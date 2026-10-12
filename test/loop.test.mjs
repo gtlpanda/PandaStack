@@ -136,3 +136,11 @@ test("a session that edits the feature list beyond passes flags stops the loop f
   assert.equal(code, 4, loopLog);
   assert.match(loopLog, /features\.json \(changed beyond passes flags\)/);
 });
+
+test("an empty feature list fails preflight instead of reporting done", () => {
+  const root = project([]);
+  const result = run(root, []);
+  assert.equal(result.code, 5, result.out);
+  assert.match(result.loopLog, /lists no features/);
+  assert.equal(result.calls.length, 0);
+});

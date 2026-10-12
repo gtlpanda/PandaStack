@@ -21,4 +21,4 @@
 - **Never:**
   - git push, checkout, reset, stash, restore or clean; recursive rm;
   - network installs outside the package manager;
-  - edits to `.env*`.
+  - edits to `.env` or `.env.local` (`.env.example` may document new variables).
