@@ -5,7 +5,9 @@
 //   { "billing": true }     end like a spend limit
 //   { "overloaded": true }  end like repeated 529s
 //   { "build": "F-1" }      do the feature properly: file, mark-passed, progress entry, feat commit
-//   { "ok": true }          a successful no-op answer (the usage probe)
+//   { "ok": true }          a successful no-op answer (the usage probe, or a review that commits nothing)
+//   { "review": true }      a review that appends a finding to PROGRESS.md and commits it as chore(review)
+//   { "hang": true }        write its pid to <script>.pid, then run until killed
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 
@@ -34,6 +36,11 @@ if (step.tamper) {
   writeFileSync("features.json", JSON.stringify(doc, null, 2));
   execFileSync("git", ["commit", "-q", "-am", "chore: sneaky"]);
 }
+if (step.hang) {
+  writeFileSync(`${scriptFile}.pid`, String(process.pid));
+  setInterval(() => {}, 1000);
+  await new Promise(() => {});
+}
 if (step.build) {
   const id = step.build;
   writeFileSync(`${id}.done`, "built\n");
@@ -41,5 +48,9 @@ if (step.build) {
   appendFileSync("PROGRESS.md", `\n## ${id} — test feature (2026-10-11)\n- What: built\n`);
   execFileSync("git", ["add", "-A"]);
   execFileSync("git", ["commit", "-q", "-m", `feat(${id}): built`]);
+}
+if (step.review) {
+  appendFileSync("PROGRESS.md", "\nREVIEW 2026-10-12: no drift found\n");
+  execFileSync("git", ["commit", "-q", "-am", "chore(review): drift review"]);
 }
 result({ subtype: "success", is_error: false, result: "done" });

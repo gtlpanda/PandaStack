@@ -11,7 +11,7 @@ Set up a new project with the `/autobuild` skill (`~/.claude/skills/autobuild/SK
 | Command | What it does |
 |---|---|
 | `autobuild init` | Scaffold `autobuild.json`, `PROGRESS.md`, the CLAUDE.md rules and `.gitignore` entries. |
-| `autobuild run [--max-iterations N]` | Run the loop. |
+| `autobuild run [--max-iterations N]` | Run the loop. Stop it with `kill $(cat .harness/loop.pid)`: the running session is stopped too (SIGTERM, then SIGKILL after 30 s). |
 | `autobuild status` | Passing count, next feature, blockers, and the last loop log lines. |
 | `autobuild next` | The feature the next session builds. |
 | `autobuild test <ID>…` | Run features' frozen acceptance tests. |
@@ -39,6 +39,14 @@ Set up a new project with the `/autobuild` skill (`~/.claude/skills/autobuild/SK
    - the flag;
    - a rerun of the test (the flag is reverted if it fails).
 
+## Reviews
+
+After every `reviewEvery` passing features, a review session compares the code since the last review against the spec and appends findings to the progress file.
+
+- **The starting point is the last `chore(review):` commit.** A review that ends without that commit (a cap, a crash) does not move it, so the next review covers the missed range too. A custom `review.prompt` must commit with that subject.
+- **A restart keeps the schedule.** The loop counts features that pass now but did not at that commit; if a review is already due, it runs before the first feature.
+- **Caps.** `reviewMaxTurns` and `reviewBudgetUsd`. A review that hits either ends without its commit, so the next review covers its range again.
+
 ## Usage limits: a pause, not a failure
 
 On a claude.ai subscription, a headless session that hits the plan limit fails right away with text like `You've hit your session limit · resets 3:45pm`. The loop:
@@ -64,7 +72,7 @@ See `templates/autobuild.json`. Defaults are in `lib/config.mjs`.
 | `prompt`, `systemPrompt` | The session prompt, and extra appended system text. |
 | `model`, `subagentModel`, `probeModel` | Models. Subagents are forced onto `subagentModel`. |
 | `hooks` | `"inject"` (default) or `"project"` (the project's settings own the guard and Stop gate). |
-| `limits` | `maxIterations`, `maxTurns`, `maxBudgetUsd` (per session), `totalBudgetUsd`, `noProgressLimit`, `reviewEvery`, `maxStopBlocks`, `maxLimitWaitHours`, `limitMarginMinutes`, `probeEveryMinutes`, `transientWaitMinutes`, `maxTransientRetries`, `watchdogMaxWaitMs`. Env overrides: `MAX_ITERATIONS`, `MAX_TURNS`, `MAX_BUDGET_USD`, `TOTAL_BUDGET_USD`, `NO_PROGRESS_LIMIT`, `REVIEW_EVERY` (or `AUTOBUILD_*`). |
+| `limits` | `maxIterations`, `maxTurns`, `maxBudgetUsd` (per session), `totalBudgetUsd`, `noProgressLimit`, `reviewEvery`, `reviewMaxTurns`, `reviewBudgetUsd`, `maxStopBlocks`, `maxLimitWaitHours`, `limitMarginMinutes`, `probeEveryMinutes`, `transientWaitMinutes`, `maxTransientRetries`, `watchdogMaxWaitMs`. Env overrides: `MAX_ITERATIONS`, `MAX_TURNS`, `MAX_BUDGET_USD`, `TOTAL_BUDGET_USD`, `NO_PROGRESS_LIMIT`, `REVIEW_EVERY` (or `AUTOBUILD_*`). |
 | `env` | `pathPrepend`, `ldLibraryPath` (`~` expanded) and `vars` for every command and session. |
 | `install`, `preflight` | Run before the loop. Each preflight entry is `{name, command, hint}`. |
 | `runners` | Maps a feature's `testKind` to `{group, command}`. Test files are appended, and features in the same group run in one invocation. |
@@ -101,5 +109,6 @@ See `templates/autobuild.json`. Defaults are in `lib/config.mjs`.
 ## Limits and caveats
 
 - **The guard is a tripwire, not a sandbox.** It inspects commands with patterns, and permission rules can be bypassed, so a determined session could find a gap. The independent frozen-file check after every session is the backstop.
+- **Stopping relies on Claude Code ending its own tool processes.** The loop stops the session; whether `claude` also ends a test run it started in its own process group is untested.
 - **The machine must stay awake.** If the host sleeps, the loop sleeps. On WSL, keep Windows from sleeping.
 - **Hook paths point at `~/.autobuild`.** A project using `hooks: "project"` with wrapper files depends on this install being present.

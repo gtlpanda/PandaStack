@@ -1,6 +1,6 @@
 // End-to-end loop scenarios against a throwaway git project and a fake `claude`.
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -10,7 +10,7 @@ const KIT = path.resolve(import.meta.dirname, "..");
 const CLI = path.join(KIT, "lib", "cli.mjs");
 const FAKE = path.join(KIT, "test-fixtures", "fake-claude.mjs");
 
-function project(featureIds) {
+function project(featureIds, limits = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "autobuild-loop-"));
   const git = (...args) => execFileSync("git", args, { cwd: root });
   git("init", "-q", "-b", "autobuild");
@@ -19,7 +19,7 @@ function project(featureIds) {
   writeFileSync(path.join(root, "autobuild.json"), JSON.stringify({
     branch: "autobuild",
     hooks: "inject",
-    limits: { maxIterations: 5, noProgressLimit: 2, reviewEvery: 99, probeEveryMinutes: 1, transientWaitMinutes: 1, maxTransientRetries: 1 },
+    limits: { maxIterations: 5, noProgressLimit: 2, reviewEvery: 99, probeEveryMinutes: 1, transientWaitMinutes: 1, maxTransientRetries: 1, ...limits },
     runners: { unit: { group: "unit", command: "bash -c 'for f in \"$@\"; do id=$(basename \"$f\" .test); test -f \"$id.done\" || exit 1; done' _" } },
     frozen: ["tests"],
     allowedTools: ["Read"],
@@ -39,16 +39,28 @@ function run(root, script) {
   writeFileSync(scriptFile, JSON.stringify(script));
   execFileSync("git", ["-C", root, "update-index", "--assume-unchanged", "features.json"], { stdio: "ignore" });
   execFileSync("git", ["-C", root, "update-index", "--no-assume-unchanged", "features.json"], { stdio: "ignore" });
-  const result = spawnSync(process.execPath, [CLI, "run"], {
-    cwd: root,
-    encoding: "utf8",
-    env: { ...process.env, AUTOBUILD_CLAUDE_BIN: FAKE, FAKE_CLAUDE_SCRIPT: scriptFile, AUTOBUILD_CLI: CLI, AUTOBUILD_MAX_SLEEP_MS: "300" },
-    timeout: 120_000,
-  });
+  const result = spawnSync(process.execPath, [CLI, "run"], { cwd: root, encoding: "utf8", env: loopEnv(scriptFile), timeout: 120_000 });
   const calls = existsSync(`${scriptFile}.calls`) ? readFileSync(`${scriptFile}.calls`, "utf8").trim().split("\n").map((line) => JSON.parse(line)) : [];
   const logDir = path.join(root, "logs");
   const loopLog = existsSync(logDir) ? readdirSync(logDir).filter((name) => name.startsWith("loop-")).map((name) => readFileSync(path.join(logDir, name), "utf8")).join("\n") : "";
   return { code: result.status, out: `${result.stdout}${result.stderr}`, calls, loopLog };
+}
+
+function loopEnv(scriptFile) {
+  return { ...process.env, AUTOBUILD_CLAUDE_BIN: FAKE, FAKE_CLAUDE_SCRIPT: scriptFile, AUTOBUILD_CLI: CLI, AUTOBUILD_MAX_SLEEP_MS: "300" };
+}
+
+function head(root) {
+  return execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+}
+
+function isAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // The fake project lives in /tmp; keep the script file out of git and out of the frozen check.
@@ -143,4 +155,51 @@ test("an empty feature list fails preflight instead of reporting done", () => {
   assert.equal(result.code, 5, result.out);
   assert.match(result.loopLog, /lists no features/);
   assert.equal(result.calls.length, 0);
+});
+
+test("a review that commits nothing leaves its range for the next review", () => {
+  const root = project(["F-1", "F-2", "F-3", "F-4"], { reviewEvery: 2 });
+  ignoreScript(root);
+  const start = head(root).slice(0, 8);
+  const { code, loopLog } = run(root, [{ build: "F-1" }, { build: "F-2" }, { ok: true }, { build: "F-3" }, { build: "F-4" }, { review: true }]);
+  assert.equal(code, 0, loopLog);
+  const ranges = [...loopLog.matchAll(/review: comparing (\w+)\.\./g)].map((match) => match[1]);
+  assert.deepEqual(ranges, [start, start], loopLog);
+  assert.match(loopLog, /review: no chore\(review\) commit/);
+});
+
+test("a review that is due when the loop starts runs before the next feature", () => {
+  const root = project(["F-1", "F-2", "F-3"], { maxIterations: 2 });
+  ignoreScript(root);
+  writeFileSync(path.join(root, "PROGRESS.md"), "# progress\n\nREVIEW 2026-10-11: no drift found\n");
+  execFileSync("git", ["-C", root, "commit", "-q", "-am", "chore(review): earlier review"]);
+  const reviewed = head(root).slice(0, 8);
+  assert.equal(run(root, [{ build: "F-1" }, { build: "F-2" }]).code, 7);
+
+  const config = JSON.parse(readFileSync(path.join(root, "autobuild.json"), "utf8"));
+  config.limits.reviewEvery = 2;
+  writeFileSync(path.join(root, "autobuild.json"), JSON.stringify(config, null, 2));
+  execFileSync("git", ["-C", root, "commit", "-q", "-am", "review every 2"]);
+  const { code, loopLog } = run(root, [{ review: true }, { build: "F-3" }]);
+  assert.equal(code, 0, loopLog);
+  const review = loopLog.indexOf(`review: comparing ${reviewed}..`);
+  assert.ok(review >= 0 && review < loopLog.indexOf("iteration 1: F-3"), loopLog);
+});
+
+test("stopping the loop also stops the session it is running", async () => {
+  const root = project(["F-1"]);
+  ignoreScript(root);
+  const scriptFile = path.join(root, ".harness-script.json");
+  writeFileSync(scriptFile, JSON.stringify([{ hang: true }]));
+  const loop = spawn(process.execPath, [CLI, "run"], { cwd: root, env: loopEnv(scriptFile), stdio: "ignore" });
+  const exited = new Promise((resolve) => loop.on("close", (code) => resolve(code)));
+  const deadline = Date.now() + 30_000;
+  while (!existsSync(`${scriptFile}.pid`) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100));
+  const sessionPid = Number(readFileSync(`${scriptFile}.pid`, "utf8"));
+  loop.kill("SIGTERM");
+  const code = await exited;
+  const orphaned = isAlive(sessionPid);
+  if (orphaned) process.kill(sessionPid, "SIGKILL");
+  assert.equal(code, 130);
+  assert.equal(orphaned, false, "the session outlived the loop");
 });
