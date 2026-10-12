@@ -20,7 +20,7 @@
     { "name": "example: typecheck", "command": "echo 'set your typecheck/lint/regression commands' && false" }
   ],
   "browser": null,
-  "frozen": ["tests", "CLAUDE.md", "SPEC.md", "spec", ".claude", ".env*"],
+  "frozen": ["tests", "CLAUDE.md", "SPEC.md", "spec", ".claude", ".env", ".env.local"],
   "writable": ["PROGRESS.md", "DECISIONS.md"],
   "allowedTools": [
     "Read", "Edit", "Write", "Glob", "Grep", "TodoWrite", "Agent", "Task",
