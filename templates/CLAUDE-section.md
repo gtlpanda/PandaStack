@@ -17,7 +17,7 @@
 
   The Stop hook runs the full gate (`autobuild check`). If it blocks, fix the cause and commit again as `feat(<ID>): …`.
 - **Inner loop.** Write the code and its own tests, `autobuild test <ID>`, run the project's checks, and commit early when green. Uncommitted changes at session start are a previous attempt at this feature: review `git diff`, then keep or redo.
-- **Subagents.** Use Sonnet subagents for research, boilerplate and repetitive edits. Keep core logic in the main session. Subagents work on the working copy (no worktree isolation).
+- **Subagents.** Use them, several at once in one message: to find the files and patterns a feature touches, for boilerplate and repetitive edits, docs, and a final audit of the diff. Keep core logic and the reading of the frozen test in the main session; check a subagent's claims before acting on them. Give each one its own files; they work on the working copy (no worktree isolation).
 - **Never:**
   - git push, checkout, reset, stash, restore or clean; recursive rm;
   - network installs outside the package manager;
