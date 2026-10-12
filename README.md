@@ -70,7 +70,7 @@ See `templates/autobuild.json`. Defaults are in `lib/config.mjs`.
 | `featuresFile`, `progressFile`, `stateDir` (`.harness`), `logsDir` (`logs`) | Where things live. |
 | `branch` | The loop refuses to run on any other branch. |
 | `prompt`, `systemPrompt` | The session prompt, and extra appended system text. |
-| `model`, `subagentModel`, `probeModel` | Models. Subagents are forced onto `subagentModel` through the injected settings, which override a subagent model pinned in `~/.claude/settings.json`. |
+| `model`, `subagentModel`, `subagentModelForce`, `probeModel` | Models. `subagentModel` is set through the injected settings, which override a subagent model pinned in `~/.claude/settings.json`. With `subagentModelForce: true` (default) every subagent runs on it; with `false` it is the default, and a session may pass `model` (`"sonnet"`, `"opus"`) on a single Agent call. |
 | `hooks` | `"inject"` (default) or `"project"` (the project's settings own the guard and Stop gate). |
 | `limits` | `maxIterations`, `maxTurns`, `maxBudgetUsd` (per session), `totalBudgetUsd`, `noProgressLimit`, `reviewEvery`, `reviewMaxTurns`, `reviewBudgetUsd`, `maxStopBlocks`, `maxLimitWaitHours`, `limitMarginMinutes`, `probeEveryMinutes`, `transientWaitMinutes`, `maxTransientRetries`, `watchdogMaxWaitMs`. Env overrides: `MAX_ITERATIONS`, `MAX_TURNS`, `MAX_BUDGET_USD`, `TOTAL_BUDGET_USD`, `NO_PROGRESS_LIMIT`, `REVIEW_EVERY` (or `AUTOBUILD_*`). |
 | `env` | `pathPrepend`, `ldLibraryPath` (`~` expanded) and `vars` for every command and session. |
