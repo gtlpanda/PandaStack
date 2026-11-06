@@ -41,7 +41,9 @@ Set up a new project with the `/autobuild` skill (`~/.claude/skills/autobuild/SK
 
 ## Reviews
 
-After every `reviewEvery` passing features, a review session compares the code since the last review against the spec and appends findings to the progress file.
+After every `reviewEvery` passing features, a review session reads the code since the last review in two passes and appends findings to the progress file: **drift** (the code against the spec and contracts) and **defects** (a hostile read for real bugs the frozen tests would not catch, including holes in the contract itself: races, a restart part-way, retries and idempotency, swallowed errors, partial writes, stale state shown to a person, tenant isolation, input validation). A defect is a `REVIEW <date>: DEFECT <file:line> <title> — <scenario; fix>` line. Review sessions only write the progress file; a person acts on their lines.
+
+- **Final review.** When every feature passes and some passed since the last review, one more review covers them before the loop exits (`limits.finalReview`, default `true`). Without it the last `reviewEvery - 1` features of a run were never reviewed.
 
 - **The starting point is the last `chore(review):` commit.** A review that ends without that commit (a cap, a crash) does not move it, so the next review covers the missed range too. A custom `review.prompt` must commit with that subject.
 - **A restart keeps the schedule.** The loop counts features that pass now but did not at that commit; if a review is already due, it runs before the first feature.
@@ -72,7 +74,7 @@ See `templates/autobuild.json`. Defaults are in `lib/config.mjs`.
 | `prompt`, `systemPrompt` | The session prompt, and extra appended system text. |
 | `model`, `subagentModel`, `subagentModelForce`, `probeModel` | Models. `subagentModel` is set through the injected settings, which override a subagent model pinned in `~/.claude/settings.json`. With `subagentModelForce: true` (default) every subagent runs on it; with `false` it is the default, and a session may pass `model` (`"sonnet"`, `"opus"`) on a single Agent call. |
 | `hooks` | `"inject"` (default) or `"project"` (the project's settings own the guard and Stop gate). |
-| `limits` | `maxIterations`, `maxTurns`, `maxBudgetUsd` (per session), `totalBudgetUsd`, `noProgressLimit`, `reviewEvery`, `reviewMaxTurns`, `reviewBudgetUsd`, `maxStopBlocks`, `maxLimitWaitHours`, `limitMarginMinutes`, `probeEveryMinutes`, `transientWaitMinutes`, `maxTransientRetries`, `watchdogMaxWaitMs`. Env overrides: `MAX_ITERATIONS`, `MAX_TURNS`, `MAX_BUDGET_USD`, `TOTAL_BUDGET_USD`, `NO_PROGRESS_LIMIT`, `REVIEW_EVERY` (or `AUTOBUILD_*`). |
+| `limits` | `maxIterations`, `maxTurns`, `maxBudgetUsd` (per session), `totalBudgetUsd`, `noProgressLimit`, `reviewEvery`, `finalReview`, `reviewMaxTurns`, `reviewBudgetUsd`, `maxStopBlocks`, `maxLimitWaitHours`, `limitMarginMinutes`, `probeEveryMinutes`, `transientWaitMinutes`, `maxTransientRetries`, `watchdogMaxWaitMs`. Env overrides: `MAX_ITERATIONS`, `MAX_TURNS`, `MAX_BUDGET_USD`, `TOTAL_BUDGET_USD`, `NO_PROGRESS_LIMIT`, `REVIEW_EVERY` (or `AUTOBUILD_*`). |
 | `env` | `pathPrepend`, `ldLibraryPath` (`~` expanded) and `vars` for every command and session. |
 | `install`, `preflight` | Run before the loop. Each preflight entry is `{name, command, hint}`. |
 | `runners` | Maps a feature's `testKind` to `{group, command}`. Test files are appended, and features in the same group run in one invocation. |

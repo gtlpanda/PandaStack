@@ -19,7 +19,7 @@ function project(featureIds, limits = {}) {
   writeFileSync(path.join(root, "autobuild.json"), JSON.stringify({
     branch: "autobuild",
     hooks: "inject",
-    limits: { maxIterations: 5, noProgressLimit: 2, reviewEvery: 99, probeEveryMinutes: 1, transientWaitMinutes: 1, maxTransientRetries: 1, ...limits },
+    limits: { maxIterations: 5, noProgressLimit: 2, reviewEvery: 99, finalReview: false, probeEveryMinutes: 1, transientWaitMinutes: 1, maxTransientRetries: 1, ...limits },
     runners: { unit: { group: "unit", command: "bash -c 'for f in \"$@\"; do id=$(basename \"$f\" .test); test -f \"$id.done\" || exit 1; done' _" } },
     frozen: ["tests"],
     allowedTools: ["Read"],
@@ -166,6 +166,36 @@ test("a review that commits nothing leaves its range for the next review", () =>
   const ranges = [...loopLog.matchAll(/review: comparing (\w+)\.\./g)].map((match) => match[1]);
   assert.deepEqual(ranges, [start, start], loopLog);
   assert.match(loopLog, /review: no chore\(review\) commit/);
+});
+
+test("the last features of a run get a final review before the loop reports done", () => {
+  const root = project(["F-1", "F-2", "F-3"], { reviewEvery: 2, finalReview: true });
+  ignoreScript(root);
+  const { code, loopLog, calls } = run(root, [{ build: "F-1" }, { build: "F-2" }, { review: true }, { build: "F-3" }, { review: true }]);
+  assert.equal(code, 0, loopLog);
+  const ranges = [...loopLog.matchAll(/review: comparing (\w+)\.\./g)];
+  assert.equal(ranges.length, 2, loopLog);
+  assert.match(loopLog, /review: final review, 1 features passed since/);
+  assert.ok(loopLog.lastIndexOf("review: comparing") < loopLog.indexOf("every feature passes. Done."), loopLog);
+  assert.equal(calls.filter((call) => call.step.review).length, 2);
+});
+
+test("finalReview: false ends the run without reviewing the last features", () => {
+  const root = project(["F-1", "F-2", "F-3"], { reviewEvery: 2, finalReview: false });
+  ignoreScript(root);
+  const { code, loopLog } = run(root, [{ build: "F-1" }, { build: "F-2" }, { review: true }, { build: "F-3" }]);
+  assert.equal(code, 0, loopLog);
+  assert.equal([...loopLog.matchAll(/review: comparing/g)].length, 1, loopLog);
+  assert.doesNotMatch(loopLog, /final review/);
+});
+
+test("no final review when the last review already covered every passed feature", () => {
+  const root = project(["F-1", "F-2"], { reviewEvery: 2, finalReview: true });
+  ignoreScript(root);
+  const { code, loopLog } = run(root, [{ build: "F-1" }, { build: "F-2" }, { review: true }]);
+  assert.equal(code, 0, loopLog);
+  assert.equal([...loopLog.matchAll(/review: comparing/g)].length, 1, loopLog);
+  assert.doesNotMatch(loopLog, /final review/);
 });
 
 test("a review that is due when the loop starts runs before the next feature", () => {

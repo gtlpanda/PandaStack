@@ -22,6 +22,7 @@ BLOCKER <ID>: <why the frozen test or contract cannot be satisfied, with the exa
 
 ```
 REVIEW <YYYY-MM-DD>: PROPOSED-FEATURE <title> — <why>
+REVIEW <YYYY-MM-DD>: DEFECT <file:line> <title> — <failure scenario; suggested fix>
 ```
 
 ---
