@@ -7,9 +7,11 @@ on:
     branches: [main]
 permissions:
   contents: read
+# A newer push cancels a superseded PR run; runs on main always finish, so every
+# merge commit keeps its own CI result.
 concurrency:
   group: test-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   test:
     runs-on: ubuntu-24.04
