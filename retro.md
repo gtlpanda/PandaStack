@@ -1572,7 +1572,27 @@ tools away from agents that have always had all of them.
 - install: dropping the `bin`/`commands` targets (4 failures) and dropping the `kit` root (6);
 - check-refs: putting the `cso` line back.
 
+**The first gated PR: `/bughunt` on the branch, 8 bugs, all reproduced.** It ran all six lenses
+over 31 agents in 6.6 minutes, and the recheck agreed with every result.
+- **Five in `render`**, copied from claude-config:
+  - the key-permission check refused every key file on Linux (BSD `stat -f` first, so it has
+    never worked on this machine);
+  - `--grep` with no match exited 1 with no footer;
+  - HTTP 401 and 404 answers read as empty results;
+  - an ambiguous name silently used the first match;
+  - `render service 'srv-x/env-vars'` reached the env-values endpoint that the wrapper promises
+    never to touch.
+  Four of these were already broken in claude-config; the fifth (the path injection) is new here.
+- **Three in this change:**
+  - `--skip=bin` still merged a statusLine that points at the skipped script;
+  - uninstall after an edit left that statusLine dangling;
+  - statusline.sh shortened `/home/bobby` to `~by` when HOME is `/home/bob`.
+
+All 8 are fixed on the branch. The hunt's 8 reproduction tests are adopted as regression tests,
+plus 7 edge-case tests: an exact name wins, a broken grep pattern still fails, a person's own or
+tuned status line survives uninstall, and a linked settings.json with `--skip=bin` warns.
+
 **Stats.**
-- 6 check-refs tests and 14 install checks (section 16).
+- 6 check-refs tests, 15 hunt-derived and edge tests, and 15 install checks (section 16).
 - 6 CLAUDE.md validate rules, plus the cap.
-- The suite is 618 workflow tests, 114 install checks, and 22 secret checks, 0 failed.
+- The suite is 635 workflow tests, 115 install checks, and 22 secret checks, 0 failed.

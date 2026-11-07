@@ -12,7 +12,14 @@ ctx=$(printf '%s' "$input" | jq -r '.context_window as $c | if $c == null then e
     (($c.current_usage | (.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)) * 100 / $c.context_window_size | floor)
   else empty end' 2>/dev/null)
 [ -z "$dir" ] && dir=$PWD
-short=${dir/#$HOME/\~}
+# ~ only for HOME itself or a path under it, never a sibling that shares the prefix (/home/bobby).
+short=$dir
+if [ -n "${HOME:-}" ] && [ "$HOME" != / ]; then
+  case "$dir" in
+    "$HOME") short='~' ;;
+    "$HOME"/*) short="~${dir#"$HOME"}" ;;
+  esac
+fi
 
 git_() { git -C "$dir" --no-optional-locks "$@" 2>/dev/null; }
 branch=$(git_ symbolic-ref --short -q HEAD || git_ rev-parse --short HEAD)

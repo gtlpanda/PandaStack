@@ -264,6 +264,9 @@ check "their status line wins"         '[ "$(jq -r .statusLine.command "$H16/.cl
 H16b="$TMP/home16b"; mkdir -p "$H16b/.claude"; echo '{}' > "$H16b/.claude/settings.json"
 HOME="$H16b" "$REPO/install.sh" >/dev/null 2>&1
 check "no status line: ours filled in" 'jq -r .statusLine.command "$H16b/.claude/settings.json" | grep -q "/bin/statusline.sh"'
+H16c="$TMP/home16c"; mkdir -p "$H16c/.claude"
+HOME="$H16c" "$REPO/install.sh" --skip=bin >"$TMP/install16c.log" 2>&1
+check "--skip=bin + linked settings warns" '[ -L "$H16c/.claude/settings.json" ] && grep -q "status line stays blank" "$TMP/install16c.log"'
 HOME="$H16" "$REPO/install.sh" --uninstall >"$TMP/uninstall16.log" 2>&1
 check "uninstall restores the copies"  '[ "$(cat "$H16/.claude/bin/statusline.sh")" = "OLD-STATUS" ] && [ "$(cat "$H16/.claude/commands/founding-sales.md")" = "OLD-CMD" ] && [ ! -L "$H16/.claude/skills/commit" ]'
 check "uninstall leaves no repo link"  '! find "$H16/.claude" -type l -lname "$REPO/*" | grep -q .'

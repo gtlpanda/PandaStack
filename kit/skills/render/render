@@ -34,7 +34,9 @@ if [[ ! -f "$KEY_FILE" ]]; then
 fi
 # Refuse to read keys with overly permissive bits — defense against accidental
 # chmod 644 or world-readable umasks.
-PERMS="$(stat -f '%Lp' "$KEY_FILE" 2>/dev/null || stat -c '%a' "$KEY_FILE")"
+# GNU stat first: BSD stat rejects -c and prints nothing to stdout, while GNU stat
+# reads -f as "filesystem status" and prints a whole report before failing.
+PERMS="$(stat -c '%a' "$KEY_FILE" 2>/dev/null || stat -f '%Lp' "$KEY_FILE")"
 if [[ "$PERMS" != "600" && "$PERMS" != "400" ]]; then
   echo "render: $KEY_FILE has mode $PERMS — refuse to read. Run: chmod 600 $KEY_FILE" >&2
   exit 1
@@ -60,35 +62,55 @@ done
 # ---------------------------------------------------------------------------
 api() {
   # api <method> <path-with-leading-slash> [--data <body>]
-  local method="$1" path="$2"; shift 2
-  curl -sS -X "$method" \
+  # A non-2xx answer exits 1 with the API's message (curl 7.76+ for --fail-with-body),
+  # so an auth or lookup failure is never read as an empty result.
+  local method="$1" path="$2" body msg; shift 2
+  if ! body="$(curl -sS --fail-with-body -X "$method" \
     -H "Authorization: Bearer $API_KEY" \
     -H "Accept: application/json" \
     "$@" \
-    "$API_BASE$path"
+    "$API_BASE$path")"; then
+    msg="$(jq -r '.message // empty' <<<"$body" 2>/dev/null || true)"
+    echo "render: $method $path failed${msg:+: $msg}" >&2
+    exit 1
+  fi
+  printf '%s\n' "$body"
 }
 
 # Resolve a name OR id to a full service object (JSON). Accepts:
-#   - srv-XXX (passes through)
-#   - any partial name (substring, case-insensitive)
-# Returns the FIRST match by name. Errors if no match.
+#   - srv-XXX (an id: letters and digits only, so it cannot reach another API path)
+#   - a name: an exact (case-insensitive) name wins, else a unique substring
+# Errors if nothing matches or the name is ambiguous.
 resolve_service() {
   local needle="$1"
-  if [[ "$needle" =~ ^srv- ]]; then
+  if [[ "$needle" =~ ^srv-[A-Za-z0-9]+$ ]]; then
     api GET "/services/$needle"
     return
+  fi
+  if [[ "$needle" == srv-* || "$needle" == */* || "$needle" == *\?* ]]; then
+    echo "render: \"$needle\" is not a service id (srv- then letters and digits) or a name" >&2
+    exit 1
   fi
   # List all services + grep name. Render paginates at 100 items; one page
   # is enough for personal accounts.
   local all
   all="$(api GET "/services?limit=100" | jq -c '.[].service')"
-  local match
+  local match count
   match="$(echo "$all" | jq -c --arg n "$needle" \
-    'select((.name | ascii_downcase) | contains($n | ascii_downcase))' \
-    | head -1)"
+    'select((.name | ascii_downcase) == ($n | ascii_downcase))')"
   if [[ -z "$match" ]]; then
+    match="$(echo "$all" | jq -c --arg n "$needle" \
+      'select((.name | ascii_downcase) | contains($n | ascii_downcase))')"
+  fi
+  count="$(grep -c . <<<"$match" || true)"
+  if [[ "$count" -eq 0 ]]; then
     echo "render: no service matching \"$needle\"" >&2
     echo "       run: render services" >&2
+    exit 1
+  fi
+  if [[ "$count" -gt 1 ]]; then
+    echo "render: \"$needle\" is ambiguous; it matches $count services: $(jq -r '.name' <<<"$match" | paste -sd, - | sed 's/,/, /g')" >&2
+    echo "       pass the full name or the srv- id" >&2
     exit 1
   fi
   echo "$match"
@@ -173,7 +195,7 @@ cmd_logs() {
   echo "$resp" \
     | jq -r '.logs[]? | "\(.timestamp)\t\(.message)"' \
     | awk -F'\t' '{ printf "%s  %s\n", $1, $2 }' \
-    | { if [[ -n "$grep_pat" ]]; then grep -E "$grep_pat"; else cat; fi; }
+    | { if [[ -n "$grep_pat" ]]; then grep -E "$grep_pat" || [[ $? -eq 1 ]]; else cat; fi; }
 
   # Footer with pagination + counts
   local count has_more
@@ -228,7 +250,7 @@ USAGE
 
 NAME RESOLUTION
   Pass a srv-id (srv-abc123) for exact match, OR a case-insensitive name substring.
-  First match wins; ambiguous names error out.
+  An exact name wins, else a unique substring; ambiguous names error out.
 
 EXAMPLES
   render services

@@ -187,6 +187,7 @@ merge_settings() {  # $1 = ours (in the repo), $2 = theirs (under ~/.claude)
   local merged added rc=0 flags=()
   command -v node >/dev/null 2>&1 || die "node is needed to merge settings.json into your own; install Node, or pass --skip=settings.json"
   if is_skipped skills/bughunt; then flags+=(--no-hooks); log "settings.json: skills/bughunt is skipped, so the review gate hook is not merged"; fi
+  if is_skipped bin/statusline.sh; then flags+=(--no-statusline); log "settings.json: bin/statusline.sh is skipped, so the status line is not merged"; fi
   merged="$(mktemp)" || die "mktemp failed"
   added="$(mktemp)" || die "mktemp failed"
   node "$REPO_DIR/scripts/merge-settings.mjs" merge ${flags[@]+"${flags[@]}"} "$1" "$2" >"$merged" 2>"$added" || rc=$?
@@ -245,7 +246,7 @@ unmerge_settings() {
       if [ "$DRY_RUN" -eq 1 ]; then log "[dry-run] would remove PandaStack's hooks from settings.json"
       else
         cat "$out" > "$dest" || die "could not write settings.json"
-        warn "settings.json changed since the merge: kept your edits, removed only PandaStack's hooks"
+        warn "settings.json changed since the merge: kept your edits, removed only what PandaStack added (its hooks, and its status line if unchanged)"
       fi
     fi
   else
@@ -313,6 +314,9 @@ do_install() {
     log "linked: $rel -> $src"
     linked=$((linked + 1))
   done < <(list_targets)
+  if is_skipped bin/statusline.sh && points_into_repo "$CLAUDE_DIR/settings.json"; then
+    warn "settings.json is linked to ours, whose statusLine runs bin/statusline.sh, which --skip left out: the status line stays blank"
+  fi
   prune_dangling
   enable_git_hooks
   log "done: $linked linked, $skipped already linked"
