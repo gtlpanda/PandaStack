@@ -29,6 +29,55 @@ in:
   body. See `graphs/build/README.md`.
 - **`/loop`** runs it in discover mode whenever the PR's head has changed since
   the last hunt, and reports. It never posts to the PR.
+- **The review gate** (`gate.mjs`, below) makes a finished hunt the price of
+  opening a PR, and a `pass` the price of merging one, in every repo.
+
+## The review gate
+
+`gate.mjs` is a PreToolUse hook on Bash. `settings.json` registers it, and
+`install.sh` merges it into a settings file of your own. It reads the ledgers
+`/bughunt` writes, through `review-status.mjs`:
+
+| Command | Allowed when |
+|---|---|
+| `gh pr create`, `gh pr new` | a finished hunt covers the PR head (`--head`, or the current branch) |
+| `gh pr merge` | a finished hunt covers the PR head (`--match-head-commit`, or `gh pr view`), and its disposition is `pass` |
+| `gh api .../pulls/<n>/merge`, a GraphQL merge | never; use `gh pr merge` |
+| `git push` to the remote's default branch, `--all`, `--mirror` | never; push a branch and open a PR |
+
+**What "covers" means.** A ledger whose latest run finished at head H covers
+commit X when H is X, or when H is an ancestor of X and every commit after H
+is one of these:
+- **documentation only**: `*.md`, `docs/`, `changelogs/`, `LICENSE`. This
+  covers `/release-pr`'s notes commit.
+- **a verified repair**: subject `bughunt: fix F<n>`, with F<n> verified in
+  that ledger. This covers `--draft-pr` and the `/build-app` landing. In that
+  case the result for X leaves out the findings that X fixes.
+
+A merge commit is never exempt. A change whose whole diff from its base is
+documentation needs no hunt.
+
+**How it reads a command.** It uses the `/build-app` guard's shell parser
+(`simpleCommands`):
+- Quoted text, heredocs, and `echo` are data, never commands.
+- `bash -c`, `eval`, `$(...)`, and `env`/`xargs` prefixes are followed.
+- A `cd` before the command is followed. A `cd` it cannot resolve (`$VAR`,
+  `-`) is denied.
+- `-R` must name this checkout's own origin, because the ledgers live in this
+  clone.
+
+Once a command matches, anything the gate cannot resolve is denied, and the
+reason names the exact `/bughunt ...` to run.
+
+**Off switches.** Start Claude Code with `PANDASTACK_REVIEW_GATE=0`, or run the
+command yourself in a shell outside Claude Code, which is never gated. Whether
+`!` bash mode skips the hook is in Troubleshooting.
+
+**What it does not cover:**
+- other machines and the GitHub web UI. Branch protection does that, where a
+  repo has it.
+- `/build-app`'s own `gh pr create`, which a node process runs outside the
+  Bash tool. Its driver runs the hunt itself and lands only verified fixes.
 
 **Live-run** on the benchmark below (2026-11-07). All 6 planted bugs were
 found and reproduced, there were no false positives on the 4 bug-free changes,
@@ -431,10 +480,23 @@ second time.
   base. Pass `--base`.
 - **A broken ledger:** `findings.mjs check <ledger>` names the problem. The
   skill never overwrites a ledger it cannot read.
+- **`review gate: ...` denied a command:** the reason names the `/bughunt` to
+  run. `node review-status.mjs status --repo . --head <sha> [--base origin/main]`
+  shows what the gate sees: which ledger covers the commit, which commits after
+  it were exempt and why, and the disposition.
+- **Running a gated command yourself:** a shell outside Claude Code is never
+  gated. For `!` bash mode, the Claude Code docs imply it skips hooks: it runs
+  "without going through Claude", and PreToolUse "runs only when Claude calls a
+  tool". The docs never state it outright, and it has not been tested here. To
+  be sure, start Claude Code with `PANDASTACK_REVIEW_GATE=0`.
+- **Settings edits are live:** the docs say a running session picks up hook
+  edits through a file watcher, so the gate applies as soon as `install.sh`
+  merges it.
 
 Credits for the methods adapted here are in
 [`core/skills/bug-lenses/CREDITS.md`](../../core/skills/bug-lenses/CREDITS.md).
 
-Tests: `tests/bughunt-flow.test.mjs` (routing and drift) and
-`tests/intake.test.mjs` (intake over throwaway repos), run by
+Tests: `tests/bughunt-flow.test.mjs` (routing and drift),
+`tests/intake.test.mjs` (intake over throwaway repos), and
+`tests/gate.test.mjs` (the review gate and review-status, over throwaway repos with a fake `gh`), run by
 `scripts/test-workflow.sh`, plus `tests/findings.test.mjs` at the repo root.

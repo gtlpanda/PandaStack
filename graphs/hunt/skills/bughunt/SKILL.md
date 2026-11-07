@@ -33,6 +33,11 @@ These instructions are the opt-in to the Workflow tool for this skill.
 
 ## 1. Resolve the target
 
+The review gate (`gate.mjs`, a hook) reads the ledger this skill writes. A PR
+opens only once a finished hunt covers its head, and it merges only once that
+hunt's disposition is `pass`. Run the hunt, fix what it finds, then open or
+merge.
+
 Usage: `/bughunt [<PR number> | <branch> | <base>..<head>] [--base <ref>] [--propose | --fix] [--approve F<n>,...] [--draft-pr]`.
 It reviews committed work only.
 

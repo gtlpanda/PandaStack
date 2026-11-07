@@ -217,6 +217,10 @@ rule graphs/hunt/agents/runner.md 'character for character' 'the runner never ch
 rule core/agents/advisor.md '## Refereeing a finding' 'the referee settles what the bughunt skeptic could not'
 rule graphs/hunt/skills/bughunt/SKILL.md 'evidence.mjs" recheck' 'the session re-runs every reproduction before the report'
 rule loop.md 'run `/bughunt <PR number>` in discover mode' 'every PR the loop tends gets a bug hunt when its head changes'
+rule settings.json 'skills/bughunt/gate.mjs' 'the review gate hook is registered'
+rule graphs/hunt/skills/bughunt/gate.mjs "if (s.disposition !== 'pass')" 'a PR merges only after a hunt that passed'
+rule graphs/hunt/skills/bughunt/review-status.mjs 'if (parents.length > 1) return null' 'a merge commit after the hunt is never exempt'
+rule scripts/merge-settings.mjs "if (k === 'permissions') continue" 'install never merges permissions'
 rule graphs/hunt/skills/bughunt/SKILL.md 'Never use ScheduleWakeup or sleep to wait for it' 'a bughunt session waits for the workflow notification, never a long wakeup'
 
 # ---- Required files ----

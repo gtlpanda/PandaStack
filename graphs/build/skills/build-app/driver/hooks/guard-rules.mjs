@@ -105,21 +105,39 @@ function commandOf(tokens) {
   }
 }
 
-export function decideBash(command, depth = 0) {
-  if (depth > 5) return 'a command nested too deeply to check'
+// Every simple command a Bash command line runs, in order, as {word, args}:
+// command substitutions first, then each segment, with eval and `sh -c`
+// scripts expanded in place. A script nested past depth 5 yields
+// {tooDeep: true}. Shared with the /bughunt review gate (graphs/hunt).
+export function simpleCommands(command, depth = 0, out = []) {
+  if (depth > 5) { out.push({ word: '', args: [], tooDeep: true }); return out }
   const { segments, subs } = parse(dropHeredocs(command))
-  for (const sub of subs) { const why = decideBash(sub, depth + 1); if (why) return why }
+  for (const sub of subs) simpleCommands(sub, depth + 1, out)
   for (const tokens of segments) {
-    const { word, args } = commandOf(tokens)
-    if (word === 'eval') { const why = decideBash(args.join(' '), depth + 1); if (why) return why }
-    if (SHELLS.includes(word)) {
-      const c = args.indexOf('-c')
-      if (c >= 0 && args[c + 1] !== undefined) { const why = decideBash(args[c + 1], depth + 1); if (why) return why }
+    const c = commandOf(tokens)
+    out.push(c)
+    if (c.word === 'eval') simpleCommands(c.args.join(' '), depth + 1, out)
+    if (SHELLS.includes(c.word)) {
+      const i = c.args.indexOf('-c')
+      if (i >= 0 && c.args[i + 1] !== undefined) simpleCommands(c.args[i + 1], depth + 1, out)
     }
+  }
+  return out
+}
+
+// git's subcommand and its arguments, after the options that come before it
+// (-C <dir>, -c <k=v>, ...). opts holds those options with their values.
+export function gitSubcommand(args) {
+  let i = 0
+  while (i < args.length && args[i].startsWith('-')) { if (GIT_VALUE_OPTS.includes(args[i])) i += 1; i += 1 }
+  return { opts: args.slice(0, i), sub: args.slice(i) }
+}
+
+export function decideBash(command) {
+  for (const { word, args, tooDeep } of simpleCommands(command)) {
+    if (tooDeep) return 'a command nested too deeply to check'
     if (word === 'git') {
-      let i = 0
-      while (i < args.length && args[i].startsWith('-')) { if (GIT_VALUE_OPTS.includes(args[i])) i += 1; i += 1 }
-      const sub = args.slice(i)
+      const { sub } = gitSubcommand(args)
       for (const [match, why] of GIT_DENY) if (match(sub)) return why
     }
     if (word === 'rm' && args.some(a => /^-[a-zA-Z]*[rR]/.test(a) || a === '--recursive') && args.some(a => ['/', '/*', '~', '~/', '$HOME', '$HOME/', '${HOME}', '${HOME}/'].includes(a))) {

@@ -2,7 +2,11 @@
 # install.sh — link this repo's Claude Code config into ~/.claude/
 #
 # Links (never the whole ~/.claude directory — it holds credentials and state):
-#   files:        settings.json, CLAUDE.md, loop.md    -> one symlink each
+#   files:        settings.json, CLAUDE.md, loop.md    -> one symlink each,
+#                 except an existing settings.json of your own: ours is merged
+#                 into it (scripts/merge-settings.mjs: our hooks added, keys you
+#                 lack filled in, yours kept, permissions never touched), with
+#                 the file before the merge kept in the backup dir
 #   directories:  skills/, agents/, workflows/          -> one symlink PER ENTRY
 #                 (so entries installed by other tools keep working), taken
 #                 from core/<dir>/ and every graphs/<graph>/<dir>/ and landing
@@ -35,7 +39,7 @@ DRY_RUN=0
 MODE=install
 SKIP=()      # rel paths (or a whole DIR_TARGETS name) that install leaves alone
 
-usage() { sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "${BASH_SOURCE[0]}"; }
 
 for arg in "$@"; do
   case "$arg" in
@@ -170,6 +174,64 @@ backup_target() {  # $1 = rel path
   if [ "$DRY_RUN" -eq 1 ]; then log "[dry-run] would back up: $rel"; else log "backed up: $rel"; fi
 }
 
+# Merges our settings.json into a person's own (a regular file, valid JSON).
+# Returns 1 when theirs is not a JSON object, so the caller falls back to
+# backing it up and linking ours. Writes only when something is missing, and
+# keeps the file from before the merge, and the merged file, in the backup dir
+# (uninstall puts the old one back while the file is still what we wrote).
+merge_settings() {  # $1 = ours (in the repo), $2 = theirs (under ~/.claude)
+  local merged added
+  command -v node >/dev/null 2>&1 || die "node is needed to merge settings.json into your own; install Node, or pass --skip=settings.json"
+  merged="$(mktemp)"; added="$(mktemp)"
+  if ! node "$REPO_DIR/scripts/merge-settings.mjs" merge "$1" "$2" >"$merged" 2>"$added"; then
+    log "settings.json: $(tail -1 "$added")"
+    rm -f "$merged" "$added"; return 1
+  fi
+  if [ ! -s "$added" ]; then
+    log "settings.json: your own file already has everything ours adds"
+    rm -f "$merged" "$added"; return 0
+  fi
+  sed 's/^added: /  + /' "$added"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "[dry-run] would merge the lines above into settings.json (your own file), keeping a backup"
+  else
+    ensure_backup_dir
+    cp -p "$2" "$BACKUP_DIR/settings.json.pre-merge"
+    cp "$merged" "$BACKUP_DIR/settings.json.merged"
+    cp "$merged" "$2.harness-tmp" && chmod --reference="$2" "$2.harness-tmp" 2>/dev/null; mv "$2.harness-tmp" "$2"
+    log "merged into settings.json (your own file; before: $BACKUP_DIR/settings.json.pre-merge)"
+  fi
+  rm -f "$merged" "$added"
+}
+
+# Undoes merge_settings, newest merge first, while the file is still exactly
+# what a merge wrote. A file edited since keeps the edits and loses only our hooks.
+unmerge_settings() {
+  local dest="$CLAUDE_DIR/settings.json" dirs=() i b restored=0 out
+  [ -f "$dest" ] && [ ! -L "$dest" ] && [ -d "$BACKUP_ROOT" ] || return 0
+  for i in "$BACKUP_ROOT"/*/; do [ -f "${i}settings.json.merged" ] && dirs+=("${i%/}"); done
+  [ "${#dirs[@]}" -gt 0 ] || return 0
+  for (( i=${#dirs[@]}-1; i>=0; i-- )); do
+    b="${dirs[$i]}"
+    cmp -s "$dest" "$b/settings.json.merged" || break
+    run mv "$b/settings.json.pre-merge" "$dest"
+    run rm "$b/settings.json.merged"
+    log "restored settings.json from before the merge ($b)"
+    restored=1
+    [ "$DRY_RUN" -eq 1 ] && break
+    find "$b" -type d -empty -delete 2>/dev/null || true
+  done
+  [ "$restored" -eq 1 ] && return 0
+  command -v node >/dev/null 2>&1 || { warn "settings.json changed since the merge, and node is missing: remove PandaStack's hooks from it by hand"; return 0; }
+  out="$(mktemp)"
+  if node "$REPO_DIR/scripts/merge-settings.mjs" unmerge "$REPO_DIR/settings.json" "$dest" >"$out"; then
+    if [ "$DRY_RUN" -eq 1 ]; then log "[dry-run] would remove PandaStack's hooks from settings.json"
+    else cp "$out" "$dest.harness-tmp" && chmod --reference="$dest" "$dest.harness-tmp" 2>/dev/null; mv "$dest.harness-tmp" "$dest"; fi
+    warn "settings.json changed since the merge: kept your edits, removed only PandaStack's hooks"
+  fi
+  rm -f "$out"
+}
+
 # Remove symlinks under managed dirs that point into the repo but whose source
 # is gone (e.g. a skill renamed or deleted in the repo).
 prune_dangling() {
@@ -214,6 +276,10 @@ do_install() {
     if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$src" ]; then
       skipped=$((skipped + 1)); continue
     fi
+    if [ "$rel" = settings.json ] && [ -f "$dest" ] && [ ! -L "$dest" ]; then
+      if merge_settings "$src" "$dest"; then continue; fi
+      log "settings.json is not a JSON object: backing it up and linking ours"
+    fi
     if is_stale_harness_link "$dest" "$rel"; then
       run rm "$dest"; log "removed stale harness link: $rel -> $(readlink "$dest" 2>/dev/null || echo '?')"
     elif [ -L "$dest" ] || [ -e "$dest" ]; then
@@ -251,6 +317,7 @@ do_uninstall() {
     fi
   done < <(list_targets)
   prune_dangling
+  unmerge_settings
 
   backup="$(latest_backup_with_manifest)"
   if [ -z "$backup" ]; then

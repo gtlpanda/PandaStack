@@ -1433,3 +1433,56 @@ that allows it.
 **Status correction.** The release graph was listed as "tested with mocked agents" only. The owner
 reports a live run on a real PR. No ledger from that run is on this machine, so the docs say
 "reported by the owner".
+
+## 31. The review gate: no PR opens or merges without a /bughunt (2026-11-07)
+
+**Why.** An agent built features with an unattended loop and opened PRs that nobody reviewed.
+`/bughunt` existed, but nothing required it outside `/build-app` and `/loop`.
+
+**What changed.**
+- **`graphs/hunt/skills/bughunt/gate.mjs`** is a PreToolUse hook on Bash, registered in
+  `settings.json`, so it applies in every repo:
+  - `gh pr create` and `gh pr new` need a finished hunt covering the PR head.
+  - `gh pr merge` also needs that hunt's disposition to be `pass`.
+  - `gh api` merges, and pushes straight to the default branch (including `--all` and `--mirror`),
+    are refused.
+  - Each refusal names the `/bughunt` to run and the off switch, `PANDASTACK_REVIEW_GATE=0`.
+- **`review-status.mjs`** decides "covering". A ledger whose latest run finished at H covers X when
+  H is X, or when every commit in H..X is documentation only or a `bughunt: fix F<n>` that the
+  ledger verified. So `/release-pr`'s notes commit, `--draft-pr`, and the `/build-app` landing all
+  pass. A merge commit never does. A verified repair in X closes its finding for X's result, since
+  the ledger keeps it open until the fix is in the PR. A change that is documentation only needs no
+  hunt.
+- **The shell parser is shared, not copied.** The `/build-app` guard's tokenizer is now
+  `simpleCommands`, exported from `guard-rules.mjs`, and the gate imports it. The guard's own tests
+  pass unchanged.
+- **`install.sh` merges `settings.json` into a file of your own** instead of replacing it:
+  - our hooks are added, keys you lack are filled in, and your values win;
+  - `permissions` is never touched;
+  - the pre-merge file and the merged file are kept in the backup dir, and uninstall restores the
+    pre-merge file byte for byte while the file is unchanged since the merge (otherwise it removes
+    only our hooks).
+
+  Before this, keeping your own settings meant `--skip=settings.json`, which also kept the gate out.
+
+**Measured, not assumed.** The gate tests ran green on the first try, so each guard was broken on
+purpose. All 10 mutations were caught, including:
+- dropping the disposition check;
+- exempting merge commits or unverified "fixes";
+- counting `.js` as docs;
+- dropping the `-R` and push checks;
+- not following `cd`;
+- not closing fixed findings;
+- not requiring the last run to have finished.
+
+**Still a hypothesis.** The docs imply that `!` bash mode skips hooks, but this was not tested.
+The docs do say that hook edits take effect in a running session.
+
+**Not covered:** the GitHub web UI, other machines (branch protection covers those, where a repo has
+it), and `/build-app`'s own `gh pr create`, which runs outside the Bash tool and is gated by its
+driver.
+
+**Stats.**
+- 17 gate tests and 16 install checks.
+- 4 new validate pins.
+- The suite is 607 workflow tests, 91 install checks, and 22 secret checks, 0 failed.
