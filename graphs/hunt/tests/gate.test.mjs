@@ -61,10 +61,10 @@ function fakeGh(root, pr) {
 
 console.log('== review status: which hunts cover which commits')
 await test('documentation paths', () => {
-  for (const p of ['README.md', 'docs/x/y.png', 'changelogs/2026-11-07.md', 'LICENSE', 'sub/LICENSE.txt', 'a/B.MD']) assert.ok(isDocPath(p), p)
+  for (const p of ['README.md', 'docs/x/y.png', 'changelogs/2026-11-07.md', 'LICENSE', 'sub/LICENSE.txt', 'a/B.MD', 'CLAUDE.md', 'docs/commands/init.md', 'graphs/x/agents/a.md']) assert.ok(isDocPath(p), p)
   for (const p of ['src/a.js', 'package.json', 'docsite/x.js', 'tests/a.test.js', 'README.md.js', '.github/workflows/test.yml', 'mydocs/a.js',
-    // Executable files under docs/, and markdown that steers an agent, are not documentation (review of #34).
-    'docs/conf.py', 'docs/.vitepress/config.js', 'docs/package.json', 'CLAUDE.md', 'sub/AGENTS.md', '.claude/agents/merger.md', 'graphs/x/agents/a.md', 'core/skills/x/SKILL.md', '.github/PULL_REQUEST_TEMPLATE.md']) assert.ok(!isDocPath(p), p)
+    // Code under docs/, and markdown Claude Code runs (.claude/), are not documentation (review of #34).
+    'docs/conf.py', 'docs/.vitepress/config.js', 'docs/package.json', 'docs/openapi.yaml', '.claude/agents/merger.md', '.claude/commands/x.md', 'sub/.claude/settings.json']) assert.ok(!isDocPath(p), p)
 })
 await test('no ledger: not hunted; a finished hunt at the exact head: hunted, its disposition', () => {
   const { repo, head } = fixture()
@@ -216,12 +216,24 @@ await test('when the local branch and origin differ, both must be covered; $VARI
   sh(repo, 'checkout', '-q', 'main')
   assert.match(gateDecision('gh pr create --head feat --title x', repo), /origin\/feat/, 'origin/feat holds an unreviewed commit')
   assert.match(gateDecision('gh pr create --head "bughunt/$KEY"', repo), /literal value/)
+  assert.match(gateDecision('gh pr create --head feat --base release/9', repo), /base release\/9 is not in this clone/, 'an unknown base is not a pass (review of #34)')
   assert.match(gateDecision('gh pr merge 5 --match-head-commit "$SHA"', repo, { env: { ...process.env, PANDASTACK_GATE_GH: fakeGh(root, null) } }), /literal value/)
   assert.match(gateDecision('git -C "$REPO" push -u origin bughunt/x', repo), /literal value/)
   // A fork-qualified head of this very repo's owner is this clone's branch.
   sh(repo, 'push', '-q', '-f', 'origin', 'feat')
   sh(repo, 'remote', 'set-url', 'origin', 'git@github.com:acme/widget.git')
   assert.equal(gateDecision('gh pr create -H acme:feat --title x', repo), null)
+})
+
+await test('origin behind a hunted local branch: the denial says to push, not to hunt again', () => {
+  const { repo, head } = fixture()
+  sh(repo, 'reset', '-q', '--hard', 'HEAD~1')
+  commit(repo, { 'src/a.js': 'export const a = 0\n' }, 'first')
+  sh(repo, 'push', '-q', 'origin', 'feat')
+  const hunted = commit(repo, { 'src/b.js': 'b\n' }, 'second')
+  ledger(repo, 'k', hunted)
+  assert.match(gateDecision('gh pr create --title x', repo), /origin\/feat is behind the hunted commit.*Push feat/)
+  assert.ok(head)
 })
 
 console.log('== the gate: gh pr merge')
@@ -242,17 +254,21 @@ await test('the pinned head wins; an unreadable or missing head is denied', () =
   const { root, repo, head } = fixture()
   ledger(repo, 'k', head)
   const noGh = { ...process.env, PANDASTACK_GATE_GH: fakeGh(root, null) }
-  assert.match(gateDecision('gh pr merge 7', repo, { env: noGh }), /could not read the PR's head commit/)
-  assert.equal(gateDecision(`gh pr merge 7 --squash --match-head-commit ${head}`, repo, { env: noGh }), null, 'the merger agent\'s exact form')
+  assert.match(gateDecision('gh pr merge 7', repo, { env: noGh }), /could not read the PR/)
+  assert.match(gateDecision(`gh pr merge 7 --squash --match-head-commit ${head}`, repo, { env: noGh }), /could not read the PR/, 'without the PR\'s base the hunted range cannot be checked (review of #34)')
+  const gh = { ...process.env, PANDASTACK_GATE_GH: fakeGh(root, { number: 7, headRefOid: head, baseRefName: 'main' }) }
+  assert.equal(gateDecision(`gh pr merge 7 --squash --match-head-commit ${head}`, repo, { env: gh }), null, 'the merger agent\'s exact form')
   const later = commit(repo, { 'src/c.js': 'c\n' }, 'unreviewed')
-  assert.match(gateDecision(`gh pr merge 7 --merge --match-head-commit ${later}`, repo, { env: noGh }), /no finished \/bughunt covers/)
-  assert.match(gateDecision('gh pr merge 7 --match-head-commit 1111111111111111111111111111111111111111', repo, { env: noGh }), /not in this clone.*git fetch origin pull/)
+  assert.match(gateDecision(`gh pr merge 7 --merge --match-head-commit ${later}`, repo, { env: gh }), /no finished \/bughunt covers/, 'the pinned head wins over gh\'s')
+  assert.match(gateDecision('gh pr merge 7 --match-head-commit 1111111111111111111111111111111111111111', repo, { env: gh }), /not in this clone.*git fetch origin pull/)
+  const otherBase = { ...process.env, PANDASTACK_GATE_GH: fakeGh(root, { number: 7, headRefOid: head, baseRefName: 'release/9' }) }
+  assert.match(gateDecision('gh pr merge 7', repo, { env: otherBase }), /base origin\/release\/9 is not in this clone.*git fetch origin release\/9/)
   assert.equal(gateDecision('gh pr merge 7 --disable-auto', repo, { env: noGh }), null)
 })
 await test('the release flow: a docs commit after the hunt still merges', () => {
   const { root, repo, head } = fixture()
   ledger(repo, 'pr-9', head)
-  const withNotes = commit(repo, { 'changelogs/2026-11-07.md': 'notes\n', 'retro.md': 'r\n' }, 'docs: release notes')
+  const withNotes = commit(repo, { 'changelogs/2026-11-07.md': 'notes\n', 'retro.md': 'r\n', 'CLAUDE.md': '## Deploy Configuration\n' }, 'docs: release notes')
   const env = { ...process.env, PANDASTACK_GATE_GH: fakeGh(root, { number: 9, headRefOid: withNotes, baseRefName: 'main' }) }
   assert.equal(gateDecision(`gh pr merge 9 --squash --match-head-commit ${withNotes}`, repo, { env }), null)
 })
@@ -267,7 +283,11 @@ await test('gh api merges are denied; other gh api calls are not', () => {
     "gh api graphql -f query='mutation { createPullRequest(input: {}) { clientMutationId } }'"]) {
     assert.match(gateDecision(cmd, repo) || '', /through `gh api` skips the review check/, cmd)
   }
+  for (const cmd of ["gh api /graphql -f query='mutation{mergePullRequest(input:{pullRequestId:\"x\"}){clientMutationId}}'", "gh api https://api.github.com/graphql -f query='mutation{mergePullRequest(input:{}){clientMutationId}}'", "gh api 'repos/o/r/pulls?x=1' -X POST -f head=feat -f base=main", 'gh api /repos/o/r/pulls/3/merge -X PUT']) {
+    assert.match(gateDecision(cmd, repo) || '', /through `gh api` skips the review check/, cmd)
+  }
   assert.match(gateDecision('gh api graphql --input q.json', repo), /read from a file/)
+  assert.match(gateDecision('gh api /graphql --input q.json', repo), /read from a file/)
   assert.match(gateDecision('gh api graphql -F query=@merge.graphql', repo), /read from a file/)
   for (const cmd of ['gh api repos/a/b/pulls/3/comments', 'gh api repos/a/b/pulls?state=open', 'gh api repos/a/b/pulls', 'gh api repos/a/b/issues/3/comments -f body=hi', "gh api graphql -f query='{ viewer { login } }'", 'gh api repos/a/b/git/refs/heads/main']) {
     assert.equal(gateDecision(cmd, repo), null, cmd)
@@ -287,9 +307,12 @@ await test('git push to the default branch is denied in its common spellings; br
     assert.equal(gateDecision(cmd, repo), null, cmd)
   }
   assert.equal(gateDecision('git push', repo), null, 'on feat, a bare push goes to feat')
+  assert.equal(gateDecision('git push origin --tags', repo), null, 'tags only')
   sh(repo, 'checkout', '-q', 'main')
   assert.match(gateDecision('git push', repo), /default branch/, 'on main, a bare push goes to main')
   assert.match(gateDecision('git push origin HEAD', repo), /default branch/)
+  assert.equal(gateDecision('git push --tags', repo), null, 'on main, --tags pushes tags only')
+  assert.equal(gateDecision('git push origin --tags', repo), null)
 })
 await test('words in data are not commands; nested and substituted commands are', () => {
   const { repo } = fixture()
@@ -300,7 +323,8 @@ await test('words in data are not commands; nested and substituted commands are'
     // Reserved words, prefix options, combined shell flags, heredocs and pipes into a shell, quoting tricks (review of #34).
     'for n in 5 6; do gh pr create --fill; done', 'if true; then git push origin main; fi', '{ git push origin main; }', '! git push origin main',
     'timeout 30 gh pr create --title x', 'nice -n 5 gh pr create', 'sudo -u bob gh pr create', 'env -u FOO gh pr create', 'bash -lc "gh pr create"', 'sh -ec "git push origin main"',
-    "bash <<'EOF'\ngh pr create --fill\nEOF", 'echo "gh pr create --fill" | bash', 'g\\h pr create', "g''h pr create"]) {
+    "bash <<'EOF'\ngh pr create --fill\nEOF", 'echo "gh pr create --fill" | bash', 'g\\h pr create', "g''h pr create",
+    'bash <<< "gh pr create --title x"', 'bash <<< "git push origin main"', 'sh < /tmp/s.sh; gh pr view', 'function f { git push origin main; }; f']) {
     assert.ok(gateDecision(cmd, repo), cmd)
   }
 })

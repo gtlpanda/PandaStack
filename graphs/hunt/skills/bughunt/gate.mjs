@@ -114,10 +114,17 @@ function prCreate(dir, args, ghRepo) {
   let base = flag(flags, '-B', '--base')
   if (typeof base === 'string' && unexpanded(base)) return deny(`cannot tell which branch \`--base ${base}\` is.`, LITERAL)
   base = typeof base === 'string' ? (commitOf(dir, `refs/remotes/origin/${base}`) ? `origin/${base}` : base) : `origin/${defaultBranches(dir)[0]}`
-  for (const tip of tips) {
-    const s = reviewStatus(dir, tip, { base })
+  const statuses = tips.map(tip => ({ tip, s: reviewStatus(dir, tip, { base }) }))
+  const ok = statuses.filter(x => x.s.docsOnly || x.s.hunted).map(x => x.tip)
+  for (const { tip, s } of statuses) {
     if (s.docsOnly || s.hunted) continue
-    const where = tips.length > 1 ? ` (${tip === commitOf(dir, `refs/heads/${branch}`) ? 'the local branch' : `origin/${branch}`})` : ''
+    if (s.baseMissing) return deny(`${s.reason}, so the gate cannot tell what this PR contains.`, 'Fetch the base branch, then retry.')
+    const local = tip === commitOf(dir, `refs/heads/${branch}`)
+    // origin is behind a covered local tip: only a push is missing.
+    if (!local && ok.some(c => git(dir, ['merge-base', '--is-ancestor', tip, c]) !== null)) {
+      return deny(`origin/${branch} is behind the hunted commit ${ok[0].slice(0, 12)}.`, `Push ${branch}, then open the PR.`)
+    }
+    const where = tips.length > 1 ? ` (${local ? 'the local branch' : `origin/${branch}`})` : ''
     return deny(`no finished /bughunt covers ${branch} at ${tip.slice(0, 12)}${where}, so this PR would open unreviewed.`, `Run \`/bughunt ${branch}\`, fix what it finds, push, then open the PR.`)
   }
   return null
@@ -136,15 +143,16 @@ function prMerge(dir, args, ghBin, ghRepo) {
   if (r.status === 0) { try { pr = JSON.parse(r.stdout) } catch { pr = null } }
   const pinned = flag(flags, '--match-head-commit')
   if (typeof pinned === 'string' && unexpanded(pinned)) return deny(`cannot tell which commit \`--match-head-commit ${pinned}\` is.`, LITERAL)
-  const head = typeof pinned === 'string' && pinned ? pinned : pr && pr.headRefOid
-  if (!head) return deny(`could not read the PR's head commit (\`gh ${viewArgs.join(' ')}\` failed).`, 'Pass --match-head-commit <sha>.')
+  // gh must answer: the PR's base decides what range the hunt had to cover.
+  if (!pr || !pr.headRefOid || !pr.baseRefName) return deny(`could not read the PR (\`gh ${viewArgs.join(' ')}\` failed), so the gate cannot tell what it contains.`, 'Check gh auth and the PR number, then retry.')
+  const head = typeof pinned === 'string' && pinned ? pinned : pr.headRefOid
   const label = pr ? `PR #${pr.number}` : `the PR at ${String(head).slice(0, 12)}`
   if (!commitOf(dir, head)) {
     return deny(`${label}'s head ${String(head).slice(0, 12)} is not in this clone.`, `Fetch it (\`git fetch origin pull/${pr ? pr.number : '<n>'}/head\`), then retry.`)
   }
-  const base = pr && pr.baseRefName ? `origin/${pr.baseRefName}` : null
-  const s = reviewStatus(dir, head, { base, pr: pr ? pr.number : null })
+  const s = reviewStatus(dir, head, { base: `origin/${pr.baseRefName}`, pr: pr.number })
   if (s.docsOnly) return null
+  if (s.baseMissing) return deny(`${s.reason}, so the gate cannot tell what ${label} contains.`, `Fetch it (\`git fetch origin ${pr.baseRefName}\`), then retry.`)
   const hunt = pr ? `/bughunt ${pr.number}` : '/bughunt'
   if (!s.hunted) return deny(`no finished /bughunt covers ${label} at ${String(head).slice(0, 12)}.`, `Run \`${hunt}\`, fix what it finds, then merge.`)
   if (s.disposition !== 'pass') {
@@ -159,13 +167,14 @@ const API_WRITE_PATH = /(^|\/)repos\/[^/]+\/[^/]+\/(pulls\/?$|pulls\/[0-9]+\/mer
 const GRAPHQL_WRITES = /\b(mergePullRequest|enablePullRequestAutoMerge|createPullRequest|updateRef|updateRefs|createRef|createCommitOnBranch|mergeBranch)\b/
 function ghApi(args) {
   const { flags, positional } = parseFlags(args, API_VALUE)
-  const path = positional[0] || ''
+  // The endpoint as gh resolves it: no scheme or host, no leading /, no query.
+  const path = String(positional[0] || '').replace(/^https?:\/\/[^/]+/, '').replace(/^\/+/, '').replace(/\?.*$/, '')
   const sendsFields = args.some(a => ['-f', '--raw-field', '-F', '--field', '--input'].includes(a) || /^--(raw-)?field=|^--input=/.test(a))
   const method = String(flag(flags, '-X', '--method') || (sendsFields ? 'POST' : 'GET')).toUpperCase()
   const no = deny('opening or merging a PR, or writing a branch, through `gh api` skips the review check.', 'Use `gh pr create` / `gh pr merge`, which the gate checks against /bughunt.')
   if (/(^|\/)pulls\/[0-9]+\/merge\b/.test(path)) return no
-  if (path === 'graphql') {
-    if (GRAPHQL_WRITES.test(args.join(' '))) return no
+  if (GRAPHQL_WRITES.test(args.join(' '))) return no
+  if (/(^|\/)graphql$/.test(path)) {
     if (flag(flags, '--input') !== undefined || args.some(a => /^query=@/.test(a))) return deny('a GraphQL query read from a file cannot be checked.', 'Pass the query inline, or use `gh pr` commands.')
     return null
   }
@@ -189,6 +198,7 @@ function gitPush(dir, sub) {
   const { flags, positional } = parseFlags(sub.slice(1), PUSH_VALUE)
   if (flag(flags, '--all', '--mirror', '--branches') !== undefined) return deny('`git push --all`/`--mirror` would update the default branch directly.', 'Push your branch and open a reviewed PR.')
   if (flag(flags, '--dry-run', '-n') !== undefined) return null
+  if (flag(flags, '--tags') !== undefined && positional.length <= 1) return null   // tags only
   const remote = positional[0] || 'origin'
   if (unexpanded(remote) || positional.slice(1).some(unexpanded)) return deny('cannot tell where this push goes.', LITERAL)
   const defaults = defaultBranches(dir, remote)

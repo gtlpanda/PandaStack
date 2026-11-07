@@ -1449,9 +1449,9 @@ reports a live run on a real PR. No ledger from that run is on this machine, so 
   - Each refusal names the `/bughunt` to run and the off switch, `PANDASTACK_REVIEW_GATE=0`.
 - **`review-status.mjs`** decides "covering". A ledger whose latest run finished at H covers X when
   two things hold:
-  - its range started no later than X's merge-base;
-  - H is X, or every commit in H..X is documentation only (prose, never agent-steering markdown,
-    renames split) or the exact commit or patch the ledger verified as a repair.
+  - its range started no later than X's merge-base, and an unknown base denies;
+  - H is X, or every commit in H..X is documentation only (prose, not code under `docs/`, nothing
+    under `.claude/`, renames split) or the exact commit or patch the ledger verified as a repair.
 
   So `/release-pr`'s notes commit, `--draft-pr`, and the `/build-app` landing all pass. A merge
   commit never does. A verified repair in X closes its finding for X's result, since the ledger
@@ -1488,16 +1488,26 @@ reports a live run on a real PR. No ledger from that run is on this machine, so 
   - With several ledgers, the alphabetically first one decided.
   - `$VAR` arguments were denied with no way forward; the denial now says to write the literal
     value, and `/bughunt --draft-pr`'s commands do.
-  - `docs/conf.py` and `CLAUDE.md` counted as documentation.
+  - `docs/conf.py` counted as documentation.
   - Repeated git reads could approach the hook's 30 s timeout; commit facts are now read once per
     check.
+- **The gate's second round: every earlier finding closed, plus 3 new MEDIUM and 3 LOW, all
+  fixed.**
+  - My first fix excluded `CLAUDE.md` from documentation, which blocked `/release-pr`'s own notes
+    commit. Now only `.claude/` is excluded.
+  - `gh api /graphql`, a full URL, and a `?query` slipped past the path match.
+  - An unresolvable base skipped the range rule. It now denies with what to fetch, and `gh pr
+    merge` needs `gh pr view` to answer.
+  - Here-strings into a shell and `function f { … }` hid commands.
+  - A stale `origin/` tip sent people to hunt again when only a push was missing.
+  - `git push --tags` on `main` was denied.
 - **The settings merge: 4 MEDIUM, 2 LOW, all fixed.** These are the fail-safe write, no
   fallback on broken JSON, the chain undo, matcher-keyed hooks, the file mode, and
   `--skip=skills/bughunt`, as described in the fix commit.
 
 **Measured, not assumed.** The gate tests ran green on the first try, so each guard was broken on
-purpose. All 10 first-round mutations were caught, and so were all 14 after the review. The
-first round included:
+purpose. All 10 first-round mutations were caught, and so were 14 after the first review and 7
+after the second. The first round included:
 - dropping the disposition check;
 - exempting merge commits or unverified "fixes";
 - counting `.js` as docs;
@@ -1514,6 +1524,6 @@ it), and `/build-app`'s own `gh pr create`, which runs outside the Bash tool and
 driver.
 
 **Stats.**
-- 21 gate tests, 13 new guard cases, and 25 install checks.
+- 22 gate tests, 13 new guard cases, and 25 install checks.
 - 5 new validate pins.
-- The suite is 611 workflow tests, 100 install checks, and 22 secret checks, 0 failed.
+- The suite is 612 workflow tests, 100 install checks, and 22 secret checks, 0 failed.

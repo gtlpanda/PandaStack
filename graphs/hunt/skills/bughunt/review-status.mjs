@@ -30,13 +30,15 @@ const SAFE_GIT = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false'
 const MAX_EXEMPT = 200 // commits after the hunted head; past this, re-hunt
 const WORST = { pass: 0, manual_review: 1, changes_requested: 2 }
 
-// Documentation: prose and images a person reads. A markdown file that steers
-// an agent (CLAUDE.md, AGENTS.md, anything under .claude/, agents/, skills/)
-// is behavior, not documentation, and so is anything executable under docs/.
+// Documentation: prose and images, which a bug hunt has no code to review in.
+// Markdown anywhere counts (READMEs, CLAUDE.md, /release-pr's notes), except
+// under .claude/, where Claude Code runs it (commands, agents, hooks). Under
+// docs/ and changelogs/, only prose and image files count: a site config or a
+// build script there is code.
 const DOC_EXT = /\.(md|markdown|rst|txt|adoc|png|jpe?g|gif|svg|webp|pdf)$/i
 export function isDocPath(p) {
   const s = String(p)
-  if (/(^|\/)(CLAUDE|AGENTS|GEMINI)\.md$/i.test(s) || /(^|\/)(\.claude|agents|skills|commands|\.github)\//.test(s)) return false
+  if (/(^|\/)\.claude\//.test(s)) return false
   if (/(^|\/)LICENSE(\.[A-Za-z]+)?$/.test(s)) return true
   if (/^(docs|changelogs)\//.test(s)) return DOC_EXT.test(s)
   return /\.(md|markdown)$/i.test(s)
@@ -131,7 +133,9 @@ export function reviewStatus(repo, head, { base = null, pr = null } = {}) {
   let mergeBase = null
   if (base) {
     const baseSha = commitOf(repo, base)
-    const mb = baseSha ? git(repo, ['merge-base', baseSha, sha]) : { ok: false }
+    // Without the base, the hunted range cannot be checked: unknown, not covered.
+    if (!baseSha) return { hunted: false, docsOnly: false, head: sha, baseMissing: true, reason: `the base ${base} is not in this clone (fetch it first)` }
+    const mb = git(repo, ['merge-base', baseSha, sha])
     if (mb.ok && mb.out) {
       mergeBase = mb.out
       const paths = mustGit(repo, ['diff', '--no-renames', '--name-only', '-z', mergeBase, sha], 'diffing against the base').split('\0').filter(Boolean)

@@ -53,19 +53,21 @@ commit X when two things hold:
   nothing.
 - **Nothing new came after it.** H is X, or H is an ancestor of X and every
   commit after H is one of these:
-  - **Documentation only.** Prose and images: `*.md`, plus `.md`, `.txt`, and
-    image files under `docs/` and `changelogs/`, and `LICENSE`. Renames count
-    as a delete plus an add. Markdown that steers an agent is behavior, not
-    documentation: `CLAUDE.md`, `AGENTS.md`, and anything under `.claude/`,
-    `agents/`, `skills/`, `commands/`, or `.github/`. This exemption covers
-    `/release-pr`'s notes commit.
+  - **Documentation only.** Prose and images, where a bug hunt has no code to
+    review: markdown anywhere (including `CLAUDE.md` and `/release-pr`'s
+    notes), only prose and image files under `docs/` and `changelogs/` (a site
+    config or script there is code), and `LICENSE`. Anything under `.claude/`
+    is not documentation, because Claude Code runs it. Renames count as a
+    delete plus an add.
   - **A verified repair.** The exact commit `/bughunt` verified for a finding
     (`fix_artifact.commit`), or the same patch cherry-picked or rebased. The
     subject `bughunt: fix F<n>` alone proves nothing. This exemption covers
     `--draft-pr` and the `/build-app` landing. The result for X then leaves
     out the findings that X fixes.
 
-A merge commit is never exempt. When several ledgers cover X, the closest hunt
+A merge commit is never exempt. If the PR's base is not in this clone, or
+`gh pr view` cannot read the PR, the range cannot be checked, so the command
+is denied with what to fetch. When several ledgers cover X, the closest hunt
 wins. Among equally close hunts, the ledger for this PR wins; otherwise the
 worst result wins. A change whose whole diff from its base is documentation
 needs no hunt.

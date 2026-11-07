@@ -117,6 +117,7 @@ function commandOf(tokens) {
   const env = {}
   for (;;) {
     if (i < tokens.length && KEYWORDS.includes(tokens[i])) { i += 1; continue }
+    if (tokens[i] === 'function') { i += 2; continue }   // `function f { ... }`: the body follows the name
     if (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i])) {
       const eq = tokens[i].indexOf('=')
       env[tokens[i].slice(0, eq)] = tokens[i].slice(eq + 1)
@@ -134,9 +135,10 @@ function commandOf(tokens) {
   }
 }
 
-// The script a shell runs from -c (also combined, as in -lc or -ec), or null.
+// The script a shell runs from -c (also combined, as in -lc or -ec) or from a
+// here-string (<<<), or null.
 function shellScript(args) {
-  const i = args.findIndex(a => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a))
+  const i = args.findIndex(a => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a) || a === '<<<')
   return i >= 0 && args[i + 1] !== undefined ? args[i + 1] : null
 }
 
@@ -158,7 +160,7 @@ export function simpleCommands(command, depth = 0, out = []) {
     if (SHELLS.includes(c.word)) {
       const script = shellScript(c.args)
       if (script !== null) simpleCommands(script, depth + 1, out)
-      else if (!c.args.some(a => !a.startsWith('-'))) c.stdinScript = true
+      else if (c.args.includes('<') || !c.args.some(a => !a.startsWith('-'))) c.stdinScript = true
     }
   }
   return out
