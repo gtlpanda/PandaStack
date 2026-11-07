@@ -1403,3 +1403,33 @@ and $1.50 per bug; the corrected figures are below, and the PR and the READMEs w
 - 21 new tests: 16 offline benchmark tests, plus 5 for the fixes.
 - Live spend for this part: $26.15 over 25 runs.
 - The suite is 590 workflow tests, 0 failed.
+
+## 30. CI and branch protection for PandaStack itself (2026-11-07)
+
+**Why.** Every check this repo has (590 workflow tests, the install, secret, and layout checks) ran
+only on one machine, and `main` was unprotected. `/release-pr` gates other repos on CI for the exact
+commit; PandaStack had none.
+
+**What changed.**
+- `.github/workflows/test.yml` runs `scripts/test.sh` on every pull request and every push to
+  `main`, on `ubuntu-24.04` with Node 24, in 15 minutes at most. The job is named `test`.
+- `main` requires that check (strict: the branch must be current), applies the rule to admins, and
+  refuses force pushes and deletion. No approving review is required: the repo has one owner, who
+  cannot approve their own PR.
+- `validate.sh` used to skip shellcheck when it was missing, and it was missing on the only machine
+  that ran it, so shellcheck had never run on this repo. In CI it is now required. Its first run
+  flagged 9 problems:
+  - four `cd` lines with no failure exit;
+  - a one-item loop;
+  - three variables shellcheck cannot see being read inside `check`'s `eval` strings (annotated, not
+    real);
+  - a glob for `graphs/*/skills/*/*.sh` that matched no file and was passed through literally.
+
+**What CI cannot do.** Ubuntu 24.04 blocks unprivileged user namespaces, so `evidence.mjs` runs
+there with its documented fallback (a timeout and a process group, network not blocked), and the
+network-block test skips itself. The sandbox's full isolation is still tested only on a machine
+that allows it.
+
+**Status correction.** The release graph was listed as "tested with mocked agents" only. The owner
+reports a live run on a real PR. No ledger from that run is on this machine, so the docs say
+"reported by the owner".

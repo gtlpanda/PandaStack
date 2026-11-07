@@ -25,6 +25,7 @@ echo 'name: verify-old' > "$CD/skills/verify/SKILL.md"
 echo 'name: review' > "$CD/skills/review/SKILL.md"   # another tool's skill named review (gstack ships one)
 echo 'old reviewer' > "$CD/agents/reviewer.md"
 ln -s /nonexistent "$CD/agents/checker.md"        # broken foreign symlink in the way
+# shellcheck disable=SC2034  # read inside check's eval string
 before="$(snapshot)"
 
 echo "== 1. dry-run changes nothing"
@@ -53,6 +54,7 @@ check "manifest lists 5 moved items"   '[ "$(wc -l < "$bk/.harness-manifest" | t
 check "old settings.json in backup"    '[ "$(cat "$bk/settings.json")" = "{\"model\":\"old\",\"hooks\":{}}" ]'
 check "old skills/verify in backup"    '[ "$(cat "$bk/skills/verify/SKILL.md")" = "name: verify-old" ]'
 check "broken symlink moved to backup" '[ -L "$bk/agents/checker.md" ]'
+# shellcheck disable=SC2034  # read inside check's eval string
 after1="$(snapshot)"
 
 echo "== 3. second install is a no-op"
@@ -120,6 +122,7 @@ H6="$TMP/home6"; mkdir -p "$H6/.claude"; echo A > "$H6/.claude/CLAUDE.md"; echo 
 HOME="$H6" "$REPO/install.sh" >/dev/null
 rm "$H6/.claude/CLAUDE.md"; echo NEW > "$H6/.claude/CLAUDE.md"      # user put a real file where our link was
 HOME="$H6" "$REPO/install.sh" --uninstall >/dev/null 2>&1
+# shellcheck disable=SC2034  # read inside check's eval string
 bk6="$(ls -1d "$H6"/.claude/backups/*/ | head -1)"
 check "settings.json restored"         '[ "$(cat "$H6/.claude/settings.json")" = "B" ]'
 check "conflicting file left alone"    '[ "$(cat "$H6/.claude/CLAUDE.md")" = "NEW" ]'
