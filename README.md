@@ -32,6 +32,11 @@
   and your approvals; a Fable advisor is called only at decision points
   (confirm a finding, gate a plan, unstick a loop, diagnose a failed deploy);
   Sonnet and Haiku subagents do the focused work. Every node is configured for high effort.
+- **Nothing unreviewed reaches a PR.** The review gate, a hook in every repo,
+  refuses `gh pr create` until a finished `/bughunt` covers the head, and
+  `gh pr merge` until that hunt passes. It also refuses pushes straight to the
+  default branch. CI (`scripts/test.sh`) and branch protection guard this
+  repo's own `main`.
 - **You stay in charge of the irreversible.** You approve every plan and every
   merge (for one exact commit); a rollback is only ever recommended, with evidence.
 
@@ -124,8 +129,17 @@ cd PandaStack
 ./install.sh             # link it
 ```
 
-On a machine whose `~/.claude/settings.json` and `CLAUDE.md` you want to keep
-(they hold machine-specific hooks, plugins, or your own rules), leave them out:
+If `~/.claude/settings.json` is already a file of your own, it is **merged,
+not replaced**:
+- Our hooks (the review gate) are added after yours.
+- Keys you lack are filled in, and every key you have keeps your value.
+- `permissions` is never touched.
+- The dry run lists each addition.
+- The file from before the merge is kept in the backup dir, and `--uninstall`
+  puts it back byte for byte while the file is still what the merge wrote. If
+  you edited it since, uninstall removes only our hooks.
+
+To keep a file out entirely:
 
 ```bash
 ./install.sh --skip=settings.json,CLAUDE.md
@@ -143,7 +157,7 @@ history, and project state):
 
 | Repo path                                    | Target                          | How                          |
 |----------------------------------------------|---------------------------------|------------------------------|
-| `settings.json`                              | `~/.claude/settings.json`       | one symlink                  |
+| `settings.json`                              | `~/.claude/settings.json`       | one symlink, or merged into your own file |
 | `CLAUDE.md`                                  | `~/.claude/CLAUDE.md`           | one symlink                  |
 | `loop.md`                                    | `~/.claude/loop.md`             | one symlink                  |
 | `core/skills/<name>/`, `graphs/*/skills/<name>/` | `~/.claude/skills/<name>`   | one symlink **per skill**    |
@@ -194,8 +208,8 @@ Claude Code reads exactly these settings files, in increasing precedence:
   through the symlink (repo file changes, link survives) or replace the link
   with a regular file. Check after your first `/config` change with
   `[ -L ~/.claude/settings.json ] && echo link || echo file`. If it is a file,
-  diff it against the repo before re-running `install.sh`, which would
-  otherwise back it up and relink the repo copy.
+  diff it against the repo. Re-running `install.sh` merges into a regular file
+  and never replaces it.
 
 ## Agent teams
 

@@ -13,7 +13,8 @@ Stopping an iteration never skips steps 5 to 7.
    - If CI is red, read the failing job's log, fix the cause, push.
    - If there are merge conflicts with the base branch, rebase or merge and resolve.
    - **Bug hunt.** If the PR's head commit differs from the head of the last bug
-     hunt, run `/bughunt <PR number>` in discover mode:
+     hunt, run `/bughunt <PR number>` in discover mode. The review gate will
+     not let the PR merge until a hunt covering its head passes:
      - The last hunt's head is the `head` of the last entry in `runs` whose
        `status` is `done`, in
        `"$(git rev-parse --path-format=absolute --git-common-dir)/bughunt/pr-<n>/ledger.json"`.

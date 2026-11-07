@@ -9,5 +9,19 @@
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "0"
   },
-  "disableAllHooks": false
+  "disableAllHooks": false,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/bughunt/gate.mjs\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
 }

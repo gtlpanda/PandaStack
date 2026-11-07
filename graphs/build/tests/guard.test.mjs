@@ -25,6 +25,10 @@ await test('denied: push in the common spellings, remote changes, history rewrit
     'git clean -fd', 'git clean -xdf', 'git checkout integration/toy', 'git switch integration/toy',
     'rm -rf /', 'rm -rf ~', 'rm -rf ~/', 'rm -fr $HOME', 'sudo rm -rf /',
     'bash -c "git push"', 'git pu\\sh', 'git send-pack origin', '(git push)', 'git branch -d integration/toy', 'git reset --soft integration/toy', 'git merge integration/toy', "sh -c 'git push origin main'", 'echo $(git push)', 'xargs git push', 'env GIT_TRACE=1 git push', 'eval git push', 'echo `git push`',
+    // Reserved words, prefix options with values, combined shell flags, and a heredoc fed to a shell (review of #34).
+    'for n in 1 2; do git push; done', 'if true; then git push; fi', '{ git push; }', '! git push', 'while true; do git push; done',
+    'timeout 30 git push', 'timeout -s KILL 30 git push', 'nice -n 5 git push', 'sudo -u bob git push', 'env -u FOO git push',
+    'bash -lc "git push"', "sh -ec 'git push origin main'", "bash <<'EOF'\ngit push origin main\nEOF",
   ]) assert.ok(decideBash(cmd), `should deny: ${cmd}`)
 })
 await test('allowed: everything a /dev slice does', () => {

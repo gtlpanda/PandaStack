@@ -1433,3 +1433,97 @@ that allows it.
 **Status correction.** The release graph was listed as "tested with mocked agents" only. The owner
 reports a live run on a real PR. No ledger from that run is on this machine, so the docs say
 "reported by the owner".
+
+## 31. The review gate: no PR opens or merges without a /bughunt (2026-11-07)
+
+**Why.** An agent built features with an unattended loop and opened PRs that nobody reviewed.
+`/bughunt` existed, but nothing required it outside `/build-app` and `/loop`.
+
+**What changed.**
+- **`graphs/hunt/skills/bughunt/gate.mjs`** is a PreToolUse hook on Bash, registered in
+  `settings.json`, so it applies in every repo:
+  - `gh pr create` and `gh pr new` need a finished hunt covering the PR head.
+  - `gh pr merge` also needs that hunt's disposition to be `pass`.
+  - `gh api` merges, and pushes straight to the default branch (including `--all` and `--mirror`),
+    are refused.
+  - Each refusal names the `/bughunt` to run and the off switch, `PANDASTACK_REVIEW_GATE=0`.
+- **`review-status.mjs`** decides "covering". A ledger whose latest run finished at H covers X when
+  two things hold:
+  - its range started no later than X's merge-base, and an unknown base denies;
+  - H is X, or every commit in H..X is documentation only (prose, not code under `docs/`, nothing
+    under `.claude/`, renames split) or the exact commit or patch the ledger verified as a repair.
+
+  So `/release-pr`'s notes commit, `--draft-pr`, and the `/build-app` landing all pass. A merge
+  commit never does. A verified repair in X closes its finding for X's result, since the ledger
+  keeps it open until the fix is in the PR. When several ledgers cover X, the closest wins, then
+  this PR's, then the worst. A change that is documentation only needs no hunt.
+- **The shell parser is shared, not copied.** The `/build-app` guard's tokenizer is now
+  `simpleCommands`, exported from `guard-rules.mjs`, and the gate imports it. The guard's own tests
+  pass unchanged.
+- **`install.sh` merges `settings.json` into a file of your own** instead of replacing it:
+  - our hooks are added, keys you lack are filled in, and your values win;
+  - `permissions` is never touched;
+  - the pre-merge file and the merged file are kept in the backup dir, and uninstall restores the
+    pre-merge file byte for byte while the file is unchanged since the merge (otherwise it removes
+    only our hooks).
+
+  Before this, keeping your own settings meant `--skip=settings.json`, which also kept the gate out.
+
+**Review of #34: two adversarial reviewers.**
+- **The gate: 4 HIGH, 6 MEDIUM, 2 LOW, each demonstrated, all fixed.**
+  - Any commit titled `bughunt: fix F1`, even an empty one, counted as the verified repair and
+    cleared F1. Now only the verified commit itself, or the same patch, counts.
+  - `git push origin feat:heads/main`, `:`, and `refs/heads/*` reached main.
+  - Shell keywords (`for … do`, `if … then`, `{ }`, `!`), prefix options (`timeout 30`,
+    `sudo -u`), `bash -lc`, heredocs and pipes into a shell, and `g\h` all hid the command. The
+    shared parser now handles each of them, and the `/build-app` guard gains the same coverage.
+  - `GH_REPO` and `gh pr -R x merge` let the gate judge this clone's PR while gh acted on another
+    repo's.
+  - Uncovered routes opened PRs or wrote branches: `gh api` POSTs to `/pulls`, `/merges`,
+    `/git/refs`, `/contents`; GraphQL from a file; `hub`; gh aliases.
+  - `--head` checked the local branch when origin's differed, and accepted a branch of another
+    fork.
+  - A rename from code into `docs/` looked like a docs-only change.
+  - A hunt of only the last commits covered the whole branch.
+  - With several ledgers, the alphabetically first one decided.
+  - `$VAR` arguments were denied with no way forward; the denial now says to write the literal
+    value, and `/bughunt --draft-pr`'s commands do.
+  - `docs/conf.py` counted as documentation.
+  - Repeated git reads could approach the hook's 30 s timeout; commit facts are now read once per
+    check.
+- **The gate's second round: every earlier finding closed, plus 3 new MEDIUM and 3 LOW, all
+  fixed.**
+  - My first fix excluded `CLAUDE.md` from documentation, which blocked `/release-pr`'s own notes
+    commit. Now only `.claude/` is excluded.
+  - `gh api /graphql`, a full URL, and a `?query` slipped past the path match.
+  - An unresolvable base skipped the range rule. It now denies with what to fetch, and `gh pr
+    merge` needs `gh pr view` to answer.
+  - Here-strings into a shell and `function f { … }` hid commands.
+  - A stale `origin/` tip sent people to hunt again when only a push was missing.
+  - `git push --tags` on `main` was denied.
+- **The settings merge: 4 MEDIUM, 2 LOW, all fixed.** These are the fail-safe write, no
+  fallback on broken JSON, the chain undo, matcher-keyed hooks, the file mode, and
+  `--skip=skills/bughunt`, as described in the fix commit.
+
+**Measured, not assumed.** The gate tests ran green on the first try, so each guard was broken on
+purpose. All 10 first-round mutations were caught, and so were 14 after the first review and 7
+after the second. The first round included:
+- dropping the disposition check;
+- exempting merge commits or unverified "fixes";
+- counting `.js` as docs;
+- dropping the `-R` and push checks;
+- not following `cd`;
+- not closing fixed findings;
+- not requiring the last run to have finished.
+
+**Still a hypothesis.** The docs imply that `!` bash mode skips hooks, but this was not tested.
+The docs do say that hook edits take effect in a running session.
+
+**Not covered:** the GitHub web UI, other machines (branch protection covers those, where a repo has
+it), and `/build-app`'s own `gh pr create`, which runs outside the Bash tool and is gated by its
+driver.
+
+**Stats.**
+- 22 gate tests, 13 new guard cases, and 25 install checks.
+- 5 new validate pins.
+- The suite is 612 workflow tests, 100 install checks, and 22 secret checks, 0 failed.
