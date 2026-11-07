@@ -181,9 +181,11 @@ PandaStack checkout and restart Claude Code, then stop.
      or the branch you hunted), titled `bughunt: fixes for <label>`, with the
      report as its body.
 
-   Only on a yes:
-   `git -C "$REPO" push -u origin "bughunt/$KEY"`, then
-   `gh pr create --draft --base <reviewed branch> --head "bughunt/$KEY" --title "bughunt: fixes for <label>" --body-file "$D/report.md"`
+   Only on a yes, with the literal repo path and key written in (the review
+   gate reads a command before the shell expands it, so it refuses `$REPO` and
+   `$KEY`):
+   `git -C <repo path> push -u origin bughunt/<KEY>`, then
+   `gh pr create --draft --base <reviewed branch> --head bughunt/<KEY> --title "bughunt: fixes for <label>" --body-file <state dir>/report.md`
    (write the report there first). Give the human the URL. Never merge it, and
    never push anything else. On anything but a yes, push nothing and say so.
 

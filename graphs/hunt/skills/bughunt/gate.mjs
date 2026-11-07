@@ -71,44 +71,71 @@ function deny(why, what) {
   return `review gate: ${why}${what ? ` ${what}` : ''} ${OVERRIDE}`
 }
 
-// The -R repo must be the one checked out here: the ledgers live in this clone.
-function wrongRepo(dir, flags) {
-  const r = flag(flags, '-R', '--repo')
-  if (r === undefined) return null
+// The gate reads a command before the shell expands it, so a $VAR or $(...)
+// is unknown to it. A denial caused by one says how to get past it honestly.
+const LITERAL = 'The gate reads the command before the shell expands it: write the literal value, not a $VARIABLE or $(...).'
+const unexpanded = v => /[$`]|SUBST/.test(String(v))
+
+// The repo gh will act on (-R, else GH_REPO) must be the one checked out
+// here: the /bughunt ledgers live in this clone.
+function wrongRepo(dir, flags, ghRepo) {
+  const r = flag(flags, '-R', '--repo') ?? ghRepo
+  if (r === undefined || r === null || r === '') return null
+  const named = flag(flags, '-R', '--repo') !== undefined ? `-R ${r}` : `GH_REPO=${r}`
+  if (unexpanded(r)) return deny(`\`${named}\`: cannot tell which repo gh will act on.`, LITERAL)
   const here = repoSlug(git(dir, ['remote', 'get-url', 'origin']))
   if (here && repoSlug(r) === here) return null
-  return deny(`\`-R ${r}\` names a repo other than this checkout's origin (${here || 'none'}); its /bughunt ledgers live in its own clone.`, 'Run the command from that repo\'s checkout.')
+  return deny(`\`${named}\` names a repo other than this checkout's origin (${here || 'none'}); its /bughunt ledgers live in its own clone.`, 'Run the command from that repo\'s checkout.')
 }
 
-function prCreate(dir, args) {
+// Every commit that could become the PR head for a branch: the local tip and
+// origin's, when both exist and differ. Each must be covered.
+function branchTips(dir, branch) {
+  return [...new Set([commitOf(dir, `refs/heads/${branch}`), commitOf(dir, `refs/remotes/origin/${branch}`)].filter(Boolean))]
+}
+
+function prCreate(dir, args, ghRepo) {
   const { flags } = parseFlags(args, [...GH_GLOBAL_VALUE, ...PR_CREATE_VALUE])
   if (flags['--dry-run'] !== undefined || flags['-w'] !== undefined || flags['--web'] !== undefined) return null
-  const other = wrongRepo(dir, flags)
+  const other = wrongRepo(dir, flags, ghRepo)
   if (other) return other
   let branch = flag(flags, '-H', '--head')
-  if (typeof branch === 'string' && branch.includes(':')) branch = branch.slice(branch.indexOf(':') + 1)
+  if (typeof branch === 'string' && branch.includes(':')) {
+    const owner = branch.slice(0, branch.indexOf(':')).toLowerCase()
+    const here = repoSlug(git(dir, ['remote', 'get-url', 'origin']))
+    if (!here || here.split('/')[0] !== owner) return deny(`\`--head ${branch}\` is a branch of another fork; this clone has no /bughunt record of it.`, 'Hunt it in a clone of that fork.')
+    branch = branch.slice(branch.indexOf(':') + 1)
+  }
   if (branch === undefined || branch === true) branch = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD'])
   if (!branch || branch === 'HEAD') return deny('cannot tell which branch this PR is for.', 'Check out the branch, or pass --head.')
-  const head = commitOf(dir, `refs/heads/${branch}`) || commitOf(dir, `refs/remotes/origin/${branch}`)
-  if (!head) return deny(`branch ${branch} is not in this clone.`, 'Fetch or check it out first.')
+  if (unexpanded(branch)) return deny(`cannot tell which branch \`--head ${branch}\` is.`, LITERAL)
+  const tips = branchTips(dir, branch)
+  if (!tips.length) return deny(`branch ${branch} is not in this clone.`, 'Fetch or check it out first.')
   let base = flag(flags, '-B', '--base')
+  if (typeof base === 'string' && unexpanded(base)) return deny(`cannot tell which branch \`--base ${base}\` is.`, LITERAL)
   base = typeof base === 'string' ? (commitOf(dir, `refs/remotes/origin/${base}`) ? `origin/${base}` : base) : `origin/${defaultBranches(dir)[0]}`
-  const s = reviewStatus(dir, head, { base })
-  if (s.docsOnly || s.hunted) return null
-  return deny(`no finished /bughunt covers ${branch} at ${head.slice(0, 12)}, so this PR would open unreviewed.`, `Run \`/bughunt ${branch}\`, fix what it finds, then open the PR.`)
+  for (const tip of tips) {
+    const s = reviewStatus(dir, tip, { base })
+    if (s.docsOnly || s.hunted) continue
+    const where = tips.length > 1 ? ` (${tip === commitOf(dir, `refs/heads/${branch}`) ? 'the local branch' : `origin/${branch}`})` : ''
+    return deny(`no finished /bughunt covers ${branch} at ${tip.slice(0, 12)}${where}, so this PR would open unreviewed.`, `Run \`/bughunt ${branch}\`, fix what it finds, push, then open the PR.`)
+  }
+  return null
 }
 
-function prMerge(dir, args, ghBin) {
+function prMerge(dir, args, ghBin, ghRepo) {
   const { flags, positional } = parseFlags(args, [...GH_GLOBAL_VALUE, ...PR_MERGE_VALUE])
   if (flags['--disable-auto'] !== undefined) return null
-  const other = wrongRepo(dir, flags)
+  const other = wrongRepo(dir, flags, ghRepo)
   if (other) return other
   const target = positional[0]
+  if (target !== undefined && unexpanded(target)) return deny(`cannot tell which PR \`${target}\` is.`, LITERAL)
   const viewArgs = ['pr', 'view', ...(target ? [target] : []), '--json', 'number,headRefOid,headRefName,baseRefName']
   const r = spawnSync(ghBin, viewArgs, { cwd: dir, encoding: 'utf8', timeout: 10_000 })
   let pr = null
   if (r.status === 0) { try { pr = JSON.parse(r.stdout) } catch { pr = null } }
   const pinned = flag(flags, '--match-head-commit')
+  if (typeof pinned === 'string' && unexpanded(pinned)) return deny(`cannot tell which commit \`--match-head-commit ${pinned}\` is.`, LITERAL)
   const head = typeof pinned === 'string' && pinned ? pinned : pr && pr.headRefOid
   if (!head) return deny(`could not read the PR's head commit (\`gh ${viewArgs.join(' ')}\` failed).`, 'Pass --match-head-commit <sha>.')
   const label = pr ? `PR #${pr.number}` : `the PR at ${String(head).slice(0, 12)}`
@@ -116,7 +143,7 @@ function prMerge(dir, args, ghBin) {
     return deny(`${label}'s head ${String(head).slice(0, 12)} is not in this clone.`, `Fetch it (\`git fetch origin pull/${pr ? pr.number : '<n>'}/head\`), then retry.`)
   }
   const base = pr && pr.baseRefName ? `origin/${pr.baseRefName}` : null
-  const s = reviewStatus(dir, head, { base })
+  const s = reviewStatus(dir, head, { base, pr: pr ? pr.number : null })
   if (s.docsOnly) return null
   const hunt = pr ? `/bughunt ${pr.number}` : '/bughunt'
   if (!s.hunted) return deny(`no finished /bughunt covers ${label} at ${String(head).slice(0, 12)}.`, `Run \`${hunt}\`, fix what it finds, then merge.`)
@@ -126,28 +153,50 @@ function prMerge(dir, args, ghBin) {
   return null
 }
 
+// gh api calls that open or merge a PR, or write a branch, behind the gate's back.
+const API_VALUE = ['-X', '--method', '-f', '--raw-field', '-F', '--field', '-H', '--header', '--input', '-q', '--jq', '-t', '--template', '--hostname', '-p', '--preview', '--cache']
+const API_WRITE_PATH = /(^|\/)repos\/[^/]+\/[^/]+\/(pulls\/?$|pulls\/[0-9]+\/merge|merges|git\/refs|contents\/|branches\/[^/]+\/rename)/
+const GRAPHQL_WRITES = /\b(mergePullRequest|enablePullRequestAutoMerge|createPullRequest|updateRef|updateRefs|createRef|createCommitOnBranch|mergeBranch)\b/
 function ghApi(args) {
-  const text = args.join(' ')
-  if (/(^|\/)pulls\/[0-9]+\/merge\b/.test(text) || /\b(mergePullRequest|enablePullRequestAutoMerge)\b/.test(text)) {
-    return deny('merging through `gh api` skips the review check.', 'Use `gh pr merge <n>`, which the gate checks against /bughunt.')
+  const { flags, positional } = parseFlags(args, API_VALUE)
+  const path = positional[0] || ''
+  const sendsFields = args.some(a => ['-f', '--raw-field', '-F', '--field', '--input'].includes(a) || /^--(raw-)?field=|^--input=/.test(a))
+  const method = String(flag(flags, '-X', '--method') || (sendsFields ? 'POST' : 'GET')).toUpperCase()
+  const no = deny('opening or merging a PR, or writing a branch, through `gh api` skips the review check.', 'Use `gh pr create` / `gh pr merge`, which the gate checks against /bughunt.')
+  if (/(^|\/)pulls\/[0-9]+\/merge\b/.test(path)) return no
+  if (path === 'graphql') {
+    if (GRAPHQL_WRITES.test(args.join(' '))) return no
+    if (flag(flags, '--input') !== undefined || args.some(a => /^query=@/.test(a))) return deny('a GraphQL query read from a file cannot be checked.', 'Pass the query inline, or use `gh pr` commands.')
+    return null
   }
+  if (method !== 'GET' && method !== 'HEAD' && API_WRITE_PATH.test(path)) return no
   return null
+}
+
+// Normalizes a push refspec's destination to a branch name; '*' for a pattern
+// or a "matching" push (':' alone), which can reach any branch.
+function pushDestination(spec, current) {
+  const s = spec.replace(/^\+/, '')
+  if (s === ':' ) return '*'
+  let dst = s.includes(':') ? s.slice(s.indexOf(':') + 1) : s
+  if (dst === '' && s.includes(':')) return null   // `:x` deletes x; handled as dst x below
+  if (dst === 'HEAD' || dst === '@') dst = current
+  dst = String(dst || '').replace(/^refs\/heads\//, '').replace(/^heads\//, '')
+  return /[*?[]/.test(dst) ? '*' : dst
 }
 
 function gitPush(dir, sub) {
   const { flags, positional } = parseFlags(sub.slice(1), PUSH_VALUE)
-  if (flag(flags, '--all', '--mirror') !== undefined) return deny('`git push --all`/`--mirror` would update the default branch directly.', 'Push your branch and open a reviewed PR.')
+  if (flag(flags, '--all', '--mirror', '--branches') !== undefined) return deny('`git push --all`/`--mirror` would update the default branch directly.', 'Push your branch and open a reviewed PR.')
   if (flag(flags, '--dry-run', '-n') !== undefined) return null
   const remote = positional[0] || 'origin'
+  if (unexpanded(remote) || positional.slice(1).some(unexpanded)) return deny('cannot tell where this push goes.', LITERAL)
   const defaults = defaultBranches(dir, remote)
   const current = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD'])
   const specs = positional.slice(1)
-  const dsts = specs.length ? specs.map(spec => {
-    const s = spec.replace(/^\+/, '')
-    const dst = s.includes(':') ? s.slice(s.indexOf(':') + 1) : s
-    return dst === 'HEAD' || dst === '@' ? current : dst
-  }) : [current]
-  const hit = dsts.map(d => String(d || '').replace(/^refs\/heads\//, '')).find(d => defaults.includes(d))
+  const dsts = specs.length ? specs.map(spec => pushDestination(spec, current)) : [current]
+  if (dsts.includes('*')) return deny('a pattern or "matching" push can update the default branch directly.', 'Push one branch by name.')
+  const hit = dsts.find(d => d && defaults.includes(d))
   if (hit) return deny(`this pushes straight to ${remote}/${hit}, the default branch, with no review.`, 'Push a branch, run /bughunt on it, and open a PR.')
   return null
 }
@@ -157,7 +206,7 @@ function gitPush(dir, sub) {
 function cdTo(dir, args) {
   const t = args.find(a => !a.startsWith('-') || a === '-')
   if (t === undefined || t === '~') return homedir()
-  if (t === '-' || /[$`]|SUBST/.test(t)) return null
+  if (t === '-' || unexpanded(t)) return null
   let p
   if (t.startsWith('~/')) p = resolve(homedir(), t.slice(2))
   else if (isAbsolute(t)) p = t
@@ -180,31 +229,45 @@ function positionalIndex(args, valueFlags, n) {
   return -1
 }
 
+const GATED_TEXT = /\b(gh|hub)\b[\s\S]*\b(pr|api|pull-request|merge|alias)\b|\bpush\b/
+
 // The deny reason for a Bash command line run in cwd, or null to allow.
 export function gateDecision(command, cwd, { env = process.env } = {}) {
   if (env.PANDASTACK_REVIEW_GATE === '0') return null
   const text = String(command || '')
-  if (!/\b(gh|git)\b/.test(text)) return null
   const ghBin = env.PANDASTACK_GATE_GH || 'gh'
   let dir = cwd && existsSync(cwd) ? cwd : null
-  for (const { word, args, tooDeep } of simpleCommands(text)) {
-    if (tooDeep) {
-      if (/\bgh\s+(pr|api)\b|\bpush\b/.test(text)) return deny('a command nested too deeply to check.', 'Run it unnested.')
+  const exported = {}   // export VAR=value earlier in this command line
+  for (const c of simpleCommands(text)) {
+    const { word, args } = c
+    if (c.tooDeep || c.stdinScript) {
+      if (GATED_TEXT.test(text)) return deny(c.tooDeep ? 'a command nested too deeply to check.' : 'a script fed to a shell on its input cannot be checked.', 'Run the commands directly.')
       continue
     }
     if (word === 'cd' || word === 'pushd') { dir = cdTo(dir, args); continue }
-    const unknownDir = deny('cannot tell which repo this command runs in (a `cd` or `-C` the gate cannot resolve).', 'Run it from the repo\'s directory without the cd.')
+    if (word === 'export' || word === 'declare' || word === 'typeset') {
+      for (const a of args) { const eq = a.indexOf('='); if (eq > 0) exported[a.slice(0, eq)] = a.slice(eq + 1) }
+      continue
+    }
+    const ghRepo = c.env.GH_REPO ?? exported.GH_REPO ?? env.GH_REPO
+    const unknownDir = deny('cannot tell which repo this command runs in (a `cd` or `-C` the gate cannot resolve).', `Run it from the repo's directory. ${LITERAL}`)
     let reason = null
     if (word === 'gh') {
       const g = positionalIndex(args, GH_GLOBAL_VALUE, 0)
       const v = positionalIndex(args, GH_GLOBAL_VALUE, 1)
       const group = g >= 0 ? args[g] : null
       const verb = v >= 0 ? args[v] : null
-      // Global flags can come before the group; the verb's own flags after it.
-      const own = [...args.slice(0, g >= 0 ? g : 0), ...(v >= 0 ? args.slice(v + 1) : [])]
-      if (group === 'pr' && (verb === 'create' || verb === 'new')) reason = dir ? prCreate(dir, own) : unknownDir
-      else if (group === 'pr' && verb === 'merge') reason = dir ? prMerge(dir, own, ghBin) : unknownDir
-      else if (group === 'api') reason = ghApi(args)
+      // gh takes -R anywhere: every argument but the group and verb words.
+      const own = args.filter((_, i) => i !== g && i !== v)
+      if (group === 'pr' && (verb === 'create' || verb === 'new')) reason = dir ? prCreate(dir, own, ghRepo) : unknownDir
+      else if (group === 'pr' && verb === 'merge') reason = dir ? prMerge(dir, own, ghBin, ghRepo) : unknownDir
+      else if (group === 'api') reason = ghApi(args.filter((_, i) => i !== g))
+      else if (group === 'alias' && (verb === 'set' || verb === 'import')) {
+        if (verb === 'import' || /\b(pr\s+(create|new|merge)|api)\b/.test(args.join(' '))) reason = deny('a gh alias for opening or merging PRs would skip the review check.', 'Use `gh pr create` / `gh pr merge` directly.')
+      }
+    } else if (word === 'hub') {
+      const sub = args.find(a => !a.startsWith('-'))
+      if (['pull-request', 'merge', 'api'].includes(sub)) reason = deny('`hub` opens or merges PRs without the review check.', 'Use `gh pr create` / `gh pr merge`.')
     } else if (word === 'git') {
       const { opts, sub } = gitSubcommand(args)
       if (sub[0] === 'push') {

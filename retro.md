@@ -1448,11 +1448,15 @@ reports a live run on a real PR. No ledger from that run is on this machine, so 
     are refused.
   - Each refusal names the `/bughunt` to run and the off switch, `PANDASTACK_REVIEW_GATE=0`.
 - **`review-status.mjs`** decides "covering". A ledger whose latest run finished at H covers X when
-  H is X, or when every commit in H..X is documentation only or a `bughunt: fix F<n>` that the
-  ledger verified. So `/release-pr`'s notes commit, `--draft-pr`, and the `/build-app` landing all
-  pass. A merge commit never does. A verified repair in X closes its finding for X's result, since
-  the ledger keeps it open until the fix is in the PR. A change that is documentation only needs no
-  hunt.
+  two things hold:
+  - its range started no later than X's merge-base;
+  - H is X, or every commit in H..X is documentation only (prose, never agent-steering markdown,
+    renames split) or the exact commit or patch the ledger verified as a repair.
+
+  So `/release-pr`'s notes commit, `--draft-pr`, and the `/build-app` landing all pass. A merge
+  commit never does. A verified repair in X closes its finding for X's result, since the ledger
+  keeps it open until the fix is in the PR. When several ledgers cover X, the closest wins, then
+  this PR's, then the worst. A change that is documentation only needs no hunt.
 - **The shell parser is shared, not copied.** The `/build-app` guard's tokenizer is now
   `simpleCommands`, exported from `guard-rules.mjs`, and the gate imports it. The guard's own tests
   pass unchanged.
@@ -1465,8 +1469,35 @@ reports a live run on a real PR. No ledger from that run is on this machine, so 
 
   Before this, keeping your own settings meant `--skip=settings.json`, which also kept the gate out.
 
+**Review of #34: two adversarial reviewers.**
+- **The gate: 4 HIGH, 6 MEDIUM, 2 LOW, each demonstrated, all fixed.**
+  - Any commit titled `bughunt: fix F1`, even an empty one, counted as the verified repair and
+    cleared F1. Now only the verified commit itself, or the same patch, counts.
+  - `git push origin feat:heads/main`, `:`, and `refs/heads/*` reached main.
+  - Shell keywords (`for … do`, `if … then`, `{ }`, `!`), prefix options (`timeout 30`,
+    `sudo -u`), `bash -lc`, heredocs and pipes into a shell, and `g\h` all hid the command. The
+    shared parser now handles each of them, and the `/build-app` guard gains the same coverage.
+  - `GH_REPO` and `gh pr -R x merge` let the gate judge this clone's PR while gh acted on another
+    repo's.
+  - Uncovered routes opened PRs or wrote branches: `gh api` POSTs to `/pulls`, `/merges`,
+    `/git/refs`, `/contents`; GraphQL from a file; `hub`; gh aliases.
+  - `--head` checked the local branch when origin's differed, and accepted a branch of another
+    fork.
+  - A rename from code into `docs/` looked like a docs-only change.
+  - A hunt of only the last commits covered the whole branch.
+  - With several ledgers, the alphabetically first one decided.
+  - `$VAR` arguments were denied with no way forward; the denial now says to write the literal
+    value, and `/bughunt --draft-pr`'s commands do.
+  - `docs/conf.py` and `CLAUDE.md` counted as documentation.
+  - Repeated git reads could approach the hook's 30 s timeout; commit facts are now read once per
+    check.
+- **The settings merge: 4 MEDIUM, 2 LOW, all fixed.** These are the fail-safe write, no
+  fallback on broken JSON, the chain undo, matcher-keyed hooks, the file mode, and
+  `--skip=skills/bughunt`, as described in the fix commit.
+
 **Measured, not assumed.** The gate tests ran green on the first try, so each guard was broken on
-purpose. All 10 mutations were caught, including:
+purpose. All 10 first-round mutations were caught, and so were all 14 after the review. The
+first round included:
 - dropping the disposition check;
 - exempting merge commits or unverified "fixes";
 - counting `.js` as docs;
@@ -1483,6 +1514,6 @@ it), and `/build-app`'s own `gh pr create`, which runs outside the Bash tool and
 driver.
 
 **Stats.**
-- 17 gate tests and 16 install checks.
-- 4 new validate pins.
-- The suite is 607 workflow tests, 91 install checks, and 22 secret checks, 0 failed.
+- 21 gate tests, 13 new guard cases, and 25 install checks.
+- 5 new validate pins.
+- The suite is 611 workflow tests, 100 install checks, and 22 secret checks, 0 failed.

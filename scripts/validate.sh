@@ -219,7 +219,8 @@ rule graphs/hunt/skills/bughunt/SKILL.md 'evidence.mjs" recheck' 'the session re
 rule loop.md 'run `/bughunt <PR number>` in discover mode' 'every PR the loop tends gets a bug hunt when its head changes'
 rule settings.json 'skills/bughunt/gate.mjs' 'the review gate hook is registered'
 rule graphs/hunt/skills/bughunt/gate.mjs "if (s.disposition !== 'pass')" 'a PR merges only after a hunt that passed'
-rule graphs/hunt/skills/bughunt/review-status.mjs 'if (parents.length > 1) return null' 'a merge commit after the hunt is never exempt'
+rule graphs/hunt/skills/bughunt/review-status.mjs 'if (facts.merge) return null' 'a merge commit after the hunt is never exempt'
+rule graphs/hunt/skills/bughunt/review-status.mjs 'if (fixCommit === sha) return' 'only the verified fix commit itself, or its patch, is exempt; a subject proves nothing'
 rule scripts/merge-settings.mjs "if (k === 'permissions') continue" 'install never merges permissions'
 rule graphs/hunt/skills/bughunt/SKILL.md 'Never use ScheduleWakeup or sleep to wait for it' 'a bughunt session waits for the workflow notification, never a long wakeup'
 

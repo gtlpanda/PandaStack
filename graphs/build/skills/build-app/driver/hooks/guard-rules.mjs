@@ -26,22 +26,41 @@ const GIT_DENY = [
 ]
 // git options before the subcommand that take a value.
 const GIT_VALUE_OPTS = ['-C', '-c', '--git-dir', '--work-tree', '--namespace']
-// Words that run the command after them.
-const PREFIXES = ['env', 'sudo', 'nohup', 'time', 'command', 'exec', 'xargs', 'nice', 'timeout', 'stdbuf']
-const SHELLS = ['bash', 'sh', 'zsh', 'dash']
+// Words that run the command after them, with their options that take a
+// value (so `timeout -s KILL 30 gh ...` and `sudo -u bob gh ...` reach gh).
+const PREFIXES = {
+  env: ['-u', '--unset', '-C', '--chdir', '-S', '--split-string'], sudo: ['-u', '-g', '-h', '-p', '-C', '-U', '-r', '-t'],
+  nohup: [], time: ['-f', '-o', '--format', '--output'], command: [], exec: ['-a'], builtin: [],
+  xargs: ['-n', '-I', '-i', '-L', '-l', '-P', '-d', '-E', '-e', '-s', '-a', '--max-args', '--max-procs', '--delimiter', '--arg-file'],
+  nice: ['-n', '--adjustment'], timeout: ['-s', '--signal', '-k', '--kill-after'], stdbuf: ['-i', '-o', '-e'],
+}
+// Shell reserved words that can stand before a command in a segment.
+const KEYWORDS = ['{', '}', '!', 'if', 'then', 'else', 'elif', 'fi', 'do', 'done', 'while', 'until', 'time', 'in', 'esac', ';;', '[[', ']]']
+const SHELLS = ['bash', 'sh', 'zsh', 'dash', 'ksh']
 
-// Heredoc bodies are data (a commit message, a file), never commands.
-function dropHeredocs(text) {
+// Heredoc bodies are data (a commit message, a file), never commands - unless
+// the line that opens one runs a shell, which then reads the body as a
+// script. Returns { text, scripts: [body fed to a shell] }.
+function splitHeredocs(text) {
   const lines = String(text).split('\n')
   const out = []
+  const scripts = []
   let end = null
+  let body = null
   for (const line of lines) {
-    if (end !== null) { if (line.trim() === end) end = null; continue }
+    if (end !== null) {
+      if (line.trim() === end) { if (body) scripts.push(body.join('\n')); end = null; body = null } else if (body) body.push(line)
+      continue
+    }
     out.push(line)
     const m = /<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/.exec(line)
-    if (m) end = m[2]
+    if (m) {
+      end = m[2]
+      const opener = line.slice(0, m.index)
+      body = parse(opener).segments.some(t => SHELLS.includes(commandOf(t).word)) ? [] : null
+    }
   }
-  return out.join('\n')
+  return { text: out.join('\n'), scripts }
 }
 
 // Splits into simple commands at unquoted ; & | newlines, and lifts out every
@@ -90,36 +109,56 @@ function parse(text) {
   return { segments, subs }
 }
 
-// The command word of a simple command and its arguments, after variable
-// assignments and prefix commands (env, sudo, xargs, ...).
+// The command word of a simple command and its arguments, after reserved
+// words (do, then, !, {), variable assignments, and prefix commands (env,
+// sudo, timeout 30, ...). env holds the VAR=value assignments it passed.
 function commandOf(tokens) {
   let i = 0
+  const env = {}
   for (;;) {
-    while (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i])) i += 1
-    if (i < tokens.length && PREFIXES.includes(basename(tokens[i]))) {
+    if (i < tokens.length && KEYWORDS.includes(tokens[i])) { i += 1; continue }
+    if (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i])) {
+      const eq = tokens[i].indexOf('=')
+      env[tokens[i].slice(0, eq)] = tokens[i].slice(eq + 1)
       i += 1
-      while (i < tokens.length && tokens[i].startsWith('-')) i += 1
       continue
     }
-    return { word: i < tokens.length ? basename(tokens[i]) : '', args: tokens.slice(i + 1) }
+    const word = i < tokens.length ? basename(tokens[i]) : ''
+    if (Object.hasOwn(PREFIXES, word)) {
+      i += 1
+      while (i < tokens.length && tokens[i].startsWith('-') && tokens[i] !== '-') { if (PREFIXES[word].includes(tokens[i])) i += 1; i += 1 }
+      if (word === 'timeout' && i < tokens.length) i += 1   // the duration
+      continue
+    }
+    return { word, args: tokens.slice(i + 1), env }
   }
 }
 
-// Every simple command a Bash command line runs, in order, as {word, args}:
-// command substitutions first, then each segment, with eval and `sh -c`
-// scripts expanded in place. A script nested past depth 5 yields
-// {tooDeep: true}. Shared with the /bughunt review gate (graphs/hunt).
+// The script a shell runs from -c (also combined, as in -lc or -ec), or null.
+function shellScript(args) {
+  const i = args.findIndex(a => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a))
+  return i >= 0 && args[i + 1] !== undefined ? args[i + 1] : null
+}
+
+// Every simple command a Bash command line runs, in order, as {word, args,
+// env}: command substitutions first, then each segment, with eval, `sh -c`,
+// and heredocs fed to a shell expanded in place. A shell with no script
+// (reading one from a pipe) is marked {stdinScript: true}; a script nested
+// past depth 5 yields {tooDeep: true}. Shared with the /bughunt review gate.
 export function simpleCommands(command, depth = 0, out = []) {
-  if (depth > 5) { out.push({ word: '', args: [], tooDeep: true }); return out }
-  const { segments, subs } = parse(dropHeredocs(command))
+  if (depth > 5) { out.push({ word: '', args: [], env: {}, tooDeep: true }); return out }
+  const { text, scripts } = splitHeredocs(command)
+  const { segments, subs } = parse(text)
   for (const sub of subs) simpleCommands(sub, depth + 1, out)
+  for (const body of scripts) simpleCommands(body, depth + 1, out)
   for (const tokens of segments) {
     const c = commandOf(tokens)
     out.push(c)
     if (c.word === 'eval') simpleCommands(c.args.join(' '), depth + 1, out)
     if (SHELLS.includes(c.word)) {
-      const i = c.args.indexOf('-c')
-      if (i >= 0 && c.args[i + 1] !== undefined) simpleCommands(c.args[i + 1], depth + 1, out)
+      const script = shellScript(c.args)
+      if (script !== null) simpleCommands(script, depth + 1, out)
+      else if (!c.args.some(a => !a.startsWith('-'))) c.stdinScript = true
     }
   }
   return out

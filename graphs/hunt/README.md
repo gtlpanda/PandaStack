@@ -42,29 +42,53 @@ in:
 |---|---|
 | `gh pr create`, `gh pr new` | a finished hunt covers the PR head (`--head`, or the current branch) |
 | `gh pr merge` | a finished hunt covers the PR head (`--match-head-commit`, or `gh pr view`), and its disposition is `pass` |
-| `gh api .../pulls/<n>/merge`, a GraphQL merge | never; use `gh pr merge` |
-| `git push` to the remote's default branch, `--all`, `--mirror` | never; push a branch and open a PR |
+| `gh api` writes that open or merge a PR or write a branch (`POST .../pulls`, `.../pulls/<n>/merge`, `.../merges`, `.../git/refs`, `.../contents/`), GraphQL merges and PR or ref mutations, a GraphQL query from a file | never; use `gh pr create` / `gh pr merge` |
+| `hub pull-request`, `hub merge`, a `gh alias` for `pr create`, `pr merge`, or `api` | never |
+| `git push` to the remote's default branch in any spelling (`HEAD:main`, `heads/main`, `refs/heads/*`, a matching `:` push), `--all`, `--mirror` | never; push a branch and open a PR |
 
 **What "covers" means.** A ledger whose latest run finished at head H covers
-commit X when H is X, or when H is an ancestor of X and every commit after H
-is one of these:
-- **documentation only**: `*.md`, `docs/`, `changelogs/`, `LICENSE`. This
-  covers `/release-pr`'s notes commit.
-- **a verified repair**: subject `bughunt: fix F<n>`, with F<n> verified in
-  that ledger. This covers `--draft-pr` and the `/build-app` landing. In that
-  case the result for X leaves out the findings that X fixes.
+commit X when two things hold:
+- **The hunt saw everything.** Its range started no later than X's merge-base
+  with the PR's base, so a hunt of only the last commits of a branch covers
+  nothing.
+- **Nothing new came after it.** H is X, or H is an ancestor of X and every
+  commit after H is one of these:
+  - **Documentation only.** Prose and images: `*.md`, plus `.md`, `.txt`, and
+    image files under `docs/` and `changelogs/`, and `LICENSE`. Renames count
+    as a delete plus an add. Markdown that steers an agent is behavior, not
+    documentation: `CLAUDE.md`, `AGENTS.md`, and anything under `.claude/`,
+    `agents/`, `skills/`, `commands/`, or `.github/`. This exemption covers
+    `/release-pr`'s notes commit.
+  - **A verified repair.** The exact commit `/bughunt` verified for a finding
+    (`fix_artifact.commit`), or the same patch cherry-picked or rebased. The
+    subject `bughunt: fix F<n>` alone proves nothing. This exemption covers
+    `--draft-pr` and the `/build-app` landing. The result for X then leaves
+    out the findings that X fixes.
 
-A merge commit is never exempt. A change whose whole diff from its base is
-documentation needs no hunt.
+A merge commit is never exempt. When several ledgers cover X, the closest hunt
+wins. Among equally close hunts, the ledger for this PR wins; otherwise the
+worst result wins. A change whose whole diff from its base is documentation
+needs no hunt.
 
 **How it reads a command.** It uses the `/build-app` guard's shell parser
 (`simpleCommands`):
 - Quoted text, heredocs, and `echo` are data, never commands.
-- `bash -c`, `eval`, `$(...)`, and `env`/`xargs` prefixes are followed.
+- It follows:
+  - `bash -c`, `-lc`, `eval`, and `$(...)`;
+  - a heredoc fed to a shell;
+  - shell keywords (`for … do`, `if … then`, `{ }`, `!`);
+  - prefixes with their options (`timeout 30`, `sudo -u bob`, `env -u X`,
+    `nice -n 5`).
+- A script piped into a shell is denied when it mentions a gated command.
 - A `cd` before the command is followed. A `cd` it cannot resolve (`$VAR`,
   `-`) is denied.
-- `-R` must name this checkout's own origin, because the ledgers live in this
-  clone.
+- It reads the command before the shell expands it, so a `$VARIABLE` in a
+  branch, commit, or path is denied, with "write the literal value".
+- The repo gh acts on (`-R` anywhere, or `GH_REPO` in the command, an
+  earlier `export`, or the session) must be this checkout's origin, because
+  the ledgers live in this clone.
+- `--head` must be a branch of this repo, not another fork. When the local
+  branch and `origin/<branch>` differ, both must be covered.
 
 Once a command matches, anything the gate cannot resolve is denied, and the
 reason names the exact `/bughunt ...` to run.

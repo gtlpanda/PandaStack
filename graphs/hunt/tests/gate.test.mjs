@@ -28,10 +28,12 @@ function finding(id, over = {}) {
     verification_status: 'reproduced', fix_status: 'none', head: 'x', history: [], test_results: [], ...over,
   }
 }
-// A ledger whose latest run ended `status` at `head`.
-function ledger(repo, key, head, { findings = [], status = 'done' } = {}) {
+// A ledger whose latest run ended `status` at `head`, having hunted from
+// mergeBase (default: where head leaves main).
+function ledger(repo, key, head, { findings = [], status = 'done', mergeBase = null, pr = null } = {}) {
   const common = sh(repo, 'rev-parse', '--path-format=absolute', '--git-common-dir')
-  const l = { version: 1, key, target: null, findings, coverage: [], routing: null, status, reason: null, runs: [{ at: '2026-11-07T00:00:00Z', mode: 'discover', head, status }] }
+  const from = mergeBase || sh(repo, 'merge-base', 'main', head)
+  const l = { version: 1, key, target: { kind: pr ? 'pr' : 'branch', pr, head, mergeBase: from }, findings, coverage: [], routing: null, status, reason: null, runs: [{ at: '2026-11-07T00:00:00Z', mode: 'discover', head, status }] }
   put(common, `bughunt/${key}/ledger.json`, JSON.stringify(l))
 }
 
@@ -60,7 +62,9 @@ function fakeGh(root, pr) {
 console.log('== review status: which hunts cover which commits')
 await test('documentation paths', () => {
   for (const p of ['README.md', 'docs/x/y.png', 'changelogs/2026-11-07.md', 'LICENSE', 'sub/LICENSE.txt', 'a/B.MD']) assert.ok(isDocPath(p), p)
-  for (const p of ['src/a.js', 'package.json', 'docsite/x.js', 'tests/a.test.js', 'README.md.js', '.github/workflows/test.yml', 'mydocs/a.js']) assert.ok(!isDocPath(p), p)
+  for (const p of ['src/a.js', 'package.json', 'docsite/x.js', 'tests/a.test.js', 'README.md.js', '.github/workflows/test.yml', 'mydocs/a.js',
+    // Executable files under docs/, and markdown that steers an agent, are not documentation (review of #34).
+    'docs/conf.py', 'docs/.vitepress/config.js', 'docs/package.json', 'CLAUDE.md', 'sub/AGENTS.md', '.claude/agents/merger.md', 'graphs/x/agents/a.md', 'core/skills/x/SKILL.md', '.github/PULL_REQUEST_TEMPLATE.md']) assert.ok(!isDocPath(p), p)
 })
 await test('no ledger: not hunted; a finished hunt at the exact head: hunted, its disposition', () => {
   const { repo, head } = fixture()
@@ -94,18 +98,57 @@ await test('a hunt whose last run did not finish covers nothing', () => {
   ledger(repo, 'k', head, { status: 'escalate' })
   assert.equal(reviewStatus(repo, head).hunted, false)
 })
-await test('verified repairs after the hunt are exempt and close their findings at that commit; unverified ones are not', () => {
+await test('the verified repair commit (or the same patch) is exempt and closes its finding; a commit that only borrows the subject is not', () => {
   const { repo, head } = fixture()
-  ledger(repo, 'k', head, { findings: [finding('F1', { fix_status: 'verified' }), finding('F2', { fix_status: 'rejected', severity: 'MEDIUM' })] })
-  assert.equal(reviewStatus(repo, head).disposition, 'changes_requested', 'at the hunted head both bugs are open')
   const fixed = commit(repo, { 'src/a.js': 'export const a = 3\n' }, 'bughunt: fix F1')
+  const findings = [finding('F1', { fix_status: 'verified', fix_artifact: { commit: fixed, branch: 'bughunt/k' } }), finding('F2', { fix_status: 'rejected', severity: 'MEDIUM' })]
+  ledger(repo, 'k', head, { findings })
+  assert.equal(reviewStatus(repo, head).disposition, 'changes_requested', 'at the hunted head both bugs are open')
   const s = reviewStatus(repo, fixed)
   assert.equal(s.hunted, true)
   assert.deepEqual(s.exempt.map(e => e.because), ['verified repair of F1'])
-  assert.equal(s.disposition, 'changes_requested')
   assert.deepEqual(s.because, ['F2'], 'F1 is fixed in this commit; F2 is still open')
-  const fake = commit(repo, { 'src/a.js': 'export const a = 4\n' }, 'bughunt: fix F2')
-  assert.equal(reviewStatus(repo, fake).hunted, false, 'a "fix" the hunt did not verify is new code')
+  // An empty commit, or other code, under the same subject proves nothing (review of #34).
+  const { repo: r2, head: h2 } = fixture()
+  const real = commit(r2, { 'src/a.js': 'export const a = 3\n' }, 'bughunt: fix F1')
+  ledger(r2, 'k', h2, { findings: [finding('F1', { fix_status: 'verified', fix_artifact: { commit: real } })] })
+  sh(r2, 'reset', '-q', '--hard', h2)
+  sh(r2, 'commit', '-q', '--allow-empty', '-m', 'bughunt: fix F1')
+  assert.equal(reviewStatus(r2, sh(r2, 'rev-parse', 'HEAD')).hunted, false, 'an empty "fix" is new, unreviewed history')
+  sh(r2, 'reset', '-q', '--hard', h2)
+  const evil = commit(r2, { 'src/evil.js': 'x\n' }, 'bughunt: fix F1')
+  assert.equal(reviewStatus(r2, evil).hunted, false)
+  // The same patch cherry-picked (a new commit id) is still the verified repair.
+  sh(r2, 'reset', '-q', '--hard', h2)
+  sh(r2, 'cherry-pick', '-x', real)
+  const picked = sh(r2, 'rev-parse', 'HEAD')
+  assert.notEqual(picked, real)
+  const p = reviewStatus(r2, picked)
+  assert.equal(p.hunted, true)
+  assert.equal(p.disposition, 'pass', 'the fix is in this commit')
+  assert.match(p.exempt[0].because, /same patch/)
+})
+await test('a hunt of only part of the branch covers nothing; several covering hunts give the worst result, or this PR\'s', () => {
+  const { repo, head } = fixture()
+  const second = commit(repo, { 'src/b.js': 'b\n' }, 'second')
+  ledger(repo, 'range', second, { mergeBase: head })
+  assert.equal(reviewStatus(repo, second, { base: 'origin/main' }).hunted, false, 'the first commit was never hunted')
+  assert.equal(reviewStatus(repo, second).hunted, true, 'with no base to compare, the range is not checked')
+  ledger(repo, 'aaa', second)
+  ledger(repo, 'zzz', second, { findings: [finding('F1')] })
+  assert.equal(reviewStatus(repo, second, { base: 'origin/main' }).disposition, 'changes_requested', 'the worst of two hunts at one head')
+  ledger(repo, 'pr-4', second, { pr: 4 })
+  const s = reviewStatus(repo, second, { base: 'origin/main', pr: 4 })
+  assert.equal(s.key, 'pr-4')
+  assert.equal(s.disposition, 'pass', 'the hunt of this very PR decides')
+})
+await test('a rename from code into docs is not a documentation-only change', () => {
+  const { repo } = fixture()
+  sh(repo, 'checkout', '-q', '-b', 'ren', 'main')
+  mkdirSync(join(repo, 'docs'), { recursive: true })
+  sh(repo, 'mv', 'src/a.js', 'docs/a.md')
+  sh(repo, 'commit', '-qm', 'move')
+  assert.equal(reviewStatus(repo, 'ren', { base: 'origin/main' }).docsOnly, false)
 })
 await test('a change that is documentation only from its base needs no hunt', () => {
   const { repo } = fixture()
@@ -132,7 +175,7 @@ await test('opening a PR needs a finished hunt over its head; docs-only, dry run
   commit(repo, { 'src/o.js': 'o\n' }, 'other code')
   assert.match(gateDecision('gh pr create', repo), /covers other/)
   assert.equal(gateDecision('gh pr create --head feat', repo), null)
-  assert.equal(gateDecision('gh pr create -H someone:feat', repo), null)
+  assert.match(gateDecision('gh pr create -H someone:feat', repo), /a branch of another fork/, 'a fork\'s branch has no record here (review of #34)')
   assert.match(gateDecision('gh pr create --head nope', repo), /branch nope is not in this clone/)
   sh(repo, 'checkout', '-q', '-b', 'docs-only', 'main')
   commit(repo, { 'docs/x.md': 'x\n' }, 'docs')
@@ -150,6 +193,35 @@ await test('-R must be this checkout\'s own repo', () => {
   assert.equal(repoSlug('https://github.com/Acme/Widget.git'), 'acme/widget')
   assert.equal(repoSlug('github.com/acme/widget'), 'acme/widget')
   assert.equal(repoSlug(''), null)
+})
+
+await test('GH_REPO, and -R between the group and the verb, are checked like -R', () => {
+  const { root, repo, head } = fixture()
+  ledger(repo, 'pr-5', head, { pr: 5 })
+  const env = { ...process.env, PANDASTACK_GATE_GH: fakeGh(root, { number: 5, headRefOid: head, baseRefName: 'main' }) }
+  for (const cmd of ['gh pr -R other/repo merge 5', 'GH_REPO=other/repo gh pr merge 5 --squash', 'export GH_REPO=other/repo; gh pr merge 5', 'GH_REPO=other/repo gh pr create --title x', 'gh pr -R other/repo create --title x', 'env GH_REPO=other/repo gh pr merge 5']) {
+    assert.match(gateDecision(cmd, repo, { env }) || '', /names a repo other than this checkout/, cmd)
+  }
+  assert.match(gateDecision('gh pr merge 5', repo, { env: { ...env, GH_REPO: 'other/repo' } }), /GH_REPO=other\/repo/, 'GH_REPO in the session itself')
+  assert.match(gateDecision('GH_REPO=$R gh pr merge 5', repo, { env }), /literal value/)
+  assert.equal(gateDecision('gh pr merge 5 --squash', repo, { env }), null)
+})
+await test('when the local branch and origin differ, both must be covered; $VARIABLES are not guessed', () => {
+  const { root, repo, head } = fixture()
+  ledger(repo, 'k', head)
+  sh(repo, 'push', '-q', 'origin', 'feat')
+  commit(repo, { 'src/u.js': 'u\n' }, 'unreviewed')
+  sh(repo, 'push', '-q', 'origin', 'feat')
+  sh(repo, 'reset', '-q', '--hard', head)
+  sh(repo, 'checkout', '-q', 'main')
+  assert.match(gateDecision('gh pr create --head feat --title x', repo), /origin\/feat/, 'origin/feat holds an unreviewed commit')
+  assert.match(gateDecision('gh pr create --head "bughunt/$KEY"', repo), /literal value/)
+  assert.match(gateDecision('gh pr merge 5 --match-head-commit "$SHA"', repo, { env: { ...process.env, PANDASTACK_GATE_GH: fakeGh(root, null) } }), /literal value/)
+  assert.match(gateDecision('git -C "$REPO" push -u origin bughunt/x', repo), /literal value/)
+  // A fork-qualified head of this very repo's owner is this clone's branch.
+  sh(repo, 'push', '-q', '-f', 'origin', 'feat')
+  sh(repo, 'remote', 'set-url', 'origin', 'git@github.com:acme/widget.git')
+  assert.equal(gateDecision('gh pr create -H acme:feat --title x', repo), null)
 })
 
 console.log('== the gate: gh pr merge')
@@ -188,14 +260,27 @@ await test('the release flow: a docs commit after the hunt still merges', () => 
 console.log('== the gate: other routes to the default branch')
 await test('gh api merges are denied; other gh api calls are not', () => {
   const { repo } = fixture()
-  assert.match(gateDecision('gh api -X PUT repos/a/b/pulls/3/merge', repo), /merging through `gh api`/)
-  assert.match(gateDecision("gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: \"x\"}) { clientMutationId } }'", repo), /merging through `gh api`/)
-  assert.equal(gateDecision('gh api repos/a/b/pulls/3/comments', repo), null)
-  assert.equal(gateDecision('gh api repos/a/b/pulls?state=open', repo), null)
+  for (const cmd of ['gh api -X PUT repos/a/b/pulls/3/merge', "gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: \"x\"}) { clientMutationId } }'",
+    // Opening a PR or writing a branch through the API (review of #34).
+    'gh api repos/o/r/pulls -f title=x -f head=feat -f base=main', 'gh api -X POST repos/o/r/merges -f base=main -f head=feat',
+    'gh api -X PATCH repos/o/r/git/refs/heads/main -f sha=abc -F force=true', 'gh api -X PUT repos/o/r/contents/README.md -f branch=main -f message=m -f content=eA==',
+    "gh api graphql -f query='mutation { createPullRequest(input: {}) { clientMutationId } }'"]) {
+    assert.match(gateDecision(cmd, repo) || '', /through `gh api` skips the review check/, cmd)
+  }
+  assert.match(gateDecision('gh api graphql --input q.json', repo), /read from a file/)
+  assert.match(gateDecision('gh api graphql -F query=@merge.graphql', repo), /read from a file/)
+  for (const cmd of ['gh api repos/a/b/pulls/3/comments', 'gh api repos/a/b/pulls?state=open', 'gh api repos/a/b/pulls', 'gh api repos/a/b/issues/3/comments -f body=hi', "gh api graphql -f query='{ viewer { login } }'", 'gh api repos/a/b/git/refs/heads/main']) {
+    assert.equal(gateDecision(cmd, repo), null, cmd)
+  }
+  assert.match(gateDecision('hub pull-request -m x', repo), /`hub` opens or merges/)
+  assert.match(gateDecision('gh alias set mp "pr merge"', repo), /gh alias/)
+  assert.equal(gateDecision('gh alias set co "pr checkout"', repo), null)
 })
 await test('git push to the default branch is denied in its common spellings; branches, tags, and dry runs pass', () => {
   const { repo } = fixture()
-  for (const cmd of ['git push origin HEAD:main', 'git push origin feat:main', 'git push origin +feat:refs/heads/main', 'git push origin main', 'git push --all', 'git push origin --mirror', `git -C ${repo} push origin main`, 'git push -u origin :main']) {
+  for (const cmd of ['git push origin HEAD:main', 'git push origin feat:main', 'git push origin +feat:refs/heads/main', 'git push origin main', 'git push --all', 'git push origin --mirror', `git -C ${repo} push origin main`, 'git push -u origin :main',
+    // Other spellings git resolves to main (review of #34).
+    'git push origin feat:heads/main', 'git push origin :', "git push origin 'refs/heads/*:refs/heads/*'", "git push origin '+refs/heads/*:refs/heads/*'", 'git push --branches origin']) {
     assert.match(gateDecision(cmd, repo) || '', /default branch/, cmd)
   }
   for (const cmd of ['git push origin feat', 'git push -u origin feat', 'git push origin v1.0', 'git push --dry-run origin main', 'git push origin feat:feat']) {
@@ -211,7 +296,11 @@ await test('words in data are not commands; nested and substituted commands are'
   for (const cmd of ['echo "gh pr merge 1"', 'git commit -m "then git push origin main"', 'grep -rn "gh pr create" .', "git commit -F - <<'EOF'\nfix: x\n\ngh pr create later; git push origin main\nEOF", 'ls', 'gh pr view 3', 'gh pr list', 'git status']) {
     assert.equal(gateDecision(cmd, repo), null, cmd)
   }
-  for (const cmd of ['bash -c "gh pr create"', 'echo $(gh pr create --fill)', 'true && gh pr create', 'eval gh pr create', 'env FOO=1 gh pr create', 'sh -c \'git push origin main\'']) {
+  for (const cmd of ['bash -c "gh pr create"', 'echo $(gh pr create --fill)', 'true && gh pr create', 'eval gh pr create', 'env FOO=1 gh pr create', 'sh -c \'git push origin main\'',
+    // Reserved words, prefix options, combined shell flags, heredocs and pipes into a shell, quoting tricks (review of #34).
+    'for n in 5 6; do gh pr create --fill; done', 'if true; then git push origin main; fi', '{ git push origin main; }', '! git push origin main',
+    'timeout 30 gh pr create --title x', 'nice -n 5 gh pr create', 'sudo -u bob gh pr create', 'env -u FOO gh pr create', 'bash -lc "gh pr create"', 'sh -ec "git push origin main"',
+    "bash <<'EOF'\ngh pr create --fill\nEOF", 'echo "gh pr create --fill" | bash', 'g\\h pr create', "g''h pr create"]) {
     assert.ok(gateDecision(cmd, repo), cmd)
   }
 })
@@ -222,7 +311,7 @@ await test('a cd before the command is followed; one the gate cannot resolve is 
   assert.equal(gateDecision('gh pr create', repo), null)
   assert.match(gateDecision(`cd ${unreviewed} && gh pr create`, repo), /no finished \/bughunt covers/)
   assert.equal(gateDecision(`cd ${unreviewed} && cd ${repo} && gh pr create`, repo), null)
-  assert.match(gateDecision('cd "$OTHER" && gh pr create', repo), /cannot tell which repo/)
+  assert.match(gateDecision('cd "$OTHER" && gh pr create', repo), /cannot tell which repo.*literal value/)
   assert.match(gateDecision('cd - && git push origin main', repo), /cannot tell which repo/)
 })
 await test('the off switch', () => {
