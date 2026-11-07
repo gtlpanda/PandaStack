@@ -63,10 +63,12 @@ done
 api() {
   # api <method> <path-with-leading-slash> [--data <body>]
   # A non-2xx answer exits 1 with the API's message (curl 7.76+ for --fail-with-body),
-  # so an auth or lookup failure is never read as an empty result.
+  # so an auth or lookup failure is never read as an empty result. The key reaches curl
+  # through a file descriptor (printf is a builtin), never argv, where `ps` shows it to
+  # every local user.
   local method="$1" path="$2" body msg; shift 2
   if ! body="$(curl -sS --fail-with-body -X "$method" \
-    -H "Authorization: Bearer $API_KEY" \
+    -H @<(printf 'Authorization: Bearer %s\n' "$API_KEY") \
     -H "Accept: application/json" \
     "$@" \
     "$API_BASE$path")"; then

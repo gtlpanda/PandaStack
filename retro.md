@@ -1600,11 +1600,19 @@ Round 3 (4 minutes) found two more LOWs:
 
 A skipped dir is now never guarded or pruned. Without `--skip`, the refusal names the flag.
 
-All 12 are fixed on the branch. The hunt's 8 reproduction tests are adopted as regression tests,
+Round 4 (3.5 minutes) found two more LOWs:
+- the Render API key sat in curl's argv, where `ps` shows it to every local user (it now goes in
+  through a file descriptor; a real-curl test proves the server still gets it);
+- the documented `services` and `deploys` columns didn't match the script.
+
+The ledger matched both onto old ids (F7, F9) and kept the old titles and expected/actual text: a
+/bughunt merge bug, logged for a follow-up.
+
+All 14 are fixed on the branch. The hunt's 8 reproduction tests are adopted as regression tests,
 plus 7 edge-case tests: an exact name wins, a broken grep pattern still fails, a person's own or
 tuned status line survives uninstall, and a linked settings.json with `--skip=bin` warns.
 
 **Stats.**
-- 6 check-refs tests, 22 hunt-derived and edge tests, and 17 install checks (section 16).
+- 6 check-refs tests, 26 hunt-derived and edge tests, and 17 install checks (section 16).
 - 6 CLAUDE.md validate rules, plus the cap.
-- The suite is 642 workflow tests, 117 install checks, and 22 secret checks, 0 failed.
+- The suite is 646 workflow tests, 117 install checks, and 22 secret checks, 0 failed.

@@ -28,12 +28,13 @@ The wrapper exits with an error if the file is missing OR has wider-than-600 per
 Run the wrapper by its full path, `~/.claude/skills/render/render`: it is not on PATH, and every Bash call starts a fresh shell, so an alias would not last. The examples below use that path.
 
 ### `render services`
-List all services the API key can see. Output: `id  name  type  url  status`.
+List all services the API key can see. Output: `ID  NAME  TYPE  URL  SUSPENDED  UPDATED`.
 
 ```bash
 ~/.claude/skills/render/render services
-# srv-abc123  supple-picks       web_service  https://...  deployed
-# srv-def456  cherryrock-folio   web_service  https://...  deployed
+# ID          NAME              TYPE         URL          SUSPENDED      UPDATED
+# srv-abc123  supple-picks      web_service  https://...  not_suspended  2026-05-26T01:41:07Z
+# srv-def456  cherryrock-folio  web_service  https://...  not_suspended  2026-05-20T17:02:11Z
 ```
 
 ### `render logs <service-name-or-id> [options]`
@@ -53,11 +54,11 @@ Options:
 ```
 
 ### `render deploys <service>`
-List the 10 most recent deploys with status + commit.
+List the 10 most recent deploys: `ID  STATUS  COMMIT  CREATED  FINISHED  MESSAGE`.
 
 ```bash
 ~/.claude/skills/render/render deploys supple-picks
-# dep-xyz   live      553172c  "PR #91 merge"   2026-05-26T01:41
+# dep-xyz   live      553172c  2026-05-26T01:38:02Z  2026-05-26T01:41:07Z  PR #91 merge
 ```
 
 ### `render env <service>`
