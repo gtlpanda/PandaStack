@@ -97,9 +97,9 @@ check "refuses symlinked skills dir"   '! HOME="$H3" "$REPO/install.sh" >/dev/nu
 check "nothing written through link"   '[ -z "$(ls -A "$TMP/dotfiles/skills")" ]'
 
 echo "== 7. regression: same-second reinstall never overwrites a backup (audit H1)"
-H4="$TMP/home4"; mkdir -p "$H4/.claude"; echo ORIGINAL > "$H4/.claude/settings.json"
+H4="$TMP/home4"; mkdir -p "$H4/.claude"; echo '"ORIGINAL"' > "$H4/.claude/settings.json"   # valid JSON, not an object: backed up and linked
 HOME="$H4" "$REPO/install.sh" >/dev/null
-rm "$H4/.claude/settings.json"; echo SECOND > "$H4/.claude/settings.json"
+rm "$H4/.claude/settings.json"; echo '"SECOND"' > "$H4/.claude/settings.json"
 HOME="$H4" "$REPO/install.sh" >/dev/null
 check "two backup dirs exist"          '[ "$(ls -1d "$H4"/.claude/backups/*/ | wc -l | tr -d " ")" = "2" ]'
 check "ORIGINAL still in a backup"     'grep -rqs ORIGINAL "$H4/.claude/backups"'
@@ -122,13 +122,13 @@ check "stale links not in a backup"    '! grep -rqs "settings.json\|fixer.md" "$
 check "foreign dangling link backed up" 'grep -qs "agents/checker.md" "$H5"/.claude/backups/*/.harness-manifest'
 
 echo "== 10. regression: partial restore keeps the manifest for the leftovers (audit M1)"
-H6="$TMP/home6"; mkdir -p "$H6/.claude"; echo A > "$H6/.claude/CLAUDE.md"; echo B > "$H6/.claude/settings.json"
+H6="$TMP/home6"; mkdir -p "$H6/.claude"; echo A > "$H6/.claude/CLAUDE.md"; echo '"B"' > "$H6/.claude/settings.json"
 HOME="$H6" "$REPO/install.sh" >/dev/null
 rm "$H6/.claude/CLAUDE.md"; echo NEW > "$H6/.claude/CLAUDE.md"      # user put a real file where our link was
 HOME="$H6" "$REPO/install.sh" --uninstall >/dev/null 2>&1
 # shellcheck disable=SC2034  # read inside check's eval string
 bk6="$(ls -1d "$H6"/.claude/backups/*/ | head -1)"
-check "settings.json restored"         '[ "$(cat "$H6/.claude/settings.json")" = "B" ]'
+check "settings.json restored"         '[ "$(cat "$H6/.claude/settings.json")" = "\"B\"" ]'
 check "conflicting file left alone"    '[ "$(cat "$H6/.claude/CLAUDE.md")" = "NEW" ]'
 check "manifest kept with leftover"    '[ "$(cat "$bk6.harness-manifest")" = "CLAUDE.md" ]'
 rm "$H6/.claude/CLAUDE.md"; HOME="$H6" "$REPO/install.sh" --uninstall >/dev/null 2>&1
@@ -209,7 +209,36 @@ check "edited after the merge: our hook removed, theirs kept" '! grep -q "gate.m
 check "edited after the merge: says so" 'grep -q "kept your edits" "$TMP/uninstall14.log"'
 H14b="$TMP/home14b"; mkdir -p "$H14b/.claude"; echo '[1, 2]' > "$H14b/.claude/settings.json"
 HOME="$H14b" "$REPO/install.sh" >"$TMP/install14c.log" 2>&1
-check "a non-object settings.json is backed up and linked" '[ "$(readlink "$H14b/.claude/settings.json")" = "$REPO/settings.json" ] && grep -q "not a JSON object" "$TMP/install14c.log"'
+check "a non-object settings.json is backed up and linked" '[ "$(readlink "$H14b/.claude/settings.json")" = "$REPO/settings.json" ] && grep -q "not an object" "$TMP/install14c.log"'
+
+echo "== 15. the merge fails safe, keys hooks on the matcher, honors --skip, and undoes a partial chain"
+H15="$TMP/home15"; mkdir -p "$H15/.claude"; S15="$H15/.claude/settings.json"
+printf '{"model": "mine",\n' > "$S15"; cp "$S15" "$TMP/s15.orig"
+check "broken JSON: install refuses"   '! HOME="$H15" "$REPO/install.sh" >"$TMP/install15.log" 2>&1'
+check "broken JSON: file untouched, says why" 'cmp -s "$S15" "$TMP/s15.orig" && [ ! -L "$S15" ] && grep -q "left as it is" "$TMP/install15.log"'
+printf '\xef\xbb\xbf{"model": "bom"}\n' > "$S15"; chmod 640 "$S15"
+HOME="$H15" "$REPO/install.sh" >/dev/null 2>&1
+check "a byte-order mark is accepted"  '[ "$(jq -r .model "$S15")" = "bom" ] && grep -q "gate.mjs" "$S15"'
+check "file mode kept"                 '[ "$(stat -c %a "$S15" 2>/dev/null || stat -f %Lp "$S15")" = "640" ]'
+H15b="$TMP/home15b"; mkdir -p "$H15b/.claude"
+jq -n --arg c "$(jq -r '.hooks.PreToolUse[0].hooks[0].command' "$REPO/settings.json")" '{hooks: {PreToolUse: [{matcher: "Edit", hooks: [{type: "command", command: $c}]}]}}' > "$H15b/.claude/settings.json"
+HOME="$H15b" "$REPO/install.sh" >/dev/null 2>&1
+check "same command, other matcher: ours still added" '[ "$(jq "[.hooks.PreToolUse[] | select(.matcher == \"Bash\")] | length" "$H15b/.claude/settings.json")" = "1" ]'
+HOME="$H15b" "$REPO/install.sh" --uninstall >/dev/null 2>&1
+check "uninstall keeps their same-command hook" '[ "$(jq -r ".hooks.PreToolUse[0].matcher" "$H15b/.claude/settings.json")" = "Edit" ]'
+H15c="$TMP/home15c"; mkdir -p "$H15c/.claude"; echo '{"model": "m"}' > "$H15c/.claude/settings.json"
+HOME="$H15c" "$REPO/install.sh" --skip=skills/bughunt >"$TMP/install15c.log" 2>&1
+check "--skip=skills/bughunt: no gate hook" '! grep -q "gate.mjs" "$H15c/.claude/settings.json" && grep -q "review gate hook is not merged" "$TMP/install15c.log"'
+# A chain: merge 1, an edit, merge 2 (ours changed), then uninstall: the edit stays, our hooks go.
+GC="$TMP/gcopy15"; cp -R "$REPO" "$GC"; rm -rf "$GC/.git"
+H15d="$TMP/home15d"; mkdir -p "$H15d/.claude"; echo '{"model": "m"}' > "$H15d/.claude/settings.json"
+HOME="$H15d" "$GC/install.sh" >/dev/null 2>&1
+jq '.model = "edited"' "$H15d/.claude/settings.json" > "$TMP/t15" && cat "$TMP/t15" > "$H15d/.claude/settings.json"
+jq '.newKey = 1' "$GC/settings.json" > "$TMP/t15" && cat "$TMP/t15" > "$GC/settings.json"
+HOME="$H15d" "$GC/install.sh" >/dev/null 2>&1
+HOME="$H15d" "$GC/install.sh" --uninstall >"$TMP/uninstall15d.log" 2>&1
+check "partial chain: the edit survives" '[ "$(jq -r .model "$H15d/.claude/settings.json")" = "edited" ]'
+check "partial chain: our hooks are gone" '! grep -q "gate.mjs" "$H15d/.claude/settings.json"'
 
 echo
 echo "TEST-INSTALL: $pass passed, $fail failed"

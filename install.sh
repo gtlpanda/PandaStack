@@ -174,18 +174,25 @@ backup_target() {  # $1 = rel path
   if [ "$DRY_RUN" -eq 1 ]; then log "[dry-run] would back up: $rel"; else log "backed up: $rel"; fi
 }
 
-# Merges our settings.json into a person's own (a regular file, valid JSON).
-# Returns 1 when theirs is not a JSON object, so the caller falls back to
-# backing it up and linking ours. Writes only when something is missing, and
-# keeps the file from before the merge, and the merged file, in the backup dir
-# (uninstall puts the old one back while the file is still what we wrote).
+# Merges our settings.json into a person's own (a regular file). Returns 0 when
+# merged or nothing was missing, 3 when theirs is valid JSON but not an object
+# (the caller backs it up and links ours); dies on anything else, leaving the
+# file untouched. Every step checks itself: a function called from a
+# condition runs without set -e. Writes in place (keeping mode and owner) only
+# after the backup copies are verified; keeps the file from before the merge,
+# and the merged file, in the backup dir for uninstall.
 merge_settings() {  # $1 = ours (in the repo), $2 = theirs (under ~/.claude)
-  local merged added
+  local merged added rc=0 flags=()
   command -v node >/dev/null 2>&1 || die "node is needed to merge settings.json into your own; install Node, or pass --skip=settings.json"
-  merged="$(mktemp)"; added="$(mktemp)"
-  if ! node "$REPO_DIR/scripts/merge-settings.mjs" merge "$1" "$2" >"$merged" 2>"$added"; then
-    log "settings.json: $(tail -1 "$added")"
-    rm -f "$merged" "$added"; return 1
+  if is_skipped skills/bughunt; then flags+=(--no-hooks); log "settings.json: skills/bughunt is skipped, so the review gate hook is not merged"; fi
+  merged="$(mktemp)" || die "mktemp failed"
+  added="$(mktemp)" || die "mktemp failed"
+  node "$REPO_DIR/scripts/merge-settings.mjs" merge ${flags[@]+"${flags[@]}"} "$1" "$2" >"$merged" 2>"$added" || rc=$?
+  if [ "$rc" -eq 3 ]; then rm -f "$merged" "$added"; return 3; fi
+  if [ "$rc" -ne 0 ]; then
+    warn "$(tail -1 "$added")"
+    rm -f "$merged" "$added"
+    die "settings.json was left as it is; fix it, or pass --skip=settings.json"
   fi
   if [ ! -s "$added" ]; then
     log "settings.json: your own file already has everything ours adds"
@@ -194,42 +201,55 @@ merge_settings() {  # $1 = ours (in the repo), $2 = theirs (under ~/.claude)
   sed 's/^added: /  + /' "$added"
   if [ "$DRY_RUN" -eq 1 ]; then
     log "[dry-run] would merge the lines above into settings.json (your own file), keeping a backup"
-  else
-    ensure_backup_dir
-    cp -p "$2" "$BACKUP_DIR/settings.json.pre-merge"
-    cp "$merged" "$BACKUP_DIR/settings.json.merged"
-    cp "$merged" "$2.harness-tmp" && chmod --reference="$2" "$2.harness-tmp" 2>/dev/null; mv "$2.harness-tmp" "$2"
-    log "merged into settings.json (your own file; before: $BACKUP_DIR/settings.json.pre-merge)"
+    rm -f "$merged" "$added"; return 0
   fi
+  ensure_backup_dir
+  [ -d "$BACKUP_DIR" ] || die "could not create $BACKUP_DIR; settings.json was left as it is"
+  cp -p "$2" "$BACKUP_DIR/settings.json.pre-merge" && cmp -s "$2" "$BACKUP_DIR/settings.json.pre-merge" \
+    || die "could not back up settings.json to $BACKUP_DIR; it was left as it is"
+  cp "$merged" "$BACKUP_DIR/settings.json.merged" && cmp -s "$merged" "$BACKUP_DIR/settings.json.merged" \
+    || die "could not save the merged settings to $BACKUP_DIR; settings.json was left as it is"
+  if ! { cat "$merged" > "$2" && cmp -s "$merged" "$2"; }; then
+    cp -p "$BACKUP_DIR/settings.json.pre-merge" "$2" 2>/dev/null || true
+    die "writing settings.json failed; restored it from $BACKUP_DIR/settings.json.pre-merge"
+  fi
+  log "merged into settings.json (your own file; before: $BACKUP_DIR/settings.json.pre-merge)"
   rm -f "$merged" "$added"
 }
 
-# Undoes merge_settings, newest merge first, while the file is still exactly
-# what a merge wrote. A file edited since keeps the edits and loses only our hooks.
+# Undoes merge_settings: newest merge first, puts back the file from before
+# each merge while the file is still exactly what that merge wrote. Then, if
+# any of our hooks remain (the file was edited after a merge), removes just
+# those hooks and keeps everything else.
 unmerge_settings() {
-  local dest="$CLAUDE_DIR/settings.json" dirs=() i b restored=0 out
+  local dest="$CLAUDE_DIR/settings.json" dirs=() i b out removed
   [ -f "$dest" ] && [ ! -L "$dest" ] && [ -d "$BACKUP_ROOT" ] || return 0
   for i in "$BACKUP_ROOT"/*/; do [ -f "${i}settings.json.merged" ] && dirs+=("${i%/}"); done
   [ "${#dirs[@]}" -gt 0 ] || return 0
   for (( i=${#dirs[@]}-1; i>=0; i-- )); do
     b="${dirs[$i]}"
     cmp -s "$dest" "$b/settings.json.merged" || break
-    run mv "$b/settings.json.pre-merge" "$dest"
-    run rm "$b/settings.json.merged"
-    log "restored settings.json from before the merge ($b)"
-    restored=1
-    [ "$DRY_RUN" -eq 1 ] && break
+    if [ "$DRY_RUN" -eq 1 ]; then log "[dry-run] would restore settings.json from before the merge ($b)"; break; fi
+    cat "$b/settings.json.pre-merge" > "$dest" || die "could not restore settings.json from $b"
+    rm -f "$b/settings.json.pre-merge" "$b/settings.json.merged"
     find "$b" -type d -empty -delete 2>/dev/null || true
+    log "restored settings.json from before the merge ($b)"
   done
-  [ "$restored" -eq 1 ] && return 0
-  command -v node >/dev/null 2>&1 || { warn "settings.json changed since the merge, and node is missing: remove PandaStack's hooks from it by hand"; return 0; }
-  out="$(mktemp)"
-  if node "$REPO_DIR/scripts/merge-settings.mjs" unmerge "$REPO_DIR/settings.json" "$dest" >"$out"; then
-    if [ "$DRY_RUN" -eq 1 ]; then log "[dry-run] would remove PandaStack's hooks from settings.json"
-    else cp "$out" "$dest.harness-tmp" && chmod --reference="$dest" "$dest.harness-tmp" 2>/dev/null; mv "$dest.harness-tmp" "$dest"; fi
-    warn "settings.json changed since the merge: kept your edits, removed only PandaStack's hooks"
+  command -v node >/dev/null 2>&1 || { warn "node is missing: check settings.json for PandaStack's hooks by hand"; return 0; }
+  out="$(mktemp)" || die "mktemp failed"
+  removed="$(mktemp)" || die "mktemp failed"
+  if node "$REPO_DIR/scripts/merge-settings.mjs" unmerge "$REPO_DIR/settings.json" "$dest" >"$out" 2>"$removed"; then
+    if grep -q '^removed: ' "$removed"; then
+      if [ "$DRY_RUN" -eq 1 ]; then log "[dry-run] would remove PandaStack's hooks from settings.json"
+      else
+        cat "$out" > "$dest" || die "could not write settings.json"
+        warn "settings.json changed since the merge: kept your edits, removed only PandaStack's hooks"
+      fi
+    fi
+  else
+    warn "settings.json could not be read ($(tail -1 "$removed")); check it for PandaStack's hooks by hand"
   fi
-  rm -f "$out"
+  rm -f "$out" "$removed"
 }
 
 # Remove symlinks under managed dirs that point into the repo but whose source
@@ -258,7 +278,7 @@ enable_git_hooks() {
 }
 
 do_install() {
-  local rel src dest linked=0 skipped=0
+  local rel src dest linked=0 skipped=0 rc
   log "repo:   $REPO_DIR"
   log "target: $CLAUDE_DIR"
   guard_layout
@@ -277,8 +297,9 @@ do_install() {
       skipped=$((skipped + 1)); continue
     fi
     if [ "$rel" = settings.json ] && [ -f "$dest" ] && [ ! -L "$dest" ]; then
-      if merge_settings "$src" "$dest"; then continue; fi
-      log "settings.json is not a JSON object: backing it up and linking ours"
+      rc=0; merge_settings "$src" "$dest" || rc=$?
+      [ "$rc" -eq 0 ] && continue
+      log "settings.json is valid JSON but not an object: backing it up and linking ours"
     fi
     if is_stale_harness_link "$dest" "$rel"; then
       run rm "$dest"; log "removed stale harness link: $rel -> $(readlink "$dest" 2>/dev/null || echo '?')"

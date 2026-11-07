@@ -1,18 +1,22 @@
 #!/usr/bin/env node
 // merge-settings.mjs - merges this repo's settings.json into a person's own
 // ~/.claude/settings.json, for install.sh. Their file stays theirs:
-//   - hooks: every hook of ours whose command is not already there is added,
-//     in a group with our matcher;
+//   - hooks: every hook of ours not already there (same event, matcher, and
+//     command) is added, in a group with our matcher. A hook of ours is never
+//     changed once it is in the file: a person may have tuned it;
 //   - permissions: never touched (only a person loosens or tightens them);
 //   - any other key: theirs wins; a key they lack is filled from ours, and an
 //     object is filled key by key the same way.
 // Merging twice gives the same file.
 //
-//   node merge-settings.mjs merge <ours.json> <theirs.json>
-//     prints the merged JSON on stdout, one "added: <what>" line per change on stderr
+//   node merge-settings.mjs merge [--no-hooks] <ours.json> <theirs.json>
+//     prints the merged JSON on stdout, one "added: <what>" line per change on
+//     stderr; --no-hooks leaves our hooks out (their scripts are not installed)
 //   node merge-settings.mjs unmerge <ours.json> <theirs.json>
-//     prints theirs without our hooks (by command) on stdout
-// Exit 1 when a file is not a JSON object.
+//     prints theirs without our hooks on stdout, one "removed: <what>" line per
+//     hook removed on stderr
+// Exit 3 when theirs is valid JSON but not an object; 1 on any other error
+// (unreadable, not JSON); 2 on bad usage.
 import { readFileSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
@@ -26,21 +30,27 @@ function fill(target, source, path, added) {
   }
 }
 
-const commandsIn = groups => new Set((Array.isArray(groups) ? groups : []).flatMap(g => (isObject(g) && Array.isArray(g.hooks) ? g.hooks : []).map(h => h && h.command)))
+// A hook's identity within one event: its group's matcher and its command.
+const hookKey = (g, h) => JSON.stringify([isObject(g) && typeof g.matcher === 'string' ? g.matcher : '', h && h.command])
+const keysIn = groups => new Set((Array.isArray(groups) ? groups : []).flatMap(g => (isObject(g) && Array.isArray(g.hooks) ? g.hooks : []).map(h => hookKey(g, h))))
 
-export function mergeSettings(ours, theirs) {
-  if (!isObject(ours) || !isObject(theirs)) throw new Error('settings must be JSON objects')
+export class NotAnObject extends Error {}
+
+export function mergeSettings(ours, theirs, { hooks = true } = {}) {
+  if (!isObject(theirs)) throw new NotAnObject('your settings.json is valid JSON but not an object')
+  if (!isObject(ours)) throw new Error('our settings.json is not an object')
   const out = clone(theirs)
   const added = []
   for (const [k, v] of Object.entries(ours)) {
     if (k === 'permissions') continue
-    if (k === 'hooks' && isObject(v)) {
+    if (k === 'hooks') {
+      if (!hooks || !isObject(v)) continue
       if (!isObject(out.hooks)) out.hooks = {}
       for (const [event, groups] of Object.entries(v)) {
         if (!Array.isArray(out.hooks[event])) out.hooks[event] = []
-        const have = commandsIn(out.hooks[event])
+        const have = keysIn(out.hooks[event])
         for (const g of groups) {
-          const fresh = (g.hooks || []).filter(h => !have.has(h.command))
+          const fresh = (g.hooks || []).filter(h => !have.has(hookKey(g, h)))
           if (!fresh.length) continue
           out.hooks[event].push({ ...clone(g), hooks: clone(fresh) })
           for (const h of fresh) added.push(`hooks.${event}: ${h.command}`)
@@ -55,46 +65,54 @@ export function mergeSettings(ours, theirs) {
 }
 
 export function unmergeSettings(ours, theirs) {
-  if (!isObject(ours) || !isObject(theirs)) throw new Error('settings must be JSON objects')
+  if (!isObject(theirs)) throw new NotAnObject('your settings.json is valid JSON but not an object')
   const out = clone(theirs)
-  if (!isObject(ours.hooks) || !isObject(out.hooks)) return out
+  const removed = []
+  if (!isObject(ours) || !isObject(ours.hooks) || !isObject(out.hooks)) return { settings: out, removed }
   for (const [event, groups] of Object.entries(ours.hooks)) {
     if (!Array.isArray(out.hooks[event])) continue
-    const mine = commandsIn(groups)
+    const mine = keysIn(groups)
     out.hooks[event] = out.hooks[event]
-      .map(g => (isObject(g) && Array.isArray(g.hooks) ? { ...g, hooks: g.hooks.filter(h => !mine.has(h && h.command)) } : g))
+      .map(g => {
+        if (!isObject(g) || !Array.isArray(g.hooks)) return g
+        const keep = g.hooks.filter(h => !mine.has(hookKey(g, h)))
+        for (const h of g.hooks) if (!keep.includes(h)) removed.push(`hooks.${event}: ${h.command}`)
+        return { ...g, hooks: keep }
+      })
       .filter(g => !(isObject(g) && Array.isArray(g.hooks) && g.hooks.length === 0))
     if (!out.hooks[event].length) delete out.hooks[event]
   }
-  return out
+  return { settings: out, removed }
 }
 
-function readObject(path) {
-  let v
-  try { v = JSON.parse(readFileSync(path, 'utf8')) } catch (e) { throw new Error(`${path} is not valid JSON: ${e.message}`) }
-  if (!isObject(v)) throw new Error(`${path} is not a JSON object`)
-  return v
+// Parsed JSON; a leading UTF-8 byte-order mark (Windows editors) is allowed.
+function readJson(path) {
+  try { return JSON.parse(readFileSync(path, 'utf8').replace(/^\uFEFF/, '')) } catch (e) { throw new Error(`${path} is not valid JSON: ${e.message}`) }
 }
 
-function main([cmd, oursFile, theirsFile]) {
-  if (!['merge', 'unmerge'].includes(cmd) || !oursFile || !theirsFile) {
-    console.error('usage: merge-settings.mjs merge|unmerge <ours.json> <theirs.json>')
+function main(argv) {
+  const noHooks = argv.includes('--no-hooks')
+  const [cmd, oursFile, theirsFile, extra] = argv.filter(a => a !== '--no-hooks')
+  if (!['merge', 'unmerge'].includes(cmd) || !oursFile || !theirsFile || extra !== undefined || (noHooks && cmd !== 'merge')) {
+    console.error('usage: merge-settings.mjs merge [--no-hooks] <ours.json> <theirs.json> | unmerge <ours.json> <theirs.json>')
     return 2
   }
   try {
-    const ours = readObject(oursFile)
-    const theirs = readObject(theirsFile)
+    const ours = readJson(oursFile)
+    const theirs = readJson(theirsFile)
     if (cmd === 'merge') {
-      const { settings, added } = mergeSettings(ours, theirs)
+      const { settings, added } = mergeSettings(ours, theirs, { hooks: !noHooks })
       for (const a of added) console.error(`added: ${a}`)
       process.stdout.write(JSON.stringify(settings, null, 2) + '\n')
     } else {
-      process.stdout.write(JSON.stringify(unmergeSettings(ours, theirs), null, 2) + '\n')
+      const { settings, removed } = unmergeSettings(ours, theirs)
+      for (const r of removed) console.error(`removed: ${r}`)
+      process.stdout.write(JSON.stringify(settings, null, 2) + '\n')
     }
     return 0
   } catch (e) {
     console.error(`merge-settings: ${e.message}`)
-    return 1
+    return e instanceof NotAnObject ? 3 : 1
   }
 }
 
