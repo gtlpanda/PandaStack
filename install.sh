@@ -76,8 +76,9 @@ guard_layout() {
     die "$CLAUDE_DIR resolves inside the repo ($REPO_DIR); refusing" ;;
   esac
   for t in "${DIR_TARGETS[@]}"; do
+    is_skipped "$t" && continue   # --skip=<dir>: install never touches it
     if [ -L "$CLAUDE_DIR/$t" ]; then
-      die "$CLAUDE_DIR/$t is a symlink (-> $(readlink "$CLAUDE_DIR/$t")). Replace it with a real directory first; per-entry links must land in $CLAUDE_DIR/$t itself"
+      die "$CLAUDE_DIR/$t is a symlink (-> $(readlink "$CLAUDE_DIR/$t")). Replace it with a real directory, or pass --skip=$t to leave it alone; per-entry links must land in $CLAUDE_DIR/$t itself"
     fi
     p="$(physical "$CLAUDE_DIR/$t")"
     case "$p" in "$REPO_DIR"|"$REPO_DIR"/*) die "$CLAUDE_DIR/$t resolves inside the repo; refusing" ;; esac
@@ -261,6 +262,7 @@ prune_dangling() {
   local t link
   for t in "${DIR_TARGETS[@]}"; do
     [ -d "$CLAUDE_DIR/$t" ] || continue
+    [ "$MODE" = install ] && is_skipped "$t" && continue
     for link in "$CLAUDE_DIR/$t"/*; do
       [ -L "$link" ] || continue
       points_into_repo "$link" || continue

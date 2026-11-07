@@ -193,8 +193,7 @@ cmd_logs() {
   # /v1/logs returns { logs: [...], hasMore, nextStartTime, nextEndTime }.
   # Each log has { timestamp, message, labels: [{name,value}, ...] }.
   echo "$resp" \
-    | jq -r '.logs[]? | "\(.timestamp)\t\(.message)"' \
-    | awk -F'\t' '{ printf "%s  %s\n", $1, $2 }' \
+    | jq -r '.logs[]? | "\(.timestamp)  \(.message)"' \
     | { if [[ -n "$grep_pat" ]]; then grep -E "$grep_pat" || [[ $? -eq 1 ]]; else cat; fi; }
 
   # Footer with pagination + counts

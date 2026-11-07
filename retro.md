@@ -1594,11 +1594,17 @@ regex (it's a plain text search), and grouped env output (the script prints name
 now call the full path and match the script. The disposition was `manual_review` only because
 the regression hunter skimmed README and retro without tracing them.
 
-All 10 are fixed on the branch. The hunt's 8 reproduction tests are adopted as regression tests,
+Round 3 (4 minutes) found two more LOWs:
+- `render logs` cut every message at its first tab;
+- a symlinked `~/.claude/commands` or `bin` aborted the whole install, even with `--skip=commands`.
+
+A skipped dir is now never guarded or pruned. Without `--skip`, the refusal names the flag.
+
+All 12 are fixed on the branch. The hunt's 8 reproduction tests are adopted as regression tests,
 plus 7 edge-case tests: an exact name wins, a broken grep pattern still fails, a person's own or
 tuned status line survives uninstall, and a linked settings.json with `--skip=bin` warns.
 
 **Stats.**
-- 6 check-refs tests, 20 hunt-derived and edge tests, and 15 install checks (section 16).
+- 6 check-refs tests, 22 hunt-derived and edge tests, and 17 install checks (section 16).
 - 6 CLAUDE.md validate rules, plus the cap.
-- The suite is 640 workflow tests, 115 install checks, and 22 secret checks, 0 failed.
+- The suite is 642 workflow tests, 117 install checks, and 22 secret checks, 0 failed.

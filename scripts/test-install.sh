@@ -267,6 +267,10 @@ check "no status line: ours filled in" 'jq -r .statusLine.command "$H16b/.claude
 H16c="$TMP/home16c"; mkdir -p "$H16c/.claude"
 HOME="$H16c" "$REPO/install.sh" --skip=bin >"$TMP/install16c.log" 2>&1
 check "--skip=bin + linked settings warns" '[ -L "$H16c/.claude/settings.json" ] && grep -q "status line stays blank" "$TMP/install16c.log"'
+H16d="$TMP/home16d"; mkdir -p "$H16d/.claude" "$TMP/mycmds"; echo MINE > "$TMP/mycmds/mine.md"; ln -s "$TMP/mycmds" "$H16d/.claude/commands"
+check "symlinked commands/ refused, naming --skip" '! HOME="$H16d" "$REPO/install.sh" >"$TMP/install16d.log" 2>&1 && grep -q "pass --skip=commands" "$TMP/install16d.log" && [ ! -e "$H16d/.claude/skills" ]'
+HOME="$H16d" "$REPO/install.sh" --skip=commands >/dev/null 2>&1
+check "--skip=commands installs the rest, writes nothing into it" '[ -L "$H16d/.claude/skills/verify" ] && [ "$(ls "$TMP/mycmds")" = "mine.md" ]'
 HOME="$H16" "$REPO/install.sh" --uninstall >"$TMP/uninstall16.log" 2>&1
 check "uninstall restores the copies"  '[ "$(cat "$H16/.claude/bin/statusline.sh")" = "OLD-STATUS" ] && [ "$(cat "$H16/.claude/commands/founding-sales.md")" = "OLD-CMD" ] && [ ! -L "$H16/.claude/skills/commit" ]'
 check "uninstall leaves no repo link"  '! find "$H16/.claude" -type l -lname "$REPO/*" | grep -q .'
