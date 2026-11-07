@@ -6,7 +6,7 @@
 # `/bughunt pr --base main` on each, scores every ledger against its truth, and
 # ends with BENCH-BUGHUNT: DONE <n> case(s) or BENCH-BUGHUNT: FAIL.
 set -uo pipefail
-cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)" || exit 1
 if [ "$#" -lt 1 ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'
   exit 2

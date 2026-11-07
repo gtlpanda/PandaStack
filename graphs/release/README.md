@@ -6,7 +6,8 @@ from "PR green" to "merged, deployed, verified, documented". Entry point: the
 approve the merge for one exact commit, and a rollback is only ever a
 recommendation with evidence.
 
-Status: **built; routing tested with mocked agents** (`tests/release-flow.test.mjs`). Not yet run live.
+Status: **built; routing tested with mocked agents** (`tests/release-flow.test.mjs`); run live once on a
+real PR (reported by the owner; no ledger from that run is on the machine that wrote this line).
 
 ## Graph
 

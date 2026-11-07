@@ -2,7 +2,7 @@
 # test-workflow.sh — every graph's workflow routing tests (tests/, graphs/*/tests/) against scripted agents.
 # Ends with TEST-WORKFLOW: N passed, M failed. A missing node is a failure.
 set -uo pipefail
-cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)" || exit 1
 if ! command -v node >/dev/null 2>&1; then
   echo "TEST-WORKFLOW: 0 passed, 1 failed (node not installed)"
   exit 1

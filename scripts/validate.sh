@@ -3,7 +3,7 @@
 # required frontmatter, settings.json carries the keys the harness depends on,
 # shell scripts parse, and no secrets or machine paths are committed.
 set -uo pipefail
-cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)" || exit 1
 
 fail=0
 ok()   { printf 'ok    %s\n' "$*"; }
@@ -21,10 +21,8 @@ fm_get() { frontmatter "$1" | awk -v k="$2" -F': *' '$1==k{sub(/^[^:]*: */,""); 
 fm_list() { frontmatter "$1" | awk -v k="$2" '$0==k":"{on=1; next} on && /^ *- /{sub(/^ *- */,""); gsub(/^["\x27]|["\x27] *$/,""); print; next} on{exit}'; }
 
 # ---- JSON ----
-for f in settings.json; do
-  if python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$f" 2>/dev/null; then ok "$f is valid JSON"
-  else bad "$f is not valid JSON"; fi
-done
+if python3 -c 'import json,sys; json.load(open(sys.argv[1]))' settings.json 2>/dev/null; then ok "settings.json is valid JSON"
+else bad "settings.json is not valid JSON"; fi
 
 # ---- settings.json contract ----
 mode="$(jq -r '.permissions.defaultMode // empty' settings.json)"
@@ -136,7 +134,10 @@ for f in install.sh scripts/*.sh core/skills/*/*.sh graphs/*/skills/*/*.sh .gith
   [ -x "$f" ] || bad "$f is not executable"
 done
 if command -v shellcheck >/dev/null 2>&1; then
-  if shellcheck -S warning install.sh scripts/*.sh core/skills/*/*.sh graphs/*/skills/*/*.sh .githooks/*; then ok "shellcheck"; else bad "shellcheck"; fi
+  sh_files=()
+  for f in install.sh scripts/*.sh core/skills/*/*.sh graphs/*/skills/*/*.sh .githooks/*; do [ -f "$f" ] && sh_files+=("$f"); done
+  if shellcheck -S warning "${sh_files[@]}"; then ok "shellcheck (${#sh_files[@]} files)"; else bad "shellcheck"; fi
+elif [ -n "${CI:-}" ]; then bad "shellcheck not installed (required in CI)"
 else echo "note  shellcheck not installed; skipped"; fi
 
 # ---- Orchestrator rules (prose the routing tests cannot reach) ----
