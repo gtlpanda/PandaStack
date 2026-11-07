@@ -58,26 +58,31 @@ if grep -nE '"/(Users|home)/' settings.json; then
   bad "settings.json contains a machine-specific absolute path; move it to settings.local.json"
 else ok "settings.json has no machine-specific paths"; fi
 
-# ---- Layout: entries live in core/ and graphs/<graph>/, never at the top level ----
+# ---- Layout: entries live in core/, kit/, and graphs/<graph>/, never at the top level ----
+# core/ is shared by the graphs; kit/ holds standalone tools that belong to no graph.
 shopt -s nullglob
-for d in skills agents workflows; do
-  [ -e "$d" ] && bad "top-level $d/ is not read by install.sh; put entries in core/$d/ or graphs/<graph>/$d/"
+for d in skills agents workflows commands bin; do
+  [ -e "$d" ] && bad "top-level $d/ is not read by install.sh; put entries in core/$d/, kit/$d/, or graphs/<graph>/$d/"
 done
 graphs=(graphs/*/)
 [ "${#graphs[@]}" -gt 0 ] || bad "no graphs found under graphs/"
+roots=(core kit graphs/*)
 # install.sh links every entry flat into ~/.claude/<dir>/, so a name may appear once across all roots.
-for d in skills agents workflows; do
-  dups="$(for e in core/"$d"/* graphs/*/"$d"/*; do basename "$e"; done | sort | uniq -d)"
-  if [ -n "$dups" ]; then bad "duplicate $d name(s) across core/ and graphs/: $(echo $dups)"; else ok "$d names unique across core/ and graphs/"; fi
+for d in skills agents workflows commands bin; do
+  dups="$(for r in "${roots[@]}"; do for e in "$r/$d"/*; do basename "$e"; done; done | sort | uniq -d)"
+  if [ -n "$dups" ]; then bad "duplicate $d name(s) across core/, kit/, and graphs/: $(echo $dups)"; else ok "$d names unique across core/, kit/, and graphs/"; fi
 done
-# Claude Code lists skills and workflows together, so a skill and a workflow may not share a name.
-dups="$( { for e in core/skills/* graphs/*/skills/*; do basename "$e"; done
-           for e in core/workflows/*.js graphs/*/workflows/*.js; do basename "$e" .js; done; } | sort | uniq -d)"
-if [ -n "$dups" ]; then bad "a skill and a workflow share a name (both appear in the skills list): $(echo $dups)"; else ok "skill and workflow names do not collide"; fi
+# Claude Code lists skills, workflows, and commands together, so none may share a name.
+dups="$( { for r in "${roots[@]}"; do
+             for e in "$r"/skills/*; do basename "$e"; done
+             for e in "$r"/workflows/*.js; do basename "$e" .js; done
+             for e in "$r"/commands/*.md; do basename "$e" .md; done
+           done; } | sort | uniq -d)"
+if [ -n "$dups" ]; then bad "a skill, workflow, or command share a name (all appear in the skills list): $(echo $dups)"; else ok "skill, workflow, and command names do not collide"; fi
 
 # ---- Skills ----
-skills=(core/skills/*/SKILL.md graphs/*/skills/*/SKILL.md)
-[ "${#skills[@]}" -gt 0 ] || bad "no skills found under core/skills/ or graphs/*/skills/"
+skills=(core/skills/*/SKILL.md kit/skills/*/SKILL.md graphs/*/skills/*/SKILL.md)
+[ "${#skills[@]}" -gt 0 ] || bad "no skills found under core/skills/, kit/skills/, or graphs/*/skills/"
 for f in "${skills[@]}"; do
   dir="$(basename "$(dirname "$f")")"
   if ! frontmatter "$f" >/dev/null; then bad "$f: no frontmatter block"; continue; fi
@@ -89,9 +94,12 @@ for f in "${skills[@]}"; do
 done
 
 # ---- Agents ----
-agents=(core/agents/*.md graphs/*/agents/*.md)
-[ "${#agents[@]}" -gt 0 ] || bad "no agents found under core/agents/ or graphs/*/agents/"
+# Graph agents pin model, effort, and tools. Kit agents pin the model only: they predate the graphs
+# and use every tool, and a 'tools' list would take tools away from them.
+agents=(core/agents/*.md kit/agents/*.md graphs/*/agents/*.md)
+[ "${#agents[@]}" -gt 0 ] || bad "no agents found under core/agents/, kit/agents/, or graphs/*/agents/"
 for f in "${agents[@]}"; do
+  kit=0; case "$f" in kit/*) kit=1 ;; esac
   base="$(basename "$f" .md)"
   if ! frontmatter "$f" >/dev/null; then bad "$f: no frontmatter block"; continue; fi
   name="$(fm_get "$f" name)"; desc="$(fm_get "$f" description)"; model="$(fm_get "$f" model)"; effort="$(fm_get "$f" effort)"; tools="$(fm_get "$f" tools)"
@@ -106,18 +114,27 @@ for f in "${agents[@]}"; do
   esac
   case "$effort" in
     low|medium|high|xhigh|max) ;;
-    "") bad "$f: 'effort' missing (agents in this repo pin effort explicitly)" ;;
+    "") [ "$kit" -eq 1 ] || bad "$f: 'effort' missing (graph agents pin effort explicitly)" ;;
     *) bad "$f: effort '$effort' is not low|medium|high|xhigh|max" ;;
   esac
-  [ -n "$tools" ] || bad "$f: 'tools' missing (agents in this repo declare tools explicitly)"
-  [ -n "$name" ] && [ -n "$desc" ] && [ -n "$model" ] && [ -n "$effort" ] && [ -n "$tools" ] && [ "$name" = "$base" ] && ok "agent $name (model=$model, effort=$effort)"
+  [ -n "$tools" ] || [ "$kit" -eq 1 ] || bad "$f: 'tools' missing (graph agents declare tools explicitly)"
+  { [ "$kit" -eq 1 ] || { [ -n "$effort" ] && [ -n "$tools" ]; }; } && [ -n "$name" ] && [ -n "$desc" ] && [ -n "$model" ] && [ "$name" = "$base" ] && ok "agent $name (model=$model, effort=${effort:-default})"
   # A preloaded skill that does not exist leaves the agent silently without its rules.
   [ -z "$(fm_get "$f" skills)" ] || bad "$f: write 'skills:' as a block list ('  - name' lines), not inline"
   while IFS= read -r s; do
-    if [ -f "core/skills/$s/SKILL.md" ] || compgen -G "graphs/*/skills/$s/SKILL.md" >/dev/null; then ok "agent $name preloads skill $s"
-    else bad "$f: preloads skill '$s', which is not in core/skills/ or graphs/*/skills/"; fi
+    if [ -f "core/skills/$s/SKILL.md" ] || [ -f "kit/skills/$s/SKILL.md" ] || compgen -G "graphs/*/skills/$s/SKILL.md" >/dev/null; then ok "agent $name preloads skill $s"
+    else bad "$f: preloads skill '$s', which is not in core/skills/, kit/skills/, or graphs/*/skills/"; fi
   done < <(fm_list "$f" skills)
 done
+
+# ---- Commands: a markdown prompt each, no frontmatter required ----
+for f in core/commands/* kit/commands/* graphs/*/commands/*; do
+  case "$f" in *.md) [ -s "$f" ] && ok "command $(basename "$f" .md)" || bad "$f is empty" ;; *) bad "$f: a command is a .md file" ;; esac
+done
+
+# ---- Standalone: every skill, agent, workflow, or command a file names ships in this repo ----
+if node scripts/check-refs.mjs >/dev/null; then ok "$(node scripts/check-refs.mjs)"
+else node scripts/check-refs.mjs | sed 's/^/      /' >&2; bad "a file names a skill, agent, or command this repo does not ship (scripts/check-refs.mjs)"; fi
 
 # ---- Workflows (routing is tested by scripts/test-workflow.sh) ----
 for f in core/workflows/*.js graphs/*/workflows/*.js; do
@@ -128,14 +145,20 @@ for f in core/workflows/*.js graphs/*/workflows/*.js; do
 done
 
 # ---- Shell scripts parse ----
-for f in install.sh scripts/*.sh core/skills/*/*.sh graphs/*/skills/*/*.sh .githooks/*; do
-  [ -f "$f" ] || continue
+# Every *.sh, plus extensionless scripts in a skill or bin/ that start with a bash or sh shebang.
+sh_files=()
+for f in install.sh scripts/*.sh .githooks/*; do [ -f "$f" ] && sh_files+=("$f"); done
+for r in "${roots[@]}"; do
+  for f in "$r"/skills/*/* "$r"/bin/*; do
+    [ -f "$f" ] || continue
+    case "$f" in *.sh) sh_files+=("$f") ;; *.*) ;; *) head -n 1 "$f" | grep -qE '^#!.*[/ ](ba)?sh$' && sh_files+=("$f") ;; esac
+  done
+done
+for f in "${sh_files[@]}"; do
   if bash -n "$f"; then ok "bash -n $f"; else bad "bash -n $f"; fi
   [ -x "$f" ] || bad "$f is not executable"
 done
 if command -v shellcheck >/dev/null 2>&1; then
-  sh_files=()
-  for f in install.sh scripts/*.sh core/skills/*/*.sh graphs/*/skills/*/*.sh .githooks/*; do [ -f "$f" ] && sh_files+=("$f"); done
   if shellcheck -S warning "${sh_files[@]}"; then ok "shellcheck (${#sh_files[@]} files)"; else bad "shellcheck"; fi
 elif [ -n "${CI:-}" ]; then bad "shellcheck not installed (required in CI)"
 else echo "note  shellcheck not installed; skipped"; fi
@@ -223,6 +246,16 @@ rule graphs/hunt/skills/bughunt/review-status.mjs 'if (facts.merge) return null'
 rule graphs/hunt/skills/bughunt/review-status.mjs 'if (fixCommit === sha) return' 'only the verified fix commit itself, or its patch, is exempt; a subject proves nothing'
 rule scripts/merge-settings.mjs "if (k === 'permissions') continue" 'install never merges permissions'
 rule graphs/hunt/skills/bughunt/SKILL.md 'Never use ScheduleWakeup or sleep to wait for it' 'a bughunt session waits for the workflow notification, never a long wakeup'
+
+# ---- CLAUDE.md: loads every session, so it stays small and keeps its rails ----
+lines="$(wc -l < CLAUDE.md)"
+if [ "$lines" -le 200 ]; then ok "CLAUDE.md is $lines lines (cap 200)"; else bad "CLAUDE.md is $lines lines; the cap is 200 (compress, never drop a rule)"; fi
+rule CLAUDE.md '## Rule 0: Test Before You Claim' 'causal claims are test results'
+rule CLAUDE.md '**95% confidence rule**' 'no commit or push below 95% confidence'
+rule CLAUDE.md 'Never commit secrets. Never commit `settings.local.json`.' 'secrets never reach git'
+rule CLAUDE.md 'Hard 200-Line Limit' 'the size cap is a written rule, not only this check'
+rule CLAUDE.md '**Never compress**' 'compression never drops the rails'
+rule CLAUDE.md 'Run `/bughunt` on a branch before opening its PR' 'every PR is hunted first'
 
 # ---- Required files ----
 for f in install.sh README.md CLAUDE.md settings.json loop.md .gitignore .githooks/pre-commit; do

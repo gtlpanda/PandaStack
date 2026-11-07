@@ -7,10 +7,12 @@
 #                 into it (scripts/merge-settings.mjs: our hooks added, keys you
 #                 lack filled in, yours kept, permissions never touched), with
 #                 the file before the merge kept in the backup dir
-#   directories:  skills/, agents/, workflows/          -> one symlink PER ENTRY
-#                 (so entries installed by other tools keep working), taken
-#                 from core/<dir>/ and every graphs/<graph>/<dir>/ and landing
-#                 flat in ~/.claude/<dir>/. Two sources with one name: refused.
+#   directories:  skills/, agents/, workflows/, commands/, bin/
+#                 -> one symlink PER ENTRY (so entries installed by other tools
+#                 keep working), taken from core/<dir>/, kit/<dir>/ (standalone
+#                 tools that belong to no graph), and every graphs/<graph>/<dir>/,
+#                 landing flat in ~/.claude/<dir>/. Two sources with one name:
+#                 refused.
 #
 # Usage:
 #   ./install.sh              link; back up anything in the way
@@ -30,9 +32,9 @@ BACKUP_ROOT="$CLAUDE_DIR/backups"
 MANIFEST=".harness-manifest"
 
 FILE_TARGETS=(settings.json CLAUDE.md loop.md)
-DIR_TARGETS=(skills agents workflows)
-# Repo dirs that hold DIR_TARGETS entries: shared core, then each graph.
-SOURCE_ROOTS=(core)
+DIR_TARGETS=(skills agents workflows commands bin)
+# Repo dirs that hold DIR_TARGETS entries: shared core, the kit, then each graph.
+SOURCE_ROOTS=(core kit)
 for g in "$REPO_DIR"/graphs/*/; do [ -d "$g" ] && SOURCE_ROOTS+=("graphs/$(basename "$g")"); done
 
 DRY_RUN=0
@@ -66,7 +68,7 @@ run() {
 physical() { [ -d "$1" ] && (cd "$1" && pwd -P) || true; }
 
 # Refuse layouts where linking would write into, or move files out of, the repo
-# itself, or write through a symlinked skills/agents dir into some other tree.
+# itself, or write through a symlinked target dir (skills/, bin/, ...) into some other tree.
 guard_layout() {
   local p t
   p="$(physical "$CLAUDE_DIR")"
@@ -110,7 +112,7 @@ check_duplicates() {
     printf 'error: %s is provided by more than one source: %s\n' "$d" \
       "$(awk -F'\t' -v d="$d" '$1==d{printf "%s ", $2}' <<< "$targets")" >&2
   done <<< "$dups"
-  die "rename one of each duplicate; every agent, skill, and workflow name must be unique across core/ and graphs/"
+  die "rename one of each duplicate; every agent, skill, workflow, command, and bin name must be unique across core/, kit/, and graphs/"
 }
 
 # True if rel path $1 is named by --skip, directly or by its top-level dir.

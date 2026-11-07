@@ -1,0 +1,253 @@
+#!/usr/bin/env bash
+# Read-only Render API wrapper.
+# Lives at ~/.claude/skills/render/render and is invoked directly.
+#
+# Auth: reads ~/.config/render/api-key (mode 600).
+# Docs: https://api-docs.render.com/reference/
+#
+# Commands:
+#   render services [--all]
+#   render logs <service-name-or-id> [--since <dur>] [--until <dur>] [--filter <text>]
+#                                    [--grep <regex>] [--limit <n>] [--level <lvl>]
+#   render deploys <service-name-or-id> [--limit <n>]
+#   render env <service-name-or-id>
+#   render service <service-name-or-id>      # show one service's details
+#
+# All operations are READ-ONLY. No POST/PUT/PATCH/DELETE is implemented;
+# adding one requires the operator to explicitly say so (and a code review).
+
+set -euo pipefail
+
+KEY_FILE="${RENDER_API_KEY_FILE:-$HOME/.config/render/api-key}"
+API_BASE="${RENDER_API_BASE:-https://api.render.com/v1}"
+
+# ---------------------------------------------------------------------------
+# Auth + perms guard
+# ---------------------------------------------------------------------------
+if [[ ! -f "$KEY_FILE" ]]; then
+  echo "render: API key file missing at $KEY_FILE" >&2
+  echo "  Create with:" >&2
+  echo "    mkdir -p ~/.config/render && chmod 700 ~/.config/render" >&2
+  echo "    printf 'rnd_...' > ~/.config/render/api-key" >&2
+  echo "    chmod 600 ~/.config/render/api-key" >&2
+  exit 1
+fi
+# Refuse to read keys with overly permissive bits — defense against accidental
+# chmod 644 or world-readable umasks.
+PERMS="$(stat -f '%Lp' "$KEY_FILE" 2>/dev/null || stat -c '%a' "$KEY_FILE")"
+if [[ "$PERMS" != "600" && "$PERMS" != "400" ]]; then
+  echo "render: $KEY_FILE has mode $PERMS — refuse to read. Run: chmod 600 $KEY_FILE" >&2
+  exit 1
+fi
+API_KEY="$(cat "$KEY_FILE")"
+if [[ -z "$API_KEY" ]]; then
+  echo "render: API key file is empty" >&2
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
+for cmd in curl jq; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "render: required command '$cmd' not found in PATH" >&2
+    exit 1
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+api() {
+  # api <method> <path-with-leading-slash> [--data <body>]
+  local method="$1" path="$2"; shift 2
+  curl -sS -X "$method" \
+    -H "Authorization: Bearer $API_KEY" \
+    -H "Accept: application/json" \
+    "$@" \
+    "$API_BASE$path"
+}
+
+# Resolve a name OR id to a full service object (JSON). Accepts:
+#   - srv-XXX (passes through)
+#   - any partial name (substring, case-insensitive)
+# Returns the FIRST match by name. Errors if no match.
+resolve_service() {
+  local needle="$1"
+  if [[ "$needle" =~ ^srv- ]]; then
+    api GET "/services/$needle"
+    return
+  fi
+  # List all services + grep name. Render paginates at 100 items; one page
+  # is enough for personal accounts.
+  local all
+  all="$(api GET "/services?limit=100" | jq -c '.[].service')"
+  local match
+  match="$(echo "$all" | jq -c --arg n "$needle" \
+    'select((.name | ascii_downcase) | contains($n | ascii_downcase))' \
+    | head -1)"
+  if [[ -z "$match" ]]; then
+    echo "render: no service matching \"$needle\"" >&2
+    echo "       run: render services" >&2
+    exit 1
+  fi
+  echo "$match"
+}
+
+# Pretty-relative-time → ISO-8601 (UTC). Accepts: 1h, 30m, 2d, 90s, 3w.
+to_iso() {
+  local spec="$1"
+  if [[ -z "$spec" || "$spec" == "now" ]]; then
+    date -u +"%Y-%m-%dT%H:%M:%SZ"
+    return
+  fi
+  local num unit seconds
+  num="${spec%[smhdw]}"
+  unit="${spec: -1}"
+  case "$unit" in
+    s) seconds="$num" ;;
+    m) seconds="$((num * 60))" ;;
+    h) seconds="$((num * 3600))" ;;
+    d) seconds="$((num * 86400))" ;;
+    w) seconds="$((num * 604800))" ;;
+    *) echo "render: bad duration \"$spec\" (use 1s/1m/1h/1d/1w)" >&2; exit 1 ;;
+  esac
+  # macOS BSD date OR GNU date
+  date -u -v "-${seconds}S" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+    || date -u -d "${seconds} seconds ago" +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+cmd_services() {
+  api GET "/services?limit=100" \
+    | jq -r '.[].service
+        | [.id, .name, .type, .url, .suspended, .updatedAt]
+        | @tsv' \
+    | awk -F'\t' 'BEGIN { printf "%-30s  %-30s  %-14s  %-50s  %-13s  %s\n", "ID", "NAME", "TYPE", "URL", "SUSPENDED", "UPDATED" }
+                  { printf "%-30s  %-30s  %-14s  %-50s  %-13s  %s\n", $1, $2, $3, $4, $5, $6 }'
+}
+
+cmd_service() {
+  local needle="${1:?service name or id required}"
+  resolve_service "$needle" | jq .
+}
+
+cmd_logs() {
+  local needle="${1:?service name or id required}"; shift
+  local since="15m" until="now" text="" grep_pat="" limit="100" level=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --since) since="$2"; shift 2 ;;
+      --until) until="$2"; shift 2 ;;
+      --filter|--text) text="$2"; shift 2 ;;
+      --grep) grep_pat="$2"; shift 2 ;;
+      --limit) limit="$2"; shift 2 ;;
+      --level) level="$2"; shift 2 ;;
+      *) echo "render logs: unknown flag $1" >&2; exit 2 ;;
+    esac
+  done
+  local svc svc_id owner_id
+  svc="$(resolve_service "$needle")"
+  svc_id="$(echo "$svc" | jq -r '.id')"
+  owner_id="$(echo "$svc" | jq -r '.ownerId')"
+
+  local start_iso end_iso
+  start_iso="$(to_iso "$since")"
+  end_iso="$(to_iso "$until")"
+
+  # Build query string. Render's /v1/logs requires ownerId + resource[].
+  local qs="ownerId=${owner_id}&resource=${svc_id}&startTime=${start_iso}&endTime=${end_iso}&limit=${limit}&direction=backward"
+  if [[ -n "$text" ]]; then
+    qs="${qs}&text=$(printf '%s' "$text" | jq -sRr @uri)"
+  fi
+  if [[ -n "$level" ]]; then
+    qs="${qs}&level=${level}"
+  fi
+
+  local resp
+  resp="$(api GET "/logs?${qs}")"
+  # /v1/logs returns { logs: [...], hasMore, nextStartTime, nextEndTime }.
+  # Each log has { timestamp, message, labels: [{name,value}, ...] }.
+  echo "$resp" \
+    | jq -r '.logs[]? | "\(.timestamp)\t\(.message)"' \
+    | awk -F'\t' '{ printf "%s  %s\n", $1, $2 }' \
+    | { if [[ -n "$grep_pat" ]]; then grep -E "$grep_pat"; else cat; fi; }
+
+  # Footer with pagination + counts
+  local count has_more
+  count="$(echo "$resp" | jq '.logs | length')"
+  has_more="$(echo "$resp" | jq -r '.hasMore // false')"
+  echo "" >&2
+  echo "—— $count log lines (since=$since until=$until limit=$limit hasMore=$has_more) ——" >&2
+}
+
+cmd_deploys() {
+  local needle="${1:?service name or id required}"; shift
+  local limit="10"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --limit) limit="$2"; shift 2 ;;
+      *) echo "render deploys: unknown flag $1" >&2; exit 2 ;;
+    esac
+  done
+  local svc svc_id
+  svc="$(resolve_service "$needle")"
+  svc_id="$(echo "$svc" | jq -r '.id')"
+  api GET "/services/${svc_id}/deploys?limit=${limit}" \
+    | jq -r '.[].deploy
+        | [.id, .status, (.commit.id // "" | .[0:8]), .createdAt, .finishedAt, (.commit.message // "" | .[0:60])]
+        | @tsv' \
+    | awk -F'\t' 'BEGIN { printf "%-30s  %-12s  %-8s  %-24s  %-24s  %s\n", "ID", "STATUS", "COMMIT", "CREATED", "FINISHED", "MESSAGE" }
+                  { printf "%-30s  %-12s  %-8s  %-24s  %-24s  %s\n", $1, $2, $3, $4, $5, $6 }'
+}
+
+cmd_env() {
+  local needle="${1:?service name or id required}"
+  local svc svc_id
+  svc="$(resolve_service "$needle")"
+  svc_id="$(echo "$svc" | jq -r '.id')"
+  # We list NAMES only — Render returns plaintext values in this endpoint
+  # but exposing them through this wrapper would be a footgun.
+  api GET "/services/${svc_id}/env-vars?limit=100" \
+    | jq -r '.[].envVar.key' \
+    | sort
+}
+
+cmd_help() {
+  cat <<EOF
+render — read-only Render API wrapper
+
+USAGE
+  render services
+  render service <name-or-id>
+  render logs <name-or-id> [--since 30m] [--until now] [--filter text] [--grep pattern] [--limit 100] [--level info|warn|error]
+  render deploys <name-or-id> [--limit 10]
+  render env <name-or-id>
+
+NAME RESOLUTION
+  Pass a srv-id (srv-abc123) for exact match, OR a case-insensitive name substring.
+  First match wins; ambiguous names error out.
+
+EXAMPLES
+  render services
+  render logs supple-picks --since 30m --grep "EARLY_RETURN"
+  render logs supple-picks --since 1h --level warn
+  render deploys supple-picks --limit 5
+  render env supple-picks
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# Dispatch
+# ---------------------------------------------------------------------------
+case "${1:-help}" in
+  services)  shift; cmd_services "$@" ;;
+  service)   shift; cmd_service "$@" ;;
+  logs)      shift; cmd_logs "$@" ;;
+  deploys|deploy) shift; cmd_deploys "$@" ;;
+  env|env-vars)   shift; cmd_env "$@" ;;
+  help|-h|--help) cmd_help ;;
+  *) echo "render: unknown subcommand '$1' (try 'render help')" >&2; exit 2 ;;
+esac

@@ -23,5 +23,9 @@
         ]
       }
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "\"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/bin/statusline.sh\""
   }
 }
