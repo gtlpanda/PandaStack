@@ -106,9 +106,11 @@ symlinked into `~/.claude/` on every machine.
 ## Layout
 
 ```
-install.sh  settings.json  CLAUDE.md  loop.md   shared config, linked into ~/.claude/
+install.sh  settings.json  CLAUDE.md  loop.md   shared config, linked into ~/.claude/ (CLAUDE.md: the global rules, at most 200 lines)
 core/skills/                                    skills more than one graph uses (verify, harness-review, knowledge-map, default-stack, gtm-brief, backlog, findings, bug-lenses)
 core/agents/                                    agents more than one graph uses (advisor, checker)
+core/bin/                                       statusline.sh (model, effort, directory, branch, worktree, context used)
+kit/skills/  kit/agents/  kit/commands/         standalone tools that belong to no graph (see Kit below)
 graphs/<graph>/agents/                          that graph's agents
 graphs/<graph>/workflows/                       that graph's workflow script
 graphs/<graph>/tests/                           that graph's routing tests (*.test.mjs)
@@ -116,9 +118,39 @@ graphs/<graph>/README.md                        roles, models, routing
 scripts/                                        repo checks (test.sh, validate, install/secret/workflow tests)
 ```
 
-Every agent, skill, and workflow lands in one flat `~/.claude/<dir>/`, so each
-name must be unique across `core/` and all graphs. `validate.sh` and
-`install.sh` both refuse duplicates.
+Every agent, skill, workflow, command, and bin script lands in one flat
+`~/.claude/<dir>/`, so each name must be unique across `core/`, `kit/`, and all
+graphs. `validate.sh` and `install.sh` both refuse duplicates.
+
+**Standalone.** PandaStack needs nothing else installed, and it never removes
+or edits what other tools install. `scripts/check-refs.mjs` (run by
+`validate.sh`) fails when a file names a skill, agent, workflow, or command
+this repo does not ship and Claude Code does not build in, so a tool that works
+only next to another toolkit cannot slip in. CI runs every check on a fresh
+machine with nothing else installed.
+
+## Kit
+
+`kit/` holds standalone tools that belong to no graph: project setup
+(`init-agents`, `init-ci`, `init-claude`, `init-env`, `init-monorepo`,
+`init-tasks`, `init-tests`, `scaffold-app`, `dockerize`), audits (`security`,
+`error-audit`, `dry`, `logging`, `seo`), investigation (`deep`, `deep-fix`),
+git (`commit`, `clean-gone`, `release`), writing (`copywriting`,
+`frontend-design`), Render (`render`, read-only), and project-specific ones
+(`build-scraper`, `fix-scraper`, `build-bot-integration`, `vendor-lens`), plus
+10 agents (design, UX, QA, wiring, Terraform, CloudFront, ads, ICP) and 2
+commands (`aws-arch-review`, `founding-sales`). Kit agents pin a model but not
+an effort or a tool list, so they keep every tool.
+
+These replace the separate `claude-config` repo. Four of its tools were retired
+because a graph does the job:
+
+| Retired | Use instead |
+|---|---|
+| build | `/dev <task>`: planned, built tests-first, each acceptance criterion proven, QA'd |
+| deep-qa | the QA graph, through `/loop` |
+| regression-check | `/verify` |
+| commit-push-pr | `/bughunt`, then `gh pr create` (the review gate refuses an unhunted PR) |
 
 ## Install
 
@@ -134,6 +166,8 @@ not replaced**:
 - Our hooks (the review gate) are added after yours.
 - Keys you lack are filled in, and every key you have keeps your value.
 - `permissions` is never touched.
+- The status line (`core/bin/statusline.sh`, needs `jq` and `git`) is filled in
+  only if you have no `statusLine` of your own.
 - The dry run lists each addition.
 - The file from before the merge is kept in the backup dir, and `--uninstall`
   puts it back byte for byte while the file is still what the merge wrote. If
@@ -160,15 +194,17 @@ history, and project state):
 | `settings.json`                              | `~/.claude/settings.json`       | one symlink, or merged into your own file |
 | `CLAUDE.md`                                  | `~/.claude/CLAUDE.md`           | one symlink                  |
 | `loop.md`                                    | `~/.claude/loop.md`             | one symlink                  |
-| `core/skills/<name>/`, `graphs/*/skills/<name>/` | `~/.claude/skills/<name>`   | one symlink **per skill**    |
-| `core/agents/<name>.md`, `graphs/*/agents/<name>.md` | `~/.claude/agents/<name>.md` | one symlink **per agent** |
-| `core/workflows/<name>.js`, `graphs/*/workflows/<name>.js` | `~/.claude/workflows/<name>.js` | one symlink **per workflow** |
+| `{core,kit,graphs/*}/skills/<name>/`        | `~/.claude/skills/<name>`       | one symlink **per skill**    |
+| `{core,kit,graphs/*}/agents/<name>.md`      | `~/.claude/agents/<name>.md`    | one symlink **per agent**    |
+| `{core,kit,graphs/*}/workflows/<name>.js`   | `~/.claude/workflows/<name>.js` | one symlink **per workflow** |
+| `{core,kit,graphs/*}/commands/<name>.md`    | `~/.claude/commands/<name>.md`  | one symlink **per command**  |
+| `{core,kit,graphs/*}/bin/<name>`            | `~/.claude/bin/<name>`          | one symlink **per script**   |
 
 `--skip` uses the target name (`--skip=agents/fixer.md`), not the repo path.
 
-Skills, agents, and workflows are linked per entry, not as whole directories,
-so entries installed by other tools (plugins, gstack, your own one-offs) keep
-working alongside these. The review skill is named `harness-review` so it does
+Every entry is linked on its own, not as a whole directory, so entries
+installed by other tools (plugins, gstack, your own one-offs) keep working
+alongside these. The review skill is named `harness-review` so it does
 not collide with gstack's `review`.
 
 ## Update
@@ -199,8 +235,8 @@ Claude Code reads exactly these settings files, in increasing precedence:
 `settings.local.json`.** So:
 
 - Anything portable goes in this repo's `settings.json`.
-- Anything machine-specific (hook commands with absolute paths, local plugins,
-  status line scripts) goes in the project's `.claude/settings.local.json`, or
+- Anything machine-specific (hook commands with absolute paths, local plugins)
+  goes in the project's `.claude/settings.local.json`, or
   in your shell environment. `settings.local.json` is gitignored here and the
   pre-commit hook refuses to commit it.
 - Claude Code itself writes to `~/.claude/settings.json` (for example `/config`
@@ -262,7 +298,7 @@ run `scripts/test.sh`, then `./install.sh`.
 
 ```bash
 scripts/test.sh           # runs all four below; ends with TEST: PASS|FAIL
-scripts/validate.sh       # JSON valid, frontmatter complete, no secrets, no machine paths
+scripts/validate.sh       # JSON valid, frontmatter complete, CLAUDE.md under 200 lines, every named tool ships here (check-refs.mjs), no secrets, no machine paths
 scripts/test-install.sh   # install / re-install / uninstall against a temp HOME
 scripts/test-secrets.sh   # proves the scanner and pre-commit hook block real key formats
 scripts/test-workflow.sh  # runs every graphs/*/tests/*.test.mjs against scripted agents; checks every workflow parses

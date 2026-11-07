@@ -7,10 +7,12 @@
 #                 into it (scripts/merge-settings.mjs: our hooks added, keys you
 #                 lack filled in, yours kept, permissions never touched), with
 #                 the file before the merge kept in the backup dir
-#   directories:  skills/, agents/, workflows/          -> one symlink PER ENTRY
-#                 (so entries installed by other tools keep working), taken
-#                 from core/<dir>/ and every graphs/<graph>/<dir>/ and landing
-#                 flat in ~/.claude/<dir>/. Two sources with one name: refused.
+#   directories:  skills/, agents/, workflows/, commands/, bin/
+#                 -> one symlink PER ENTRY (so entries installed by other tools
+#                 keep working), taken from core/<dir>/, kit/<dir>/ (standalone
+#                 tools that belong to no graph), and every graphs/<graph>/<dir>/,
+#                 landing flat in ~/.claude/<dir>/. Two sources with one name:
+#                 refused.
 #
 # Usage:
 #   ./install.sh              link; back up anything in the way
@@ -30,9 +32,9 @@ BACKUP_ROOT="$CLAUDE_DIR/backups"
 MANIFEST=".harness-manifest"
 
 FILE_TARGETS=(settings.json CLAUDE.md loop.md)
-DIR_TARGETS=(skills agents workflows)
-# Repo dirs that hold DIR_TARGETS entries: shared core, then each graph.
-SOURCE_ROOTS=(core)
+DIR_TARGETS=(skills agents workflows commands bin)
+# Repo dirs that hold DIR_TARGETS entries: shared core, the kit, then each graph.
+SOURCE_ROOTS=(core kit)
 for g in "$REPO_DIR"/graphs/*/; do [ -d "$g" ] && SOURCE_ROOTS+=("graphs/$(basename "$g")"); done
 
 DRY_RUN=0
@@ -66,7 +68,7 @@ run() {
 physical() { [ -d "$1" ] && (cd "$1" && pwd -P) || true; }
 
 # Refuse layouts where linking would write into, or move files out of, the repo
-# itself, or write through a symlinked skills/agents dir into some other tree.
+# itself, or write through a symlinked target dir (skills/, bin/, ...) into some other tree.
 guard_layout() {
   local p t
   p="$(physical "$CLAUDE_DIR")"
@@ -74,8 +76,9 @@ guard_layout() {
     die "$CLAUDE_DIR resolves inside the repo ($REPO_DIR); refusing" ;;
   esac
   for t in "${DIR_TARGETS[@]}"; do
+    is_skipped "$t" && continue   # --skip=<dir>: install never touches it
     if [ -L "$CLAUDE_DIR/$t" ]; then
-      die "$CLAUDE_DIR/$t is a symlink (-> $(readlink "$CLAUDE_DIR/$t")). Replace it with a real directory first; per-entry links must land in $CLAUDE_DIR/$t itself"
+      die "$CLAUDE_DIR/$t is a symlink (-> $(readlink "$CLAUDE_DIR/$t")). Replace it with a real directory, or pass --skip=$t to leave it alone; per-entry links must land in $CLAUDE_DIR/$t itself"
     fi
     p="$(physical "$CLAUDE_DIR/$t")"
     case "$p" in "$REPO_DIR"|"$REPO_DIR"/*) die "$CLAUDE_DIR/$t resolves inside the repo; refusing" ;; esac
@@ -110,7 +113,7 @@ check_duplicates() {
     printf 'error: %s is provided by more than one source: %s\n' "$d" \
       "$(awk -F'\t' -v d="$d" '$1==d{printf "%s ", $2}' <<< "$targets")" >&2
   done <<< "$dups"
-  die "rename one of each duplicate; every agent, skill, and workflow name must be unique across core/ and graphs/"
+  die "rename one of each duplicate; every agent, skill, workflow, command, and bin name must be unique across core/, kit/, and graphs/"
 }
 
 # True if rel path $1 is named by --skip, directly or by its top-level dir.
@@ -185,6 +188,7 @@ merge_settings() {  # $1 = ours (in the repo), $2 = theirs (under ~/.claude)
   local merged added rc=0 flags=()
   command -v node >/dev/null 2>&1 || die "node is needed to merge settings.json into your own; install Node, or pass --skip=settings.json"
   if is_skipped skills/bughunt; then flags+=(--no-hooks); log "settings.json: skills/bughunt is skipped, so the review gate hook is not merged"; fi
+  if is_skipped bin/statusline.sh; then flags+=(--no-statusline); log "settings.json: bin/statusline.sh is skipped, so the status line is not merged"; fi
   merged="$(mktemp)" || die "mktemp failed"
   added="$(mktemp)" || die "mktemp failed"
   node "$REPO_DIR/scripts/merge-settings.mjs" merge ${flags[@]+"${flags[@]}"} "$1" "$2" >"$merged" 2>"$added" || rc=$?
@@ -243,7 +247,7 @@ unmerge_settings() {
       if [ "$DRY_RUN" -eq 1 ]; then log "[dry-run] would remove PandaStack's hooks from settings.json"
       else
         cat "$out" > "$dest" || die "could not write settings.json"
-        warn "settings.json changed since the merge: kept your edits, removed only PandaStack's hooks"
+        warn "settings.json changed since the merge: kept your edits, removed only what PandaStack added (its hooks, and its status line if unchanged)"
       fi
     fi
   else
@@ -258,6 +262,7 @@ prune_dangling() {
   local t link
   for t in "${DIR_TARGETS[@]}"; do
     [ -d "$CLAUDE_DIR/$t" ] || continue
+    [ "$MODE" = install ] && is_skipped "$t" && continue
     for link in "$CLAUDE_DIR/$t"/*; do
       [ -L "$link" ] || continue
       points_into_repo "$link" || continue
@@ -311,6 +316,9 @@ do_install() {
     log "linked: $rel -> $src"
     linked=$((linked + 1))
   done < <(list_targets)
+  if is_skipped bin/statusline.sh && points_into_repo "$CLAUDE_DIR/settings.json"; then
+    warn "settings.json is linked to ours, whose statusLine runs bin/statusline.sh, which --skip left out: the status line stays blank"
+  fi
   prune_dangling
   enable_git_hooks
   log "done: $linked linked, $skipped already linked"

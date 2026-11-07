@@ -1527,3 +1527,92 @@ driver.
 - 22 gate tests, 13 new guard cases, and 25 install checks.
 - 5 new validate pins.
 - The suite is 612 workflow tests, 100 install checks, and 22 secret checks, 0 failed.
+
+## 32. PandaStack is the one home: the kit, one CLAUDE.md, standalone (2026-11-07)
+
+**What changed.** The separate `claude-config` repo's tools moved in, so one repo installs
+everything:
+- `kit/skills` (26), `kit/agents` (10), and `kit/commands` (2), copied from claude-config. All
+  were byte-identical to the live copies in `~/.claude`.
+- Four tools were retired because a graph does the job: build (`/dev`), deep-qa (the QA graph),
+  regression-check (`/verify`), and commit-push-pr (the review gate refuses an unhunted PR). The
+  README maps each one.
+- `install.sh` gains a `kit` source root and the `commands` and `bin` target dirs. Its generic
+  loops needed no other change.
+- `core/bin/statusline.sh` ships, and `settings.json` gains `statusLine`. The merge keeps a
+  person's own status line.
+- One `CLAUDE.md` of 180 lines, from the user's 229-line global rules plus PandaStack's 42. Its
+  rails are pinned by validate rules, and a 200-line cap is enforced.
+
+**Standalone, corrected mid-plan.** The plan first moved gstack out. The user corrected this:
+gstack is their own optional tool, and most PandaStack users don't have it. PandaStack now needs
+nothing else installed and never touches what other tools install. `scripts/check-refs.mjs` fails
+when a file names a skill, agent, workflow, or command that the repo doesn't ship and Claude Code
+doesn't build in. It caught the one gstack-only reference (`cso` in build-bot-integration).
+
+**Bugs found while moving.**
+- build-scraper pointed at `~/.claude/skills/build-scraper.md`, a loose note that claude-config
+  never installed. Its full protocol now ships as `protocol.md` in the skill.
+- 5 kit skills lacked a `name` (2 had no frontmatter at all).
+
+**Contracts.** Kit agents pin a model but not an effort or tool list. A `tools` list would take
+tools away from agents that have always had all of them.
+
+**The CLAUDE.md merge audit.** An independent agent read both sources line by line.
+- It found plan-mode requirements lost in the condensation: explaining each stage with a
+  recommendation and why before AskUserQuestion, a real stop after each section, and what counts
+  as an issue. It also found four smaller dropped phrases, the Rule 0 override gap, and the
+  unattended conflict.
+- All were fixed except the ones that would narrow a rule of the user's own (the sweep scope, the
+  300-line split, task-file creation, context sync).
+
+**Measured.** Mutations were caught:
+- validate: the CLAUDE.md cap, a kit agent's missing model, a skill/workflow name collision, and a
+  broken kit script;
+- install: dropping the `bin`/`commands` targets (4 failures) and dropping the `kit` root (6);
+- check-refs: putting the `cso` line back.
+
+**The first gated PR: `/bughunt` on the branch, 8 bugs, all reproduced.** It ran all six lenses
+over 31 agents in 6.6 minutes, and the recheck agreed with every result.
+- **Five in `render`**, copied from claude-config:
+  - the key-permission check refused every key file on Linux (BSD `stat -f` first, so it has
+    never worked on this machine);
+  - `--grep` with no match exited 1 with no footer;
+  - HTTP 401 and 404 answers read as empty results;
+  - an ambiguous name silently used the first match;
+  - `render service 'srv-x/env-vars'` reached the env-values endpoint that the wrapper promises
+    never to touch.
+  Four of these were already broken in claude-config; the fifth (the path injection) is new here.
+- **Three in this change:**
+  - `--skip=bin` still merged a statusLine that points at the skipped script;
+  - uninstall after an edit left that statusLine dangling;
+  - statusline.sh shortened `/home/bobby` to `~by` when HOME is `/home/bob`.
+
+Round 2 (4.5 minutes) found two LOW doc mismatches in render's SKILL.md: it promised a PATH entry
+that doesn't exist, and it documented a 200-line default (the script sends 100), `--filter` as a
+regex (it's a plain text search), and grouped env output (the script prints names only). The docs
+now call the full path and match the script. The disposition was `manual_review` only because
+the regression hunter skimmed README and retro without tracing them.
+
+Round 3 (4 minutes) found two more LOWs:
+- `render logs` cut every message at its first tab;
+- a symlinked `~/.claude/commands` or `bin` aborted the whole install, even with `--skip=commands`.
+
+A skipped dir is now never guarded or pruned. Without `--skip`, the refusal names the flag.
+
+Round 4 (3.5 minutes) found two more LOWs:
+- the Render API key sat in curl's argv, where `ps` shows it to every local user (it now goes in
+  through a file descriptor; a real-curl test proves the server still gets it);
+- the documented `services` and `deploys` columns didn't match the script.
+
+The ledger matched both onto old ids (F7, F9) and kept the old titles and expected/actual text: a
+/bughunt merge bug, logged for a follow-up.
+
+All 14 are fixed on the branch. The hunt's 8 reproduction tests are adopted as regression tests,
+plus 7 edge-case tests: an exact name wins, a broken grep pattern still fails, a person's own or
+tuned status line survives uninstall, and a linked settings.json with `--skip=bin` warns.
+
+**Stats.**
+- 6 check-refs tests, 26 hunt-derived and edge tests, and 17 install checks (section 16).
+- 6 CLAUDE.md validate rules, plus the cap.
+- The suite is 646 workflow tests, 117 install checks, and 22 secret checks, 0 failed.
