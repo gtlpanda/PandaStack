@@ -25,13 +25,13 @@ The wrapper exits with an error if the file is missing OR has wider-than-600 per
 
 ## Commands
 
-All commands use the wrapper at `~/.claude/skills/render/render` (added to PATH below).
+Run the wrapper by its full path, `~/.claude/skills/render/render`: it is not on PATH, and every Bash call starts a fresh shell, so an alias would not last. The examples below use that path.
 
 ### `render services`
 List all services the API key can see. Output: `id  name  type  url  status`.
 
 ```bash
-render services
+~/.claude/skills/render/render services
 # srv-abc123  supple-picks       web_service  https://...  deployed
 # srv-def456  cherryrock-folio   web_service  https://...  deployed
 ```
@@ -42,21 +42,21 @@ Fetch logs for a service.
 Options:
 - `--since <duration>` — relative time (e.g. `1h`, `30m`, `2d`). Default: `15m`.
 - `--until <duration>` — relative end time. Default: `now`.
-- `--filter <regex>` — server-side full-text filter.
-- `--grep <pattern>` — local grep after fetch (more flexible).
-- `--limit <n>` — max log lines (default 200, max 1000).
+- `--filter <text>` — server-side text search (plain text, matched by Render; not a pattern).
+- `--grep <pattern>` — local `grep -E` after the fetch (use this for patterns).
+- `--limit <n>` — max log lines (default 100, max 1000).
 - `--level <info|warn|error>` — filter by log level.
 
 ```bash
-render logs supple-picks --since 30m --grep "EARLY_RETURN"
-render logs supple-picks --since 1h --level warn
+~/.claude/skills/render/render logs supple-picks --since 30m --grep "EARLY_RETURN"
+~/.claude/skills/render/render logs supple-picks --since 1h --level warn
 ```
 
 ### `render deploys <service>`
 List the 10 most recent deploys with status + commit.
 
 ```bash
-render deploys supple-picks
+~/.claude/skills/render/render deploys supple-picks
 # dep-xyz   live      553172c  "PR #91 merge"   2026-05-26T01:41
 ```
 
@@ -64,18 +64,18 @@ render deploys supple-picks
 List env-var NAMES only (NOT values). For secrets safety, the wrapper never fetches plaintext values.
 
 ```bash
-render env supple-picks
-# DATABASE_URL       (group: production)
-# EBAY_CLIENT_ID     (group: production)
-# OPENAI_API_KEY     (group: production)
+~/.claude/skills/render/render env supple-picks
+# DATABASE_URL
+# EBAY_CLIENT_ID
+# OPENAI_API_KEY
 ```
 
 ## How to invoke from Claude
 
 When the user asks anything log-related about Render:
-1. Run `render services` first to confirm the service exists + grab the canonical name/id.
-2. Run `render logs <name>` with appropriate `--since` + `--grep` filters based on what they're debugging.
-3. If they need to see deploys (e.g., "did my push deploy?"), use `render deploys`.
+1. Run `~/.claude/skills/render/render services` first to confirm the service exists + grab the canonical name/id.
+2. Run `~/.claude/skills/render/render logs <name>` with appropriate `--since` + `--grep` filters based on what they're debugging.
+3. If they need to see deploys (e.g., "did my push deploy?"), use `~/.claude/skills/render/render deploys`.
 
 The wrapper is read-only by design — no command can change Render state. Trust accordingly.
 

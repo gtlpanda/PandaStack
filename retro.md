@@ -1588,11 +1588,17 @@ over 31 agents in 6.6 minutes, and the recheck agreed with every result.
   - uninstall after an edit left that statusLine dangling;
   - statusline.sh shortened `/home/bobby` to `~by` when HOME is `/home/bob`.
 
-All 8 are fixed on the branch. The hunt's 8 reproduction tests are adopted as regression tests,
+Round 2 (4.5 minutes) found two LOW doc mismatches in render's SKILL.md: it promised a PATH entry
+that doesn't exist, and it documented a 200-line default (the script sends 100), `--filter` as a
+regex (it's a plain text search), and grouped env output (the script prints names only). The docs
+now call the full path and match the script. The disposition was `manual_review` only because
+the regression hunter skimmed README and retro without tracing them.
+
+All 10 are fixed on the branch. The hunt's 8 reproduction tests are adopted as regression tests,
 plus 7 edge-case tests: an exact name wins, a broken grep pattern still fails, a person's own or
 tuned status line survives uninstall, and a linked settings.json with `--skip=bin` warns.
 
 **Stats.**
-- 6 check-refs tests, 15 hunt-derived and edge tests, and 15 install checks (section 16).
+- 6 check-refs tests, 20 hunt-derived and edge tests, and 15 install checks (section 16).
 - 6 CLAUDE.md validate rules, plus the cap.
-- The suite is 635 workflow tests, 115 install checks, and 22 secret checks, 0 failed.
+- The suite is 640 workflow tests, 115 install checks, and 22 secret checks, 0 failed.
