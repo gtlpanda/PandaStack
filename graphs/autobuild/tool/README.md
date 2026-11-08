@@ -54,7 +54,7 @@ After every `reviewEvery` passing features, a review session reads the code sinc
 When every feature passes (and the final review ran), the loop runs `/bughunt --fix` over the build branch against its base: the whole branch, which is what a pull request from it would merge, so PandaStack's review gate accepts that PR once the hunt passes. `lib/bughunt.mjs` does this, through the hunt's landing module (`graphs/hunt/skills/bughunt/land.mjs`, shared with `/build-app`):
 
 1. **Intake and a fix worktree** on `bughunt/<key>`, inside `.git`. What an earlier hunt left is kept as `attempt/bughunt-<stamp>`, never lost.
-2. **One headless session** runs the hunt graph in fix mode. It uses `/build-app`'s session settings (its guard opens only the hunt's state dir in `.git`; background work is not cut off at 10 minutes), not the review settings, which forbid the Workflow tool. Caps: `limits.bughuntBudgetUsd` (default $30) and `limits.bughuntTimeoutMinutes` (360).
+2. **One headless session** runs the hunt graph in fix mode. It uses `/build-app`'s session settings (its guard opens only the hunt's state dir in `.git`; background work is not cut off at 10 minutes), not the review settings, which forbid the Workflow tool. Caps: `limits.bughuntBudgetUsd` (default $100) and `limits.bughuntTimeoutMinutes` (360).
 3. **The loop's own checks**, before anything lands:
    - every commit is a `bughunt: fix F<n>` the hunt's ledger calls verified;
    - no file that already existed under a frozen path changed (new regression tests may be added);
