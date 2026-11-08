@@ -6,7 +6,8 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-const GUARD = path.resolve(import.meta.dirname, "..", "hooks", "guard.mjs");
+const KIT = path.resolve(import.meta.dirname, "..");
+const GUARD = path.join(KIT, "hooks", "guard.mjs");
 const root = mkdtempSync(path.join(tmpdir(), "autobuild-guard-"));
 writeFileSync(path.join(root, "autobuild.json"), JSON.stringify({ frozen: ["tests", "spec", "SPEC.md", "CLAUDE.md", ".claude", ".env*", "scripts/harness"], writable: ["PROGRESS.md", "DECISIONS.md"] }));
 
@@ -46,7 +47,8 @@ const CASES = [
   ["Bash", { command: "cp /tmp/x.ts tests/acceptance/A-1.test.ts" }, "deny"],
   ["Bash", { command: "node -e \"require('fs').writeFileSync('features.json','{}')\"" }, "deny"],
   ["Bash", { command: "echo x >> .claude/settings.json" }, "deny"],
-  ["Bash", { command: "echo x > ~/.autobuild/lib/cli.mjs" }, "deny"],
+  ["Bash", { command: `echo x > ${path.join(KIT, "lib", "cli.mjs")}` }, "deny"],
+  ["Bash", { command: `python3 -c "open('${path.join(KIT, "lib", "loop.mjs")}','w')"` }, "deny"],
   ["Bash", { command: `echo x > ${path.join(homedir(), ".bashrc")}` }, "deny"],
   ["Bash", { command: "docker compose down" }, "deny"],
   ["Bash", { command: "docker ps" }, "allow"],
@@ -61,7 +63,7 @@ const CASES = [
   ["Edit", { file_path: "DECISIONS.md" }, "allow"],
   ["Write", { file_path: ".harness/session.json" }, "deny"],
   ["Write", { file_path: path.join(homedir(), "outside.txt") }, "deny"],
-  ["Write", { file_path: "~/.autobuild/hooks/guard.mjs" }, "deny"],
+  ["Write", { file_path: path.join(KIT, "hooks", "guard.mjs") }, "deny"],
   ["Write", { file_path: "/tmp/scratch.txt" }, "allow"],
   ["Write", { file_path: ".env.local" }, "deny"],
 ];

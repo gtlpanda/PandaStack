@@ -39,6 +39,8 @@ function deny(reason) {
   process.exit(0);
 }
 
+// The kit itself (lib/, hooks/): a session never rewrites the tool that checks it.
+const KIT_HOME = path.resolve(import.meta.dirname, "..");
 const TEMP_DIRS = [...new Set(["/tmp", tmpdir()].map((dir) => path.resolve(dir)))];
 
 function globToRegExp(pattern) {
@@ -109,7 +111,7 @@ if (tool === "Bash") {
   const mutating = /(^|[\s;&|(])(sed\s+-[^\s]*i|perl\s+-[^\s]*i|mv|cp|rm|unlink|truncate|chmod|chown|ln|touch|dd|install|patch|rsync)(\s|$)/;
   const scripting = /(^|[\s;&|(])(node\s+(-e|--eval|-p|--print)|python3?|ruby|perl\s+-e)(\s|$)/;
   const frozenNames = config.frozen.map((entry) => entry.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*"));
-  const frozenAnywhere = new RegExp(`(${[...frozenNames, "\\.autobuild", "\\.claude/"].join("|")})`);
+  const frozenAnywhere = new RegExp(`(${[...frozenNames, KIT_HOME.replace(/[.+^${}()|[\]\\]/g, "\\$&"), "\\.claude/"].join("|")})`);
   if (scripting.test(command) && frozenAnywhere.test(command)) deny("inline scripts that reference frozen files are not allowed.");
   const mentionsFrozen = command.split(/[\s;&|()]+/).some((token) => frozenTarget(token));
   if (mentionsFrozen && (mutating.test(command) || scripting.test(command))) {

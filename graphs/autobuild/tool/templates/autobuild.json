@@ -1,5 +1,5 @@
 {
-  "$comment": "autobuild project config. Docs: ~/.autobuild/README.md. Commands run with bash in the project root.",
+  "$comment": "autobuild project config. Docs: graphs/autobuild/tool/README.md in PandaStack. Commands run with bash in the project root.",
   "featuresFile": "features.json",
   "progressFile": "PROGRESS.md",
   "branch": "autobuild",

@@ -145,11 +145,11 @@ for f in core/workflows/*.js graphs/*/workflows/*.js; do
 done
 
 # ---- Shell scripts parse ----
-# Every *.sh, plus extensionless scripts in a skill or bin/ that start with a bash or sh shebang.
+# Every *.sh, plus extensionless scripts in a skill, bin/, or a graph's tool/bin/ that start with a bash or sh shebang.
 sh_files=()
 for f in install.sh scripts/*.sh .githooks/*; do [ -f "$f" ] && sh_files+=("$f"); done
 for r in "${roots[@]}"; do
-  for f in "$r"/skills/*/* "$r"/bin/*; do
+  for f in "$r"/skills/*/* "$r"/bin/* "$r"/tool/bin/*; do
     [ -f "$f" ] || continue
     case "$f" in *.sh) sh_files+=("$f") ;; *.*) ;; *) head -n 1 "$f" | grep -qE '^#!.*[/ ](ba)?sh$' && sh_files+=("$f") ;; esac
   done

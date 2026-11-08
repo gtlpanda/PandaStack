@@ -275,6 +275,28 @@ HOME="$H16" "$REPO/install.sh" --uninstall >"$TMP/uninstall16.log" 2>&1
 check "uninstall restores the copies"  '[ "$(cat "$H16/.claude/bin/statusline.sh")" = "OLD-STATUS" ] && [ "$(cat "$H16/.claude/commands/founding-sales.md")" = "OLD-CMD" ] && [ ! -L "$H16/.claude/skills/commit" ]'
 check "uninstall leaves no repo link"  '! find "$H16/.claude" -type l -lname "$REPO/*" | grep -q .'
 
+echo "== 17. autobuild goes on PATH: one link in ~/.local/bin; one in the way is backed up and restored"
+H17="$TMP/home17"; mkdir -p "$H17/.claude" "$H17/.local/bin" "$H17/old/bin"
+printf '#!/bin/sh\necho OLD-AUTOBUILD\n' > "$H17/old/bin/autobuild"; chmod +x "$H17/old/bin/autobuild"
+ln -s "$H17/old/bin/autobuild" "$H17/.local/bin/autobuild"     # the tool's old home, linked by hand
+HOME="$H17" PATH="/usr/bin:/bin:$(dirname "$(command -v node)")" "$REPO/install.sh" >"$TMP/install17.log" 2>&1
+check "autobuild linked into ~/.local/bin" '[ "$(readlink "$H17/.local/bin/autobuild")" = "$REPO/graphs/autobuild/tool/bin/autobuild" ]'
+check "the linked autobuild runs"          '"$H17/.local/bin/autobuild" help 2>&1 | grep -q "Exit codes of .run."'
+check "the autobuild skill is linked"      '[ "$(readlink "$H17/.claude/skills/autobuild")" = "$REPO/graphs/autobuild/skills/autobuild" ]'
+bk17="$(ls -1d "$H17"/.claude/backups/*/ | head -1)"; bk17="${bk17%/}"
+check "old link backed up as local-bin/autobuild" '[ "$(readlink "$bk17/local-bin/autobuild")" = "$H17/old/bin/autobuild" ] && grep -qx "local-bin/autobuild" "$bk17/.harness-manifest"'
+check "warns when ~/.local/bin is not on PATH" 'grep -q "$H17/.local/bin is not on your PATH" "$TMP/install17.log"'
+HOME="$H17" "$REPO/install.sh" >"$TMP/install17b.log" 2>&1
+check "second install leaves it alone"    '! grep -q "local-bin/autobuild" "$TMP/install17b.log"'
+HOME="$H17" "$REPO/install.sh" --uninstall >/dev/null 2>&1
+check "uninstall restores the old link"   '[ "$(readlink "$H17/.local/bin/autobuild")" = "$H17/old/bin/autobuild" ]'
+H17b="$TMP/home17b"; mkdir -p "$H17b/.claude"
+HOME="$H17b" "$REPO/install.sh" --skip=local-bin/autobuild >/dev/null 2>&1
+check "--skip=local-bin/autobuild leaves PATH alone" '[ ! -e "$H17b/.local/bin/autobuild" ] && [ -L "$H17b/.claude/skills/autobuild" ]'
+H17c="$TMP/home17c"; mkdir -p "$H17c/.claude"
+HOME="$H17c" PANDASTACK_BIN_DIR="$H17c/tools" "$REPO/install.sh" >/dev/null 2>&1
+check "PANDASTACK_BIN_DIR picks the dir"  '[ -L "$H17c/tools/autobuild" ] && [ ! -e "$H17c/.local/bin/autobuild" ]'
+
 echo
 echo "TEST-INSTALL: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
