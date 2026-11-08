@@ -96,18 +96,19 @@ function readFacts(runDir) {
   return file.facts
 }
 
-// Every refused attempt recorded in `file`: { stage, wave?, problems } entries, one per stage (applying a stage again replaces its own entry, so it
-// counts once). A mint attempt carries its wave, so a later wave starts with none.
+// Every refused attempt recorded in `file`: { stage, scope?, problems } entries, one per stage (applying a stage again replaces its own entry, so it
+// counts once). A mint attempt carries its scope, the wave and the kind of critic it follows ("1:post-wave"), so a later wave, and the final-clean
+// critic's minter of the same wave, start with none.
 function readAttempts(runDir, file) {
   const parsed = readJson(join(runDir, file))
   if (parsed === undefined) return []
-  const ok = isObj(parsed) && Array.isArray(parsed.attempts) && parsed.attempts.every(a => isObj(a) && typeof a.stage === 'string' && Array.isArray(a.problems) && a.problems.every(x => typeof x === 'string'))
-  if (!ok) refuse(`${file} is not what apply wrote ({attempts: [{stage, problems: [text]}]}); delete it to forget the refused attempts`)
+  const ok = isObj(parsed) && Array.isArray(parsed.attempts) && parsed.attempts.every(a => isObj(a) && typeof a.stage === 'string' && (a.scope === undefined || typeof a.scope === 'string') && Array.isArray(a.problems) && a.problems.every(x => typeof x === 'string'))
+  if (!ok) refuse(`${file} is not what apply wrote ({attempts: [{stage, scope?, problems: [text]}]}); delete it to forget the refused attempts`)
   return parsed.attempts
 }
-// What the next plan sends back to the agent: the last refused attempt (of this wave), or nothing.
-function feedbackFor(runDir, file, wave) {
-  const mine = readAttempts(runDir, file).filter(a => a.wave === wave)
+// What the next plan sends back to the agent: the last refused attempt (of this scope), or nothing.
+function feedbackFor(runDir, file, scope) {
+  const mine = readAttempts(runDir, file).filter(a => a.scope === scope)
   return mine.length ? { feedback: { attempt: mine.length, of: MAX_SYNTH_ATTEMPTS, problems: mine.at(-1).problems } } : {}
 }
 
@@ -203,14 +204,15 @@ function readCritic(runDir) {
 // The gaps to mint: the critic's missing_units and the hunters' queued `uncovered`, in that order (apply-critic counts them the same way), each tagged with where it came from.
 export function mintInput(runDir, run, next) {
   const critic = readCritic(runDir)
+  const kind = run.state.critic_kind   // the critic whose gaps these are: set when its result was saved
   const queue = readJson(join(runDir, 'uncovered.json')) ?? []
   const proposals = [
     ...critic.missing_units.map(u => ({ ...u, source: `the wave ${next.wave} critic` })),
     ...(Array.isArray(queue) ? queue : []).map(({ hunter_id, wave, ...rest }) => ({ ...rest, source: `hunter ${hunter_id}, wave ${wave}` })),
   ]
   return {
-    ...baseInput(runDir, run.meta, 'mint'), wave: next.wave, profile: run.meta.profile, scope_paths: run.meta.scope_paths, architecture_md: architectureOf(runDir), proposals,
-    existing: run.ledger.map(u => u.coverage_id), ...feedbackFor(runDir, MINT_FEEDBACK, next.wave),
+    ...baseInput(runDir, run.meta, 'mint'), wave: next.wave, kind, profile: run.meta.profile, scope_paths: run.meta.scope_paths, architecture_md: architectureOf(runDir), proposals,
+    existing: run.ledger.map(u => u.coverage_id), ...feedbackFor(runDir, MINT_FEEDBACK, `${next.wave}:${kind}`),
     parts: { ledger: blockText(LEDGER_SPEC), registry: { ordinary: ordinary(), companions: companions().map(c => ({ file: c.file, whenToUse: blockText(c.whenToUse), blocks: c.blocks })) } },
   }
 }
@@ -254,7 +256,7 @@ const PLANNERS = {
   mint(runDir, run, next) {
     const input = mintInput(runDir, run, next)
     if (input.proposals.length) stopOnCriticBudget(runDir, run, 'mint', 'the minter')   // with nothing to mint no agent is called, so nothing is gated
-    return { label: `mint-w${next.wave}`, part: 'mint', input }
+    return { label: `mint-${input.kind}-w${next.wave}`, part: 'mint', input }
   },
 }
 
@@ -292,13 +294,13 @@ function resultProblems(result, input) {
 }
 
 // A synthesizer or minter result the ledger would refuse is not saved as the step's, so the run is not left at a step with no way back: the cost is
-// recorded, the reasons kept in `file` (one entry per stage, so applying one twice counts once; a mint entry carries its wave) and sent back by the next
+// recorded, the reasons kept in `file` (one entry per stage, so applying one twice counts once; a mint entry carries its scope) and sent back by the next
 // plan, and a second refusal ends the run. `giveUp` does what ending it means for this stage. Always refuses.
-function refuseResult({ runDir, stage, result, event, file, wave, problems, what, then, giveUp }) {
+function refuseResult({ runDir, stage, result, event, file, scope, problems, what, then, giveUp }) {
   const attempts = readAttempts(runDir, file)
   const others = attempts.filter(a => a.stage !== stage.name)
-  const mine = [...others.filter(a => a.wave === wave), { stage: stage.name, ...(wave !== undefined && { wave }), problems: problems.slice(0, 20).map(x => x.slice(0, 400)) }]
-  writeJson(join(runDir, file), { version: 1, attempts: [...others.filter(a => a.wave !== wave), ...mine] })
+  const mine = [...others.filter(a => a.scope === scope), { stage: stage.name, ...(scope !== undefined && { scope }), problems: problems.slice(0, 20).map(x => x.slice(0, 400)) }]
+  writeJson(join(runDir, file), { version: 1, attempts: [...others.filter(a => a.scope !== scope), ...mine] })
   recordSpend(runDir, stage.name, result.budgetSpent)
   writeJson(join(stage.dir, 'result.json'), result)
   const last = mine.length >= MAX_SYNTH_ATTEMPTS
@@ -336,7 +338,7 @@ const APPLIERS = {
     const recon = { architecture_md, units: units.map(u => (u.ordinary_attack_class_block === '' ? { ...u, ordinary_attack_class_block: null } : u)), focused_recon }
     // What seed would do with it, asked now: a result seed would refuse is never saved as the step's.
     const problems = seedProblems(runDir, recon)
-    if (problems.length) return refuseResult({ runDir, stage, result, event, file: SEED_FEEDBACK, wave: undefined, problems, what: "the synthesizer's units would not seed", then: 'plan the stage again: it is sent these reasons', giveUp: () => markIncomplete(runDir, LEDGER_FAILED) })
+    if (problems.length) return refuseResult({ runDir, stage, result, event, file: SEED_FEEDBACK, scope: undefined, problems, what: "the synthesizer's units would not seed", then: 'plan the stage again: it is sent these reasons', giveUp: () => markIncomplete(runDir, LEDGER_FAILED) })
     writeJson(join(runDir, 'recon.json'), recon)
     recordSpend(runDir, stage.name, result.budgetSpent)
     writeJson(join(stage.dir, 'result.json'), result)
@@ -380,7 +382,7 @@ const APPLIERS = {
     const mint = { units: units.map(u => (u.ordinary_attack_class_block === '' ? { ...u, ordinary_attack_class_block: null } : u)) }
     // What apply-critic would do with it, asked now: upstream says fail on a collision and the parent never mints more than it was given.
     const problems = applyCriticProblems(runDir, readCritic(runDir), mint)
-    if (problems.length) return refuseResult({ runDir, stage, result, event, file: MINT_FEEDBACK, wave: input.wave, problems, what: "the minter's units would not apply", then: 'plan the stage again: it is sent these reasons', giveUp: () => stopHunting(runDir, LEDGER_FAILED, run) })
+    if (problems.length) return refuseResult({ runDir, stage, result, event, file: MINT_FEEDBACK, scope: `${input.wave}:${input.kind}`, problems, what: "the minter's units would not apply", then: 'plan the stage again: it is sent these reasons', giveUp: () => stopHunting(runDir, LEDGER_FAILED, run) })
     writeJson(join(runDir, 'mint.json'), mint)
     recordSpend(runDir, stage.name, result.budgetSpent)
     writeJson(join(stage.dir, 'result.json'), result)

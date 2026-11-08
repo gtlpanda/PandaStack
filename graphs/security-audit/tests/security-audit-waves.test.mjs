@@ -257,7 +257,7 @@ console.log('== waves: mint')
 const MINT_PARTS = () => ({ ledger: block('RECONNAISSANCE.md#Deterministic coverage ledger').text, registry: { ordinary: ordinary(), companions: companions().map(c => ({ file: c.file, whenToUse: block(c.whenToUse).text, blocks: c.blocks })) } })
 const PROPOSAL = (name = 'p') => ({ surface: `gap ${name}`, boundary: 'b', subsystem: 's', attack_class: 'a', starting_paths: ['src/db.js'], reason: 'a parallel path nobody owns', source: 'critic c2' })
 const MINT_INPUT = (proposals = [PROPOSAL()], extra = {}) => ({
-  stage: 'mint', part: 'mint', tree: TREE, maxParallel: 8, execution: EXEC, wave: 2, profile: 'standard', scope_paths: [], architecture_md: 'The fixture app.', proposals, existing: ['cov-a', 'cov-b'], parts: MINT_PARTS(), ...extra,
+  stage: 'mint', part: 'mint', tree: TREE, maxParallel: 8, execution: EXEC, wave: 2, kind: 'post-wave', profile: 'standard', scope_paths: [], architecture_md: 'The fixture app.', proposals, existing: ['cov-a', 'cov-b'], parts: MINT_PARTS(), ...extra,
 })
 const MINTED = (n = 1) => ({ units: Array.from({ length: n }, (_, i) => ({ canonical_refs: { surface: `src/db.js#gap${i}`, boundary: 'b', subsystem: 's', attack_class: ACCESS }, surface: 'x', boundary: 'b', subsystem: 's', attack_class: 'a', starting_paths: ['src/db.js'], ordinary_attack_class_block: ACCESS, selected_companion_blocks: [], excluded_blocks: [], priority_class: 3, priority_why: 'gap' })) })
 await test('mint is one audit-synthesizer call, synth-mint<wave>, over the fenced proposals with upstream\'s ledger text and every block name; its units come back with the count', async () => {
@@ -272,6 +272,17 @@ await test('mint is one audit-synthesizer call, synth-mint<wave>, over the fence
   for (const c of input.parts.registry.companions) { assert.ok(prompt.includes(c.whenToUse)); for (const b of c.blocks) assert.ok(prompt.includes(`\n- ${b}\n`), b) }
   assert.ok(prompt.includes('<untrusted-proposals>\n') && prompt.includes('"gap a"') && prompt.includes('"cov-a"') && prompt.includes('"cov-b"'))
   assert.match(prompt, /Return at most one unit per proposal/)
+})
+await test('the final-clean critic\'s minter has its own ID, synth-mintf<wave>, and a kind that is not post-wave or final-clean escalates', async () => {
+  const { calls } = await go({ 'audit-synthesizer': [MINTED(1)] }, MINT_INPUT([PROPOSAL()], { kind: 'final-clean' }))
+  assert.deepEqual(calls.map(c => c.label), ['synth-mintf2'])
+  assert.ok(isSafeAgentId('synth-mintf2'))
+  for (const kind of ['both', undefined, 7, null]) {
+    const { result, calls: c } = await go({}, MINT_INPUT([PROPOSAL()], { kind }))
+    assert.equal(result.status, 'escalate', String(kind))
+    assert.match(result.reason, /args\.kind must be one of post-wave, final-clean/)
+    assert.equal(c.length, 0)
+  }
 })
 await test('with nothing to mint no agent is called, the stage is done with an empty list and no cost; the proposals are fenced against a fence-closing text', async () => {
   const { result, calls } = await go({}, MINT_INPUT([]))

@@ -496,7 +496,8 @@ async function critic() {
 async function mint() {
   if (!isInt1(A.wave)) return finish('escalate', 'args.wave must be the wave number, an integer from 1')
   if (!Array.isArray(A.proposals) || !A.proposals.every(isObj)) return finish('escalate', 'args.proposals must be a list of objects')
-  const id = `synth-mint${A.wave}`
+  if (!CRITIC_KINDS.includes(A.kind)) return finish('escalate', `args.kind must be one of ${CRITIC_KINDS.join(', ')}; got ${json(A.kind)}`)
+  const id = A.kind === 'post-wave' ? `synth-mint${A.wave}` : `synth-mintf${A.wave}`   // the post-wave and the final-clean critic's minters are different invocations
   if (A.proposals.length === 0) {   // a critic that found nothing and a queue that is empty: no agent is called for nothing
     ledger.results = { part: 'mint', units: [] }
     return finish('done', 'nothing to mint')
