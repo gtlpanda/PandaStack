@@ -16,9 +16,10 @@ const show = v => String(JSON.stringify(v)).slice(0, 80)
 // agentBytes is the one that bounds the script, and it counts what the script holds: facts reach the run script through run-script.mjs,
 // which writes JSON.stringify(JSON.stringify(input)), so a control character costs seven bytes and a quote four. 4 researchers x 75,000
 // + the synthesizer's 67,000-byte base stays under MAX_SCRIPT_BYTES whatever the text (tested with quotes, backslashes, control
-// characters and lone surrogates; measured worst: 337,644 bytes for text of plain letters, 332,892 for quotes, 324,188 for control characters).
+// characters, lone surrogates and multi-byte text, counted in UTF-8 bytes; measured worst: 337,644 bytes for text of plain letters, 332,892 for quotes, 324,188 for control characters).
 export const FACT_LIMITS = { items: 200, itemChars: 2000, refs: 50, refChars: 300, limits: 50, limitChars: 2000, agentBytes: 75_000 }
-const encodedSize = v => JSON.stringify(JSON.stringify(v)).length
+// UTF-8 bytes, as run-script.mjs writes the script: .length would count a CJK character once though it takes three bytes.
+const encodedSize = v => Buffer.byteLength(JSON.stringify(JSON.stringify(v)), 'utf8')
 const MAX_LINE_COUNT_BYTES = 16 * 1024 * 1024
 
 // ---------- the facts: every reference must hold ----------
