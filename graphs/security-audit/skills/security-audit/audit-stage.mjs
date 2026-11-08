@@ -16,9 +16,11 @@
 // both times. `apply` of the synthesize part writes recon.json, which `audit-ledger.mjs seed` takes, and saves the step.
 //
 // A stage lives in stages/<NN>-<name>/: input.json and run.js (plan), result.json (apply, written last, so a stage without one
-// is planned and not applied). Every effect of apply is idempotent: running it again after a crash finishes it.
+// is planned and not applied). Every effect of apply is idempotent and the step is saved last, so a crash leaves the step behind its
+// effects, never ahead: applying the same result again finishes the stage, and changes nothing if it had finished.
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
+import { isDeepStrictEqual } from 'node:util'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { RUNNERS, Usage, advanceState, appendEvent, formatNext, loadRun, nextStep, readJson, recordSpend, refuse, writeJson } from './audit-run.mjs'
@@ -230,12 +232,15 @@ export function applyStage(runDir, returnedFile) {
   const started = Date.now()
   const run = loadRun(runDir)
   expectStage(run)
-  const stage = listStages(runDir).filter(s => !s.done).at(-1)
+  // The newest stage, applied or not: a stage whose result.json is saved but whose step was not (a crash between the two) is finished by
+  // applying the very same result again, and only that.
+  const stage = listStages(runDir).at(-1)
   if (!stage) refuse('no stage is planned: run `audit-stage.mjs plan` first')
   const input = readJson(join(stage.dir, 'input.json'))
   if (!isObj(input)) refuse(`${stage.name} has no input.json: plan it again`)
   const result = readJson(resolve(returnedFile))
   if (result === undefined) refuse(`${returnedFile} does not exist`)
+  if (stage.done && !isDeepStrictEqual(readJson(join(stage.dir, 'result.json')), result)) refuse(`${stage.name} was already applied with a different result: plan the stage again`)
   const problems = resultProblems(result, input)
   if (problems.length) refuse(`the result is not the workflow's: ${problems.join('; ')}; nothing was changed`)
   const notes = []
@@ -272,8 +277,8 @@ export function applyStage(runDir, returnedFile) {
   const recon = { architecture_md, units: units.map(u => (u.ordinary_attack_class_block === '' ? { ...u, ordinary_attack_class_block: null } : u)), focused_recon }
   writeJson(join(runDir, 'recon.json'), recon)
   recordSpend(runDir, stage.name, result.budgetSpent)
-  advanceState(runDir, 'recon')
   writeJson(join(stage.dir, 'result.json'), result)
+  advanceState(runDir, 'recon')   // last: a crash leaves the step behind its effects, never ahead of them
   event('ok', { counts: { units: units.length, focused_recon: focused_recon.length } })
   if (focused_recon.length) notes.push(`${focused_recon.length} area(s) the synthesizer says need their own reconnaissance agent were recorded in recon.json and not investigated: this version runs no focused reconnaissance`)
   return { summary: `recon part=synthesize units=${units.length} focused_recon=${focused_recon.length} agents=${result.budgetSpent}`, notes, then: `node audit-ledger.mjs seed ${runDir} ${join(runDir, 'recon.json')}` }

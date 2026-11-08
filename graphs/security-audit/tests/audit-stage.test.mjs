@@ -3,7 +3,7 @@
 // generated run script loaded and run by the workflow harness against scripted agents.
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import { test, load, run } from '../../../scripts/workflow-harness.mjs'
@@ -275,30 +275,76 @@ await test('an escalated stage records its cost, refuses with the reason, change
   assert.deepEqual(events.map(e => `${e.cmd}:${e.result}`), ['init:ok', 'plan:ok', 'apply:escalated', 'plan:ok', 'apply:ok'])
   assert.match(events[2].reason, /returned no result recon-1b/)
 })
-await test('applying the same result twice (a crash before the step was saved) changes nothing the second time', async () => {
+await test('applying the same result again, after a crash at any point, finishes the stage and changes nothing the second time: facts, synthesize, and the window where only the step was not saved', async () => {
+  const { runDir } = newInit()
+  stage(['plan', runDir])
+  const dir1 = join(runDir, 'stages', '01-recon-facts')
+  const facts = returnedFile(dir1, (await runScript(join(dir1, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })).result)
+  const first = stage(['apply', runDir, facts])
+  assert.equal(first.status, 0)
+  const afterFacts = files(runDir)
+  assert.equal(stage(['apply', runDir, facts]).last, first.last, 'the same facts result again: the same answer')
+  assert.deepEqual(files(runDir), afterFacts)
+  assert.equal(meta(runDir).agents_spent, 4)
+  // the facts effects landed, result.json did not: the stage is still pending
+  rmSync(join(dir1, 'result.json'))
+  assert.equal(stage(['apply', runDir, facts]).last, first.last)
+  assert.deepEqual(files(runDir), afterFacts)
+  // synthesize
+  stage(['plan', runDir])
+  const dir2 = join(runDir, 'stages', '02-recon-synthesize')
+  const synth = returnedFile(dir2, (await runScript(join(dir2, 'run.js'), { 'audit-synthesizer': [SYNTH()] })).result)
+  const before = readFileSync(join(runDir, 'stage-state.json'), 'utf8')
+  assert.equal(stage(['apply', runDir, synth]).status, 0)
+  const done = files(runDir), recon = readFileSync(join(runDir, 'recon.json'), 'utf8')
+  assert.equal(audit(['next', runDir]).last, 'NEXT: seed run=helper')
+  // only the step was not saved: result.json is there, the state is as it was before the apply
+  writeFileSync(join(runDir, 'stage-state.json'), before)
+  assert.equal(audit(['next', runDir]).last, 'NEXT: recon run=workflow')
+  const again = stage(['apply', runDir, synth])
+  assert.equal(again.status, 0, again.stdout)
+  assert.equal(audit(['next', runDir]).last, 'NEXT: seed run=helper')
+  assert.equal(meta(runDir).agents_spent, 5, 'the cost is recorded under the stage\'s key, not added again')
+  assert.deepEqual(files(runDir), done)
+  assert.equal(readFileSync(join(runDir, 'recon.json'), 'utf8'), recon)
+})
+await test('the step is saved last: when result.json cannot be written, the step stays where it was and `next` still says recon, then the same apply finishes', async () => {
+  if (process.getuid && process.getuid() === 0) return   // as root a read-only directory is writable; the order is asserted by the test above on every other platform
+  const { runDir } = newInit()
+  stage(['plan', runDir])
+  const dir1 = join(runDir, 'stages', '01-recon-facts')
+  stage(['apply', runDir, returnedFile(dir1, (await runScript(join(dir1, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })).result)])
+  stage(['plan', runDir])
+  const dir2 = join(runDir, 'stages', '02-recon-synthesize')
+  const synth = returnedFile(dir2, (await runScript(join(dir2, 'run.js'), { 'audit-synthesizer': [SYNTH()] })).result)
+  const before = readFileSync(join(runDir, 'stage-state.json'), 'utf8')
+  chmodSync(dir2, 0o555)
+  try {
+    const r = stage(['apply', runDir, synth])
+    assert.equal(r.status, 1)
+    assert.match(r.last, /^AUDIT: FAIL .*EACCES/)
+    assert.equal(readFileSync(join(runDir, 'stage-state.json'), 'utf8'), before, 'the step was not saved')
+    assert.equal(audit(['next', runDir]).last, 'NEXT: recon run=workflow')
+  } finally { chmodSync(dir2, 0o755) }
+  assert.equal(stage(['apply', runDir, synth]).status, 0)
+  assert.equal(audit(['next', runDir]).last, 'NEXT: seed run=helper')
+  assert.equal(meta(runDir).agents_spent, 5)
+})
+await test('a stage already applied is not applied again with a different result: that is a refusal naming the stage, never an overwrite', async () => {
   const { runDir } = newInit()
   stage(['plan', runDir])
   const dir = join(runDir, 'stages', '01-recon-facts')
   const ran = await runScript(join(dir, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })
-  const file = returnedFile(dir, ran.result)
-  assert.equal(stage(['apply', runDir, file]).status, 0)
-  assert.match(stage(['apply', runDir, file]).last, /^AUDIT: FAIL no stage is planned/)
+  assert.equal(stage(['apply', runDir, returnedFile(dir, ran.result)]).status, 0)
+  const other = { ...ran.result, results: { ...ran.result.results, facts: ran.result.results.facts.map(f => ({ ...f, items: [{ text: 'another fact', refs: ['src/app.js:1'] }] })) } }
+  const snapshot = files(runDir), facts = readFileSync(join(runDir, 'recon-facts.json'), 'utf8')
+  const r = stage(['apply', runDir, returnedFile(dir, other)])
+  assert.equal(r.status, 1)
+  assert.equal(r.last, 'AUDIT: FAIL 01-recon-facts was already applied with a different result: plan the stage again')
+  assert.deepEqual(files(runDir), snapshot)
+  assert.equal(readFileSync(join(runDir, 'recon-facts.json'), 'utf8'), facts)
   assert.equal(meta(runDir).agents_spent, 4)
-  // the crash itself: the effects landed, result.json did not
-  const { runDir: r2 } = newInit()
-  stage(['plan', r2])
-  const d2 = join(r2, 'stages', '01-recon-facts')
-  const ran2 = await runScript(join(d2, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })
-  const f2 = returnedFile(d2, ran2.result)
-  stage(['apply', r2, f2])
-  const snapshot = files(r2)
-  assert.ok(existsSync(join(d2, 'result.json')))
-  rmSync(join(d2, 'result.json'))
-  assert.equal(stage(['apply', r2, f2]).status, 0, 'the same stage applied again, its result.json missing')
-  assert.equal(meta(r2).agents_spent, 4, 'the cost is recorded under the stage\'s key, not added again')
-  assert.deepEqual(files(r2), snapshot)
 })
-
 console.log('== plan and apply refuse what they must, and change nothing')
 await test('plan and apply run only when `next` names recon: not after seed, not for a run that cannot be funded, not before init has a run', () => {
   const { runDir } = newInit()
