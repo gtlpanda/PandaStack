@@ -66,6 +66,10 @@ export const SHARED_FILE_OWNERS = {
 export const RUN_STATUSES = ['in_progress', 'complete', 'incomplete']
 export const STEPS = ['init', 'recon', 'seed', 'plan-wave', 'hunt', 'merge-wave', 'critic', 'mint', 'apply-critic', 'consolidate', 'validate', 'write-findings', 'verify', 'report']
 const MAX_SKIPPED_LISTED = 200
+// A commit ID as git prints one: 40 hex (sha1) or 64 (sha256), lower case. Every commit read back from a file is checked
+// against this before it can reach git as a revision: a value like "--output=x" is an option, not a commit.
+const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/
+export const isCommitId = v => typeof v === 'string' && COMMIT_ID.test(v)   // a string: a regex test coerces an array or an object to one
 
 export class Usage extends Error {}
 class Refusal extends Error {}
@@ -355,6 +359,11 @@ function describePrior(path, source, repo) {
   const ledger = fileVerdict(join(path, 'coverage-ledger.json'), validateLedgerFile)
   const findings = fileVerdict(join(path, 'findings.json'), validateFindingsFile)
   const reasons = []
+  // A run that says nothing about its commit is still usable (every unit of it then counts as changed source); one that names
+  // something that is not a commit ID is not: the value would reach `git diff` as a revision.
+  const commit = m.source_ref?.commit
+  const commitOk = isCommitId(commit)
+  if (commit !== undefined && !commitOk) reasons.push(`its source_ref.commit is not a 40 or 64 hex commit ID (${JSON.stringify(commit).slice(0, 60)}), so the run is incompatible`)
   if (ledger.state !== 'pass') reasons.push(ledger.state === 'missing' ? 'coverage-ledger.json is missing' : `coverage-ledger.json did not validate: ${ledger.last_line}`)
   if (findings.state === 'fail' || findings.state === 'error') reasons.push(`findings.json did not validate: ${findings.last_line}`)
   // Runs in this repository's own git directory are this repository, whatever it was called then; anywhere else, ask.
@@ -362,7 +371,7 @@ function describePrior(path, source, repo) {
   return {
     path, run_id: basename(path), number: RUN_NAME.test(basename(path)) ? Number(basename(path).slice(4)) : null, source,
     run_status: str(m.run_status), profile: str(m.profile), scope_paths: Array.isArray(m.scope_paths) ? m.scope_paths : null,
-    repo: str(m.repo), source_commit: str(m.source_ref?.commit), ledger, findings, compatible: reasons.length === 0, reasons,
+    repo: str(m.repo), source_commit: commitOk ? commit : null, ledger, findings, compatible: reasons.length === 0, reasons,
   }
 }
 
@@ -510,7 +519,7 @@ function metadataProblems(m) {
   const p = []
   const need = (ok, what) => { if (!ok) p.push(`run-metadata.json: ${what}`) }
   need(isStr(m.run_id) && isStr(m.repo) && isStr(m.target), 'run_id, repo and target must be non-empty strings')
-  need(/^([0-9a-f]{40}|[0-9a-f]{64})$/.test(m.source_ref?.commit) && typeof m.source_ref?.dirty === 'boolean', 'source_ref needs a 40 or 64 hex commit and a boolean dirty')
+  need(isCommitId(m.source_ref?.commit) && typeof m.source_ref?.dirty === 'boolean', 'source_ref needs a 40 or 64 hex commit and a boolean dirty')
   need(SUPPORTED_PROFILES.includes(m.profile), `profile must be one of ${SUPPORTED_PROFILES.join(', ')}`)
   need(Array.isArray(m.scope_paths) && m.scope_paths.every(isSafeRelativePath), 'scope_paths must be safe repository-relative paths')
   need(m.budget === null || isInt(m.budget), 'budget must be null or a non-negative integer')

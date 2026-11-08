@@ -19,7 +19,7 @@
 import { existsSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CARRIED, REASONS, Usage, advanceState, appendEvent, countStatuses, formatNext, git, loadRun, nextStep, readJson, refuse, waveAllowance, writeJson } from './audit-run.mjs'
+import { CARRIED, REASONS, Usage, advanceState, appendEvent, countStatuses, formatNext, git, isCommitId, loadRun, nextStep, readJson, refuse, waveAllowance, writeJson } from './audit-run.mjs'
 import { canonicalCoverageId, isSafeRelativePath, validateFindingsFile, validateLedgerDocument, validateLedgerFile } from './upstream.mjs'
 
 export const LEDGER_FILE = 'coverage-ledger.json'
@@ -431,7 +431,6 @@ export function applyCritic(runDir, critic, mint) {
 // What an earlier run contributes (SKILL.md "Coverage and prior runs"; RECONNAISSANCE.md "Prior-run input"). Evidence is
 // carried only while `git diff --quiet` says the source it rests on is byte for byte the same; stale evidence is invalidated,
 // never reused. A prior ledger absent from this run's seeding is added back, so no prior lead vanishes.
-const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/
 const PATHS_PER_DIFF = 200
 const diffCache = new Map()
 
@@ -442,7 +441,7 @@ const diffCache = new Map()
 // can make git read one commit as another) rewrites what either commit holds.
 export function sourceUnchanged(top, priorCommit, headCommit, paths) {
   const list = [...new Set(paths)].filter(p => typeof p === 'string' && p !== '')
-  if (list.length === 0 || !COMMIT_ID.test(priorCommit) || !COMMIT_ID.test(headCommit)) return false
+  if (list.length === 0 || !isCommitId(priorCommit) || !isCommitId(headCommit)) return false
   const key = JSON.stringify([top, priorCommit, headCommit, list])
   if (!diffCache.has(key)) {
     let same = true

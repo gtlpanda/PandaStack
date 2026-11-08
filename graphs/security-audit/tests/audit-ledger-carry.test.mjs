@@ -138,16 +138,30 @@ await test('paths are literal: a change to src/a1.js is not a change to src/a[1]
   seed(real.runDir, reconInput([unitInput('cov', { starting_paths: ['src/a[1].js'] })]))
   assert.equal(readLedger(real.runDir)[0].prior_status, 'prior_covered_changed_source')
 })
-await test('a prior commit this clone does not have counts as changed, whatever its text: absent, short, not hex, null, or an option', () => {
+await test('a prior commit this clone does not have counts as changed; a value that is not a commit ID never reaches git, even when prior-runs.json is edited after init', () => {
   const marker = join(fresh('hostile'), 'written-by-git')
-  for (const commit of ['a'.repeat(40), 'abc123', 'main', '', null, `--output=${marker}`, '-p', 'A'.repeat(40), 7]) {
-    const { runDir } = scenario({ tamper: setCommit(commit) })
+  const absent = scenario({ tamper: setCommit('a'.repeat(40)) })
+  seed(absent.runDir, recon())
+  assert.equal(labels(absent.runDir).conf, 'prior_confirmed_changed_source', 'a well-formed commit this clone lacks')
+  assert.deepEqual(pool(absent.runDir), [])
+  for (const commit of ['a'.repeat(40), 'abc123', 'main', '', null, `--output=${marker}`, '-p', 'A'.repeat(40), 7, ['a'.repeat(40)]]) {
+    // init refuses to call such a run compatible (so a hostile value is never carried); the file it writes is still a file on disk.
+    const { runDir } = scenario({ tamper: setCommit('b'.repeat(40)) })
+    const file = join(runDir, 'prior-runs.json')
+    writeFileSync(file, JSON.stringify(JSON.parse(readFileSync(file, 'utf8')).map(p => ({ ...p, source_commit: commit }))))
     seed(runDir, recon())
     assert.equal(labels(runDir).conf, 'prior_confirmed_changed_source', String(commit))
     assert.deepEqual(pool(runDir), [], String(commit))
     assert.ok(ledgerValid(runDir))
   }
   assert.ok(!existsSync(marker), 'a prior run\'s metadata never reaches git as an option')
+  for (const commit of ['abc123', `--output=${marker}`, 7, ['b'.repeat(40)]]) {
+    const { runDir } = scenario({ tamper: setCommit(commit) })
+    assert.deepEqual(JSON.parse(readFileSync(join(runDir, 'prior-runs.json'), 'utf8')).map(p => p.compatible), [false], `init: ${JSON.stringify(commit)}`)
+    seed(runDir, recon())
+    assert.equal(labels(runDir).conf, 'none', 'no compatible earlier run: the unit starts as new work with no prior label')
+    assert.deepEqual(pool(runDir), [], 'an incompatible run carries nothing')
+  }
 })
 await test('sourceUnchanged: same bytes only; an empty path list, a missing repository and an unknown commit are never "same"', () => {
   const repo = mkRepo({ 'a.txt': '1\n', 'b.txt': '1\n' })
@@ -161,6 +175,8 @@ await test('sourceUnchanged: same bytes only; an empty path list, a missing repo
   assert.equal(sourceUnchanged(repo, first, second, []), false, 'git reads an empty path list as the whole tree')
   assert.equal(sourceUnchanged(repo, first, second, [null, '', 7]), false)
   assert.equal(sourceUnchanged(repo, 'f'.repeat(40), second, ['a.txt']), false)
+  assert.equal(sourceUnchanged(repo, [first], second, ['a.txt']), false, 'a one-element array coerces to its string: a regex test alone would call it a commit')
+  assert.equal(sourceUnchanged(repo, first, { toString: () => second }, ['a.txt']), false, 'so does an object with a toString')
   assert.equal(sourceUnchanged(join(repo, 'nowhere'), first, second, ['a.txt']), false)
   const many = Array.from({ length: 450 }, (_, i) => `absent/${i}.txt`)
   assert.equal(sourceUnchanged(repo, first, second, many), true)

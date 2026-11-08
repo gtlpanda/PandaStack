@@ -171,6 +171,40 @@ await test('earlier runs are found, numbered, and judged by upstream\'s validato
   assert.match(r.stdout, /note: earlier run run-3 is incompatible \(coverage-ledger\.json did not validate: .*it is recorded in prior-runs\.json, never treated as empty coverage/)
   assert.equal(r.stdout.split('\n').filter(l => l.startsWith('note: earlier run')).length, 5, 'at most five notes')
 })
+await test('a prior run\'s source_ref.commit is kept only when it is a 40 or 64 hex commit ID; anything else is null and makes the run incompatible', () => {
+  const repo = mkRepo()
+  const commit40 = 'a'.repeat(40), commit64 = 'b'.repeat(64)
+  const cases = [
+    [1, { source_ref: { commit: commit40 } }, commit40, true],
+    [2, { source_ref: { commit: commit64 } }, commit64, true],
+    [3, { source_ref: { commit: '--output=/tmp/x' } }, null, false],       // an option, were it ever passed to git as a revision
+    [4, { source_ref: { commit: 'main' } }, null, false],
+    [5, { source_ref: { commit: 'A'.repeat(40) } }, null, false],          // upper case is not what git prints
+    [6, { source_ref: { commit: 'a'.repeat(39) } }, null, false],
+    [7, { source_ref: { commit: `${commit40}\n` } }, null, false],         // the anchors reject a trailing newline
+    [8, { source_ref: { commit: 5 } }, null, false],
+    [9, { source_ref: { commit: null } }, null, false],
+    [10, { source_ref: { commit: { $ne: 1 } } }, null, false],
+    [11, { source_ref: { commit: [commit40] } }, null, false],
+    [12, { source_ref: {} }, null, true],                                  // absent: a Cloudflare-style run says nothing about its commit
+    [13, { source_ref: 'abc' }, null, true],
+    [14, {}, null, true],
+  ]
+  for (const [n, metadata, , ] of cases) priorFiles(repo, n, { 'coverage-ledger.json': LEDGER(), 'run-metadata.json': metadata })
+  const r = init([repo, '--full'])
+  assert.equal(r.status, 0, r.stdout)
+  const priors = readJson(join(r.runDir, 'prior-runs.json'))
+  for (const [n, , commit, compatible] of cases) {
+    const p = priors.find(x => x.number === n)
+    assert.equal(p.source_commit, commit, `run-${n}`)
+    assert.equal(p.compatible, compatible, `run-${n}`)
+    if (!compatible) assert.match(p.reasons.join('; '), /source_ref\.commit is not a 40 or 64 hex commit ID/, `run-${n}`)
+    else assert.deepEqual(p.reasons, [], `run-${n}`)
+  }
+  assert.match(priors.find(x => x.number === 3).reasons[0], /^its source_ref\.commit is not a 40 or 64 hex commit ID \("--output=\/tmp\/x"\), so the run is incompatible$/)
+  assert.match(priors.find(x => x.number === 11).reasons[0], /is not a 40 or 64 hex commit ID \(.{1,60}\)/, 'the reason shows a bounded rendering, never the raw value')
+  assert.ok(priors.find(x => x.number === 10).reasons[0].length < 200, 'a hostile value cannot flood the reason')
+})
 await test('--prior adds a run directory from anywhere (a Cloudflare-style one has no run-metadata.json), once, and must be a directory', () => {
   const repo = mkRepo()
   const own = init([repo, '--full']).runDir
