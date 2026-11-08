@@ -11,7 +11,7 @@ import { test } from '../../../scripts/workflow-harness.mjs'
 import { REPORT_FILES, buildReports, reportContext, writeReport } from '../skills/security-audit/audit-report.mjs'
 import { markIncomplete, STATUSES } from '../skills/security-audit/audit-run.mjs'
 import { audit, ENV, meta, sh } from './audit-fixtures.mjs'
-import { DECISIONS, META, NV, RJ, CF, STATE, UNIT, fixtureRun } from './report-fixtures.mjs'
+import { DECISIONS, META, NV, RJ, CF, STATE, TREE_FILES, UNIT, fixtureRun } from './report-fixtures.mjs'
 import { atVerify, next, passed, verifyRound } from './verdict-fixtures.mjs'
 import { listFiles } from './audit-fixtures.mjs'
 
@@ -133,19 +133,17 @@ await test('a lead appears with its trace, blocker and both plans and no severit
   assert.deepEqual([...r['NEEDS-VALIDATION.md'].matchAll(/^## (.*)$/gm)].map(m => m[1]), ['Early lead', 'Late lead'])
   assert.ok(!/severity/i.test(r['NEEDS-VALIDATION.md'].replace('no severity', '')), 'no severity anywhere in the leads file')
 })
-await test('the prior-run use is counted from the ledger and the earlier runs: carried same-source confirmations, changed-source revalidations, carried leads', () => {
+await test('the prior-run use is counted from the ledger\'s leads and the earlier runs: carried same-source confirmations, changed-source revalidations, carried leads', () => {
+  const lead = (fingerprint, verdict, carried) => [{ fingerprint, verdict, carried }]
   const dir = fixtureRun({
-    ledger: [{ ...UNIT('a', 'planned'), prior_status: 'prior_confirmed_same_source' }, { ...UNIT('b', 'planned'), prior_status: 'prior_confirmed_same_source' }, { ...UNIT('c', 'planned'), prior_status: 'prior_confirmed_changed_source' }, { ...UNIT('d', 'planned'), prior_status: 'prior_needs_validation' }],
+    ledger: [{ ...UNIT('a', 'planned'), prior_status: 'prior_confirmed_same_source', prior_leads: lead('fp-1', 'confirmed', true) }, { ...UNIT('b', 'planned'), prior_status: 'prior_confirmed_same_source', prior_leads: lead('fp-2', 'confirmed', true) },
+      { ...UNIT('c', 'planned'), prior_status: 'prior_confirmed_changed_source', prior_leads: lead('fp-3', 'confirmed', false) }, { ...UNIT('d', 'planned'), prior_status: 'prior_needs_validation', prior_leads: lead('fp-4', 'needs_validation', true) }],
     priors: [{ run_id: 'run-1', compatible: true }, { run_id: 'run-2', compatible: false }, { run_id: 'run-3', compatible: true }], critic: CRITIC_DONE,
   })
   const text = reports(dir)['REPORT.md']
   assert.match(text, /- Earlier runs: 3 found, 2 compatible\. Carried same-source confirmations: 2\. Changed-source revalidations: 1\. Carried needs-validation leads: 1\./)
-  assert.ok(!text.includes('  - `'), 'no lead is named when the ledger names none')
-  const named = fixtureRun({
-    ledger: [{ ...UNIT('a', 'planned'), prior_status: 'prior_confirmed_same_source', prior_leads: [{ fingerprint: 'fp-same', verdict: 'confirmed', carried: true }] }, { ...UNIT('c', 'planned'), prior_status: 'prior_confirmed_changed_source', prior_leads: [{ fingerprint: 'fp-changed', verdict: 'confirmed', carried: false }] },
-      { ...UNIT('d', 'planned'), prior_status: 'prior_needs_validation', prior_leads: [{ fingerprint: 'fp-lead', verdict: 'needs_validation', carried: true }] }, { ...UNIT('e', 'covered'), prior_status: 'prior_covered_same_source', prior_leads: [{ fingerprint: 'fp-not-named', verdict: 'rejected', carried: false }] }], critic: CRITIC_DONE })
-  const lines = reports(named)['REPORT.md'].split('\n').filter(l => l.startsWith('  - `fp-'))
-  assert.deepEqual(lines, ['  - `fp-changed`: changed-source revalidation (hunted again, not carried)', '  - `fp-lead`: carried needs-validation lead', '  - `fp-same`: carried same-source confirmation'])
+  assert.deepEqual(text.split('\n').filter(l => l.startsWith('  - `fp-')), ['  - `fp-1`: carried same-source confirmation', '  - `fp-2`: carried same-source confirmation', '  - `fp-3`: changed-source revalidation (hunted again, not carried)', '  - `fp-4`: carried needs-validation lead'])
+  assert.ok(!reports(fixtureRun({ ledger: [UNIT('a')], critic: CRITIC_DONE }))['REPORT.md'].includes('  - `fp-'), 'no lead is named when the ledger names none')
 })
 await test('scope, a dirty tree and a strict budget are stated, and an unscoped complete run under no budget says none of them', () => {
   const scoped = fixtureRun({ meta: META({ scope_paths: ['src/app.js'], budget: 100, source_ref: { commit: 'c'.repeat(40), tree: 'd'.repeat(40), dirty: true, uncommitted: { tracked: 2, untracked: 1 } }, agents_spent: 12, agents_planned: 30 }), ledger: [UNIT('a')], critic: CRITIC_DONE })
@@ -198,6 +196,83 @@ await test('a report from hostile findings is still the same bytes when generate
   for (const text of Object.values(a)) assert.ok(!text.includes(dir) && !text.includes('/fixture/target') && !/\/tmp\//.test(text), 'no absolute path')
 })
 
+await test('a file name with a pipe, a tag or a backtick (all of which upstream\'s path rule allows) cannot break a table row or inject HTML, and is shown exactly', () => {
+  const pipe = 'src/a|<img src=x onerror=alert(1)>|b.js', tick = 'src/a`b.js'
+  const dir = fixtureRun({
+    ledger: [UNIT('a', 'candidate', { result_fingerprints: ['fp-a'] }), UNIT('b', 'candidate', { result_fingerprints: ['fp-b'] })],
+    findings: [NV('fp-a', { title: 'Pipe name', trace: [{ kind: 'sink', file: pipe, line: 1, scope: 'a', description: 'x' }], evidence: [{ file: pipe, line: 1, description: 'e' }] }), NV('fp-b', { title: 'Tick name', trace: [{ kind: 'sink', file: tick, line: 1, scope: 'a', description: 'x' }], evidence: [{ file: tick, line: 1, description: 'e' }] })],
+    files: { ...TREE_FILES, [pipe]: 'x\n', [tick]: 'y\n' }, critic: CRITIC_DONE,
+  })
+  const out = reports(dir)
+  const rows = out['REPORT.md'].split('\n').filter(l => /^\| (Pipe|Tick) name/.test(l))
+  assert.equal(rows.length, 2)
+  for (const row of rows) assert.equal(row.replace(/\\\|/g, '').split('|').length - 1, 6, `a row of five cells has six unescaped pipes: ${row}`)
+  const outsideCode = text => text.replace(/(`+)(?:(?!\1).)+?\1/g, '')
+  for (const [name, text] of Object.entries(out)) assert.ok(!outsideCode(text).includes('<img'), `${name}: the tag is only ever inside a code span`)
+  assert.ok(rows[0].includes('`src/a\\|<img src=x onerror=alert(1)>\\|b.js:1`'), 'the pipes are escaped inside the code span, so a renderer shows the real name')
+  assert.ok(rows[1].includes('``src/a`b.js:1``'), 'the backtick name is shown as it is, not as src/ab.js, a file that does not exist')
+  assert.ok(out['NEEDS-VALIDATION.md'].includes('`src/a|<img src=x onerror=alert(1)>|b.js:1`') && out['NEEDS-VALIDATION.md'].includes('``src/a`b.js:1``'), 'outside a table a pipe needs no escape')
+})
+await test('a run whose findings could not be written still names every candidate it decided as unresolved, with the run\'s reason, and says what went wrong', () => {
+  const dir = fixtureRun({
+    meta: META({ run_status: 'incomplete', incomplete_reason: 'findings_validation_failed' }), state: { ...STATE({ last: 'write-findings' }), write_failed: true },
+    ledger: [UNIT('a', 'candidate', { result_fingerprints: ['fp-a'] }), UNIT('b', 'candidate', { result_fingerprints: ['fp-b'] })],
+    pool: [{ fingerprint: 'fp-a', proposed_verdict: 'needs_validation', hunter_ids: ['h1-01'], units: [], record: {} }, { fingerprint: 'fp-b', proposed_verdict: 'needs_validation', hunter_ids: ['h1-02'], units: [], record: {} }],
+    decisions: DECISIONS([{ fingerprint: 'fp-a', n: 1, record: NV('fp-a'), decision: 'needs_validation', verifier_id: 'v01' }, { fingerprint: 'fp-b', n: 2, record: NV('fp-b'), decision: 'needs_validation', verifier_id: 'v02' }]),
+    events: [{ at: 'x', cmd: 'write-findings', stage: 'write-findings', result: 'failed', reason: 'findings_validation_failed', problems: ['$[0]: needs_validation finding must not contain "severity"'] }], critic: CRITIC_DONE,
+  })
+  const ctx = reportContext(dir)
+  assert.deepEqual(ctx.unresolved.map(u => [u.fingerprint, u.reason]), [['fp-a', 'findings_validation_failed'], ['fp-b', 'findings_validation_failed']])
+  const text = buildReports(ctx, { findings: null, ledger: 'PASS: 2 coverage units valid' })['REPORT.md']
+  assert.match(text, /### Unresolved candidates: 2 fingerprints, not findings/)
+  assert.ok(text.includes('`fp-a`') && text.includes('`fp-b`'))
+  assert.match(text, /What went wrong:/)
+  assert.ok(text.includes('needs\\_validation finding must not contain "severity"'), 'the validator\'s own error, escaped')
+})
+await test('every unresolved candidate is listed in both files, however many there are, and with the linked units: upstream says "list every unvalidated fingerprint and linked unit"', () => {
+  const n = 45
+  const fps = Array.from({ length: n }, (_, i) => `fp-${String(i).padStart(2, '0')}`)
+  const dir = fixtureRun({
+    meta: META({ run_status: 'incomplete', incomplete_reason: 'validation_budget_exhausted' }),
+    ledger: fps.map((fp, i) => UNIT(`u${String(i).padStart(2, '0')}`, 'candidate', { result_fingerprints: [fp], unresolved: ['validation_budget_exhausted'] })),
+    pool: fps.map(fingerprint => ({ fingerprint, proposed_verdict: 'needs_validation', hunter_ids: ['h1-01'], units: [], record: {} })),
+    decisions: DECISIONS(fps.map((fingerprint, i) => ({ fingerprint, n: i + 1, state: 'unvalidated', unresolved: 'validation_budget_exhausted' }))), critic: CRITIC_DONE,
+  })
+  const out = reports(dir)
+  for (const name of ['REPORT.md', 'NEEDS-VALIDATION.md']) for (const fp of fps) assert.ok(out[name].includes(`\`${fp}\``), `${name} lists ${fp}`)
+  assert.ok(!/and \d+ more/.test(out['REPORT.md'].slice(0, out['REPORT.md'].indexOf('## Run'))), 'no "and N more" in the unresolved list')
+  assert.ok(out['REPORT.md'].includes('Route u44 (Boundary of u44)'), 'with its unit')
+})
+await test('the blockers, plans and descriptions a file is meant to copy are not cut: only a table cell is short', () => {
+  const long = (tag, n) => `${tag} ${'w'.repeat(n)} END-OF-${tag}`
+  const dir = fixtureRun({
+    ledger: [UNIT('a', 'candidate', { result_fingerprints: ['fp-a'] })],
+    findings: [NV('fp-a', { blockers: [long('BLOCKER', 593)], validation_plan: { local: long('LOCAL', 900), deployment: long('DEPLOY', 900) }, trace: [{ kind: 'sink', file: 'src/app.js', line: 1, scope: 'a', description: long('TRACE', 800) }], evidence: [{ file: 'src/app.js', line: 1, description: long('EVID', 800) }] })], critic: CRITIC_DONE,
+  })
+  const out = reports(dir)
+  for (const tag of ['BLOCKER', 'LOCAL', 'DEPLOY', 'TRACE', 'EVID']) assert.ok(out['NEEDS-VALIDATION.md'].includes(`END-OF-${tag}`), `NEEDS-VALIDATION.md has the whole ${tag}`)
+  const row = out['REPORT.md'].split('\n').find(l => l.startsWith('| Lead fp-a'))
+  assert.ok(row.includes('…') && !row.includes('END-OF-BLOCKER'), 'the table cell is the short one')
+  const conf = reports(fixtureRun({ ledger: [UNIT('a', 'candidate', { result_fingerprints: ['fp-a'] })], findings: [CF('fp-a', { execution: { attacker_perspective: long('PRINCIPAL', 700), payloads: [long('PAYLOAD', 900)], instructions: [long('STEP', 900)], observed_result: long('OBSERVED', 900) }, remediation: { strategy: long('FIX', 900) } })], critic: CRITIC_DONE }))
+  for (const tag of ['PRINCIPAL', 'PAYLOAD', 'STEP', 'OBSERVED', 'FIX']) assert.ok(conf['REPORT.md'].includes(`END-OF-${tag}`) || conf['FINDINGS-DETAIL.md'].includes(`END-OF-${tag}`), `the whole ${tag} is in a report file`)
+  assert.ok(conf['FINDINGS-DETAIL.md'].includes('END-OF-FIX') && conf['FINDINGS-DETAIL.md'].includes('END-OF-PRINCIPAL'))
+})
+await test('each prior lead is named by its own verdict and treatment, not by its unit\'s label, and the counts are of leads: a rejected or a changed lead on a same-source unit is not a carried confirmation', () => {
+  const lead = (fingerprint, verdict, carried) => ({ fingerprint, verdict, carried })
+  const dir = fixtureRun({
+    ledger: [{ ...UNIT('a', 'planned'), prior_status: 'prior_confirmed_same_source', prior_leads: [lead('fp-conf', 'confirmed', true), lead('fp-rej', 'rejected', false), lead('fp-nv-changed', 'needs_validation', false), lead('fp-nv', 'needs_validation', true)] },
+      { ...UNIT('c', 'planned'), prior_status: 'prior_confirmed_changed_source', prior_leads: [lead('fp-changed', 'confirmed', false)] }], critic: CRITIC_DONE,
+  })
+  const text = reports(dir)['REPORT.md']
+  assert.deepEqual(text.split('\n').filter(l => l.startsWith('  - `fp-')), ['  - `fp-changed`: changed-source revalidation (hunted again, not carried)', '  - `fp-conf`: carried same-source confirmation', '  - `fp-nv`: carried needs-validation lead'])
+  assert.match(text, /Carried same-source confirmations: 1\. Changed-source revalidations: 1\. Carried needs-validation leads: 1\./)
+})
+await test('the agents line says plainly when no planned count exists, instead of leaving the plan out: this version computes none', () => {
+  assert.match(reports(fixtureRun({ ledger: [UNIT('a')], critic: CRITIC_DONE }))['REPORT.md'], /- Agents: 23 invoked \(no budget set\); no planned count was computed\./)
+  assert.match(reports(fixtureRun({ meta: META({ budget: 100, agents_planned: null }), ledger: [UNIT('a')], critic: CRITIC_DONE }))['REPORT.md'], /- Agents: 23 invoked of a budget of 100; no planned count was computed\./)
+  assert.match(reports(fixtureRun({ meta: META({ budget: 100, agents_planned: 30 }), ledger: [UNIT('a')], critic: CRITIC_DONE }))['REPORT.md'], /- Agents: 23 invoked of a budget of 100, 30 planned\./)
+})
+
 console.log('== the report command')
 const lsRun = dir => readdirSync(dir).filter(f => !['tree'].includes(f)).sort()
 await test('report writes the three files, saves the step, and next says done; a complete run stays complete', async () => {
@@ -246,6 +321,7 @@ await test('a run still in progress when the report is asked for is decided firs
   assert.match(out.notes[0], /problem\(s\): the run is marked incomplete \(complete_check_failed\)/)
   assert.equal(meta(dir).run_status, 'incomplete')
   assert.match(readFileSync(join(dir, 'REPORT.md'), 'utf8'), /\*\*INCOMPLETE\*\* \(`complete_check_failed`\): complete-check found the run not completable/)
+  assert.match(readFileSync(join(dir, 'REPORT.md'), 'utf8'), /What went wrong:\n\n(- .*\n)*- record "fp-a" has no decision/, 'the problems complete-check found are in the report, not only its name')
   assert.equal(next(dir), 'NEXT: done status=incomplete reason=complete_check_failed')
 })
 await test('report writes nothing when it is not the next step, or when findings.json or the ledger is there and a vendored validator rejects it', () => {

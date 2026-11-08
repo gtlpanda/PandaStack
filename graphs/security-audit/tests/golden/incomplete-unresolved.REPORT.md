@@ -24,7 +24,7 @@ Candidate validation or record verification did not finish for these. They are l
   - a read-only target and toolchain, with the target-controlled process able to write only inside its assigned `scratch/` directory
   - explicit low CPU, memory, process, file-size, disk, and wall-clock limits
   - trusted parent-side code may promote the minimum non-secret result to retained `artifacts/` using the procedure under Write isolation
-- Agents: 41 invoked of a budget of 40.
+- Agents: 41 invoked of a budget of 40; no planned count was computed.
 - Earlier runs: 0 found, 0 compatible. Carried same-source confirmations: 0. Changed-source revalidations: 0. Carried needs-validation leads: 0.
 - Validators: findings.json: PASS: 1 findings valid; coverage-ledger.json: PASS: 3 coverage units valid.
 

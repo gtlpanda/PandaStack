@@ -78,12 +78,16 @@ await test('fenceTag removes any opening or closing copy of its tag from the tex
 })
 
 console.log('== where and plural')
-await test('where is a code span of path:line with no backtick inside, and a line that is not an integer is a question mark', () => {
+await test('where is a code span of path:line that is exact for any file name: a backtick is kept by a longer delimiter, a pipe is escaped in a table cell, and a line that is not an integer is a question mark', () => {
   assert.equal(where('src/a.js', 12), '`src/a.js:12`')
-  assert.equal(where('a`b', 1), '`ab:1`')
+  assert.equal(where('a`b', 1), '``a`b:1``', 'the file name is shown as it is, never as a path that does not exist')
+  assert.equal(where('a``b', 1), '```a``b:1```')
+  assert.equal(where('src/a|b.js', 1), '`src/a|b.js:1`', 'outside a table a pipe is a pipe')
+  assert.equal(where('src/a|b.js', 1, true), '`src/a\\|b.js:1`', 'in a table cell it is escaped, which a code span renders as a pipe')
   assert.equal(where('src/a.js', '12'), '`src/a.js:?`')
   assert.equal(where('src/a.js', null), '`src/a.js:?`')
   assert.equal(where('src/a.js', 1.5), '`src/a.js:?`')
+  assert.equal(where('src/<img src=x onerror=1>.js', 3), '`src/<img src=x onerror=1>.js:3`', 'inside a code span a tag is text')
 })
 await test('plural counts: one is singular, anything else is plural, and an irregular plural is given', () => {
   assert.equal(plural(1, 'lead'), '1 lead')
@@ -100,11 +104,16 @@ await test('plain collapses whitespace and control characters and bounds length,
   assert.equal(plain(12), '12')
   assert.equal(plain('a*b_c'), 'a*b_c')
 })
-await test('code is a one-line code span with nothing escaped inside it (an escape would show), a backtick turned into an apostrophe, and a bound', () => {
+await test('code is a one-line code span: nothing is escaped inside it, a backtick is held by a delimiter longer than any run of backticks inside (padded when the text starts or ends with one), a pipe is escaped only in a table cell, and it is bounded', () => {
   assert.equal(code('validation_budget_exhausted'), '`validation_budget_exhausted`')
-  assert.equal(code('a`b'), "`a'b`")
+  assert.equal(code('a`b'), '``a`b``')
+  assert.equal(code('`a'), '`` `a ``')
+  assert.equal(code('a`'), '`` a` ``')
   assert.equal(code('a\nb'), '`a b`')
   assert.equal(code('z'.repeat(10), 4), '`zzzz…`')
   assert.equal(code(null), '``')
-  assert.ok(!code('``` ## x').slice(1, -1).includes('`'))
+  assert.equal(code('a|b'), '`a|b`')
+  assert.equal(code('a|b', 200, true), '`a\\|b`')
+  const hostile = code('``` ## x <b>')
+  assert.ok(hostile.startsWith('````') && hostile.endsWith('````'), hostile)
 })

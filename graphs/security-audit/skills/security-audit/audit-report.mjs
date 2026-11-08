@@ -12,11 +12,11 @@
 // task and export-remediation need only a findings.json that passes upstream's validator. Nothing here writes into the audited repository: the files are the run's own.
 // A command's last line is "AUDIT: OK <cmd> ..." (exit 0) or "AUDIT: FAIL <reason>" (exit 1); bad usage is on stderr, exit 2.
 import { createHash } from 'node:crypto'
-import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Usage, advanceState, appendEvent, formatNext, loadRun, nextStep, readJson, refuse, STATUSES } from './audit-run.mjs'
-import { byFingerprint, decisionsOf, finishRun, linkCheck, readPool } from './audit-findings.mjs'
+import { FINDINGS_FAILED, LEDGER_FAILED, Usage, advanceState, appendEvent, formatNext, loadRun, nextStep, readJson, refuse, STATUSES } from './audit-run.mjs'
+import { byFingerprint, completeProblems, decisionsOf, finishRun, linkCheck, readPool } from './audit-findings.mjs'
 import { LEDGER_FILE } from './audit-ledger.mjs'
 import { validateFindingsFile, validateLedgerFile } from './upstream.mjs'
 import { cell, code, fence, fenceTag, inline, plain, plural, where } from './audit-md.mjs'
@@ -24,7 +24,9 @@ import { cell, code, fence, fenceTag, inline, plain, plural, where } from './aud
 export const REPORT_FILES = ['REPORT.md', 'FINDINGS-DETAIL.md', 'NEEDS-VALIDATION.md']
 const SEVERITIES = ['critical', 'high', 'medium', 'low', 'informational']
 const DETAIL_SEVERITIES = ['critical', 'high', 'medium']   // upstream: FINDINGS-DETAIL.md covers each confirmed medium, high or critical record
-const MAX_LISTED = 40
+const MAX_LISTED = 40   // hardening notes and gap units; never the unresolved candidates, which upstream says to list every one of
+const COPY = 65_536     // what a file that copies a trace, a blocker or a plan may hold of one text: a record is bounded to 64 KiB, so it is never cut; only a table cell is short
+const MAX_PROBLEMS = 10
 const isObj = v => typeof v === 'object' && v !== null && !Array.isArray(v)
 const list = v => (Array.isArray(v) ? v : [])
 const rank = s => { const i = SEVERITIES.indexOf(s); return i < 0 ? SEVERITIES.length : i }
@@ -50,16 +52,39 @@ export function reportContext(runDir) {
   const { meta, state, ledger, findings } = loadRun(runDir)
   const records = Array.isArray(findings) ? [...findings].sort(byFingerprint) : []
   const decisions = decisionsOf(runDir)
+  const pool = readPool(runDir)
   const priors = readJson(join(runDir, 'prior-runs.json'))
   const critic = readJson(join(runDir, 'critic.json'))
-  const link = Array.isArray(ledger) ? linkCheck({ runDir, records, ledger, decisions, pool: readPool(runDir), meta }) : { problems: [], unresolved: [] }
-  return { meta, state, ledger: Array.isArray(ledger) ? ledger : null, records, decisions, priors: Array.isArray(priors) ? priors : [], critic: isObj(critic) ? critic : null, unresolved: link.unresolved }
+  const link = Array.isArray(ledger) ? linkCheck({ runDir, records, ledger, decisions, pool, meta }) : { problems: [], unresolved: [] }
+  return { meta, state, ledger: Array.isArray(ledger) ? ledger : null, records, decisions, priors: Array.isArray(priors) ? priors : [], critic: isObj(critic) ? critic : null, unresolved: unresolvedOf({ meta, records, decisions, pool, link }), problems: problemsOf(runDir, meta) }
+}
+
+// Every candidate with no record in findings.json: what the link-check lists (an unvalidated candidate, a record Phase 5 removed), and what it flags instead of listing, a candidate that was decided
+// and whose record was never written (a failed write: the run says why and the report must still name them: "it must identify each unresolved ledger candidate"). Their reason is the run's.
+function unresolvedOf({ meta, records, decisions, pool, link }) {
+  const have = new Set(records.map(r => r.fingerprint))
+  const listed = new Set(link.unresolved.map(u => u.fingerprint))
+  const candidates = new Map(pool.map(c => [c.fingerprint, c.units]))
+  for (const e of decisions?.entries ?? []) if (!candidates.has(e.fingerprint)) candidates.set(e.fingerprint, [])
+  const missing = [...candidates].filter(([fp]) => !have.has(fp) && !listed.has(fp)).map(([fingerprint, units]) => ({ fingerprint, reason: meta.incomplete_reason ?? 'no_record_written', units: [...units].sort() }))
+  return [...link.unresolved, ...missing].sort(byFingerprint)
+}
+
+// What an incomplete run's reason does not say by itself: the problems complete-check found, or the validator errors a failed write recorded in events.jsonl (a few lines, quoted).
+function problemsOf(runDir, meta) {
+  if (meta.run_status !== 'incomplete') return []
+  if (meta.incomplete_reason === 'complete_check_failed') return completeProblems(runDir).problems.slice(0, MAX_PROBLEMS)
+  if (meta.incomplete_reason !== FINDINGS_FAILED && meta.incomplete_reason !== LEDGER_FAILED) return []
+  const file = join(runDir, 'events.jsonl')
+  const events = existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l) } catch { return null } }) : []
+  const failed = events.filter(e => isObj(e) && e.result === 'failed' && e.reason === meta.incomplete_reason && Array.isArray(e.problems)).at(-1)
+  return failed ? failed.problems.filter(p => typeof p === 'string').slice(0, MAX_PROBLEMS) : []
 }
 
 const unitsOf = (ledger, ids) => (ledger ?? []).filter(u => ids.includes(u.coverage_id))
 const labelOf = u => `${inline(u.surface, 120)} (${inline(u.boundary, 120)})`
 const boundariesOf = (ctx, fp) => [...new Set((ctx.ledger ?? []).filter(u => list(u.result_fingerprints).includes(fp) || list(u.attempts).some(a => list(a.result_fingerprints).includes(fp)) || list(u.merged_fingerprints).some(m => m.into === fp)).map(u => inline(u.boundary, 120)))].sort()
-const traceLine = r => { const t = list(r.trace); return t.length ? `${where(t[0].file, t[0].line)} (${inline(t[0].kind, 20)})${t.length > 1 ? ` → ${where(t.at(-1).file, t.at(-1).line)} (${inline(t.at(-1).kind, 20)})` : ''}` : '(no trace)' }
+const traceLine = (r, table = false) => { const t = list(r.trace); return t.length ? `${where(t[0].file, t[0].line, table)} (${inline(t[0].kind, 20)})${t.length > 1 ? ` → ${where(t.at(-1).file, t.at(-1).line, table)} (${inline(t.at(-1).kind, 20)})` : ''}` : '(no trace)' }
 const countBy = (items, key) => items.reduce((m, i) => m.set(key(i), (m.get(key(i)) ?? 0) + 1), new Map())
 
 function statusSection(ctx) {
@@ -69,28 +94,33 @@ function statusSection(ctx) {
   else {
     out.push(`The run is **INCOMPLETE** (${code(meta.incomplete_reason, 80)}): ${WHY[meta.incomplete_reason] ?? 'see the reason'}. This is a partial pass.`)
   }
+  if (ctx.problems.length) out.push('', 'What went wrong:', '', ...ctx.problems.map(p => `- ${inline(p, 400)}`))
   if (unresolved.length) {
     out.push('', `### Unresolved candidates: ${plural(unresolved.length, 'fingerprint')}, not findings`, '',
       'Candidate validation or record verification did not finish for these. They are leads that no independent verifier settled; none is a finding under any verdict, and none is in findings.json.', '',
       '| Fingerprint | Why unresolved | Linked coverage units |', '|---|---|---|')
-    for (const u of unresolved.slice(0, MAX_LISTED)) out.push(`| ${code(u.fingerprint)} | ${code(u.reason, 80)} | ${unitsOf(ctx.ledger, u.units).map(x => labelOf(x)).join('<br>') || '(none)'} |`)
-    if (unresolved.length > MAX_LISTED) out.push('', `…and ${unresolved.length - MAX_LISTED} more: \`link-check\` lists them all.`)
+    for (const u of unresolved) out.push(`| ${code(u.fingerprint, 200, true)} | ${code(u.reason, 80, true)} | ${unitsOf(ctx.ledger, u.units).map(x => labelOf(x)).join('<br>') || '(none)'} |`)
   }
   return out
 }
 
-// Upstream: "Name carried same-source confirmations and changed-source revalidations." Each lead a unit took from an earlier run, by fingerprint and how it was treated.
-const PRIOR_TREATMENT = { prior_confirmed_same_source: 'carried same-source confirmation', prior_confirmed_changed_source: 'changed-source revalidation (hunted again, not carried)', prior_needs_validation: 'carried needs-validation lead' }
-function priorLines(ledger) {
-  const named = ledger.filter(u => Object.hasOwn(PRIOR_TREATMENT, u.prior_status)).flatMap(u => list(u.prior_leads).map(l => `  - ${code(l?.fingerprint)}: ${PRIOR_TREATMENT[u.prior_status]}`))
-  return [...new Set(named)].sort().slice(0, MAX_LISTED).concat(named.length > MAX_LISTED ? [`  - …and ${named.length - MAX_LISTED} more in coverage-ledger.json`] : [])
+// Upstream: "Name carried same-source confirmations and changed-source revalidations." Each lead a unit took from an earlier run is named by its own verdict and how it was treated, from the
+// unit's `prior_leads` bookkeeping (fingerprint, verdict, carried), never from the unit's label alone: one unit can hold a confirmed, a rejected and a needs_validation lead.
+const CARRIED_CONFIRMED = 'carried same-source confirmation', CARRIED_LEAD = 'carried needs-validation lead', CHANGED = 'changed-source revalidation (hunted again, not carried)'
+function priorLeads(ledger) {
+  const treatment = (u, l) => (l.carried === true && l.verdict === 'confirmed' ? CARRIED_CONFIRMED : l.carried === true && l.verdict === 'needs_validation' ? CARRIED_LEAD : l.carried !== true && l.verdict === 'confirmed' && u.prior_status === 'prior_confirmed_changed_source' ? CHANGED : null)
+  return ledger.flatMap(u => list(u.prior_leads).filter(isObj).map(l => ({ fingerprint: l.fingerprint, treatment: treatment(u, l) }))).filter(l => l.treatment !== null)
+}
+function priorLines(leads) {
+  const named = [...new Set(leads.map(l => `  - ${code(l.fingerprint)}: ${l.treatment}`))].sort()
+  return named.slice(0, MAX_LISTED).concat(named.length > MAX_LISTED ? [`  - …and ${named.length - MAX_LISTED} more in coverage-ledger.json`] : [])
 }
 
 function runSection(ctx, validators) {
   const { meta, ledger, priors } = ctx
   const dirty = meta.source_ref?.dirty ? ` Uncommitted changes in the working tree (${meta.source_ref.uncommitted?.tracked ?? '?'} tracked, ${meta.source_ref.uncommitted?.untracked ?? '?'} untracked) were not audited.` : ''
-  const byPrior = countBy(ledger ?? [], u => u.prior_status)
-  const carried = byPrior.get('prior_confirmed_same_source') ?? 0, changed = byPrior.get('prior_confirmed_changed_source') ?? 0, needs = byPrior.get('prior_needs_validation') ?? 0
+  const leads = priorLeads(ledger ?? [])
+  const count = treatment => leads.filter(l => l.treatment === treatment).length
   const partial = []
   if (meta.run_status !== 'complete') partial.push('the run is incomplete')
   if (list(meta.scope_paths).length) partial.push(`it was scoped to ${list(meta.scope_paths).map(p => code(p, 120)).join(', ')}`)
@@ -102,9 +132,9 @@ function runSection(ctx, validators) {
     `- Source: commit ${code(String(meta.source_ref?.commit ?? '').slice(0, 12))}.${dirty}`,
     `- Execution: ${meta.execution_policy === 'sandboxed-source-and-local-only' ? 'sandboxed source and local checks only' : inline(meta.execution_policy)}; the capability this run had was ${code(meta.execution_capability, 20)}, so **no target code was executed**. Controls the host could not enforce (so nothing ran):`,
     ...list(meta.execution_blockers).map(b => `  - ${plain(b)}`),
-    `- Agents: ${meta.agents_spent} invoked${meta.budget === null ? ' (no budget set)' : ` of a budget of ${meta.budget}`}${meta.agents_planned === null || meta.agents_planned === undefined ? '' : `, ${meta.agents_planned} planned`}.`,
-    `- Earlier runs: ${priors.length} found, ${priors.filter(p => p.compatible).length} compatible. Carried same-source confirmations: ${carried}. Changed-source revalidations: ${changed}. Carried needs-validation leads: ${needs}.`,
-    ...priorLines(ledger ?? []),
+    `- Agents: ${meta.agents_spent} invoked${meta.budget === null ? ' (no budget set)' : ` of a budget of ${meta.budget}`}${meta.agents_planned === null || meta.agents_planned === undefined ? '; no planned count was computed' : `, ${meta.agents_planned} planned`}.`,
+    `- Earlier runs: ${priors.length} found, ${priors.filter(p => p.compatible).length} compatible. Carried same-source confirmations: ${count(CARRIED_CONFIRMED)}. Changed-source revalidations: ${count(CHANGED)}. Carried needs-validation leads: ${count(CARRIED_LEAD)}.`,
+    ...priorLines(leads),
     `- Validators: findings.json: ${validators.findings ?? 'not written'}; coverage-ledger.json: ${validators.ledger ?? 'not written'}.`,
     ...(partial.length ? ['', `**This is a partial pass:** ${partial.join('; ')}.`] : [])]
 }
@@ -125,13 +155,13 @@ function confirmedSection(ctx) {
   for (const r of confirmed) out.push(`| ${cell(r.severity?.overall_severity, 20)} | ${cell(r.title)} | ${boundariesOf(ctx, r.fingerprint).join('<br>') || '(none)'} | ${cell(r.execution?.observed_result)} |`)
   for (const r of confirmed) {
     out.push('', `### ${inline(r.title, 200)}`, '', `- Fingerprint: ${code(r.fingerprint)}`, `- Location: ${traceLine(r)}`,
-      `- Lower-trust principal: ${inline(r.execution?.attacker_perspective, 400)}`,
-      `- Bounded reproduction: ${list(r.execution?.instructions).map(i => inline(i, 300)).join(' ')} Input: ${list(r.execution?.payloads).map(p => inline(p, 200)).join('; ')}`,
-      `- Conditions: ${list(r.conditions).length ? list(r.conditions).map(c => `${inline(c.kind, 40)}: ${inline(c.description, 200)}`).join('; ') : 'none'}`,
-      `- Actual result: ${inline(r.execution?.observed_result, 400)}`,
-      `- Impact: ${inline(r.severity?.impact?.score, 20)}: ${inline(r.severity?.impact?.reason, 400)}`,
-      `- Priority rationale: likelihood ${inline(r.severity?.likelihood?.score, 20)}: ${inline(r.severity?.likelihood?.reason, 400)}`,
-      `- Smallest source fix: ${inline(r.remediation?.strategy, 600)}`)
+      `- Lower-trust principal: ${inline(r.execution?.attacker_perspective, COPY)}`,
+      `- Bounded reproduction: ${list(r.execution?.instructions).map(i => inline(i, COPY)).join(' ')} Input: ${list(r.execution?.payloads).map(p => inline(p, COPY)).join('; ')}`,
+      `- Conditions: ${list(r.conditions).length ? list(r.conditions).map(c => `${inline(c.kind, 40)}: ${inline(c.description, COPY)}`).join('; ') : 'none'}`,
+      `- Actual result: ${inline(r.execution?.observed_result, COPY)}`,
+      `- Impact: ${inline(r.severity?.impact?.score, 20)}: ${inline(r.severity?.impact?.reason, COPY)}`,
+      `- Priority rationale: likelihood ${inline(r.severity?.likelihood?.score, 20)}: ${inline(r.severity?.likelihood?.reason, COPY)}`,
+      `- Smallest source fix: ${inline(r.remediation?.strategy, COPY)}`)
   }
   return out
 }
@@ -145,7 +175,7 @@ function needsSection(ctx) {
   const out = ['## NEEDS VALIDATION', '', 'Leads with an exact unresolved blocker. Each is source-grounded, none is a confirmed vulnerability, and none has a severity. Ordered by the priority of the coverage that found them.', '']
   if (!rows.length) return [...out, 'None.']
   out.push('| Lead | Repository trace | Blocker | Bounded local next step | Owner-observed deployment check |', '|---|---|---|---|---|')
-  for (const r of rows) out.push(`| ${cell(r.title)} (${code(r.fingerprint)}) | ${traceLine(r)} | ${list(r.blockers).map(b => cell(b)).join('<br>')} | ${cell(r.validation_plan?.local ?? 'none given')} | ${cell(r.validation_plan?.deployment ?? 'none given')} |`)
+  for (const r of rows) out.push(`| ${cell(r.title)} (${code(r.fingerprint, 200, true)}) | ${traceLine(r, true)} | ${list(r.blockers).map(b => cell(b)).join('<br>')} | ${cell(r.validation_plan?.local ?? 'none given')} | ${cell(r.validation_plan?.deployment ?? 'none given')} |`)
   return out
 }
 
@@ -190,25 +220,25 @@ export function buildReports(ctx, validators = {}) {
     ...(detailed.length ? detailed.flatMap(r => detailSection(r)) : ['No confirmed medium, high or critical finding: nothing to detail. Confirmed low and informational findings, leads that need validation, and rejected candidates are not detailed here.'])].join('\n') + '\n'
   const rows = needsRows(ctx)
   const needs = [...head('Needs validation', 'Leads, not findings: each has an exact unresolved blocker and no severity. Generated from findings.json.'),
-    ...(ctx.unresolved.length ? ['## Unresolved candidates (not findings)', '', ...ctx.unresolved.slice(0, MAX_LISTED).map(u => `- ${code(u.fingerprint)}: ${code(u.reason, 80)} (${unitsOf(ctx.ledger, u.units).map(labelOf).join('; ') || 'no unit'})`), ''] : []),
+    ...(ctx.unresolved.length ? ['## Unresolved candidates (not findings)', '', ...ctx.unresolved.map(u => `- ${code(u.fingerprint)}: ${code(u.reason, 80)} (${unitsOf(ctx.ledger, u.units).map(labelOf).join('; ') || 'no unit'})`), ''] : []),
     ...(rows.length ? rows.flatMap(r => needsDetail(ctx, r)) : ['No lead needs validation.'])].join('\n') + '\n'
   return { 'REPORT.md': report, 'FINDINGS-DETAIL.md': detail, 'NEEDS-VALIDATION.md': needs }
 }
 
-function steps(r) { return list(r.trace).map((t, i) => `${i + 1}. ${t.kind} ${where(t.file, t.line)} (${inline(t.scope, 80)}): ${inline(t.description, 300)}`) }
+function steps(r) { return list(r.trace).map((t, i) => `${i + 1}. ${t.kind} ${where(t.file, t.line)} (${inline(t.scope, 80)}): ${inline(t.description, COPY)}`) }
 function detailSection(r) {
   return [`## ${inline(r.title, 200)}`, '', `- Fingerprint: \`${r.fingerprint}\`; severity ${inline(r.severity?.overall_severity, 20)}; confidence ${inline(r.confidence?.score, 20)}`, '', '### Source path', '', ...steps(r), '',
-    '### Evidence', '', ...list(r.evidence).map(e => `- ${where(e.file, e.line)}: ${inline(e.description, 300)}`), '',
-    '### Reproduction', '', `Dummy principal: ${inline(r.execution?.attacker_perspective, 400)}`, '', 'Input:', '', fence(list(r.execution?.payloads).join('\n\n')), '', 'Instructions:', '', fence(list(r.execution?.instructions).map((x, i) => `${i + 1}. ${x}`).join('\n')), '',
-    'Observed result:', '', fence(r.execution?.observed_result), '', `Security invariant: ${inline(r.intended_behavior, 400)}`, '',
-    '### Conditions', '', ...(list(r.conditions).length ? list(r.conditions).map(c => `- ${inline(c.kind, 40)}: ${inline(c.description, 300)}`) : ['None.']), '',
-    '### Source-level remediation', '', inline(r.remediation?.strategy, 800), '',
+    '### Evidence', '', ...list(r.evidence).map(e => `- ${where(e.file, e.line)}: ${inline(e.description, COPY)}`), '',
+    '### Reproduction', '', `Dummy principal: ${inline(r.execution?.attacker_perspective, COPY)}`, '', 'Input:', '', fence(list(r.execution?.payloads).join('\n\n')), '', 'Instructions:', '', fence(list(r.execution?.instructions).map((x, i) => `${i + 1}. ${x}`).join('\n')), '',
+    'Observed result:', '', fence(r.execution?.observed_result), '', `Security invariant: ${inline(r.intended_behavior, COPY)}`, '',
+    '### Conditions', '', ...(list(r.conditions).length ? list(r.conditions).map(c => `- ${inline(c.kind, 40)}: ${inline(c.description, COPY)}`) : ['None.']), '',
+    '### Source-level remediation', '', inline(r.remediation?.strategy, COPY), '',
     ...(list(r.remediation?.code_changes).length ? ['Suggested code changes. These are the audit\'s suggestions: they were not applied and not reviewed.', '', ...list(r.remediation.code_changes).flatMap(c => [`- ${where(c.file_name, undefined).replace(':?', '')}`, '', fence(c.fixed_code, 2000), ''])] : []),
     'Regression case: the reproduction above, written as a test that fails before the fix.', '']
 }
 function needsDetail(ctx, r) {
-  return [`## ${inline(r.title, 200)}`, '', `- Fingerprint: ${code(r.fingerprint)}`, `- Affected boundary: ${boundariesOf(ctx, r.fingerprint).join('; ') || '(none)'}`, '', '### Source trace', '', ...steps(r), '', '### Evidence', '', ...list(r.evidence).map(e => `- ${where(e.file, e.line)}: ${inline(e.description, 300)}`), '',
-    '### Blocker', '', ...list(r.blockers).map(b => `- ${inline(b, 400)}`), '', '### Resolution plans', '', `- Bounded local: ${inline(r.validation_plan?.local ?? 'none given', 600)}`, `- Owner-observed deployment check: ${inline(r.validation_plan?.deployment ?? 'none given', 600)}`, '']
+  return [`## ${inline(r.title, 200)}`, '', `- Fingerprint: ${code(r.fingerprint)}`, `- Affected boundary: ${boundariesOf(ctx, r.fingerprint).join('; ') || '(none)'}`, '', '### Source trace', '', ...steps(r), '', '### Evidence', '', ...list(r.evidence).map(e => `- ${where(e.file, e.line)}: ${inline(e.description, COPY)}`), '',
+    '### Blocker', '', ...list(r.blockers).map(b => `- ${inline(b, COPY)}`), '', '### Resolution plans', '', `- Bounded local: ${inline(r.validation_plan?.local ?? 'none given', COPY)}`, `- Owner-observed deployment check: ${inline(r.validation_plan?.deployment ?? 'none given', COPY)}`, '']
 }
 
 // ---------- report ----------

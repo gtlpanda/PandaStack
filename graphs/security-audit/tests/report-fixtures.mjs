@@ -27,14 +27,14 @@ export const CF = (fp, over = {}) => ({ ...confirmedRecord(fp), ...over })
 
 // Writes the run and checks that what it wrote passes both vendored validators, as every test that makes an artifact must. Files are written only for what is given:
 // a run that stopped before the ledger has none.
-export function fixtureRun({ meta = META(), state = STATE(), ledger = null, findings = null, decisions = null, pool = [], priors = [], critic = null, files = TREE_FILES } = {}) {
+export function fixtureRun({ meta = META(), state = STATE(), ledger = null, findings = null, decisions = null, pool = [], priors = [], critic = null, files = TREE_FILES, events = [] } = {}) {
   const dir = fresh('report')
   mkdirSync(join(dir, 'tree', 'src'), { recursive: true })
-  for (const [p, text] of Object.entries(files)) writeFileSync(join(dir, 'tree', p), text)
+  for (const [p, text] of Object.entries(files)) writeFileSync(join(dir, 'tree', p), text)   // a name with '|' or '<' is a name upstream's path rule allows
   const put = (name, value) => writeFileSync(join(dir, name), JSON.stringify(value, null, 2))
   put('run-metadata.json', meta)
   put('stage-state.json', state)
-  writeFileSync(join(dir, 'events.jsonl'), '')
+  writeFileSync(join(dir, 'events.jsonl'), events.map(e => `${JSON.stringify(e)}\n`).join(''))
   put('prior-runs.json', priors)
   put('candidates.json', pool)
   if (ledger) put('coverage-ledger.json', [...ledger].sort(byId))
