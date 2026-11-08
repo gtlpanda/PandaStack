@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import { exportRemediation, main, remediationName, taskText } from '../skills/security-audit/audit-report.mjs'
 import { ENV, listFiles, sh } from './audit-fixtures.mjs'
-import { CF, NV, RJ, UNIT, fixtureRun } from './report-fixtures.mjs'
+import { CF, META, NV, RJ, STATE, UNIT, fixtureRun } from './report-fixtures.mjs'
 import { atVerify, passed, verifyRound } from './verdict-fixtures.mjs'
 
 const REPORT = join(dirname(fileURLToPath(import.meta.url)), '..', 'skills', 'security-audit', 'audit-report.mjs')
@@ -186,6 +186,20 @@ await test('a real run\'s export writes nothing into the audited repository, and
   assert.match(out.last, /tasks=0 investigations=2/)
   assert.equal(sh(run.repo, 'status', '--porcelain', '--ignored'), before)
   assert.ok(readdirSync(join(run.runDir, 'remediation')).filter(f => f.endsWith('.md')).every(f => readFileSync(join(run.runDir, 'remediation', f), 'utf8').startsWith('INVESTIGATION ONLY')))
+})
+
+await test('a task and an export are made only from a run at its end: before Phase 5 has read the records, or while a stage is pending, they are refused and write nothing', () => {
+  const midRun = fixtureRun({ meta: META({ run_status: 'in_progress' }), state: STATE({ last: 'write-findings' }), ledger: [UNIT('a')], findings: [GOOD('fp-1')] })
+  const t = taskOf(midRun, 'fp-1')
+  assert.equal(t.status, 1)
+  assert.match(t.last, /^AUDIT: FAIL a task is made at the end of a run, when `audit-run\.mjs next` says report or done: it is NEXT: verify run=workflow now: the records have not been verified yet$/)
+  const e = cli('export-remediation', midRun)
+  assert.match(e.last, /^AUDIT: FAIL a task is made at the end of a run/)
+  assert.ok(!existsSync(join(midRun, 'remediation')))
+  const done = runWith([GOOD('fp-1')])
+  assert.equal(taskOf(done, 'fp-1').status, 0, 'a run whose next step is the report')
+  const early = fixtureRun({ meta: META({ run_status: 'incomplete', incomplete_reason: 'budget_cannot_fund_reconnaissance_and_reserves' }), state: STATE({ last: 'init', wave: 0, critic_kind: null }) })
+  assert.match(taskOf(early, 'x').last, /^AUDIT: FAIL (a task is made at the end of a run|.*findings\.json does not exist)/)
 })
 
 console.log('== the command line')

@@ -9,7 +9,8 @@
 //
 // report runs only as the next step (`audit-run.mjs next` says report), after complete-check has decided the run's terminal state (a run still in progress is checked first), and
 // refuses when findings.json or the ledger is there and a vendored validator does not pass it: prose is never derived from records upstream's validator rejects.
-// task and export-remediation need only a findings.json that passes upstream's validator. Nothing here writes into the audited repository: the files are the run's own.
+// task and export-remediation run at the end of a run (`next` says report or done: every record has passed Phase 5) and need a findings.json that passes upstream's validator. Nothing here
+// writes into the audited repository: the files are the run's own.
 // A command's last line is "AUDIT: OK <cmd> ..." (exit 0) or "AUDIT: FAIL <reason>" (exit 1); bad usage is on stderr, exit 2.
 import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
@@ -274,6 +275,10 @@ function recordsOf(runDir) {
   if (!existsSync(file)) refuse(`${file} does not exist: nothing has been written to make a task from`)
   const r = validateFindingsFile(file)
   if (!r.valid) refuse(`upstream's validator did not pass ${file} (${r.lastLine}): no task is made from it`)
+  // At the end of the run only: before verify has read the records, or while a stage is pending, a record is not one an owner may act on (a task is "fix this", and a lead that Phase 5
+  // has yet to read may be removed).
+  const next = nextStep(loadRun(runDir))
+  if (!['report', 'done'].includes(next.step)) refuse(`a task is made at the end of a run, when \`audit-run.mjs next\` says report or done: it is ${formatNext(next)} now: the records have not been verified yet`)
   return readJson(file)
 }
 
