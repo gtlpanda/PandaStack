@@ -6,7 +6,7 @@
 //   node audit-stage.mjs plan  <run dir>
 //   node audit-stage.mjs apply <run dir> <returned.json>     returned.json: what the Workflow tool returned, as JSON
 //
-// Both run only when `audit-run.mjs next` names a Workflow stage this version builds (recon, hunt, critic, mint, consolidate), so a stage cannot be
+// Both run only when `audit-run.mjs next` names a Workflow stage this version builds (recon, hunt, critic, mint, consolidate, validate), so a stage cannot be
 // planned or applied out of order. A command's last line is "AUDIT: OK <cmd> ..." (exit 0) or "AUDIT: FAIL <reason>" (exit 1); bad usage is
 // on stderr, exit 2.
 //
@@ -18,7 +18,8 @@
 // hunt, critic and mint are one Workflow run each. hunt writes hunter-results.json, which `audit-ledger.mjs merge-wave` takes; critic writes
 // critic.json; mint writes mint.json, and critic.json and mint.json are what `audit-ledger.mjs apply-critic` takes. Each saves its step.
 // consolidate (audit-verdicts.mjs) groups the candidates of one root cause and rewrites candidates.json and the ledger only for a grouping that
-// covers every fingerprint exactly once.
+// covers every fingerprint exactly once. validate is Phase 3: one verifier per candidate, in rounds (a retry, or a batch the script cannot hold, is
+// another round), decisions.json holding where each candidate stands; the step is saved, and the ledger written, when none is pending.
 //
 // A stage lives in stages/<NN>-<name>/: input.json and run.js (plan), result.json (apply, written last, so a stage without one
 // is planned and not applied). Every effect of apply is idempotent and the step is saved last, so a crash leaves the step behind its
@@ -28,12 +29,12 @@ import { spawnSync } from 'node:child_process'
 import { isDeepStrictEqual } from 'node:util'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { REASONS, RUNNERS, Usage, advanceState, appendEvent, formatNext, loadRun, markIncomplete, nextStep, readJson, recordSpend, reconGate, refuse, waveAllowance, writeJson } from './audit-run.mjs'
+import { LEDGER_FAILED, REASONS, RUNNERS, Usage, advanceState, appendEvent, formatNext, loadRun, markIncomplete, nextStep, readJson, recordSpend, reconGate, refuse, waveAllowance, writeJson } from './audit-run.mjs'
 import { applyCriticProblems, criticBudgetExhausted, criticResultProblems, deferHunting, seedProblems, stopHunting } from './audit-ledger.mjs'
 import { RECON_IDS, checkFacts } from './audit-facts.mjs'
 import { companions, ordinary, parts, resolve as resolveBlock } from './blocks.mjs'
 import { CLIP, architectureOf, baseInput, blockText, clipText, clipValue } from './audit-inputs.mjs'
-import { applyConsolidate, consolidateInput } from './audit-verdicts.mjs'
+import { applyConsolidate, applyValidate, consolidateInput, validateInput } from './audit-verdicts.mjs'
 
 // Found from the real file, so the install symlink (~/.claude/skills/security-audit) does not matter, as in upstream.mjs.
 const REPO_ROOT = join(dirname(realpathSync(fileURLToPath(import.meta.url))), '..', '..', '..', '..')
@@ -46,7 +47,6 @@ export const MAX_SCRIPT_BYTES = 500_000
 // A synthesizer result seed would refuse is sent back once with the reasons (plan section 4.2: "bounded feedback retry"); a second refusal
 // ends the run. The reason string is PandaStack's own (the plan, 4.3), not one of upstream's five.
 export const MAX_SYNTH_ATTEMPTS = 2
-export const LEDGER_FAILED = 'ledger_validation_failed'
 export const STAGE_TOO_LARGE = 'stage_input_too_large'   // PandaStack's own reason: a wave stage whose input will not fit one run script ends the run
 const WAVE_STAGES = ['hunt', 'critic', 'mint']          // the stages that size is a reason to end the run for: they can neither be split nor skipped
 const SEED_FEEDBACK = 'seed-feedback.json'
@@ -232,7 +232,7 @@ export function mintInput(runDir, run, next) {
 }
 
 // `step` may run only when `audit-run.mjs next` names it, and only a stage this version builds.
-const BUILT = ['recon', 'hunt', 'critic', 'mint', 'consolidate']
+const BUILT = ['recon', 'hunt', 'critic', 'mint', 'consolidate', 'validate']
 function expectStage(run) {
   const next = nextStep(run)
   if (RUNNERS[next.step] !== 'workflow') refuse(`the next step is not a Workflow stage: ${formatNext(next)}`)
@@ -288,6 +288,11 @@ const PLANNERS = {
     return { label: `mint-${input.kind}-w${next.wave}`, part: 'mint', input }
   },
   consolidate: (runDir, run) => ({ label: 'consolidate', part: 'consolidate', input: consolidateInput(runDir, run) }),   // skips itself (and says so) when there is nothing to group or no room
+  // A batch of the candidates still pending, as many as one script holds and the budget funds: `next` says validate again until none is.
+  validate(runDir, run) {
+    const input = validateInput(runDir, run)
+    return { label: `validate-r${input.round}`, part: 'validate', input }
+  },
 }
 
 export function planStage(runDir) {
@@ -433,6 +438,8 @@ const APPLIERS = {
     if (!Array.isArray(ctx.result.results.groups)) refuse('the consolidate result needs a groups list; nothing was changed')
     return applyConsolidate(ctx)
   },
+
+  validate: applyValidate,
 }
 
 export function applyStage(runDir, returnedFile) {

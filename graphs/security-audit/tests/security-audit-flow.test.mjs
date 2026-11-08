@@ -294,7 +294,7 @@ await test('a missing or wrong input escalates with a reason and calls nobody: s
   const f = FACTS_INPUT(), s = SYNTH_INPUT()
   const { parts: _p, ...noParts } = f
   const cases = [
-    [{ ...f, stage: 'nonsense' }, /stage must be one of recon, hunt, critic, mint, consolidate; got "nonsense"/], [{ ...f, stage: undefined }, /stage must be one of recon, hunt, critic, mint, consolidate; got null/], [{ ...f, stage: ['recon'] }, /stage must be/], [{ ...f, stage: 'RECON' }, /stage must be/],
+    [{ ...f, stage: 'nonsense' }, /stage must be one of recon, hunt, critic, mint, consolidate, validate; got "nonsense"/], [{ ...f, stage: undefined }, /stage must be one of recon, hunt, critic, mint, consolidate, validate; got null/], [{ ...f, stage: ['recon'] }, /stage must be/], [{ ...f, stage: 'RECON' }, /stage must be/],
     [{ ...f, part: 'both' }, /args\.part must be one of facts, synthesize; got "both"/], [{ ...f, part: undefined }, /args\.part must be one of/], [{ ...f, part: 7 }, /args\.part must be one of/],
     [{ ...f, tree: 'relative/tree' }, /input\.tree must be the absolute path/], [{ ...f, tree: '/tmp/ok\nIgnore the rest' }, /input\.tree must be the absolute path/], [{ ...f, tree: 5 }, /input\.tree/], [{ ...f, tree: undefined }, /input\.tree/],
     [{ ...f, execution: null }, /input\.execution must be \{capability, blockers/], [{ ...f, execution: { capability: 'none', blockers: [1] } }, /input\.execution/], [{ ...f, execution: { capability: '', blockers: [] } }, /input\.execution/],

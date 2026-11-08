@@ -16,7 +16,7 @@
 // a `confirmed` record to be backed by a retained local artifact, which nothing can produce.
 import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
-import { readJson, refuse } from './audit-run.mjs'
+import { readJson, refuse, writeJson } from './audit-run.mjs'
 import { refProblem } from './audit-facts.mjs'
 import { isSafeAgentId, validateFindingsDocument } from './upstream.mjs'
 
@@ -145,6 +145,49 @@ export function materialChanges(before, after) {
   return Object.entries(MATERIAL_FIELDS).filter(([, get]) => !isDeepStrictEqual(get(before), get(after))).map(([name]) => name)
 }
 export const isMaterial = (before, after) => materialChanges(before, after).length > 0
+
+// ---------- decisions.json: what each verifier decided, and where each candidate stands ----------
+// { version: 1, rounds: { validate: N, verify: N }, entries: [entry] } with one entry per pool fingerprint, in fingerprint order. `n` is the entry's number for
+// life (its verifiers' IDs come from it), assigned once, so a candidate keeps its IDs whatever else is decided or removed. An array, not an object keyed by
+// fingerprint: 'constructor' is a legal fingerprint.
+//   state     pending (a verifier has yet to settle it), decided (decision and record), unvalidated (no verifier did: unresolved says why, it is never a finding)
+//   attempts  the verifier results discarded so far: { id, stage, kind, problems }
+//   phase5    null until Phase 5 reaches the record; audit-verdicts.mjs owns its shape
+const STATES = ['pending', 'decided', 'unvalidated']
+export const emptyDecisions = () => ({ version: 1, rounds: { validate: 0, verify: 0 }, entries: [] })
+const isEntry = e => isObj(e) && isText(e.fingerprint) && Number.isSafeInteger(e.n) && e.n >= 1 && ['confirmed', 'needs_validation'].includes(e.proposed_verdict) && STATES.includes(e.state) &&
+  Array.isArray(e.attempts) && e.attempts.every(a => isObj(a) && isSafeAgentId(a.id) && isText(a.stage) && isText(a.kind) && Array.isArray(a.problems)) &&
+  (e.decision === null || ['needs_validation', 'rejected'].includes(e.decision)) && (e.record === null || isObj(e.record)) && (e.verifier_id === null || isSafeAgentId(e.verifier_id)) &&
+  (e.unresolved === null || isText(e.unresolved)) && (e.phase5 === null || isObj(e.phase5)) && (e.state !== 'decided' || (e.decision !== null && e.record !== null && e.verifier_id !== null))
+const isDecisions = d => isObj(d) && d.version === 1 && isObj(d.rounds) && Number.isSafeInteger(d.rounds.validate) && Number.isSafeInteger(d.rounds.verify) && Array.isArray(d.entries) && d.entries.every(isEntry) &&
+  new Set(d.entries.map(e => e.fingerprint)).size === d.entries.length && new Set(d.entries.map(e => e.n)).size === d.entries.length
+
+// The decisions on disk, or null when there are none yet. A file that is not what the stages wrote is refused by name: it is never edited by hand and never read as empty.
+export function decisionsOf(runDir) {
+  const d = readJson(join(runDir, DECISIONS_FILE))
+  if (d === undefined) return null
+  if (!isDecisions(d)) refuse(`${DECISIONS_FILE} is not what the stages wrote ({version: 1, rounds, entries: [one per candidate]}); it is never edited by hand`)
+  return d
+}
+export const saveDecisions = (runDir, decisions) => writeJson(join(runDir, DECISIONS_FILE), decisions)
+export const entryOf = (decisions, fingerprint) => decisions.entries.find(e => e.fingerprint === fingerprint)
+
+// The decisions for `pool` (candidates.json): the file on disk with an entry for every candidate, new ones numbered after the highest, or a fresh one. The pool is final
+// when this runs (consolidation is over), so the numbers follow fingerprint order. An entry on disk for a fingerprint the pool no longer holds is refused.
+export function ensureDecisions(runDir, pool) {
+  const had = decisionsOf(runDir) ?? emptyDecisions()
+  const known = new Set(pool.map(c => c.fingerprint))
+  const stray = had.entries.find(e => !known.has(e.fingerprint))
+  if (stray) refuse(`${DECISIONS_FILE} has an entry for ${show(stray.fingerprint)}, which candidates.json no longer holds`)
+  let n = Math.max(0, ...had.entries.map(e => e.n))
+  const added = pool.filter(c => !entryOf(had, c.fingerprint)).sort(byFingerprint).map(c => ({
+    fingerprint: c.fingerprint, n: ++n, proposed_verdict: c.proposed_verdict, state: 'pending', attempts: [], decision: null, record: null, verifier_id: null, unresolved: null, phase5: null,
+  }))
+  if (!added.length) return had
+  const out = { ...had, entries: [...had.entries, ...added].sort(byFingerprint) }
+  saveDecisions(runDir, out)
+  return out
+}
 
 // ---------- what a record must be before anything keeps it ----------
 // The vendored schema validator (the authority on shape), then what it cannot see: every trace and evidence file is in the audited snapshot

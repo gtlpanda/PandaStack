@@ -336,6 +336,9 @@ export const REASONS = Object.freeze({
   validation: 'validation_budget_exhausted',                 // candidates outnumber the validation reserve: run incomplete
   quick: 'quick_profile_final_critic',                       // quick's accepted discoveries and reassignments, deferred
 })
+// PandaStack's own reason strings, which are not upstream's five (so not in REASONS): a ledger or findings.json a vendored validator would not pass, ending the run.
+export const LEDGER_FAILED = 'ledger_validation_failed'
+export const FINDINGS_FAILED = 'findings_validation_failed'
 export const RECON_CALLS = 4
 // PandaStack's own call: the synthesizer reads the four reports and writes the ledger units. Upstream's parent does that work, so SKILL.md's
 // "four baseline reconnaissance calls" leave it out; a gate without it passed budgets that were spent before the first hunter (found by the
