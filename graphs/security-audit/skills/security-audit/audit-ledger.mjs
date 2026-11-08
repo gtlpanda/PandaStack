@@ -444,10 +444,9 @@ function reassign(unit, reason) {
 
 // The critic's `reassign_ids` carry no per-unit reason (HUNTING.md's JSON, which a critic must return exactly), though
 // RECONNAISSANCE.md asks for "the critic's source-backed reassignment_reason": the archive says so instead of inventing one.
-export function applyCritic(runDir, critic, mint) {
-  const started = Date.now()
-  const run = loadRun(runDir)
-  expectStep(run, 'apply-critic')
+// Everything apply-critic does up to the write: the next ledger and the tallies. Throws a refusal (or a failure with its problems) for what
+// upstream says to fail on, so a caller can ask without writing.
+function buildCritic(runDir, run, critic, mint) {
   const { meta, state, ledger } = run
   if (state.critic_kind === null) refuse('a critic result is being applied but stage-state.json has no critic_kind')
   const problems = criticProblems(critic, mint)
@@ -492,11 +491,35 @@ export function applyCritic(runDir, critic, mint) {
     }
     tally.resolved += 1
   }
-  commitLedger(runDir, [...ledger.map(u => patched.get(u.coverage_id) ?? u), ...fresh])
+  return { next: [...ledger.map(u => patched.get(u.coverage_id) ?? u), ...fresh], tally, notes }
+}
+
+// What apply-critic would refuse this critic result and mint for as a whole, as plain strings (empty when it would write), without writing: the
+// same computation, then the in-memory pass of upstream's validator. A check, not a step: audit-stage.mjs asks it before saving a minter's result,
+// so a result apply-critic would refuse (a unit count above the proposals, an ID collision: upstream says fail, never merge) never reaches it.
+export function applyCriticProblems(runDir, critic, mint) {
+  const run = loadRun(runDir)
+  try {
+    const { next } = buildCritic(runDir, run, critic, mint)
+    return validateLedgerDocument(clone([...next].sort(byId))).slice(0, MAX_PROBLEMS)
+  } catch (e) {
+    if (Array.isArray(e.problems)) return [e.message, ...e.problems]
+    throw e
+  }
+}
+
+export function applyCritic(runDir, critic, mint) {
+  const started = Date.now()
+  const run = loadRun(runDir)
+  expectStep(run, 'apply-critic')
+  const { state } = run
+  const { next, tally, notes } = buildCritic(runDir, run, critic, mint)
+  commitLedger(runDir, next)
   writeJson(join(runDir, 'uncovered.json'), [])   // after the ledger holds what was made of the queue: a crash in between keeps the gaps
   finish(runDir, 'apply-critic', started, tally, {}, { wave: state.wave, critic_kind: state.critic_kind, critic_stop: critic.stop })
   return { summary: `wave=${state.wave} kind=${state.critic_kind} units_added=${tally.units_added} out_of_scope=${tally.out_of_scope} reassigned=${tally.reassigned} resolved=${tally.resolved} rejected=${tally.reassign_rejected + tally.minted_rejected}`, notes }
 }
+
 
 // ---------- carry-forward ----------
 // What an earlier run contributes (SKILL.md "Coverage and prior runs"; RECONNAISSANCE.md "Prior-run input"). Evidence is

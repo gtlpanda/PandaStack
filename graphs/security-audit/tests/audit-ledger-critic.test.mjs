@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
-import { applyCritic, commitLedger, mergeWave, planWave } from '../skills/security-audit/audit-ledger.mjs'
+import { applyCritic, applyCriticProblems, commitLedger, mergeWave, planWave } from '../skills/security-audit/audit-ledger.mjs'
 import { advanceState } from '../skills/security-audit/audit-run.mjs'
 import { audit, fresh, ledgerCli } from './audit-fixtures.mjs'
 import { assignments, candidateOf, checkOf, coverAll, hunterResult, hunterUnit, ledgerBytes, ledgerValid, readJsonFile, readLedger, refsOf, seeded, unitInput } from './ledger-fixtures.mjs'
@@ -33,6 +33,41 @@ const refused = (runDir, c, m, pattern) => {
   assert.throws(() => applyCritic(runDir, c, m), e => pattern.test(`${e.message}\n${(e.problems ?? []).join('\n')}`), `expected a refusal matching ${pattern}`)
   assert.deepEqual(snapshot(runDir), before, 'a refused apply-critic changes nothing')
 }
+
+console.log('== applyCriticProblems: what apply-critic would refuse as a whole, without writing')
+await test('applyCriticProblems lists each reason apply-critic would refuse the whole apply for, writes nothing, and agrees with apply-critic', () => {
+  const { runDir } = afterWave([named('a'), named('b', { subsystem: 'other' })])
+  const before = snapshot(runDir)
+  const ids = readLedger(runDir).map(u => u.coverage_id)
+  const ok = { units: [minted('good')] }
+  assert.deepEqual(applyCriticProblems(runDir, critic({ missing_units: [gap('g')] }), ok), [])
+  const cases = [
+    ['more units than proposals', critic({ missing_units: [gap('g')] }), { units: [minted('x'), minted('y')] }, /mint returned 2 unit\(s\) for 1 proposal\(s\)/],
+    ['a collision with different semantic fields', critic({ missing_units: [gap('g')] }), { units: [named('a', { surface: 'Another display label', reason: 'r' })] }, /coverage ID collision: minted unit 0/],
+    ['a critic result that is not the critic JSON', 'prose wrapped in text', ok, /the critic result is not a JSON object/],
+    ['a critic with a missing list', { missing_units: [], stop: true }, ok, /critic\.reassign_ids must be an array/],
+    ['a critic with a non-boolean stop', critic({ stop: 'yes' }), ok, /critic\.stop must be true or false/],
+    ['a mint that is not { units }', critic(), { unit: [] }, /mint\.json must be an object/],
+  ]
+  for (const [what, c, m, pattern] of cases) {
+    const problems = applyCriticProblems(runDir, c, m)
+    assert.ok(problems.length > 0 && problems.some(p => pattern.test(p)), `${what}: ${JSON.stringify(problems).slice(0, 240)}`)
+    assert.throws(() => applyCritic(runDir, c, m), e => pattern.test(`${e.message}\n${(e.problems ?? []).join('\n')}`), `${what}: apply-critic refuses it too`)
+  }
+  assert.deepEqual(snapshot(runDir), before, 'neither check changed a file')
+  assert.deepEqual(readLedger(runDir).map(u => u.coverage_id), ids)
+  applyCritic(runDir, critic({ missing_units: [gap('g')] }), ok)
+  assert.ok(ledgerValid(runDir))
+})
+await test('applyCriticProblems also runs upstream\'s validator on the ledger apply-critic would write, and does not need apply-critic to be next', () => {
+  const { runDir } = afterWave([named('a')])
+  advanceState(runDir, 'critic', { critic_kind: 'post-wave' })   // as when the critic result is saved and mint has not run
+  assert.deepEqual(applyCriticProblems(runDir, critic({ missing_units: [gap('g')] }), { units: [minted('good')] }), [])
+  const tuple = name => minted(name, { surface: 'One surface', boundary: 'One boundary', subsystem: 'src', attack_class: 'One class' })
+  const problems = applyCriticProblems(runDir, critic({ missing_units: [gap('p'), gap('q')] }), { units: [tuple('p'), tuple('q')] })
+  assert.ok(problems.some(p => /semantic tuple|coverage ID/.test(p)), JSON.stringify(problems))
+  assert.throws(() => applyCriticProblems(fresh('not-a-run'), critic(), { units: [] }), /has no run-metadata\.json/)
+})
 
 console.log('== apply-critic: minted units')
 await test('a minted unit is added planned at wave 1 beside the evidence-bearing ones, the queue is drained, the step saved, and `next` plans the next wave', () => {
