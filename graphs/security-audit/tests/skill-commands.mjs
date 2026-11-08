@@ -44,13 +44,15 @@ export function runCommand(command, vars, cwd) {
 
 // Is this a command the code accepts? Run with paths that do not exist, so that a command that parses is refused for its state (exit 1, a line that
 // says so) and writes nothing; a command that does not parse is a usage error (exit 2). Returns the problem, or null.
-export function commandProblem(command, vars, cwd) {
+export function commandProblem(command, vars, cwd, skillDir = SKILL_DIR) {
   const m = command.match(/^node "\$AUDIT\/([A-Za-z0-9._-]+)"/)
   if (!m) return `not a node "$AUDIT/<script>" command: ${command}`
-  if (!existsSync(join(SKILL_DIR, m[1]))) return `${m[1]} is not a file of the skill: ${command}`
+  if (!existsSync(join(skillDir, m[1]))) return `${m[1]} is not a file of the skill: ${command}`
   const r = runCommand(command, vars, cwd)
   if (r.status === 2) return `usage error (exit 2): ${command}\n${r.stderr.trim().split('\n')[0]}`
   if (r.status !== 0 && r.status !== 1) return `exit ${r.status}: ${command}\n${r.stderr.slice(0, 300)}`
   if (/Cannot find module|ERR_MODULE_NOT_FOUND|SyntaxError/.test(r.stderr)) return `the script does not load: ${command}\n${r.stderr.slice(0, 300)}`
+  // A refusal says so on its last line (the helpers: AUDIT: FAIL, NEXT: FAIL; blocks.mjs: blocks: FAIL on stderr). Exit 1 with anything else is a crash, not a refusal for state.
+  if (r.status === 1 && !/^(AUDIT|NEXT): FAIL /.test(r.last) && !/^blocks: FAIL /m.test(r.stderr)) return `exit 1 with no refusal line (a crash?): ${command}\n${(r.stderr || r.stdout).slice(0, 300)}`
   return null
 }

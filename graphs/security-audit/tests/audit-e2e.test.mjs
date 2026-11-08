@@ -10,7 +10,7 @@ import { audit, meta, mkRepo, sh } from './audit-fixtures.mjs'
 import { answer } from './toy-agents.mjs'
 import { driveAudit } from './e2e-driver.mjs'
 import { PLANTED, TOY_FILES } from './toy-app.mjs'
-import { runCommand, skillCommands, skillText } from './skill-commands.mjs'
+import { runCommand, skillCommands, skillText, stepCommands } from './skill-commands.mjs'
 import { validateFindingsFile, validateLedgerFile } from '../skills/security-audit/upstream.mjs'
 
 const readJson = f => JSON.parse(readFileSync(f, 'utf8'))
@@ -93,7 +93,10 @@ await test('the audited repository was not touched: the same commit, a clean tre
   assert.ok(RUN.startsWith(join(repo, '.git', 'security-audit')))
   assert.equal(sh(repo, 'ls-files').split('\n').length, Object.keys(TOY_FILES).length)
 })
-await test('the skill at the end of the run still passes its own drift test against the code, and the driver used only commands that are in it (no helper the skill does not name)', () => {
-  const named = new Set(skillCommands(skillText()))
-  for (const s of steps) for (const c of s.commands) assert.ok(named.has(c.command), `${c.command} is in SKILL.md`)
+await test('every row of the skill\'s table was run by the drive, and so was every command the skill gives for a Workflow step: the e2e covers the whole of what the skill tells a session to run', () => {
+  const rows = [...stepCommands(skillText()).entries()].filter(([step]) => step !== 'done')
+  assert.deepEqual(rows.map(([step]) => step).sort(), ['apply-critic', 'merge-wave', 'plan-wave', 'report', 'seed', 'write-findings'])
+  const ran = new Set(steps.flatMap(s => s.commands.map(c => c.command)))
+  for (const [step, command] of rows) assert.ok(ran.has(command), `the table's command for ${step} was never run: ${command}`)
+  for (const re of [/audit-stage\.mjs" plan "\$RUN"$/, /audit-stage\.mjs" apply "\$RUN" "\$OUT"$/]) assert.ok([...ran].some(c => re.test(c)), `${re} was never run`)
 })

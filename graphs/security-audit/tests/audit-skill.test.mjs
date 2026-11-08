@@ -2,7 +2,7 @@
 // every command SKILL.md names is one the code accepts (each is run, with paths that do not exist, and a usage error fails it), every flag it documents is one `init`
 // takes and every one `init` takes is documented, and every step `next` can say has its row. Negatives: the checks are run against a skill with a mistyped
 // subcommand, flag, script and step, and each is caught.
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
@@ -93,6 +93,18 @@ await test('the report row and the remediation commands exist; the remediation s
   assert.ok(skillCommands(text).some(c => /audit-report\.mjs" export-remediation "\$RUN"/.test(c)))
   assert.ok(text.includes('This skill never fixes anything.'))
   assert.ok(text.includes('**Never edit the audited repository.**'))
+})
+
+await test('a command that crashes (exit 1 with no refusal line) is a problem, a refusal for state is not, and a helper that exits 0 is neither', () => {
+  const fake = mkdtempSync(join(box, 'fake-'))
+  const cmd = 'node "$AUDIT/audit-run.mjs" next "$RUN"'
+  for (const [body, want] of [["throw new Error('boom')", /exit 1 with no refusal line/], ["console.log('something else'); process.exit(1)", /exit 1 with no refusal line/], ["console.log('NEXT: FAIL no run'); process.exit(1)", null], ["console.log('AUDIT: FAIL state'); process.exit(1)", null],
+    ["console.log('NEXT: done'); process.exit(0)", null], ["process.exit(2)", /usage error/], ["process.exit(3)", /exit 3/]]) {
+    writeFileSync(join(fake, 'audit-run.mjs'), body)
+    const r = commandProblem(cmd, { ...VARS, AUDIT: fake }, box, fake)
+    if (want === null) assert.equal(r, null, body); else assert.match(String(r), want, body)
+  }
+  assert.match(String(commandProblem('node "$AUDIT/audit-gone.mjs" x', VARS, box, fake)), /is not a file of the skill/)
 })
 
 console.log('== the helpers the session runs are not the audited repository\'s')
