@@ -34,6 +34,9 @@ const MAX_HARDENING = 20, MAX_HARDENING_CHARS = 1000   // kept small: the valida
 export const MAX_UNIT_EVIDENCE_BYTES = 64 * 1024
 const SEED_STATES = ['planned', 'not_applicable', 'out_of_scope', 'deferred']   // the states a unit can start in
 const VERDICTS = ['confirmed', 'needs_validation']
+// What a hunter may propose. v1 has no sandbox, so nothing can be confirmed and the hunter prompt says a proposed confirmed is
+// rejected (security-audit-flow.js, part 9); the sandbox PR widens this to VERDICTS.
+const PROPOSABLE = ['needs_validation']
 
 const isObj = v => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isText = v => typeof v === 'string' && v.trim() !== ''
@@ -339,7 +342,7 @@ function applyUnitResult(unit, entry, candidates, runDir) {
   if (checks.some(c => c.method !== 'source')) return { reason: 'a check is not method "source" (no sandbox, so no local artifact can be promoted)' }
   if (checks.some(c => c.agent_id !== unit.agent_id)) return { reason: `a check is not owned by the assigned hunter ${unit.agent_id}` }
   const linked = entry.candidate_fingerprints ?? []
-  if (Array.isArray(linked) && linked.some(f => !candidates.has(f))) return { reason: 'a linked fingerprint has no valid entry in the result\'s candidates' }
+  if (Array.isArray(linked) && linked.some(f => !candidates.has(f))) return { reason: 'a linked fingerprint has no valid entry in the result\'s candidates (each must propose needs_validation: with no sandbox, a proposed confirmed is rejected)' }
   const absent = (Array.isArray(entry.reviewed_paths) ? entry.reviewed_paths : []).find(p => typeof p === 'string' && isSafeRelativePath(p) && !existsSync(join(runDir, 'tree', p)))
   if (absent !== undefined) return { reason: `reviewed path ${absent} is not in tree/ (the audited snapshot): coverage of a file nobody can read is not coverage` }
   const merged = {
@@ -356,7 +359,7 @@ function applyUnitResult(unit, entry, candidates, runDir) {
 function candidateIndex(result) {
   const index = new Map()
   for (const c of result.candidates) {
-    if (isObj(c) && typeof c.fingerprint === 'string' && VERDICTS.includes(c.proposed_verdict) && !Object.hasOwn(c, 'verdict') && !index.has(c.fingerprint)) index.set(c.fingerprint, c)
+    if (isObj(c) && typeof c.fingerprint === 'string' && PROPOSABLE.includes(c.proposed_verdict) && !Object.hasOwn(c, 'verdict') && !index.has(c.fingerprint)) index.set(c.fingerprint, c)
   }
   return index
 }
