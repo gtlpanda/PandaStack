@@ -57,7 +57,8 @@ const FROZEN = config.frozen.map((entry) => globToRegExp(entry.replace(/\/$/, ""
 const WRITABLE = (config.writable ?? []).map((entry) => globToRegExp(entry));
 
 function expand(file) {
-  const raw = String(file ?? "").replace(/^['"]|['"]$/g, "");
+  // Shell quotes only join pieces ("$HOME"/.bashrc is $HOME/.bashrc); they never name a path.
+  const raw = String(file ?? "").replace(/["']/g, "");
   if (raw === "~" || raw.startsWith("~/")) return path.join(homedir(), raw.slice(2));
   return raw.replace(/^\$\{?HOME\}?(?=\/|$)/, homedir());
 }
@@ -166,6 +167,9 @@ if (tool === "Bash") {
   if (/\bpnpm\s+(dlx|create)\b/.test(command)) deny("pnpm dlx/create download and run remote code; use `pnpm add` and `pnpm exec`.");
   if (/(^|[\s;&|(])docker(\s|$)/.test(command) && !/\bdocker\s+(ps|compose\s+ps)\b/.test(command)) deny("docker is managed by the owner; only `docker ps` is allowed.");
 
+  // A write target the guard cannot resolve (an unknown $VAR, backticks, $(...), shown as SUBST)
+  // could land anywhere, so it is denied like an outside one.
+  const computed = (token) => /[$`]|SUBST/.test(expand(token).replace(/^\$\{?HOME\}?(?=\/|$)/, ""));
   const frozenHere = (token) => isFrozen(token) || cdDirs.some((dir) => isFrozen(path.resolve(dir, expand(token))));
   // A token is taken for a path when it looks like one, or when the command cd'd (then a bare name is one).
   const frozenTarget = (token) => Boolean(token) && !/^-/.test(token) && (/[/.~]/.test(token) || cdDirs.length > 0) && frozenHere(token);
@@ -174,7 +178,7 @@ if (tool === "Bash") {
   for (const match of command.matchAll(/(?:^|[^<>])(?:\d+|&)?(>>|>\||>)(&?)\s*([^\s;&|<>]+)/g)) {
     const [, , dup, target] = match;
     if ((dup && /^\d+$/.test(target)) || target === "/dev/null") continue;
-    if (frozenTarget(target)) deny(`redirecting output into ${target} is not allowed (frozen or outside the project).`);
+    if (computed(target) || frozenTarget(target)) deny(`redirecting output into ${target} is not allowed (frozen, outside the project, or a computed path).`);
   }
   // Files a command writes through its arguments: every tee operand, --output (git log, diff,
   // format-patch and others), find's -fprint/-fprint0/-fprintf/-fls, and sed's w/W commands.
@@ -192,7 +196,7 @@ if (tool === "Bash") {
         for (const match of arg.matchAll(/(?:^|[;\n{}/])\s*[wW]\s*([^\s;}]+)/g)) targets.push(match[1]);
       }
     }
-    for (const target of targets) if (frozenTarget(target)) deny(`${word} writing ${target} is not allowed (frozen or outside the project).`);
+    for (const target of targets) if (computed(target) || frozenTarget(target)) deny(`${word} writing ${target} is not allowed (frozen or outside the project).`);
   }
   const mutating = /(^|[\s;&|(])(sed\s+-[^\s]*i|perl\s+-[^\s]*i|mv|cp|rm|unlink|truncate|chmod|chown|ln|touch|dd|install|patch|rsync)(\s|$)/;
   const scripting = /(^|[\s;&|(])(node\s+(-e|--eval|-p|--print)|python3?|ruby|perl\s+-e)(\s|$)/;

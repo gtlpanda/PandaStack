@@ -1806,3 +1806,9 @@ all reproduced; each test checked against the unfixed head.
 - F23: a documented writable exception inside a frozen path stopped the loop with exit 4. Fixed.
 - F24: uninstall with no HOME restored a local-bin backup to `/autobuild`. Fixed: it is kept in
   the backup with a note.
+
+**/bughunt round 8** (6.2 min, 10 agents; contract partial): 1 finding. F25: `echo … >> "$HOME"/.bashrc`
+got past the guard, because a quoted `$HOME` was not resolved. It came in with the original guard.
+The owner chose fix-then-merge over merging with it open. Fixed: shell quotes are dropped before a
+path is resolved, and a write target the guard cannot resolve (an unknown `$VAR`, backticks,
+`$(…)`) is denied. Quoted paths inside the project stay allowed.
