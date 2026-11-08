@@ -500,7 +500,9 @@ export function nextStep({ meta, state, ledger, findings }) {
       if (state.last === 'plan-wave' && huntable > 0) refuse(`plan-wave left ${huntable} unit(s) planned and assigned none: units the budget cannot reach are deferred`)
       if (huntable > 0) return go('plan-wave', { wave: state.wave + 1 })
       if (state.last === 'apply-critic' && state.critic_kind === 'final-clean') return coverageDone()
-      return go('critic', { kind: 'final-clean', wave: state.wave })        // nothing left to hunt: the retained final-clean critic
+      // Nothing left to hunt: the retained final-clean critic. Straight after seed no wave ran (wave 0), but a critic's wave starts at 1
+      // (its ID is cf<wave>), so it runs as wave 1 and says no hunting wave ran.
+      return go('critic', { kind: 'final-clean', wave: Math.max(state.wave, 1), ...(state.wave === 0 ? { hunted: false } : {}) })
     }
     case 'consolidate': return go('validate')
     case 'validate': return go('write-findings')

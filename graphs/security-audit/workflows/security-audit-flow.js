@@ -351,7 +351,9 @@ ${PARTS.schema_needs_validation}`
 }
 
 function criticPrompt(id) {
-  const who = A.kind === 'post-wave' ? `the post-wave coverage critic of wave ${A.wave}` : `the distinct final-clean coverage critic after wave ${A.wave}; a different critic has already looked at this wave, and you are the independent second look`
+  const who = A.kind === 'post-wave' ? `the post-wave coverage critic of wave ${A.wave}`
+    : A.hunted === false ? `the final-clean coverage critic (wave ${A.wave}); no hunting wave ran, because the seeded ledger had no hunter work, so no other critic has looked at it`
+    : `the distinct final-clean coverage critic after wave ${A.wave}; a different critic has already looked at this wave, and you are the independent second look`
   return `You are ${who} (agent ID ${id}) of a full security audit. You are a fresh agent. You read source but write and run nothing, and you propose coverage, never findings.
 
 ${frame()}

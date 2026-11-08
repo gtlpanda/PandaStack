@@ -57,7 +57,7 @@ await test('prior-run gaps and changed source come before new units, and same-so
 await test('a run whose only planned units are verifier-owned is not planned at all: next goes to the final critic and plan-wave refuses', () => {
   const { runDir } = seeded([named('only')])
   withPrior(runDir, { only: 'prior_needs_validation' })
-  assert.equal(audit(['next', runDir]).last, 'NEXT: critic run=workflow kind=final-clean wave=0')
+  assert.equal(audit(['next', runDir]).last, 'NEXT: critic run=workflow kind=final-clean wave=1')
   assert.throws(() => planWave(runDir), /plan-wave is not the next step of this run: NEXT: critic/)
 })
 await test('rank ties break by coverage_id, so the same ledger plans the same wave every time', () => {

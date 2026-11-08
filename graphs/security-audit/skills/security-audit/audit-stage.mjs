@@ -209,7 +209,7 @@ function compactUnit(u) {
 export function criticInput(runDir, run, next) {
   const pool = readJson(join(runDir, 'candidates.json')) ?? []
   return {
-    ...baseInput(runDir, run.meta, 'critic'), kind: next.kind, wave: next.wave, architecture_md: architectureOf(runDir), ledger: run.ledger.map(compactUnit),
+    ...baseInput(runDir, run.meta, 'critic'), kind: next.kind, wave: next.wave, hunted: next.hunted !== false, architecture_md: architectureOf(runDir), ledger: run.ledger.map(compactUnit),
     candidates: (Array.isArray(pool) ? pool : []).map(c => ({ fingerprint: c.fingerprint, proposed_verdict: c.proposed_verdict, units: c.units, hunter_ids: c.hunter_ids })),
     prior: priorSummary(runDir), parts: { criticSection: blockText(CRITIC_SECTION) },
   }
@@ -425,7 +425,7 @@ const APPLIERS = {
     writeJson(join(runDir, 'critic.json'), critic)
     recordSpend(runDir, stage.name, result.budgetSpent)
     writeJson(join(stage.dir, 'result.json'), result)
-    advanceState(runDir, 'critic', { critic_kind: input.kind })
+    advanceState(runDir, 'critic', { critic_kind: input.kind, wave: input.wave })   // the mint and apply-critic after it use this wave
     event('ok', { counts: { missing_units: critic.missing_units.length, reassign_ids: critic.reassign_ids.length, resolved_prior_leads: critic.resolved_prior_leads.length }, critic_stop: critic.stop })
     return { summary: `critic kind=${input.kind} id=${result.results.id} missing_units=${critic.missing_units.length} reassign_ids=${critic.reassign_ids.length} resolved_prior_leads=${critic.resolved_prior_leads.length} stop=${critic.stop} agents=${result.budgetSpent}`, notes, then: `node audit-stage.mjs plan ${runDir}` }
   },
