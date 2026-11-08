@@ -2,6 +2,7 @@
 // (~/.autobuild/lib/proc.mjs): a headless session must not inherit the parent
 // session's identity or settings env.
 import { spawnSync } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
 
 // A Claude session exports its settings env (CLAUDE_CODE_*) into its process, so
 // a driver started from one would pass on, for example, an old
@@ -16,6 +17,20 @@ export function buildEnv(extra = {}, base = process.env) {
     if (/^(CLAUDECODE$|CLAUDE_CODE_|CLAUDE_PID$|CLAUDE_EFFORT$)/.test(key) && !KEEP.test(key)) delete env[key]
   }
   return Object.assign(env, extra)
+}
+
+function isAlive(pid) {
+  try { process.kill(pid, 0); return true } catch { return false }
+}
+
+// A pid file outlives a SIGKILL or a reboot, and pids are reused: a live pid
+// counts only when its command line is still ours (Linux /proc; elsewhere,
+// alive is all we can tell).
+export function isOurs(pid, marker) {
+  if (!Number.isInteger(pid) || pid <= 0 || !isAlive(pid)) return false
+  const cmdline = `/proc/${pid}/cmdline`
+  if (!existsSync('/proc/self/cmdline')) return true
+  try { return readFileSync(cmdline, 'utf8').split('\0').some(a => a.includes(marker)) } catch { return false }
 }
 
 // Runs a command synchronously; never throws.

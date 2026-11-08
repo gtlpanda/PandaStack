@@ -190,7 +190,7 @@ export function decideBash(command) {
 
 // The real path of a file that may not exist yet: its nearest existing parent,
 // resolved, plus the rest. So a symlinked repo or ../ cannot dodge the rules.
-function realish(p) {
+export function realish(p) {
   let head = p
   const rest = []
   while (!existsSync(head) && dirname(head) !== head) { rest.unshift(basename(head)); head = dirname(head) }

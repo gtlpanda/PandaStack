@@ -14,7 +14,7 @@ test('--skip=bin into a user\'s own settings.json does not add a statusLine for 
     writeFileSync(dest, JSON.stringify({ model: 'sonnet' }, null, 2) + '\n')
     const r = spawnSync('bash', [join(REPO, 'install.sh'), '--skip=bin'], {
       encoding: 'utf8',
-      env: { ...process.env, CLAUDE_CONFIG_DIR: home, HARNESS_NO_GIT_CONFIG: '1' },
+      env: { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: home, HARNESS_NO_GIT_CONFIG: '1' },
     })
     assert.equal(r.status, 0, `install.sh failed: ${r.stderr}`)
     assert.equal(existsSync(join(home, 'bin', 'statusline.sh')), false, 'bin/statusline.sh must be skipped')

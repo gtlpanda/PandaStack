@@ -1,0 +1,124 @@
+// The full gate (stop hook, loop verification, people). In order:
+//   1. frozen files unchanged since the session's base commit
+//   2. the current feature's test (non-browser; browser specs run in step 5)
+//   3. the project's gate commands (typecheck, lint, regression suite, coverage…)
+//   4. the tests of every feature already passing (non-browser)
+//   5. browser suites: the regression command plus passing and current browser specs
+// failFast stops at the first failing step.
+
+import { createHash } from "node:crypto";
+import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
+import path from "node:path";
+import { featureById, readFeatures } from "./features.mjs";
+import { git, sh, tail } from "./proc.mjs";
+import { runFeatureTests } from "./tests.mjs";
+
+/** The feature list with every `passes` flag removed: what must never change during a session. */
+function featuresWithoutPasses(text) {
+  try {
+    const doc = JSON.parse(text);
+    for (const feature of doc.features ?? []) delete feature.passes;
+    return JSON.stringify(doc);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Frozen paths changed or added since `baseSha` (committed or not). The feature list may
+ * change only in its `passes` flags (written by `autobuild mark-passed`).
+ */
+export function frozenChanges(config, baseSha) {
+  const paths = config.frozen.filter((entry) => entry !== config.featuresFile);
+  const diff = git(config, ["diff", "--name-only", baseSha, "--", ...paths]);
+  const untracked = git(config, ["ls-files", "--others", "--exclude-standard", "--", ...paths]);
+  // A writable entry is an exception inside a frozen path (frozen: spec, writable: spec/DECISIONS.md).
+  const writable = config.writable ?? [];
+  const changed = `${diff.output}\n${untracked.output}`
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((file) => !writable.some((entry) => file === entry || file.startsWith(`${entry}/`)));
+  const before = git(config, ["show", `${baseSha}:${config.featuresFile}`]);
+  const now = existsSync(path.join(config.root, config.featuresFile)) ? readFileSync(path.join(config.root, config.featuresFile), "utf8") : "";
+  if (before.ok && featuresWithoutPasses(before.output) !== featuresWithoutPasses(now)) changed.push(`${config.featuresFile} (changed beyond passes flags)`);
+  return { ok: diff.ok && untracked.ok, changed: [...new Set(changed)] };
+}
+
+/**
+ * A digest of the git files that make git run code: config, hooks/, info/ (and a worktree's
+ * config.worktree). Compared before and after each session: frozenChanges sees only tracked
+ * files, so a hook or an fsmonitor written into .git would otherwise go unnoticed.
+ */
+export function gitControlDigest(config) {
+  const dir = (flag) => git(config, ["rev-parse", "--path-format=absolute", flag]).output.trim();
+  const common = dir("--git-common-dir");
+  const own = dir("--git-dir");
+  const roots = [path.join(common, "config"), path.join(common, "hooks"), path.join(common, "info"), path.join(own, "config.worktree")];
+  const digest = {};
+  const walk = (file) => {
+    let stat;
+    try {
+      stat = lstatSync(file);
+    } catch {
+      return;
+    }
+    if (stat.isDirectory()) {
+      for (const entry of readdirSync(file)) walk(path.join(file, entry));
+      return;
+    }
+    const content = stat.isSymbolicLink() ? `link:${readlinkSync(file)}` : readFileSync(file);
+    digest[file] = `${stat.mode.toString(8)}:${createHash("sha1").update(content).digest("hex")}`;
+  };
+  for (const root of [...new Set(roots)]) walk(root);
+  return digest;
+}
+
+/** The git control files added, removed or changed since `before` (a gitControlDigest). */
+export function gitControlChanges(config, before) {
+  const after = gitControlDigest(config);
+  return [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((file) => before[file] !== after[file]).sort();
+}
+
+export function runGate(config, { featureId = null, baseSha = null, failFast = false, skipBrowser = false } = {}) {
+  const doc = readFeatures(config);
+  const current = featureId ? featureById(doc, featureId) : null;
+  const browserKind = config.browser?.runner ?? null;
+  const steps = [];
+  const record = (step) => {
+    steps.push(step);
+    return step.ok || !failFast;
+  };
+  const summary = () => ({
+    ok: steps.every((step) => step.ok),
+    feature: featureId,
+    steps: steps.map((step) => ({ name: step.name, ok: step.ok, seconds: Math.round((step.ms ?? 0) / 1000), tail: step.ok ? "" : tail(step.output ?? "", 6000) })),
+  });
+
+  if (baseSha) {
+    const started = Date.now();
+    const frozen = frozenChanges(config, baseSha);
+    const ok = frozen.ok && frozen.changed.length === 0;
+    if (!record({ name: "frozen files unchanged", ok, ms: Date.now() - started, output: ok ? "" : `Changed or added frozen files:\n${frozen.changed.join("\n")}` })) return summary();
+  }
+
+  if (current && current.testKind !== browserKind) {
+    for (const step of runFeatureTests(config, [current])) if (!record({ ...step, name: `current feature ${current.id}: ${step.name}` })) return summary();
+  }
+
+  for (const gateStep of config.gate ?? []) {
+    if (!record({ name: gateStep.name, ...sh(config, gateStep.command) })) return summary();
+  }
+
+  const passing = doc.features.filter((feature) => feature.passes && feature.id !== featureId);
+  const passingNonBrowser = passing.filter((feature) => feature.testKind !== browserKind);
+  if (passingNonBrowser.length > 0) {
+    for (const step of runFeatureTests(config, passingNonBrowser)) if (!record({ ...step, name: `passing features: ${step.name}` })) return summary();
+  }
+
+  if (!skipBrowser && browserKind) {
+    const specs = [...passing.filter((feature) => feature.testKind === browserKind), ...(current?.testKind === browserKind ? [current] : [])];
+    for (const step of runFeatureTests(config, specs, { withRegressionBrowser: true })) if (!record({ ...step, name: `browser: ${step.name}` })) return summary();
+  }
+  return summary();
+}

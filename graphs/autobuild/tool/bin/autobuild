@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# autobuild entry point. Uses the newest Node on PATH; Node 20.11+ is required.
+set -euo pipefail
+AUTOBUILD_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+exec node "$AUTOBUILD_HOME/lib/cli.mjs" "$@"

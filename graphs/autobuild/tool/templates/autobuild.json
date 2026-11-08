@@ -1,0 +1,31 @@
+{
+  "$comment": "autobuild project config. Docs: graphs/autobuild/tool/README.md in PandaStack. Commands run with bash in the project root.",
+  "featuresFile": "features.json",
+  "progressFile": "PROGRESS.md",
+  "branch": "autobuild",
+  "prompt": "Read CLAUDE.md, SPEC.md, features.json, PROGRESS.md. Build the next feature.",
+  "model": "claude-opus-5-5",
+  "subagentModel": "claude-sonnet-5-5",
+  "hooks": "inject",
+  "limits": { "maxIterations": 40, "maxTurns": 200, "maxBudgetUsd": 15, "noProgressLimit": 3, "reviewEvery": 5 },
+  "env": { "pathPrepend": [], "ldLibraryPath": [], "vars": { "CI": "1" } },
+  "install": null,
+  "preflight": [
+    { "name": "example: database container running", "command": "true", "hint": "replace with a real check" }
+  ],
+  "runners": {
+    "unit": { "group": "unit", "command": "echo 'set the unit test command, e.g. pnpm exec vitest run --config vitest.acceptance.config.ts' && false" }
+  },
+  "gate": [
+    { "name": "example: typecheck", "command": "echo 'set your typecheck/lint/regression commands' && false" }
+  ],
+  "browser": null,
+  "frozen": ["tests", "CLAUDE.md", "SPEC.md", "spec", ".claude", ".env", ".env.local"],
+  "writable": ["PROGRESS.md", "DECISIONS.md"],
+  "allowedTools": [
+    "Read", "Edit", "Write", "Glob", "Grep", "TodoWrite", "Agent", "Task",
+    "Bash(autobuild *)", "Bash(git add *)", "Bash(git commit *)", "Bash(git status*)", "Bash(git diff*)", "Bash(git log*)", "Bash(git show*)",
+    "Bash(ls*)", "Bash(cat *)", "Bash(head *)", "Bash(tail *)", "Bash(grep *)", "Bash(rg *)", "Bash(find *)", "Bash(wc *)", "Bash(jq *)",
+    "Bash(mkdir *)", "Bash(touch *)", "Bash(cp *)", "Bash(mv *)", "Bash(rm *)", "Bash(sed *)", "Bash(cd *)", "Bash(timeout *)"
+  ]
+}

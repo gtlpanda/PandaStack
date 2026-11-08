@@ -1616,3 +1616,213 @@ tuned status line survives uninstall, and a linked settings.json with `--skip=bi
 - 6 check-refs tests, 26 hunt-derived and edge tests, and 17 install checks (section 16).
 - 6 CLAUDE.md validate rules, plus the cap.
 - The suite is 646 workflow tests, 117 install checks, and 22 secret checks, 0 failed.
+
+## 33. autobuild moves in and runs /bughunt before it reports done (2026-11-07)
+
+**What changed.**
+- **The move.** `~/.autobuild` (its own repo, no remote) came in with history: a `git subtree add` to
+  `graphs/autobuild/tool/`, so all 9 of its commits are kept.
+  - The `/autobuild` skill moved to `graphs/autobuild/skills/autobuild/`.
+  - `install.sh` links `bin/autobuild` into `~/.local/bin`. The new `PATH_TOOLS` list and
+    `dest_of` give backups, the manifest and `--skip` one name for it: `local-bin/autobuild`.
+    A link already in the way is backed up and restored on uninstall.
+  - `scripts/test-autobuild.sh` runs its node:test suite inside `scripts/test.sh`, so CI runs it too.
+  - validate shellchecks `graphs/*/tool/bin/*`.
+- **One landing for unattended hunts.** `graphs/hunt/skills/bughunt/land.mjs` holds everything
+  around a fix-mode hunt session except running it:
+  - intake and the fix worktree;
+  - the prompt;
+  - reading what the session saved;
+  - the landing checks;
+  - the fast-forward;
+  - the summary line.
+
+  `/build-app`'s driver switched to it as a pure refactor, and its 646 workflow tests pass
+  unchanged. `checks.mjs` and `finish.mjs` re-export what they used to define.
+- **autobuild hunts before done.** Once every feature passes and the final review has run,
+  `lib/bughunt.mjs` runs `/bughunt --fix` over the whole branch against its base, in one headless
+  session.
+  - That session uses /build-app's settings: its guard opens only the hunt's state dir, and there is
+    no 10-minute background ceiling. The loop's review settings would have blocked the Workflow tool.
+  - The loop lands the hunt through `land.mjs`. Its frozen list is every existing file under
+    autobuild's frozen paths, so new regression tests may be added but no existing test may change.
+  - The result goes into one `BUGHUNT` line in PROGRESS.md.
+  - Exit 0 only on `pass`; exit 12 for a human otherwise.
+  - Off switches: `"bughunt": false` or `AUTOBUILD_BUGHUNT=0`. `bughuntBase` sets the base, and its
+    budget and timeout are in `limits`.
+
+**Why the whole branch.** A hunt over the whole branch is what a PR from it would merge, so the
+review gate accepts that PR. Tested: the gate's own `review-status` reports `hunted: true,
+disposition: pass` on the landed head.
+
+**Found along the way.**
+- The test projects had no base branch, so intake failed with "resolving master failed". A real
+  project can be in the same state. The loop now says how to fix it (`bughuntBase`).
+- The fake `claude`'s `build` step ran `git add -A`, which committed the fake's own script files.
+  The hunt's verify then saw them change. The test project now ignores them, which replaced a
+  per-test helper (14 call sites) that did the same.
+
+**Measured.**
+- Tests: autobuild 31 → 36 (5 hunt scenarios); install 117 → 126.
+- Mutations caught:
+  - dropping the PATH link fails 2 install checks;
+  - accepting unverified fix commits fails one test in each caller (autobuild and /build-app).
+- The guard's kit protection first looked untestable: every case was already denied by the
+  "outside the project" rule. A run of the middle commit from a worktree under `/tmp` found the
+  real gap. Sessions may write the temp dir, so a kit under `/tmp` was writable. The kit's own
+  directory is now frozen before the temp-dir allowance. A regression test runs the guard from a
+  copy of the kit under the temp dir; it failed before the fix and passes after.
+
+**/bughunt round 1 on this branch** (7.4 min, 25 agents, all six lenses; security and concurrency
+only partly covered): 6 findings, all reproduced by a failing test, and the recheck agreed with
+each. F2, F3 and F5 came in with the tool; they are PandaStack's to fix now.
+- F1 HIGH: `cli.mjs` compared `import.meta.url` with a raw argv path. From a checkout path with a
+  space, every command exited 0 having done nothing, and the hunt's landing verify passed with no
+  gate run. Fixed: compare real paths. The verify now also needs the gate's own `GATE: PASS`
+  line, not just exit 0.
+- F2: the guard's redirect check skipped `1>`, `&>` and `>|`. Fixed: every write redirect form is
+  checked; only fd duplication and /dev/null are skipped.
+- F3: `git -P push`, `git -ccore.x=y push` and `git -c alias.p=push p` got past the push
+  deny. Fixed: the guard now reads commands with PandaStack's shared shell reader
+  (`simpleCommands`, `gitSubcommand`, as the review gate does). A git alias set on the command
+  line is denied.
+- F4: with an unknown reset time, a probe that succeeded while the real session stayed limited
+  retried forever. Fixed: the wait cap covers every wait for the feature.
+- F5: frozen-path checks were lexical, so a symlink got past them. Fixed: the real path is
+  checked as well (`realish`, shared).
+- F6: a stop during the landing checks was ignored and the fixes landed anyway.
+  - The checks blocked the event loop.
+  - Yielding one turn after them was not always enough: it worked in an isolated experiment but
+    not in the loop, and why is untested.
+  - Fixed: the landing verify runs as an async child, ended on a stop. The loop's stop also waits
+    for an in-progress landing to restore the build branch; that bug surfaced once the stop
+    worked.
+  - `/build-app` gets the async verify too, through `land.mjs`.
+
+**/bughunt round 2** (6.3 min, 16 agents; concurrency now covered, regression and security
+partial). 3 findings, all reproduced; the recheck agreed with each.
+- F5 (the ledger reused this id for a new bug, the known ID-merge issue): a builder could write
+  `.git/hooks/pre-commit`, which then runs on every later commit, the owner's included. Fixed:
+  the project's `.git` is frozen. Inline git config that runs code (`core.hooksPath`,
+  `core.fsmonitor`, aliases) is denied.
+- F7: `sed -E -i` and `sed -e … -i` got past the in-place check. Fixed: in-place flags are read
+  from each command's arguments.
+- F8: a session that ran `mark-passed` but never committed left `passes: true` in the tree, and
+  the loop skipped the feature as built. Fixed: the flag is reset when there is no
+  `feat(<ID>)` commit.
+
+**/bughunt round 3** (5.7 min, 17 agents; security now covered, contract and concurrency partial).
+3 findings, all reproduced; one more was refuted.
+- F7 (id reused again): `cd .git && cat >> config <<EOF` got past the guard, because it resolves
+  redirect targets from the project root. Fixed: `cd` and `pushd` into a frozen dir, out of the
+  project, or to a computed path are denied.
+- F10: autobuild's env cleanup dropped `CLAUDE_CODE_OAUTH_TOKEN` and `CLAUDE_CODE_USE_*`, so a
+  token- or provider-authenticated box failed with an auth error. Fixed: it starts from
+  `/build-app`'s `buildEnv`, which keeps them.
+- F11: the loop lock was a plain pid file checked with "is any process alive with this pid".
+  Fixed: it is created exclusively, and a pid counts only while its command line is this tool's
+  `cli.mjs`. That reuses `/build-app`'s `isOurs`, now in its `proc.mjs`.
+
+**/bughunt round 4** (7.2 min, 22 agents; logic and errors covered, the other four partial).
+5 findings. Each reproduction test was checked against the unfixed head, and one turned out not
+to be a reproduction at all.
+- F13 was my own regression from round 3. The `cd` rule reused `isFrozen`, which for review
+  sessions denies everything but the progress file, so reviews could not
+  `cd packages/api && pnpm test`. Redesigned:
+  - `cd` is denied only out of the project, into `.git`, or to a computed path;
+  - after a `cd` inside the project, every path is checked from that dir as well as from the root.
+- F14: the hunt session's guard rules file sat in `.harness/`, which the hunt's own guard did not
+  protect. Editing it switched the guard off. Fixed:
+  - the hunt's control files live in the git dir, which /build-app's guard never lets a session
+    edit;
+  - that guard now denies every call when its rules file is unreadable.
+- F12: `git branch -D x` and `git tag -d v1` passed, because the flag check needed a leading
+  space. Fixed.
+- F15: a failed commit of the `BUGHUNT` line was ignored, and the run reported done. Fixed: it is
+  exit 12, and nothing is recorded.
+- F11 again: the lock had a window between create and write, and two loops could both take over
+  a stale lock. Fixed:
+  - the pid file is linked into place whole;
+  - a stale one is moved aside and its content re-checked, so a rival's fresh lock goes back.
+- **A false reproduction.** F11's race test imported `syncBuiltinESMExports` from `node:fs`
+  (it lives in `node:module`), so the loop crashed before reaching the lock. The test still
+  failed with its marker, so evidence.mjs and the recheck both counted it as reproduced. With the
+  import fixed, it fails on the old lock for the real reason and passes on the new one. Logged as
+  a /bughunt follow-up.
+
+**/bughunt round 5** (8.3 min, 16 agents; security and contract partial). 3 findings, all
+reproduced; each test was checked against the unfixed head.
+- F2 (id reused) HIGH: `git send-pack origin …` pushes without the word push. Fixed: it is denied,
+  as /build-app's guard already does.
+- F16 HIGH: only the first `tee` operand was checked, and `--output=<file>` (git log, git diff)
+  writes anywhere. Fixed: every tee operand and every `--output` value is checked.
+- F17: a restart before the first review started the review range at the restart, so features
+  passed before it were never reviewed. Fixed: with no review yet, the range starts at the
+  commit that added the feature list.
+
+**Changing course after round 5.** 11 of the 20 findings were bypasses of the regex Bash guard,
+and that class was not converging: each round found a new spelling. The logic bugs were
+converging. So instead of patching each new guard bypass, this commit adds the backstop the
+README already claimed:
+- the loop's own git runs with `core.hooksPath=/dev/null` and `core.fsmonitor=false`;
+- `.git/config`, `hooks/` and `info/` are digested around every session, and any change exits 4;
+- the hunt's control files are per worktree (`--git-dir`).
+
+The README now says plainly that writes outside the project have no backstop. Mutation-checked:
+dropping the safe-git flags, or the post-session check, fails a test. Cost so far: about 7 min and
+about 1M subagent tokens per hunt round; 5 rounds.
+
+**/bughunt round 6** (7.1 min, 19 agents; security now covered, regression and contract
+partial). 4 findings, all reproduced; each test was checked against the unfixed head.
+- F2 (id reused) HIGH: `find . -exec git push …` ran git where the guard never looked, and a push
+  leaves the machine, so the backstop cannot catch it. Fixed: the guard also reads the commands
+  find runs (-exec, -execdir, -ok, -okdir) with the same shell reader.
+- F16 HIGH: `sed 'w FILE'` and `find -fprintf FILE` write files. For tracked frozen files the
+  new backstop already caught these; outside the project nothing did. Fixed: they count as
+  writes, and sed's `e` command (it runs a shell) is denied.
+- F18: install.sh died on an unbound HOME when only CLAUDE_CONFIG_DIR was set. My PATH-link
+  change caused it. Fixed: the link is skipped with a note.
+- F19: a failed progress commit left no record, so a rerun paid for the whole hunt again. Fixed:
+  the hunt is recorded before that commit, and a commit since that touches only the progress
+  file still counts as the same head.
+
+**Stopping rule** (set with the advisor after round 5): F2 was a HIGH the backstop does not
+cover, so it was fixed and hunting this branch stops after one more round, the one the gate needs
+to open the PR. A disposition other than `pass` goes to the owner for a by-hand merge, as with
+PR3.
+
+**/bughunt round 7** (7.3 min, 23 agents; every lens covered except errors, which was partial). 5 findings, none HIGH,
+all reproduced; each test checked against the unfixed head.
+- F20: two install tests from PR #35 set only CLAUDE_CONFIG_DIR. Once install.sh linked
+  autobuild into `$HOME/.local/bin`, they rewrote the developer's real `~/.local/bin/autobuild`
+  and dropped its backup with their temp dir. **It happened on this machine at 20:03:** the link
+  had been switched to the checkout. I restored the original link, `~/.autobuild/bin/autobuild`;
+  no loop was running. Fixed: those tests use a temp HOME, and a regression test runs them under
+  a fake HOME and checks it stays untouched.
+- F21: the guard allowed everything when autobuild.json could not be loaded. Fixed: inside a loop
+  session it denies everything.
+- F22: a final review that ended without its commit still reported Done (exit 0). Fixed: it is
+  retried once, then exit 13.
+- F23: a documented writable exception inside a frozen path stopped the loop with exit 4. Fixed.
+- F24: uninstall with no HOME restored a local-bin backup to `/autobuild`. Fixed: it is kept in
+  the backup with a note.
+
+**/bughunt round 8** (6.2 min, 10 agents; contract partial): 1 finding. F25: `echo … >> "$HOME"/.bashrc`
+got past the guard, because a quoted `$HOME` was not resolved. It came in with the original guard.
+The owner chose fix-then-merge over merging with it open. Fixed: shell quotes are dropped before a
+path is resolved, and a write target the guard cannot resolve (an unknown `$VAR`, backticks,
+`$(…)`) is denied. Quoted paths inside the project stay allowed.
+
+**/bughunt round 9** (7.1 min, 16 agents; contract partial, as in every round): 3 findings.
+- F2 (id reused) HIGH: the guard allowed commands its shell reader marks as unreadable
+  (`echo 'git push' | bash`, or nesting past depth 5). /build-app's guard and the review gate
+  both deny these. Fixed: autobuild's guard denies them too. This closes a class, not a spelling.
+- F16 HIGH: `cp --target-directory=` / `-t` (and mv, install, ln) wrote outside the project.
+  Fixed: the option's directory is checked as a write target.
+- F26: a writable file inside a frozen dir was still blocked by the injected `Edit(/dir/**)` deny
+  rule. Fixed: such a dir gets no dir-wide rule, and the guard hook keeps the rest of it frozen.
+
+**Stopping here.** Contract coverage has been partial in all 9 rounds, so the gate can never
+reach `pass` on this branch by itself. The guard's text-matching class keeps producing new
+spellings. The owner merges by hand, with the residual risk stated in the README: writes outside
+the project have no backstop beyond the tripwire.

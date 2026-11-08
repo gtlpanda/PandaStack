@@ -10,14 +10,16 @@ import { decide } from './guard-rules.mjs'
 
 if (process.env.HARNESS_BUILD_ACTIVE !== '1' || !process.env.HARNESS_BUILD_GUARD) process.exit(0)
 let input
-let rules
 try {
   input = JSON.parse(readFileSync(0, 'utf8'))
-  rules = JSON.parse(readFileSync(process.env.HARNESS_BUILD_GUARD, 'utf8'))
 } catch {
   process.exit(0)
 }
-const reason = decide(input.tool_name || '', input.tool_input || {}, rules)
+// Under the driver, a rules file that cannot be read denies everything: a session that broke it
+// must not run unguarded.
+let rules = null
+try { rules = JSON.parse(readFileSync(process.env.HARNESS_BUILD_GUARD, 'utf8')) } catch { rules = null }
+const reason = rules && typeof rules === 'object' ? decide(input.tool_name || '', input.tool_input || {}, rules) : 'its rules file is missing or unreadable, so every call is denied'
 if (reason) {
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: `build-app guard: ${reason}` } }))
 }

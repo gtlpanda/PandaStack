@@ -13,6 +13,8 @@
 #                 tools that belong to no graph), and every graphs/<graph>/<dir>/,
 #                 landing flat in ~/.claude/<dir>/. Two sources with one name:
 #                 refused.
+#   command line: autobuild -> one symlink in ~/.local/bin (PANDASTACK_BIN_DIR
+#                 overrides it); backups and --skip name it local-bin/autobuild
 #
 # Usage:
 #   ./install.sh              link; back up anything in the way
@@ -22,6 +24,7 @@
 #   ./install.sh --uninstall  remove our links, restore the most recent backup
 #
 # Env: CLAUDE_CONFIG_DIR overrides the target (default: $HOME/.claude).
+#      PANDASTACK_BIN_DIR overrides where command-line tools go (default: $HOME/.local/bin).
 #      HARNESS_NO_GIT_CONFIG=1 skips enabling the repo's pre-commit hook.
 set -euo pipefail
 
@@ -36,6 +39,14 @@ DIR_TARGETS=(skills agents workflows commands bin)
 # Repo dirs that hold DIR_TARGETS entries: shared core, the kit, then each graph.
 SOURCE_ROOTS=(core kit)
 for g in "$REPO_DIR"/graphs/*/; do [ -d "$g" ] && SOURCE_ROOTS+=("graphs/$(basename "$g")"); done
+
+# Command-line tools put on PATH, "<name><TAB><repo path>": each is one symlink in
+# LOCAL_BIN. Their rel path (backups, the manifest, --skip) is local-bin/<name>.
+PATH_TOOLS=("autobuild	graphs/autobuild/tool/bin/autobuild")
+# With no HOME (a container or cron run that sets only CLAUDE_CONFIG_DIR) and no
+# PANDASTACK_BIN_DIR, there is nowhere to put them: they are skipped with a note.
+LOCAL_BIN="${PANDASTACK_BIN_DIR:-${HOME:+$HOME/.local/bin}}"
+LOCAL_BIN="${LOCAL_BIN%/}"
 
 DRY_RUN=0
 MODE=install
@@ -85,11 +96,20 @@ guard_layout() {
   done
 }
 
+# Where rel path $1 lives: under LOCAL_BIN for local-bin/<name>, else under ~/.claude.
+dest_of() {
+  case "$1" in
+    local-bin/*) printf '%s\n' "$LOCAL_BIN/${1#local-bin/}" ;;
+    *) printf '%s\n' "$CLAUDE_DIR/$1" ;;
+  esac
+}
+
 # Print "dest<TAB>src" for every item we manage, one per line. dest is the
-# path under ~/.claude; src is the path in the repo. Both are relative.
+# rel path (see dest_of); src is the path in the repo. Both are relative.
 list_targets() {
   local t root entry name
   for t in "${FILE_TARGETS[@]}"; do printf '%s\t%s\n' "$t" "$t"; done
+  if [ -n "$LOCAL_BIN" ]; then for t in "${PATH_TOOLS[@]}"; do printf 'local-bin/%s\n' "$t"; done; fi
   for root in "${SOURCE_ROOTS[@]}"; do
     for t in "${DIR_TARGETS[@]}"; do
       [ -d "$REPO_DIR/$root/$t" ] || continue
@@ -133,7 +153,7 @@ check_skips() {
   targets="$(list_targets | cut -f1)"
   for s in ${SKIP[@]+"${SKIP[@]}"}; do
     known=0
-    for t in "${DIR_TARGETS[@]}"; do [ "$s" = "$t" ] && known=1; done
+    for t in "${DIR_TARGETS[@]}" local-bin; do [ "$s" = "$t" ] && known=1; done
     [ "$known" -eq 1 ] || grep -qxF -- "$s" <<< "$targets" || die "--skip: '$s' is not an install target (see the table in README.md)"
   done
 }
@@ -162,7 +182,8 @@ ensure_backup_dir() {
 }
 
 backup_target() {  # $1 = rel path
-  local rel="$1" dest="$CLAUDE_DIR/$1"
+  local rel="$1" dest
+  dest="$(dest_of "$1")"
   ensure_backup_dir
   if [ -e "$BACKUP_DIR/$rel" ] || [ -L "$BACKUP_DIR/$rel" ]; then
     die "backup collision: $BACKUP_DIR/$rel already exists; refusing to overwrite"
@@ -283,21 +304,23 @@ enable_git_hooks() {
 }
 
 do_install() {
-  local rel src dest linked=0 skipped=0 rc
+  local rel src dest stale on_path=0 linked=0 skipped=0 rc
   log "repo:   $REPO_DIR"
   log "target: $CLAUDE_DIR"
+  [ -n "$LOCAL_BIN" ] || log "note: HOME is not set, so command-line tools (autobuild) are not linked; set PANDASTACK_BIN_DIR to link them"
   guard_layout
   check_duplicates
   check_skips
   run mkdir -p "$CLAUDE_DIR"
   while IFS=$'\t' read -r rel srcrel; do
-    src="$REPO_DIR/$srcrel"; dest="$CLAUDE_DIR/$rel"
+    src="$REPO_DIR/$srcrel"; dest="$(dest_of "$rel")"
     if is_skipped "$rel"; then
       log "skip (--skip): $rel"; continue
     fi
     if [ ! -e "$src" ]; then
       log "skip (missing in repo): $rel"; continue
     fi
+    case "$rel" in local-bin/*) on_path=1 ;; esac
     if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$src" ]; then
       skipped=$((skipped + 1)); continue
     fi
@@ -306,7 +329,9 @@ do_install() {
       [ "$rc" -eq 0 ] && continue
       log "settings.json is valid JSON but not an object: backing it up and linking ours"
     fi
-    if is_stale_harness_link "$dest" "$rel"; then
+    # A tool on PATH is named for itself, not its repo path: match a moved repo by the source path.
+    stale="$rel"; case "$rel" in local-bin/*) stale="$srcrel" ;; esac
+    if is_stale_harness_link "$dest" "$stale"; then
       run rm "$dest"; log "removed stale harness link: $rel -> $(readlink "$dest" 2>/dev/null || echo '?')"
     elif [ -L "$dest" ] || [ -e "$dest" ]; then
       backup_target "$rel"
@@ -319,6 +344,10 @@ do_install() {
   if is_skipped bin/statusline.sh && points_into_repo "$CLAUDE_DIR/settings.json"; then
     warn "settings.json is linked to ours, whose statusLine runs bin/statusline.sh, which --skip left out: the status line stays blank"
   fi
+  case ":$PATH:" in
+    *":$LOCAL_BIN:"*) ;;
+    *) [ "$on_path" -eq 0 ] || warn "$LOCAL_BIN is not on your PATH: add it to run autobuild by name" ;;
+  esac
   prune_dangling
   enable_git_hooks
   log "done: $linked linked, $skipped already linked"
@@ -340,7 +369,7 @@ do_uninstall() {
   log "repo:   $REPO_DIR"
   log "target: $CLAUDE_DIR"
   while IFS=$'\t' read -r rel _; do
-    dest="$CLAUDE_DIR/$rel"
+    dest="$(dest_of "$rel")"
     if points_into_repo "$dest"; then
       run rm "$dest"; log "unlinked: $rel"; removed=$((removed + 1))
     fi
@@ -357,7 +386,11 @@ do_uninstall() {
   log "restoring from: $backup"
   while IFS= read -r rel; do
     [ -n "$rel" ] || continue
-    dest="$CLAUDE_DIR/$rel"
+    if [ -z "$LOCAL_BIN" ] && [ "${rel#local-bin/}" != "$rel" ]; then
+      warn "'$rel' kept in the backup: HOME is not set; set PANDASTACK_BIN_DIR and run --uninstall again to restore it"
+      remaining+=("$rel"); continue
+    fi
+    dest="$(dest_of "$rel")"
     if [ ! -e "$backup/$rel" ] && [ ! -L "$backup/$rel" ]; then
       warn "'$rel' listed in manifest but missing from backup; skipped"; continue
     fi
