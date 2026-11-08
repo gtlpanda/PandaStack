@@ -42,6 +42,15 @@ export function huntControlDir(config) {
   return path.join(git(config, ["rev-parse", "--path-format=absolute", "--git-dir"]).output.trim(), "autobuild");
 }
 
+/** Whether HEAD is the head a hunt ran at, or that head plus commits that only touch the progress file. */
+function sameHuntHead(config, hunted, head) {
+  if (!hunted) return false;
+  if (hunted === head) return true;
+  if (!git(config, ["merge-base", "--is-ancestor", hunted, head]).ok) return false;
+  const changed = git(config, ["diff", "--name-only", hunted, head]);
+  return changed.ok && changed.output.split("\n").filter(Boolean).every((file) => file === config.progressFile);
+}
+
 /** Every tracked file under a frozen path, except the writable ones: what the fixes may not change. */
 export function frozenFiles(config) {
   const paths = config.frozen.filter((entry) => !(config.writable ?? []).includes(entry));
@@ -67,7 +76,7 @@ export async function runBughunt(config, { log, runId, stopped = () => false }) 
   const target = git(config, ["rev-parse", "--abbrev-ref", "HEAD"]).output.trim();
   const head0 = git(config, ["rev-parse", "HEAD"]).output.trim();
   const previous = readJson(record);
-  if (previous && previous.head === head0 && Number.isInteger(previous.code)) {
+  if (previous && Number.isInteger(previous.code) && sameHuntHead(config, previous.head, head0)) {
     log(`bug hunt: already ran at ${head0.slice(0, 8)} (${previous.disposition ?? "skipped"}); not repeated`);
     return previous.code;
   }
@@ -164,14 +173,15 @@ export async function runBughunt(config, { log, runId, stopped = () => false }) 
   const date = new Date().toISOString().slice(0, 10);
   const entry = `BUGHUNT ${date}: ${result.disposition}; fixed ${fixed.length ? fixed.join(", ") : "none"}; open ${open.length ? open.join(", ") : "none"}${result.because.length ? ` (${result.because.join(", ")})` : ""}; report ${path.join(prep.stateDir, "report.md")}`;
   appendFileSync(path.join(config.root, config.progressFile), `\n${entry}\n`);
+  const exit = result.disposition === "pass" ? 0 : HUNT_EXIT;
+  // Recorded before the progress commit, so a commit that fails does not cost a second hunt.
+  writeFileSync(record, `${JSON.stringify({ head: git(config, ["rev-parse", "HEAD"]).output.trim(), code: exit, disposition: result.disposition })}\n`);
   const added = git(config, ["add", config.progressFile]);
   const committed = added.ok ? git(config, ["commit", "-q", "-m", `chore(bughunt): ${result.disposition}`]) : added;
   if (!committed.ok) {
     log(`bug hunt: ${landed.commits} fix(es) landed, but committing its ${config.progressFile} line failed (left uncommitted; commit it, then rerun):\n${committed.output.slice(-1500)}`);
     return HUNT_EXIT;
   }
-  const exit = result.disposition === "pass" ? 0 : HUNT_EXIT;
-  writeFileSync(record, `${JSON.stringify({ head: git(config, ["rev-parse", "HEAD"]).output.trim(), code: exit, disposition: result.disposition })}\n`);
   log(`bug hunt: ${landed.commits} verified fix(es) landed on ${target}; ${result.disposition}\n${bughuntLine(ledger, landed.commits > 0)}`);
   return exit;
 }

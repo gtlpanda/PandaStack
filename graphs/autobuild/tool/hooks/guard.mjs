@@ -101,12 +101,33 @@ if (["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(tool)) {
   process.exit(0);
 }
 
+/**
+ * Every simple command in `command`, as PandaStack's shell reader sees them, plus the commands
+ * find runs with -exec/-execdir/-ok/-okdir (read the same way, so a sh -c inside is read too).
+ */
+function allCommands(command, depth = 0) {
+  const out = [];
+  for (const cmd of simpleCommands(command)) {
+    out.push(cmd);
+    if (cmd.word !== "find" || depth > 3) continue;
+    cmd.args.forEach((arg, i) => {
+      if (!["-exec", "-execdir", "-ok", "-okdir"].includes(arg)) return;
+      const rest = cmd.args.slice(i + 1);
+      const end = rest.findIndex((token) => token === ";" || token === "\\;" || token === "+");
+      const nested = (end === -1 ? rest : rest.slice(0, end)).map((token) => `'${token.replace(/'/g, "'\\''")}'`).join(" ");
+      if (nested) out.push(...allCommands(nested, depth + 1));
+    });
+  }
+  return out;
+}
+
 if (tool === "Bash") {
   const command = String(params.command ?? "");
+  const commands = allCommands(command);
 
   const GIT_DENIED = new Set(["push", "reset", "checkout", "restore", "clean", "stash", "rebase", "filter-branch", "filter-repo", "update-ref",
     "switch", "worktree", "rm", "mv", "config", "remote", "gc", "prune", "reflog", "am", "apply", "cherry-pick", "revert", "merge", "pull", "fetch", "clone", "submodule"]);
-  for (const { word, args } of simpleCommands(command)) {
+  for (const { word, args } of commands) {
     if (word !== "git") continue;
     const { opts, sub: words } = gitSubcommand(args);
     // Config set on the command line that runs code: an alias (any subcommand, or a shell
@@ -126,7 +147,7 @@ if (tool === "Bash") {
   // .git, or to a computed place is denied; after a cd inside the project, every path below is
   // checked from that directory as well as from the root (cd tests && echo x > a.test).
   const cdDirs = [];
-  for (const { word, args } of simpleCommands(command)) {
+  for (const { word, args } of commands) {
     if (word !== "cd" && word !== "pushd") continue;
     const target = args.find((arg) => !arg.startsWith("-")) ?? "~";
     // The shell reader shows a command substitution as SUBST.
@@ -153,14 +174,22 @@ if (tool === "Bash") {
     if ((dup && /^\d+$/.test(target)) || target === "/dev/null") continue;
     if (frozenTarget(target)) deny(`redirecting output into ${target} is not allowed (frozen or outside the project).`);
   }
-  // Files a command writes through its arguments: every tee operand, and --output (git log,
-  // diff, format-patch, and others take it).
-  for (const { word, args } of simpleCommands(command)) {
+  // Files a command writes through its arguments: every tee operand, --output (git log, diff,
+  // format-patch and others), find's -fprint/-fprint0/-fprintf/-fls, and sed's w/W commands.
+  for (const { word, args } of commands) {
     const targets = word === "tee" ? args.filter((arg) => !arg.startsWith("-")) : [];
     args.forEach((arg, i) => {
       if (arg.startsWith("--output=")) targets.push(arg.slice("--output=".length));
       else if (arg === "--output" && args[i + 1]) targets.push(args[i + 1]);
+      if (word === "find" && ["-fprint", "-fprint0", "-fprintf", "-fls"].includes(arg) && args[i + 1]) targets.push(args[i + 1]);
     });
+    if (word === "sed") {
+      for (const arg of args) {
+        // GNU sed's e command runs its text as a shell command.
+        if (/(^|[;\n{}])\s*e(\s|$)/.test(arg)) deny("sed's e command runs a shell command; it is not allowed.");
+        for (const match of arg.matchAll(/(?:^|[;\n{}/])\s*[wW]\s*([^\s;}]+)/g)) targets.push(match[1]);
+      }
+    }
     for (const target of targets) if (frozenTarget(target)) deny(`${word} writing ${target} is not allowed (frozen or outside the project).`);
   }
   const mutating = /(^|[\s;&|(])(sed\s+-[^\s]*i|perl\s+-[^\s]*i|mv|cp|rm|unlink|truncate|chmod|chown|ln|touch|dd|install|patch|rsync)(\s|$)/;
@@ -170,7 +199,7 @@ if (tool === "Bash") {
   if (scripting.test(command) && frozenAnywhere.test(command)) deny("inline scripts that reference frozen files are not allowed.");
   const mentionsFrozen = command.split(/[\s;&|()]+/).some((token) => frozenTarget(token));
   // In-place edits, whatever flags come first (sed -E -i, sed -e s/a/b/ -i, perl -pi).
-  const inPlace = simpleCommands(command).some(({ word, args }) => (word === "sed" || word === "perl") && args.some((arg) => /^-[a-zA-Z]*i/.test(arg) || arg.startsWith("--in-place")));
+  const inPlace = commands.some(({ word, args }) => (word === "sed" || word === "perl") && args.some((arg) => /^-[a-zA-Z]*i/.test(arg) || arg.startsWith("--in-place")));
   if (mentionsFrozen && (mutating.test(command) || inPlace || scripting.test(command))) {
     deny("that command could modify frozen files or files outside the project. Read them freely; change the project's code instead.");
   }

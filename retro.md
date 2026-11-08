@@ -1771,3 +1771,22 @@ README already claimed:
 The README now says plainly that writes outside the project have no backstop. Mutation-checked:
 dropping the safe-git flags, or the post-session check, fails a test. Cost so far: about 7 min and
 about 1M subagent tokens per hunt round; 5 rounds.
+
+**/bughunt round 6** (7.1 min, 19 agents; security now covered, regression and contract
+partial). 4 findings, all reproduced; each test was checked against the unfixed head.
+- F2 (id reused) HIGH: `find . -exec git push …` ran git where the guard never looked, and a push
+  leaves the machine, so the backstop cannot catch it. Fixed: the guard also reads the commands
+  find runs (-exec, -execdir, -ok, -okdir) with the same shell reader.
+- F16 HIGH: `sed 'w FILE'` and `find -fprintf FILE` write files. For tracked frozen files the
+  new backstop already caught these; outside the project nothing did. Fixed: they count as
+  writes, and sed's `e` command (it runs a shell) is denied.
+- F18: install.sh died on an unbound HOME when only CLAUDE_CONFIG_DIR was set. My PATH-link
+  change caused it. Fixed: the link is skipped with a note.
+- F19: a failed progress commit left no record, so a rerun paid for the whole hunt again. Fixed:
+  the hunt is recorded before that commit, and a commit since that touches only the progress
+  file still counts as the same head.
+
+**Stopping rule** (set with the advisor after round 5): F2 was a HIGH the backstop does not
+cover, so it was fixed and hunting this branch stops after one more round, the one the gate needs
+to open the PR. A disposition other than `pass` goes to the owner for a by-hand merge, as with
+PR3.

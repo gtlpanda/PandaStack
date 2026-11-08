@@ -43,7 +43,9 @@ for g in "$REPO_DIR"/graphs/*/; do [ -d "$g" ] && SOURCE_ROOTS+=("graphs/$(basen
 # Command-line tools put on PATH, "<name><TAB><repo path>": each is one symlink in
 # LOCAL_BIN. Their rel path (backups, the manifest, --skip) is local-bin/<name>.
 PATH_TOOLS=("autobuild	graphs/autobuild/tool/bin/autobuild")
-LOCAL_BIN="${PANDASTACK_BIN_DIR:-$HOME/.local/bin}"
+# With no HOME (a container or cron run that sets only CLAUDE_CONFIG_DIR) and no
+# PANDASTACK_BIN_DIR, there is nowhere to put them: they are skipped with a note.
+LOCAL_BIN="${PANDASTACK_BIN_DIR:-${HOME:+$HOME/.local/bin}}"
 LOCAL_BIN="${LOCAL_BIN%/}"
 
 DRY_RUN=0
@@ -107,7 +109,7 @@ dest_of() {
 list_targets() {
   local t root entry name
   for t in "${FILE_TARGETS[@]}"; do printf '%s\t%s\n' "$t" "$t"; done
-  for t in "${PATH_TOOLS[@]}"; do printf 'local-bin/%s\n' "$t"; done
+  if [ -n "$LOCAL_BIN" ]; then for t in "${PATH_TOOLS[@]}"; do printf 'local-bin/%s\n' "$t"; done; fi
   for root in "${SOURCE_ROOTS[@]}"; do
     for t in "${DIR_TARGETS[@]}"; do
       [ -d "$REPO_DIR/$root/$t" ] || continue
@@ -305,6 +307,7 @@ do_install() {
   local rel src dest stale on_path=0 linked=0 skipped=0 rc
   log "repo:   $REPO_DIR"
   log "target: $CLAUDE_DIR"
+  [ -n "$LOCAL_BIN" ] || log "note: HOME is not set, so command-line tools (autobuild) are not linked; set PANDASTACK_BIN_DIR to link them"
   guard_layout
   check_duplicates
   check_skips
