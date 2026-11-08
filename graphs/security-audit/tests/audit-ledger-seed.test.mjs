@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
-import { ARCHITECTURE_WORD_CAP, byId, commitLedger, seed } from '../skills/security-audit/audit-ledger.mjs'
+import { ARCHITECTURE_WORD_CAP, byId, commitLedger, seed, seedProblems } from '../skills/security-audit/audit-ledger.mjs'
 import { VENDOR_SKILL_DIR, validateLedgerFile } from '../skills/security-audit/upstream.mjs'
 import { companions, ordinary } from '../skills/security-audit/blocks.mjs'
 import { audit, newRun } from './audit-fixtures.mjs'
@@ -197,6 +197,41 @@ await test('every problem of every unit is reported in one refusal, and nothing 
   const { runDir } = newRun()
   assert.throws(() => seed(runDir, reconInput([unitInput('a', { ordinary_attack_class_block: 'ATTACK-CLASSES.md#Nope' }), unitInput('b', { selected_companion_blocks: ['X.md#y'] })])), e => e.problems.length === 2 && /unit 0 /.test(e.problems[0]) && /unit 1 /.test(e.problems[1]))
   assert.ok(!existsSync(LEDGER_PATH(runDir)))
+})
+
+console.log('== seedProblems: what seed would refuse, without writing')
+await test('seedProblems lists every reason seed would refuse for and writes nothing; for input seed would take it lists none, and seed then agrees', () => {
+  const { runDir } = newRun()
+  const before = readdirSync(runDir).sort()
+  assert.deepEqual(seedProblems(runDir, reconInput([unitInput('a'), unitInput('b')])), [])
+  const words = Array(ARCHITECTURE_WORD_CAP + 1).fill('w').join(' ')
+  const cases = [
+    [reconInput([unitInput('a')], { architecture_md: words }), /architecture_md has \d+ words/],
+    [reconInput([unitInput('a', { starting_paths: ['src/nope.js'] })]), /unit 0 .*starting path src\/nope\.js is not in tree\//],
+    [reconInput([unitInput('a'), unitInput('a')]), /coverage_id is already unit 0's/],
+    [reconInput([unitInput('a', { ordinary_attack_class_block: 'none' })]), /ordinary_attack_class_block: malformed block reference/],
+    [reconInput([unitInput('a', { ordinary_attack_class_block: 'ATTACK-CLASSES.md#Made up' })]), /unknown block ATTACK-CLASSES\.md#Made up/],
+    [reconInput([]), /units must be a non-empty array/], [{ units: [unitInput('a')] }, /architecture_md is missing/],
+    [reconInput([unitInput('a', { surface: 'Same labels', canonical_refs: refsOf('x') }), unitInput('b', { surface: 'Same labels', canonical_refs: refsOf('y') })]), /semantic tuple|already/],
+  ]
+  for (const [input, pattern] of cases) {
+    const problems = seedProblems(runDir, input)
+    assert.ok(problems.length > 0 && problems.some(p => pattern.test(p)), `${pattern}: ${JSON.stringify(problems).slice(0, 200)}`)
+    assert.throws(() => seed(runDir, input), e => problems.every(p => `${e.message}\n${(e.problems ?? []).join('\n')}`.includes(p.slice(0, 30))), 'seed refuses what seedProblems listed')
+  }
+  for (const bad of [null, 'prose', 7, [], undefined]) assert.match(seedProblems(runDir, bad).join(' '), /recon\.json must be an object/)
+  assert.deepEqual(readdirSync(runDir).sort(), before, 'nothing was written, not even a scratch file')
+  assert.ok(!existsSync(LEDGER_PATH(runDir)))
+  seed(runDir, reconInput([unitInput('a'), unitInput('b')]))
+  assert.ok(ledgerValid(runDir))
+})
+await test('seedProblems runs upstream\'s validator on the whole ledger, so a refusal only the validator would make is found too, and it does not require seed to be next', () => {
+  const run = seeded([unitInput('a')])
+  assert.ok(Array.isArray(seedProblems(run.runDir, reconInput([unitInput('z')]))), 'after the seed has run it still answers (it is a check, not a step)')
+  const { runDir } = newRun()
+  const tuple = (name, refs) => unitInput(name, { canonical_refs: refs, surface: 'One surface', boundary: 'One boundary', subsystem: 'One subsystem', attack_class: 'One class' })
+  const problems = seedProblems(runDir, reconInput([tuple('a', refsOf('p')), tuple('b', refsOf('q'))]))
+  assert.ok(problems.some(p => /semantic tuple|coverage ID/.test(p)), JSON.stringify(problems))
 })
 
 console.log('== seed: scope, and every upstream state kept distinct')

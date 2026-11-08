@@ -164,10 +164,8 @@ export function unitFromInput(input, ctx) {
 // ---------- seed ----------
 const wordCount = text => text.trim().split(/\s+/).length
 
-export function seed(runDir, input) {
-  const started = Date.now()
-  const run = loadRun(runDir)
-  expectStep(run, 'seed')
+// Everything seed does up to the write: the units of this run with every usable earlier run folded in. Throws a refusal naming each problem.
+function buildSeed(runDir, run, input) {
   const notes = []
   const priors = loadPriors(runDir, notes)
   const ctx = { runDir, scope: run.meta.scope_paths, priorStatus: priors.length ? 'new' : 'none' }
@@ -187,7 +185,28 @@ export function seed(runDir, input) {
     units.push(built.unit)
   })
   if (problems.length) fail(`seed refused: ${problems.length} problem(s); nothing was written`, problems)
-  const carry = carryForward(run.meta, priors, units, ctx)
+  return { carry: carryForward(run.meta, priors, units, ctx), notes, priors }
+}
+
+// What seed would refuse `input` for, as a list of plain strings (empty when it would write), without writing anything: the same
+// computation, then the in-memory pass of upstream's validator that commitLedger makes first. It is a check, not a step, so it does not
+// need seed to be next: audit-stage.mjs asks it before saving a synthesizer's result, so a result seed would refuse never reaches seed.
+export function seedProblems(runDir, input) {
+  const run = loadRun(runDir)
+  try {
+    const { carry } = buildSeed(runDir, run, input)
+    return validateLedgerDocument(clone([...carry.units].sort(byId))).slice(0, MAX_PROBLEMS)
+  } catch (e) {
+    if (Array.isArray(e.problems)) return [e.message, ...e.problems]
+    throw e
+  }
+}
+
+export function seed(runDir, input) {
+  const started = Date.now()
+  const run = loadRun(runDir)
+  expectStep(run, 'seed')
+  const { carry, notes, priors } = buildSeed(runDir, run, input)
   commitLedger(runDir, carry.units, () => {
     writeText(join(runDir, 'architecture.md'), `${input.architecture_md.trim()}\n`)
     writeJson(join(runDir, 'candidates.json'), carry.pool)   // a seed starts the pool: only carried records can be in it
