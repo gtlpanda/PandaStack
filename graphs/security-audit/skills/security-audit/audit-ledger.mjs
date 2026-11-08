@@ -231,7 +231,6 @@ function applyUnitResult(unit, entry, candidates) {
   if (checks.some(c => c.method !== 'source')) return { reason: 'a check is not method "source" (no sandbox, so no local artifact can be promoted)' }
   if (checks.some(c => c.agent_id !== unit.agent_id)) return { reason: `a check is not owned by the assigned hunter ${unit.agent_id}` }
   const linked = entry.candidate_fingerprints ?? []
-  if (entry.disposition !== 'candidate' && linked.length) return { reason: `only a candidate unit carries fingerprints (this one is ${entry.disposition})` }
   if (Array.isArray(linked) && linked.some(f => !candidates.has(f))) return { reason: 'a linked fingerprint has no valid entry in the result\'s candidates' }
   const merged = {
     ...unit, status: entry.disposition, reviewed_paths: entry.reviewed_paths, local_checks: checks,
@@ -251,11 +250,12 @@ function candidateIndex(result) {
 }
 
 // A unit whose result failed returns to planned for reassignment (HUNTING.md); counted, and deferred with a stated reason when it
-// has failed MAX_UNIT_ATTEMPTS times, so a unit that no hunter can answer cannot loop forever.
+// has failed MAX_UNIT_ATTEMPTS times, so a unit that no hunter can answer cannot loop forever. `unit` is the in_progress unit the
+// wave assigned, which has no evidence and nothing unresolved, so only its owner and status change.
 function returnToPlanned(unit, reason) {
   const failed = (unit.failed_attempts ?? 0) + 1
-  const back = { ...unit, agent_id: null, reviewed_paths: [], local_checks: [], result_fingerprints: [], failed_attempts: failed, last_failure: reason }
-  return failed >= MAX_UNIT_ATTEMPTS ? { ...back, status: 'deferred', unresolved: [FAILED_TWICE] } : { ...back, status: 'planned', unresolved: [] }
+  const back = { ...unit, agent_id: null, failed_attempts: failed, last_failure: reason }
+  return failed >= MAX_UNIT_ATTEMPTS ? { ...back, status: 'deferred', unresolved: [FAILED_TWICE] } : { ...back, status: 'planned' }
 }
 
 const uncoveredKey = e => JSON.stringify([e.surface, e.boundary, e.subsystem, e.attack_class])

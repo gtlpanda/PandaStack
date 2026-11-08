@@ -239,6 +239,15 @@ await test('a prior run that was compatible at init and was damaged since is ski
   assert.equal(validateFindingsFile(join(prior, 'findings.json')).valid, false)
   assert.deepEqual(loadPriors(runDir, []).length, 0)
 })
+await test('a prior ledger damaged after init is skipped and said, not read: no garbage unit reaches the new ledger', () => {
+  const { runDir, prior } = scenario()
+  writeFileSync(join(prior, 'coverage-ledger.json'), JSON.stringify([{ coverage_id: 'x', status: 'covered' }]))
+  const out = seed(runDir, recon())
+  assert.match(out.notes.join('\n'), /earlier run run-1 no longer validates/)
+  assert.ok(Object.values(labels(runDir)).every(l => l === 'none'))
+  assert.equal(readLedger(runDir).length, 9)
+  assert.ok(ledgerValid(runDir))
+})
 await test('a prior run without a findings.json (it stopped before Phase 4) still carries its units, with no records', () => {
   const repo = mkRepo(FILES)
   const prior = priorRun(repo, [priorUnit('cov')], [])
