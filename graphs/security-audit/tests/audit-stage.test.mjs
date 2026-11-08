@@ -492,7 +492,7 @@ await test('a later stage is named as not built yet, so a session cannot plan a 
   assert.equal(audit(['next', runDir]).last, 'NEXT: validate run=workflow')
   const r = stage(['plan', runDir])
   assert.equal(r.status, 1)
-  assert.equal(r.last, 'AUDIT: FAIL stage validate is not built in this version of audit-stage.mjs (it plans recon, hunt, critic, mint): NEXT: validate run=workflow')
+  assert.equal(r.last, 'AUDIT: FAIL stage validate is not built in this version of audit-stage.mjs (it plans recon, hunt, critic, mint, consolidate): NEXT: validate run=workflow')
   assert.match(stage(['apply', runDir, 'x.json']).last, /^AUDIT: FAIL stage validate is not built in this version/)
   assert.ok(!existsSync(join(runDir, 'stages')))
 })

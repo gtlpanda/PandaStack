@@ -6,7 +6,7 @@
 //   node audit-stage.mjs plan  <run dir>
 //   node audit-stage.mjs apply <run dir> <returned.json>     returned.json: what the Workflow tool returned, as JSON
 //
-// Both run only when `audit-run.mjs next` names a Workflow stage this version builds (recon, hunt, critic, mint), so a stage cannot be
+// Both run only when `audit-run.mjs next` names a Workflow stage this version builds (recon, hunt, critic, mint, consolidate), so a stage cannot be
 // planned or applied out of order. A command's last line is "AUDIT: OK <cmd> ..." (exit 0) or "AUDIT: FAIL <reason>" (exit 1); bad usage is
 // on stderr, exit 2.
 //
@@ -17,6 +17,8 @@
 //
 // hunt, critic and mint are one Workflow run each. hunt writes hunter-results.json, which `audit-ledger.mjs merge-wave` takes; critic writes
 // critic.json; mint writes mint.json, and critic.json and mint.json are what `audit-ledger.mjs apply-critic` takes. Each saves its step.
+// consolidate (audit-verdicts.mjs) groups the candidates of one root cause and rewrites candidates.json and the ledger only for a grouping that
+// covers every fingerprint exactly once.
 //
 // A stage lives in stages/<NN>-<name>/: input.json and run.js (plan), result.json (apply, written last, so a stage without one
 // is planned and not applied). Every effect of apply is idempotent and the step is saved last, so a crash leaves the step behind its
@@ -31,6 +33,7 @@ import { applyCriticProblems, criticBudgetExhausted, criticResultProblems, defer
 import { RECON_IDS, checkFacts } from './audit-facts.mjs'
 import { companions, ordinary, parts, resolve as resolveBlock } from './blocks.mjs'
 import { CLIP, architectureOf, baseInput, blockText, clipText, clipValue } from './audit-inputs.mjs'
+import { applyConsolidate, consolidateInput } from './audit-verdicts.mjs'
 
 // Found from the real file, so the install symlink (~/.claude/skills/security-audit) does not matter, as in upstream.mjs.
 const REPO_ROOT = join(dirname(realpathSync(fileURLToPath(import.meta.url))), '..', '..', '..', '..')
@@ -45,6 +48,7 @@ export const MAX_SCRIPT_BYTES = 500_000
 export const MAX_SYNTH_ATTEMPTS = 2
 export const LEDGER_FAILED = 'ledger_validation_failed'
 export const STAGE_TOO_LARGE = 'stage_input_too_large'   // PandaStack's own reason: a wave stage whose input will not fit one run script ends the run
+const WAVE_STAGES = ['hunt', 'critic', 'mint']          // the stages that size is a reason to end the run for: they can neither be split nor skipped
 const SEED_FEEDBACK = 'seed-feedback.json'
 const MINT_FEEDBACK = 'mint-feedback.json'   // the same for a minter result apply-critic would refuse, kept per wave
 const MAX_DROPPED_LISTED = 200
@@ -228,7 +232,7 @@ export function mintInput(runDir, run, next) {
 }
 
 // `step` may run only when `audit-run.mjs next` names it, and only a stage this version builds.
-const BUILT = ['recon', 'hunt', 'critic', 'mint']
+const BUILT = ['recon', 'hunt', 'critic', 'mint', 'consolidate']
 function expectStage(run) {
   const next = nextStep(run)
   if (RUNNERS[next.step] !== 'workflow') refuse(`the next step is not a Workflow stage: ${formatNext(next)}`)
@@ -283,6 +287,7 @@ const PLANNERS = {
     if (input.proposals.length) stopOnCriticBudget(runDir, run, 'mint', 'the minter')   // with nothing to mint no agent is called, so nothing is gated
     return { label: `mint-${input.kind}-w${next.wave}`, part: 'mint', input }
   },
+  consolidate: (runDir, run) => ({ label: 'consolidate', part: 'consolidate', input: consolidateInput(runDir, run) }),   // skips itself (and says so) when there is nothing to group or no room
 }
 
 export function planStage(runDir) {
@@ -296,7 +301,7 @@ export function planStage(runDir) {
   const r = spawnSync(process.execPath, [RUN_SCRIPT, SEAM, input, WORKFLOW_FILE, script], { encoding: 'utf8' })
   if (r.status !== 0 || !r.stdout.startsWith('run-script: wrote')) refuse(`run-script.mjs did not write the run script: ${(r.stdout + r.stderr).trim().split('\n').at(-1)}`)
   const bytes = statSync(script).size
-  if (bytes > MAX_SCRIPT_BYTES && next.step !== 'recon') {
+  if (bytes > MAX_SCRIPT_BYTES && WAVE_STAGES.includes(next.step)) {
     // The Workflow tool would refuse this script and nothing here can split the input, so the stage can never run: the run ends, as upstream's early stop says
     // (mark every untouched unit deferred, disclose the gap), instead of staying at a step that cannot be planned.
     rmSync(stage.dir, { recursive: true, force: true })
@@ -306,7 +311,7 @@ export function planStage(runDir) {
   }
   if (bytes > MAX_SCRIPT_BYTES) {
     rmSync(script)
-    refuse(`the run script would be ${bytes} bytes; the Workflow tool refuses a script file over 524288 bytes and this version stops at ${MAX_SCRIPT_BYTES} (input: ${statSync(input).size} bytes).${' If the facts are the cause, delete recon-facts.json and plan again to run the facts part afresh'}`)
+    refuse(`the run script would be ${bytes} bytes; the Workflow tool refuses a script file over 524288 bytes and this version stops at ${MAX_SCRIPT_BYTES} (input: ${statSync(input).size} bytes).${next.step === 'recon' ? ' If the facts are the cause, delete recon-facts.json and plan again to run the facts part afresh' : ''}`)
   }
   appendEvent(runDir, { cmd: 'plan', stage: next.step, result: 'ok', duration_ms: Date.now() - started, part: planned.part, stage_dir: stage.name, script_bytes: bytes })
   return { step: next.step, part: planned.part, stage, script, bytes, returned: join(stage.dir, 'returned.json') }
@@ -422,6 +427,11 @@ const APPLIERS = {
     advanceState(runDir, 'mint')
     event('ok', { counts: { proposals: input.proposals.length, units: units.length } })
     return { summary: `mint wave=${input.wave} proposals=${input.proposals.length} units=${units.length} agents=${result.budgetSpent}`, notes, then: `node audit-ledger.mjs apply-critic ${runDir} ${join(runDir, 'critic.json')} ${join(runDir, 'mint.json')}` }
+  },
+
+  consolidate(ctx) {
+    if (!Array.isArray(ctx.result.results.groups)) refuse('the consolidate result needs a groups list; nothing was changed')
+    return applyConsolidate(ctx)
   },
 }
 
