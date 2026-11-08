@@ -1827,6 +1827,14 @@ reach `pass` on this branch by itself. The guard's text-matching class keeps pro
 spellings. The owner merges by hand, with the residual risk stated in the README: writes outside
 the project have no backstop beyond the tripwire.
 
+**Follow-up (2026-11-08): higher default caps.** The owner asked for higher budget defaults. On cherry-crm, one
+review session cost $10.85 against the $5 cap (the CLI checks the cap between turns, so a session can run past
+it), the largest builder session cost $8.85 against $15, and every autobuild project on this machine had already
+overridden the builder and review caps with 100000. New defaults: `maxBudgetUsd` $15 to $50 (and the
+new-project template), `reviewBudgetUsd` $5 to $25, `limits.bughuntBudgetUsd` $30 to $100. A project's own
+`limits` and the env overrides still win (`test/config-defaults.test.mjs`, 3 tests; it fails on the old
+defaults). The security-audit graph has no default cap to raise: without `--budget` it is unbounded.
+
 **Docs follow-up (PR5).** The README's "What's installed and where" section was added after this
 merged: each piece, where it lives in the repo and on the machine, and the state it keeps, plus
 the path a change takes to `main`. On this machine after the merge:
