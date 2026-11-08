@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyCritic, mergeWave, planWave } from '../skills/security-audit/audit-ledger.mjs'
 import { advanceState } from '../skills/security-audit/audit-run.mjs'
+import { writeFindings } from '../skills/security-audit/audit-findings.mjs'
 import assert from 'node:assert/strict'
 import { audit } from './audit-fixtures.mjs'
 import { returnedFile, runScript, stage, stageDirOf } from './stage-fixtures.mjs'
@@ -67,3 +68,25 @@ export async function round(runDir, answerFor) {
   return { plan, dir, input, ran, apply: stage(['apply', runDir, returnedFile(dir, ran.result)]), prompts: Object.fromEntries(ran.calls.map(c => [c.label, c.prompt])) }
 }
 export const good = c => verified(c.fingerprint)
+
+// Validated and written: the point verify starts from. `answer(label, candidate)` is the Phase 3 verifier's answer (a needs_validation record unless it says otherwise).
+export async function atVerify(defs, opts, answer = (l, c) => good(c)) {
+  const run = toValidate(defs, opts)
+  const res = await round(run.runDir, answer)
+  assert.equal(res.apply.status, 0, res.apply.stdout)
+  writeFindings(run.runDir)
+  assert.equal(next(run.runDir), 'NEXT: verify run=workflow')
+  return run
+}
+// plan, run the generated script against Phase 5 verifiers (audit-researcher for a record, audit-analyst for a replacement), apply: like round() for verify.
+export async function verifyRound(runDir, answerFor) {
+  const plan = stage(['plan', runDir])
+  assert.equal(plan.status, 0, plan.stdout)
+  const dir = stageDirOf(plan, runDir)
+  const input = readJsonFile(dir, 'input.json')
+  const queue = type => input.items.filter(i => (i.kind === 'phase5' ? 'audit-researcher' : 'audit-analyst') === type).map(() => (prompt, opts) => answerFor(opts.label, input.items.find(i => i.agent_id === opts.label)))
+  const ran = await runScript(join(dir, 'run.js'), { 'audit-researcher': queue('audit-researcher'), 'audit-analyst': queue('audit-analyst') })
+  return { plan, dir, input, ran, apply: stage(['apply', runDir, returnedFile(dir, ran.result)]), prompts: Object.fromEntries(ran.calls.map(c => [c.label, c.prompt])), types: Object.fromEntries(ran.calls.map(c => [c.label, c.agentType])) }
+}
+export const passed = item => ({ decision: 'verified', fingerprint: item.fingerprint })
+export const replaced = (item, over, reason = 'the record says more than the source shows') => ({ decision: 'replace', reason, record: { ...item.record, ...over } })

@@ -486,17 +486,6 @@ await test('plan and apply run only when `next` names recon: not after seed, not
   assert.match(stage(['plan', empty]).last, /^AUDIT: FAIL .* has no run-metadata\.json: it is not a run directory/)
   assert.match(stage(['apply', empty, 'x.json']).last, /^AUDIT: FAIL .* has no run-metadata\.json/)
 })
-await test('a later stage is named as not built yet, so a session cannot plan a verification this version cannot run', () => {
-  const { runDir } = seeded([unitInput('a')])
-  advanceState(runDir, 'write-findings')
-  writeFileSync(join(runDir, 'findings.json'), JSON.stringify([{ verdict: 'needs_validation' }]))
-  assert.equal(audit(['next', runDir]).last, 'NEXT: verify run=workflow')
-  const r = stage(['plan', runDir])
-  assert.equal(r.status, 1)
-  assert.equal(r.last, 'AUDIT: FAIL stage verify is not built in this version of audit-stage.mjs (it plans recon, hunt, critic, mint, consolidate, validate): NEXT: verify run=workflow')
-  assert.match(stage(['apply', runDir, 'x.json']).last, /^AUDIT: FAIL stage verify is not built in this version/)
-  assert.ok(!existsSync(join(runDir, 'stages')))
-})
 await test('apply with nothing planned, with a missing file, a torn file, or a value that is not the workflow\'s result, refuses and writes nothing', async () => {
   const { runDir } = newInit()
   const none = files(runDir)

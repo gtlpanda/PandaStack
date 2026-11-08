@@ -6,7 +6,7 @@ import { readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import { MAX_VALIDATE_BYTES, bounded, judgeValidator, validateInput } from '../skills/security-audit/audit-verdicts.mjs'
-import { agentId } from '../skills/security-audit/audit-findings.mjs'
+import { agentId, writeFindings } from '../skills/security-audit/audit-findings.mjs'
 import { MAX_SCRIPT_BYTES } from '../skills/security-audit/audit-stage.mjs'
 import { advanceState, loadRun, recordSpend } from '../skills/security-audit/audit-run.mjs'
 import { canonicalCoverageId } from '../skills/security-audit/upstream.mjs'
@@ -332,6 +332,35 @@ await test('a carried prior record is validated like a candidate: its unit becom
   ok(run.runDir)
 })
 
+await test('a carried unit with two prior leads becomes one candidate holding both fingerprints, owned by the first verifier, with each verifier\'s check: no lead is linked from nowhere', async () => {
+  const refs = refsOf('carry', { subsystem: 'carry' })
+  const carriedUnit = priorUnit('carry', 'candidate', { canonical_refs: refs, coverage_id: canonicalCoverageId(refs), result_fingerprints: ['fp-c1', 'fp-c2'] })
+  const before = repo => priorRun(repo, [carriedUnit], [needsValidationRecord('fp-c1'), needsValidationRecord('fp-c2')])
+  const run = toValidate([{ name: 'carry', candidates: [] }, { name: 'x', candidates: ['fp-x'] }], { before })
+  const res = await round(run.runDir, (label, c) => good(c))
+  assert.equal(res.apply.status, 0, res.apply.stdout)
+  assert.deepEqual(res.input.candidates.map(c => c.fingerprint), ['fp-c1', 'fp-c2', 'fp-x'])
+  const after = unitByName(run.runDir).carry
+  assert.deepEqual([after.status, after.agent_id, after.result_fingerprints, after.local_checks.map(c => c.agent_id)], ['candidate', 'v01', ['fp-c1', 'fp-c2'], ['v01', 'v02']])
+  ok(run.runDir)
+  assert.equal(writeFindings(run.runDir).summary.split(' ')[0], 'records=3', 'both leads are linked from the unit, so the link-check passes and findings.json is written')
+})
+await test('independence is asserted again at apply: a hunter ID written into the history after the plan makes apply refuse, and nothing changes', async () => {
+  const run = toValidate([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }])
+  const plan = stage(['plan', run.runDir])
+  const dir = stageDirOf(plan, run.runDir)
+  const input = readJsonFile(dir, 'input.json')
+  const ran = await runScript(join(dir, 'run.js'), { 'audit-analyst': input.candidates.map(() => (p, opts) => good(input.candidates.find(c => c.agent_id === opts.label))) })
+  const h = readJsonFile(run.runDir, 'agent-history.json')
+  h.fingerprints['fp-a'] = h.fingerprints['fp-a'].filter(e => e.role !== 'validator').concat([{ role: 'hunter', id: 'v01' }])
+  writeFileSync(join(run.runDir, 'agent-history.json'), JSON.stringify(h))
+  const file = returnedFile(dir, ran.result)
+  const before = snapshot(run.runDir)
+  const r = stage(['apply', run.runDir, file])
+  assert.equal(r.status, 1)
+  assert.match(r.last, /^AUDIT: FAIL agent v01 already served as hunter of fp-a: it cannot also be its validator/)
+  assert.deepEqual(snapshot(run.runDir), before)
+})
 console.log('== crash windows and mutation')
 await test('a crash after the effects landed and before the step was saved is finished by applying the same result again: nothing is judged twice, the cost is recorded once, the ledger is the same', async () => {
   const run = toValidate([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }])

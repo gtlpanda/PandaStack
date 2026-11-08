@@ -373,7 +373,8 @@ export function completeProblems(runDir) {
     if (!e || e.state !== 'decided') { note(`record ${show(r.fingerprint)} has no decision`); continue }
     const roles = (history.fingerprints[r.fingerprint] ?? []).filter(h => !['hunter'].includes(h.role))
     if (!roles.some(h => h.role === 'validator')) note(`record ${show(r.fingerprint)} was verified by no Phase 3 verifier`)
-    if (needsPhase5(r) && !(e.phase5?.state === 'verified' && roles.some(h => h.role === 'verifier' && h.id === e.phase5.verifier_id))) note(`record ${show(r.fingerprint)} did not pass Phase 5`)
+    // Phase 5 passed means a verifier that is not the hunter or the Phase 3 verifier said so: the Phase 5 verifier, or the new one a material replacement went to.
+    if (needsPhase5(r) && !(e.phase5?.state === 'verified' && roles.some(h => ['verifier', 'replacer'].includes(h.role) && h.id === e.phase5.verifier_id))) note(`record ${show(r.fingerprint)} did not pass Phase 5`)
     if (!isDeepStrictEqual(e.record, r)) note(`record ${show(r.fingerprint)} in findings.json is not the decided record`)
   }
   return { problems, unresolved: link.unresolved }

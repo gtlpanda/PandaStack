@@ -6,7 +6,7 @@
 //   node audit-stage.mjs plan  <run dir>
 //   node audit-stage.mjs apply <run dir> <returned.json>     returned.json: what the Workflow tool returned, as JSON
 //
-// Both run only when `audit-run.mjs next` names a Workflow stage this version builds (recon, hunt, critic, mint, consolidate, validate), so a stage cannot be
+// Both run only when `audit-run.mjs next` names a Workflow stage (recon, hunt, critic, mint, consolidate, validate, verify), so a stage cannot be
 // planned or applied out of order. A command's last line is "AUDIT: OK <cmd> ..." (exit 0) or "AUDIT: FAIL <reason>" (exit 1); bad usage is
 // on stderr, exit 2.
 //
@@ -19,7 +19,8 @@
 // critic.json; mint writes mint.json, and critic.json and mint.json are what `audit-ledger.mjs apply-critic` takes. Each saves its step.
 // consolidate (audit-verdicts.mjs) groups the candidates of one root cause and rewrites candidates.json and the ledger only for a grouping that
 // covers every fingerprint exactly once. validate is Phase 3: one verifier per candidate, in rounds (a retry, or a batch the script cannot hold, is
-// another round), decisions.json holding where each candidate stands; the step is saved, and the ledger written, when none is pending.
+// another round), decisions.json holding where each candidate stands; the step is saved, and the ledger written, when none is pending. verify is Phase 5
+// (audit-verify.mjs), in rounds the same way, and ends the run: complete only if complete-check passes.
 //
 // A stage lives in stages/<NN>-<name>/: input.json and run.js (plan), result.json (apply, written last, so a stage without one
 // is planned and not applied). Every effect of apply is idempotent and the step is saved last, so a crash leaves the step behind its
@@ -35,6 +36,7 @@ import { RECON_IDS, checkFacts } from './audit-facts.mjs'
 import { companions, ordinary, parts, resolve as resolveBlock } from './blocks.mjs'
 import { CLIP, architectureOf, baseInput, blockText, clipText, clipValue } from './audit-inputs.mjs'
 import { applyConsolidate, applyValidate, consolidateInput, validateInput } from './audit-verdicts.mjs'
+import { applyVerify, verifyInput } from './audit-verify.mjs'
 
 // Found from the real file, so the install symlink (~/.claude/skills/security-audit) does not matter, as in upstream.mjs.
 const REPO_ROOT = join(dirname(realpathSync(fileURLToPath(import.meta.url))), '..', '..', '..', '..')
@@ -231,12 +233,10 @@ export function mintInput(runDir, run, next) {
   }
 }
 
-// `step` may run only when `audit-run.mjs next` names it, and only a stage this version builds.
-const BUILT = ['recon', 'hunt', 'critic', 'mint', 'consolidate', 'validate']
+// `step` may run only when `audit-run.mjs next` names it: every Workflow step has a planner and an applier below.
 function expectStage(run) {
   const next = nextStep(run)
   if (RUNNERS[next.step] !== 'workflow') refuse(`the next step is not a Workflow stage: ${formatNext(next)}`)
-  if (!BUILT.includes(next.step)) refuse(`stage ${next.step} is not built in this version of audit-stage.mjs (it plans ${BUILT.join(', ')}): ${formatNext(next)}`)
   return next
 }
 
@@ -292,6 +292,11 @@ const PLANNERS = {
   validate(runDir, run) {
     const input = validateInput(runDir, run)
     return { label: `validate-r${input.round}`, part: 'validate', input }
+  },
+  // Phase 5, in rounds: a record's first verifier, then (for a material replacement) a new independent one, a retry after a discarded result.
+  verify(runDir, run) {
+    const input = verifyInput(runDir, run)
+    return { label: `verify-r${input.round}`, part: 'verify', input }
   },
 }
 
@@ -440,6 +445,7 @@ const APPLIERS = {
   },
 
   validate: applyValidate,
+  verify: applyVerify,
 }
 
 export function applyStage(runDir, returnedFile) {

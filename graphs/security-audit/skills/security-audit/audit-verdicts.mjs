@@ -206,29 +206,39 @@ export function validatedLedger(ledger, decisions) {
       const u = unit(id)
       if (!u) continue
       if (e.state === 'decided') {
-        const carried = u.status === 'planned' && CARRIED.includes(u.prior_status)
-        if (!(carried || (u.status === 'candidate' && u.result_fingerprints.includes(e.fingerprint)))) continue
+        // A carried prior record's unit is planned in the ledger as it stood before validation; `u` may already hold an earlier lead of the same unit (the unit has become
+        // a candidate, owned by the first verifier, and each further lead adds its fingerprint and its verifier's check).
+        const was = ledger.find(x => x.coverage_id === id)
+        const carried = was.status === 'planned' && CARRIED.includes(was.prior_status)
+        const holds = carried || (u.status === 'candidate' && u.result_fingerprints.includes(e.fingerprint))
         const check = verifierCheck(e)
-        if (u.local_checks.some(c => c.agent_id === check.agent_id)) continue
-        const next = { ...u, local_checks: [...u.local_checks, check], reviewed_paths: [...new Set([...u.reviewed_paths, ...check.reviewed_paths])] }
-        patch.set(id, carried ? { ...next, status: 'candidate', agent_id: e.verifier_id, result_fingerprints: [e.fingerprint], unresolved: [] } : next)
-      } else if (e.state === 'unvalidated' && u.status === 'candidate' && u.result_fingerprints.includes(e.fingerprint) && !u.unresolved.includes(e.unresolved)) {
-        patch.set(id, { ...u, unresolved: [...u.unresolved, e.unresolved] })
+        if (holds && !u.local_checks.some(c => c.agent_id === check.agent_id)) {
+          const next = { ...u, local_checks: [...u.local_checks, check], reviewed_paths: [...new Set([...u.reviewed_paths, ...check.reviewed_paths])] }
+          patch.set(id, carried ? { ...next, status: 'candidate', agent_id: u.agent_id ?? e.verifier_id, result_fingerprints: [...new Set([...u.result_fingerprints, e.fingerprint])], unresolved: [] } : next)
+        }
       }
+      // A candidate that is not a finding stays an unresolved candidate of its unit, with the reason: one no verifier validated, or a record Phase 5 removed.
+      const why = e.state === 'unvalidated' ? e.unresolved : e.phase5?.state === 'removed' ? e.phase5.reason : null
+      const now = unit(id)
+      if (why && now.status === 'candidate' && now.result_fingerprints.includes(e.fingerprint) && !now.unresolved.includes(why)) patch.set(id, { ...now, unresolved: [...now.unresolved, why] })
     }
   }
   return ledger.map(u => patch.get(u.coverage_id) ?? u)
 }
 
-// Closes the step: the ledger carries the decisions, and the step is saved last. A ledger the validator would refuse (nothing here is known to make one) ends the run with its
-// own reason and is not retried: the step is closed all the same, so that `next` goes on to write-findings and the report discloses it.
-function closeValidation(runDir, run, decisions) {
-  const entries = decisions.entries.map(e => ({ ...e, units: readPool(runDir).find(c => c.fingerprint === e.fingerprint)?.units ?? [] }))
+// The ledger carries the decisions: one write, through upstream's validator. A ledger it would refuse (nothing here is known to make one) ends the run with its own reason and is
+// not retried, so that the step can still be closed, `next` goes on, and the report discloses it. `stage` names the stage for the event.
+export function syncLedger(runDir, run, decisions, stage) {
+  const pool = readPool(runDir)
+  const entries = decisions.entries.map(e => ({ ...e, units: pool.find(c => c.fingerprint === e.fingerprint)?.units ?? [] }))
   try { commitLedger(runDir, validatedLedger(run.ledger, { ...decisions, entries })) } catch (err) {
     if (!err.problems) throw err
     markIncomplete(runDir, LEDGER_FAILED)
-    appendEvent(runDir, { cmd: 'apply', stage: 'validate', result: 'failed', reason: LEDGER_FAILED, problems: err.problems.slice(0, 5) })
+    appendEvent(runDir, { cmd: 'apply', stage, result: 'failed', reason: LEDGER_FAILED, problems: err.problems.slice(0, 5) })
   }
+}
+function closeValidation(runDir, run, decisions) {
+  syncLedger(runDir, run, decisions, 'validate')
   advanceState(runDir, 'validate')
 }
 
