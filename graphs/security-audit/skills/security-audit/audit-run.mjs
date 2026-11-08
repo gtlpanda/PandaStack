@@ -749,6 +749,10 @@ function runInit(argv) {
   if (s.dirty) console.log(`note: the working tree has uncommitted changes (${s.uncommitted.tracked} tracked, ${s.uncommitted.untracked} untracked); only the committed snapshot ${s.commit.slice(0, 12)} is audited`)
   if (snapshot.skipped_total) console.log(`note: ${snapshot.skipped_total} symlink(s) and submodule(s) are not in tree/ (listed in run-metadata.json)`)
   for (const p of priors.filter(p => !p.compatible).slice(0, 5)) console.log(`note: earlier run ${p.run_id} is incompatible (${p.reasons[0]}); it is recorded in prior-runs.json, never treated as empty coverage`)
+  // What a session says to its user before any agent runs: printed here, because an instruction to "tell the user" was skipped by the session in two live runs, and a note it is told to relay is in the transcript either way.
+  console.log(`note: what runs: about one agent per coverage unit, then one or two verifiers per surviving lead; ${metadata.budget === null ? 'no budget is set, so nothing stops spend but you' : `a budget of ${metadata.budget} agent invocations is set`}`)
+  console.log(`note: the agents can only read, search and list files in a read-only snapshot of the commit (${join(runDir, 'tree')}); no code of the target is executed and nothing in the repository is edited`)
+  console.log(`note: the run is ${runDir}; it resumes from disk: audit-run.mjs next ${runDir}`)
   console.log(`AUDIT: OK run=${metadata.run_id} profile=${metadata.profile} commit=${s.commit.slice(0, 12)} files=${snapshot.files} earlier_runs=${priors.length} compatible=${priors.filter(p => p.compatible).length}`)
   return 0
 }

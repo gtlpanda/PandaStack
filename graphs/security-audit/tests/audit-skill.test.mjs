@@ -127,6 +127,12 @@ await test('the session\'s own flags (--unattended, --guidance) are never passed
   assert.ok(/Pass the flags the user gave, except `--unattended` and `--guidance`/.test(flat) && /`init` refuses them/.test(flat), 'section 3 names the exception')
   assert.ok(!/Add the flags the user gave/.test(flat), 'the old unqualified sentence is gone')
 })
+await test('the skill tells the session to relay the three notes init prints before any agent runs, and says why they are printed rather than left to an instruction', () => {
+  assert.ok(/`init` prints three more `note:` lines, after the run directory and before the `AUDIT: OK` line/.test(flat))
+  assert.ok(/Repeat them in your reply, with the others, before the first `plan` command/.test(flat))
+  assert.ok(/two live runs skipped them when they were only an instruction/.test(flat))
+  assert.ok(!/Tell the user once, before any agent runs/.test(flat), 'the instruction the session skipped is gone')
+})
 await test('the guidance question is single-quoted in the command (it can hold text that is not the session\'s, which double quotes would let the shell run), and the skill says why', () => {
   const g = skillCommands(text).filter(c => /blocks\.mjs" guidance/.test(c))
   assert.ok(g.length >= 1)

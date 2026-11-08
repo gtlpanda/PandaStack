@@ -81,16 +81,14 @@ Pass the flags the user gave, except `--unattended` and `--guidance`: those are
 yours, and `init` refuses them (a usage error, exit 2). `REPO` is the target. The last line must start
 `AUDIT: OK`; on `AUDIT: FAIL`, say why and stop. Relay every `note:` line
 (uncommitted changes, symlinks left out, an earlier run that cannot be carried).
-Before the first `plan` command, and so before any agent runs, write these in
-your reply as text (a live run skipped them when they were only an instruction
-to "tell the user"; they are not optional, `--unattended` or not):
-
-- what runs: about one agent per coverage unit, then one or two verifiers per
-  surviving lead, with no budget unless `--budget` was given;
-- that the agents can only read, search and list files in a read-only snapshot
-  of the commit (`$RUN/tree`), and that nothing in the target is executed;
-- where the run lives (`$RUN`), which directory `$AUDIT` is, and that the run
-  resumes from disk if interrupted.
+`init` prints three more `note:` lines, after the run directory and before the
+`AUDIT: OK` line: what runs and its budget (about one agent per coverage unit,
+then one or two verifiers per surviving lead), that the agents only read a
+read-only snapshot and nothing in the target is executed, and where the run
+lives and how it resumes. Repeat them in your reply, with the others, before the
+first `plan` command and so before any agent runs: they are not optional,
+`--unattended` or not (two live runs skipped them when they were only an
+instruction to "tell the user", so the helper prints them now).
 
 ## 4. The loop
 
