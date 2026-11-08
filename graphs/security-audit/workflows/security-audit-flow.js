@@ -388,6 +388,7 @@ ${fenced('untrusted-proposals', json(A.proposals))}
 Coverage IDs the ledger already has. A unit whose canonical references encode to one of these is a duplicate and is refused:
 ${json(A.existing)}
 
+${feedbackSection()}
 architecture.md, for context, given verbatim:
 ${fenced('untrusted-architecture', A.architecture_md)}
 
@@ -470,9 +471,10 @@ async function hunt() {
     failures.push(r ? `audit-analyst returned a malformed result ${h.agent_id}: ${problem}` : problem)
   })
   ledger.results = { part: 'hunt', hunters: out }
-  if (failures.length === hunters.length) return finish('escalate', failures.join('; '))
-  if (failures.length) log(`${failures.length} of ${hunters.length} hunter(s) returned nothing usable; their units stay planned for merge-wave to reassign: ${failures.join('; ')}`)
-  return finish('done', `${hunters.length - failures.length} of ${hunters.length} hunter(s) returned a result`)
+  // Never an escalation, even when every hunter failed: a unit with no usable result goes back to planned and merge-wave counts the failure (a unit
+  // is deferred after two), which is the bounded retry upstream asks for; the reason below says which hunters failed and why.
+  if (failures.length) log(`${failures.length} of ${hunters.length} hunter(s) returned nothing usable; their units stay planned for merge-wave to count and reassign: ${failures.join('; ')}`)
+  return finish('done', `${hunters.length - failures.length} of ${hunters.length} hunter(s) returned a result${failures.length ? `: ${failures.join('; ')}` : ''}`)
 }
 
 async function critic() {
@@ -504,6 +506,8 @@ async function mint() {
   const regBad = registryProblem(PARTS.registry)
   if (regBad) return finish('escalate', regBad)
   if (!isText(A.architecture_md) || !isText(A.profile) || !Array.isArray(A.scope_paths) || !A.scope_paths.every(isText) || !Array.isArray(A.existing) || !A.existing.every(isText)) return finish('escalate', 'args.architecture_md, args.profile, args.scope_paths and args.existing are required')
+  const fbBad = feedbackProblem(A.feedback)
+  if (fbBad) return finish('escalate', fbBad)
   phase('Mint')
   const r = await callNode('minter', id, mintPrompt(id), MINT_SCHEMA)
   const problem = r ? mintProblem(r) : failureOf('minter', id)
