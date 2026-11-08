@@ -10,7 +10,8 @@
 //   - agentType: 'name' / subagent_type: "name"   -> an agent
 //   - `/name` or `/name args` in backticks          -> a skill, workflow, or command
 //   - `name` skill / `name` agent / `name` subagent -> any of them
-// Tests (*/tests/) are skipped: their names are fixtures.
+// Tests (*/tests/) are skipped: their names are fixtures. So is any vendor/ directory: it holds
+// another project's files, copied byte for byte, and what they name is not ours to resolve.
 //
 //   node scripts/check-refs.mjs [repo dir]
 // prints one line per unresolved reference (file:line: kind 'name') and exits 1
@@ -28,6 +29,7 @@ export const ROUTE_EXAMPLES = new Set(['a', 'dashboard', 'settings', 'profile', 
 const ROOT_DIRS = ['core', 'kit', 'graphs']
 const TOP_FILES = ['CLAUDE.md', 'loop.md', 'README.md']
 const SCANNED = /\.(md|mjs|js)$/
+const SKIPPED_DIRS = new Set(['tests', 'vendor', 'node_modules', '.git'])
 
 // Every reference in one file's text: [{kind: 'agent'|'command'|'any', name, line}].
 export function findRefs(text) {
@@ -74,7 +76,7 @@ function scannedFiles(repo) {
       const p = join(dir, e)
       let st
       try { st = statSync(p) } catch { continue }
-      if (st.isDirectory()) { if (e !== 'tests' && e !== 'node_modules' && e !== '.git') walk(p) } else if (SCANNED.test(e)) out.push(p)
+      if (st.isDirectory()) { if (!SKIPPED_DIRS.has(e)) walk(p) } else if (SCANNED.test(e)) out.push(p)
     }
   }
   for (const d of ROOT_DIRS) walk(join(repo, d))
