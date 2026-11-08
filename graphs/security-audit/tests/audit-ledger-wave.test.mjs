@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
-import { FAILED_TWICE, MAX_UNIT_ATTEMPTS, commitLedger, groupIntoHunters, hunterId, isHunterWork, mergeWave, planWave, rankUnits } from '../skills/security-audit/audit-ledger.mjs'
+import { FAILED_TWICE, MAX_UNIT_ATTEMPTS, applyCritic, commitLedger, groupIntoHunters, hunterId, isHunterWork, mergeWave, planWave, rankUnits } from '../skills/security-audit/audit-ledger.mjs'
 import { REASONS, advanceState } from '../skills/security-audit/audit-run.mjs'
 import { isSafeAgentId } from '../skills/security-audit/upstream.mjs'
 import { audit, fresh, ledgerCli, newRun } from './audit-fixtures.mjs'
@@ -186,6 +186,7 @@ const FAILURES = {
   'a check that is not an object': (r) => { r.units[0].checks = [null]; return r },
   'a check with an empty invariant': (r) => { r.units[0].checks[0].invariant = ' '; return r },
   ...Object.fromEntries(['../x', '/etc/passwd', 'src/aux.ts', 'src\\app.js', 'src/app.js '].map(p => [`the unsafe path ${JSON.stringify(p)}`, (r) => { r.units[0].reviewed_paths = [p]; r.units[0].checks[0].reviewed_paths = [p]; return r }])),
+  'a reviewed path that is not in the snapshot': (r) => { r.units[0].reviewed_paths = ['does/not/exist.js']; r.units[0].checks[0].reviewed_paths = ['does/not/exist.js']; return r },
   'a result over a thousand reviewed paths': (r) => { const p = Array.from({ length: 1001 }, (_, i) => `src/f${i}.js`); r.units[0].reviewed_paths = p; r.units[0].checks[0].reviewed_paths = p; return r },
 }
 await test('a unit whose result failed returns to planned with no owner, no evidence and a recorded reason; the ledger passes the validator', () => {
@@ -300,14 +301,21 @@ await test('merge-wave runs only after a hunt is saved: before plan-wave, and af
   planWave(runDir)
   assert.throws(() => mergeWave(runDir, {}), /merge-wave is not the next step of this run: NEXT: hunt/)
 })
-await test('a ledger that is valid unit by unit but too large for upstream\'s reader is refused whole: no unit, candidate or queue entry is written', () => {
-  const { runDir, assigned } = hunting([named('a')])
-  const [[agent, [id]]] = Object.entries(assigned)
-  const before = snapshot(runDir)
+await test('one unit\'s evidence is bounded, so no hunter result can fill the ledger to upstream\'s 5 MiB read limit and freeze the run', () => {
+  const { runDir, assigned } = hunting([named('a'), named('b', { subsystem: 'b' })])
+  const [[agent, [id]], [other, [idB]]] = Object.entries(assigned)
   const checks = Array.from({ length: 900 }, (_, i) => checkOf(agent, ['src/app.js'], { invariant: `control ${i} ${'i'.repeat(3000)}`, result: 'r'.repeat(4000) }))
-  const result = hunterResult([hunterUnit(id, agent, { checks })], { uncovered: [{ surface: 's', boundary: 'b', subsystem: 's', attack_class: 'a', starting_paths: ['src/db.js'], reason: 'r' }] })
-  assert.throws(() => mergeWave(runDir, { [agent]: result }), /said "Failed to read coverage ledger: input exceeds 5242880 byte limit".*coverage-ledger\.json is unchanged/)
-  assert.deepEqual(snapshot(runDir), before)
+  const out = mergeWave(runDir, { [agent]: hunterResult([hunterUnit(id, agent, { checks })]), [other]: hunterResult([hunterUnit(idB, other)]) })
+  assert.match(out.summary, /merged=1 failed=1/)
+  const [u, v] = readLedger(runDir)
+  const [bloated, fine] = u.coverage_id === id ? [u, v] : [v, u]
+  assert.deepEqual([bloated.status, fine.status], ['planned', 'covered'])
+  assert.match(bloated.last_failure, /evidence is \d+ bytes, over the \d+ a unit may hold/)
+  assert.ok(ledgerBytes(runDir).length < 100_000)
+  // the run is not stuck: the next steps still write
+  advanceState(runDir, 'critic', { critic_kind: 'post-wave' }); advanceState(runDir, 'mint')
+  applyCritic(runDir, { missing_units: [], reassign_ids: [fine.coverage_id], resolved_prior_leads: [], stop: false }, { units: [] })
+  assert.ok(ledgerValid(runDir))
 })
 await test('a merge that saved the ledger and died before saving its step is finished by running it again; nothing is applied twice', () => {
   const { runDir, assigned } = hunting([named('a')])

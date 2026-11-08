@@ -28,6 +28,9 @@ export const MAX_UNIT_ATTEMPTS = 2                 // PandaStack's: a hunter res
 export const FAILED_TWICE = 'hunter_result_invalid_twice'   // PandaStack's own reason string, not upstream's (so not in REASONS)
 const MAX_PROBLEMS = 40
 const MAX_HARDENING = 20, MAX_HARDENING_CHARS = 1000   // kept small: the validator rejects a ledger file over 5 MiB or any array past 1,000 entries
+// One unit's evidence may not fill the ledger: each text field is within upstream's 4,096 characters and each array within 1,000
+// entries, yet one unit of 1,000 such checks is 5 MiB and no later write could pass upstream's reader. A realistic unit is a few KB.
+export const MAX_UNIT_EVIDENCE_BYTES = 64 * 1024
 const SEED_STATES = ['planned', 'not_applicable', 'out_of_scope', 'deferred']   // the states a unit can start in
 const VERDICTS = ['confirmed', 'needs_validation']
 
@@ -224,7 +227,7 @@ const DISPOSITIONS = ['covered', 'candidate', 'blocked']    // a hunter's result
 
 // The unit after a hunter's result for it, or a reason it cannot be. Only a v1 source check is accepted: no sandbox exists, so no
 // local artifact can have been promoted (plan section 6). The check owner must be the hunter: its checks are its own.
-function applyUnitResult(unit, entry, candidates) {
+function applyUnitResult(unit, entry, candidates, runDir) {
   if (!isObj(entry)) return { reason: 'the result has no entry for this unit' }
   if (!DISPOSITIONS.includes(entry.disposition)) return { reason: `disposition ${JSON.stringify(entry.disposition)} is not ${DISPOSITIONS.join(', ')}` }
   const checks = (Array.isArray(entry.checks) ? entry.checks : []).map(c => ({ agent_id: c?.agent_id, reviewed_paths: c?.reviewed_paths, invariant: c?.invariant, method: c?.method, result: c?.result, artifact: c?.artifact }))
@@ -232,10 +235,14 @@ function applyUnitResult(unit, entry, candidates) {
   if (checks.some(c => c.agent_id !== unit.agent_id)) return { reason: `a check is not owned by the assigned hunter ${unit.agent_id}` }
   const linked = entry.candidate_fingerprints ?? []
   if (Array.isArray(linked) && linked.some(f => !candidates.has(f))) return { reason: 'a linked fingerprint has no valid entry in the result\'s candidates' }
+  const absent = (Array.isArray(entry.reviewed_paths) ? entry.reviewed_paths : []).find(p => typeof p === 'string' && isSafeRelativePath(p) && !existsSync(join(runDir, 'tree', p)))
+  if (absent !== undefined) return { reason: `reviewed path ${absent} is not in tree/ (the audited snapshot): coverage of a file nobody can read is not coverage` }
   const merged = {
     ...unit, status: entry.disposition, reviewed_paths: entry.reviewed_paths, local_checks: checks,
     result_fingerprints: linked, unresolved: entry.unresolved ?? [],
   }
+  const bytes = Buffer.byteLength(JSON.stringify([merged.reviewed_paths, merged.local_checks, merged.result_fingerprints, merged.unresolved]))
+  if (bytes > MAX_UNIT_EVIDENCE_BYTES) return { reason: `the evidence is ${bytes} bytes, over the ${MAX_UNIT_EVIDENCE_BYTES} a unit may hold (the ledger file is limited to 5 MiB)` }
   const errors = validateLedgerDocument([clone(merged)]).map(plain)
   return errors.length ? { reason: `upstream's validator: ${errors.slice(0, 2).join('; ')}` } : { unit: merged }
 }
@@ -291,7 +298,7 @@ export function mergeWave(runDir, results) {
     const done = []
     for (const unit of units) {
       const matches = entries.filter(e => e.coverage_id === unit.coverage_id)
-      const outcome = !shaped ? { reason: 'no result, or not { units, candidates, hardening, uncovered } arrays' } : matches.length !== 1 ? { reason: `the result lists this unit ${matches.length} times, not once` } : applyUnitResult(unit, matches[0], candidates)
+      const outcome = !shaped ? { reason: 'no result, or not { units, candidates, hardening, uncovered } arrays' } : matches.length !== 1 ? { reason: `the result lists this unit ${matches.length} times, not once` } : applyUnitResult(unit, matches[0], candidates, runDir)
       if (outcome.unit) { done.push(outcome.unit); continue }
       const back = returnToPlanned(unit, outcome.reason)
       patched.set(unit.coverage_id, back)
@@ -373,14 +380,12 @@ export function applyCritic(runDir, critic, mint) {
   const { meta, state, ledger } = run
   if (state.critic_kind === null) refuse('a critic result is being applied but stage-state.json has no critic_kind')
   const problems = criticProblems(critic, mint)
-  const queue = readQueue(runDir)
-  const proposals = isObj(critic) && Array.isArray(critic.missing_units) ? critic.missing_units.length + queue.length : 0
-  if (!problems.length && mint.units.length > proposals) problems.push(`mint returned ${mint.units.length} unit(s) for ${proposals} proposal(s): a unit comes from a proposal`)
+  const proposals = isObj(critic) && Array.isArray(critic.missing_units) ? critic.missing_units.length + readQueue(runDir).length : 0
   if (problems.length) fail(`apply-critic refused: ${problems.length} problem(s); nothing was changed`, problems)
 
   const by = `${state.critic_kind} critic of wave ${state.wave}`
   const notes = [], patched = new Map(), fresh = []
-  const tally = { reassigned: 0, reassign_rejected: 0, units_added: 0, out_of_scope: 0, duplicates: 0, minted_rejected: 0, resolved: 0, resolved_unknown: 0, dropped_proposals: proposals - mint.units.length }
+  const tally = { reassigned: 0, reassign_rejected: 0, units_added: 0, out_of_scope: 0, duplicates: 0, minted_rejected: 0, resolved: 0, resolved_unknown: 0, dropped_proposals: Math.max(0, proposals - mint.units.length) }
   if (tally.dropped_proposals) notes.push(`${tally.dropped_proposals} proposal(s) (critic missing_units and queued uncovered) were not minted into a unit; they are dropped`)
   const current = new Map(ledger.map(u => [u.coverage_id, u]))
   for (const id of new Set(critic.reassign_ids)) {
@@ -403,6 +408,10 @@ export function applyCritic(runDir, critic, mint) {
     fresh.push(built.unit)
     tally[built.unit.status === 'out_of_scope' ? 'out_of_scope' : 'units_added'] += 1
   })
+  // A unit comes from a proposal. Units already in the ledger do not count: after a crash the queue may be empty and a rerun
+  // finds the same units there.
+  const novel = tally.units_added + tally.out_of_scope + tally.minted_rejected
+  if (novel > proposals) fail(`apply-critic refused: mint returned ${novel} unit(s) for ${proposals} proposal(s): a unit comes from a proposal; nothing was changed`)
   for (const fingerprint of new Set(critic.resolved_prior_leads)) {
     const linked = ledger.filter(u => (u.prior_leads ?? []).some(l => l.fingerprint === fingerprint))
     if (!linked.length) { tally.resolved_unknown += 1; notes.push(`resolved_prior_leads ${fingerprint}: not a prior lead of any unit; not applied`); continue }
@@ -412,7 +421,8 @@ export function applyCritic(runDir, critic, mint) {
     }
     tally.resolved += 1
   }
-  commitLedger(runDir, [...ledger.map(u => patched.get(u.coverage_id) ?? u), ...fresh], () => writeJson(join(runDir, 'uncovered.json'), []))
+  commitLedger(runDir, [...ledger.map(u => patched.get(u.coverage_id) ?? u), ...fresh])
+  writeJson(join(runDir, 'uncovered.json'), [])   // after the ledger holds what was made of the queue: a crash in between keeps the gaps
   finish(runDir, 'apply-critic', started, tally, {}, { wave: state.wave, critic_kind: state.critic_kind, critic_stop: critic.stop })
   return { summary: `wave=${state.wave} kind=${state.critic_kind} units_added=${tally.units_added} out_of_scope=${tally.out_of_scope} reassigned=${tally.reassigned} resolved=${tally.resolved} rejected=${tally.reassign_rejected + tally.minted_rejected}`, notes }
 }
@@ -428,7 +438,8 @@ const diffCache = new Map()
 // True only when every path holds the same bytes in both commits. Anything else is "changed": a different file, a commit this
 // clone lacks, an unreadable repository, an empty path list (which git would read as the whole tree), a value that is not a
 // commit ID (a prior run's metadata is not trusted: "--output=x" must never reach git as an option). Paths are literal: a name
-// with [ or * is that name, not a pattern. No external diff driver or textconv runs.
+// with [ or * is that name, not a pattern. No external diff driver or textconv runs, and no replace ref (a hostile repository
+// can make git read one commit as another) rewrites what either commit holds.
 export function sourceUnchanged(top, priorCommit, headCommit, paths) {
   const list = [...new Set(paths)].filter(p => typeof p === 'string' && p !== '')
   if (list.length === 0 || !COMMIT_ID.test(priorCommit) || !COMMIT_ID.test(headCommit)) return false
@@ -436,7 +447,7 @@ export function sourceUnchanged(top, priorCommit, headCommit, paths) {
   if (!diffCache.has(key)) {
     let same = true
     for (let i = 0; same && i < list.length; i += PATHS_PER_DIFF) {
-      same = git(top, ['--literal-pathspecs', 'diff', '--quiet', '--no-ext-diff', '--no-textconv', priorCommit, headCommit, '--', ...list.slice(i, i + PATHS_PER_DIFF)]).status === 0
+      same = git(top, ['--no-replace-objects', '--literal-pathspecs', 'diff', '--quiet', '--no-ext-diff', '--no-textconv', priorCommit, headCommit, '--', ...list.slice(i, i + PATHS_PER_DIFF)]).status === 0
     }
     diffCache.set(key, same)
   }
@@ -462,43 +473,60 @@ export function loadPriors(runDir, notes = []) {
 const fileOfRef = ref => String(ref).split('#')[0]
 const unitPaths = u => [...u.reviewed_paths, ...u.starting_paths, fileOfRef(u.canonical_refs.boundary)]
 const recordPaths = r => [...(r.trace ?? []), ...(r.evidence ?? [])].map(e => e?.file)
+const fingerprintsOfUnit = u => [...new Set([...u.result_fingerprints, ...u.attempts.flatMap(a => a.result_fingerprints)])]
 
-// A prior unit's prior_status, from its records first (a confirmed or needs_validation record whose source changed is work, not
-// something to carry), then from its state. Upstream's list has no label for a needs_validation lead whose source changed or for a
-// unit never reached: prior_blocked and prior_deferred are the nearest, and the real reason stays in prior_invalidated.
-function priorLabel(unit, same, leads) {
-  const has = (verdict, unchanged) => leads.some(l => l.record.verdict === verdict && l.same === unchanged)
+// A prior unit's prior_status, from its leads first, then from its state. A lead whose source changed, a rejected claim whose
+// source changed, and a lead with no record (the run stopped before it was validated) are work: they come first, so a unit that
+// has any is hunted. Only a unit whose every lead is carried goes to its verifier. Upstream's list has no value for a
+// needs_validation lead whose source changed, an unvalidated lead, or a unit never reached: prior_blocked and prior_deferred are
+// the nearest, and the real reason stays in prior_leads and prior_invalidated.
+function priorLabel(unit, leads) {
+  const has = (verdict, unchanged) => leads.some(l => l.record?.verdict === verdict && l.same === unchanged)
   if (has('confirmed', false)) return 'prior_confirmed_changed_source'
-  if (has('needs_validation', false)) return 'prior_blocked'
+  if (has('needs_validation', false) || leads.some(l => !l.record)) return 'prior_blocked'
+  if (has('rejected', false)) return 'prior_rejected_claim_changed'
   if (has('confirmed', true)) return 'prior_confirmed_same_source'
   if (has('needs_validation', true)) return 'prior_needs_validation'
-  const rejected = leads.filter(l => l.record.verdict === 'rejected')
-  if (rejected.length) return rejected.every(l => l.same) ? 'prior_covered_same_source' : 'prior_rejected_claim_changed'
-  return { blocked: 'prior_blocked', deferred: 'prior_deferred', out_of_scope: 'prior_out_of_scope', planned: 'prior_deferred', in_progress: 'prior_deferred' }[unit.status] ?? (same ? 'prior_covered_same_source' : 'prior_covered_changed_source')
+  if (has('rejected', true)) return 'prior_covered_same_source'
+  return { blocked: 'prior_blocked', deferred: 'prior_deferred', out_of_scope: 'prior_out_of_scope', planned: 'prior_deferred', in_progress: 'prior_deferred' }[unit.status] ?? (unit.sameSource ? 'prior_covered_same_source' : 'prior_covered_changed_source')
 }
 
-// The current unit with what this prior unit adds: its prior_status, same-source coverage evidence (bookkeeping: a planned unit has
-// none of its own; the fingerprints it linked are in prior_leads, each marked carried or not), the claims an unchanged rejection
-// suppresses, and why changed evidence was dropped.
-function withPrior(unit, prior, was, top, head) {
-  const same = sourceUnchanged(top, prior.commit, head, unitPaths(was))
-  const fingerprints = [...new Set([...was.result_fingerprints, ...was.attempts.flatMap(a => a.result_fingerprints)])]
-  const leads = fingerprints.map(f => prior.records.get(f)).filter(Boolean).map(record => ({ record, same: same && sourceUnchanged(top, prior.commit, head, recordPaths(record)) }))
-  const carry = unit.status === 'planned' ? leads.filter(l => l.same && VERDICTS.includes(l.record.verdict)) : []
-  const stale = leads.filter(l => !l.same && l.record.verdict !== 'rejected').map(l => l.record.fingerprint)
-  const evidence = same && ARCHIVABLE.includes(was.status)
-  const staleUnit = !same && ARCHIVABLE.includes(was.status)
-  const out = {
-    ...unit, prior_status: priorLabel(was, same, leads),
-    ...(evidence && { prior_evidence: clone({ run_id: prior.run_id, commit: prior.commit, wave: was.wave, status: was.status, reviewed_paths: was.reviewed_paths, local_checks: was.local_checks, unresolved: was.unresolved }) }),
-    ...((staleUnit || stale.length) && { prior_invalidated: { run_id: prior.run_id, commit: prior.commit, reason: 'the source it rests on changed (git diff against this run\'s commit)', fingerprints: stale } }),
-    ...(leads.some(l => VERDICTS.includes(l.record.verdict)) && { prior_leads: leads.filter(l => VERDICTS.includes(l.record.verdict)).map(l => ({ fingerprint: l.record.fingerprint, verdict: l.record.verdict, carried: carry.includes(l) })) }),
-    ...(carry.some(l => l.record.verdict === 'confirmed') && { carried_exclusions: carry.filter(l => l.record.verdict === 'confirmed').map(l => ({ fingerprint: l.record.fingerprint, title: l.record.title, root_cause: l.record.root_cause })) }),
-    ...(leads.some(l => l.record.verdict === 'rejected' && l.same) && { suppressed_claims: leads.filter(l => l.record.verdict === 'rejected' && l.same).map(l => l.record.fingerprint) }),
+// The current unit with what the earlier runs that held it add (`history`, oldest run first; the newest run's state is the unit's
+// state). Leads are the union over every run, a later run's record replacing an earlier run's for the same fingerprint: a run that
+// never closed the unit (a scoped run, a stopped one) must not erase an earlier run's record. Adds: prior_status, same-source
+// coverage evidence (bookkeeping: a planned unit has none of its own), the leads (each marked carried or not), the claims an
+// unchanged rejection suppresses, and why changed evidence was dropped. A record is carried only into a planned unit whose label
+// is a verifier's (CARRIED); in any other unit the hunt re-finds it with current evidence.
+function withPrior(unit, history, top, head) {
+  const newest = history.at(-1)
+  const same = sourceUnchanged(top, newest.prior.commit, head, unitPaths(newest.was))
+  const found = new Map()
+  for (const { was, prior } of history) {
+    const unitSame = was === newest.was ? same : sourceUnchanged(top, prior.commit, head, unitPaths(was))
+    for (const fingerprint of fingerprintsOfUnit(was)) {
+      const record = prior.records.get(fingerprint) ?? null
+      if (record || !found.has(fingerprint)) found.set(fingerprint, { fingerprint, record, prior, same: record !== null && unitSame && sourceUnchanged(top, prior.commit, head, recordPaths(record)) })
+    }
   }
-  const entries = carry.map(({ record }) => {
-    const { verdict, ...rest } = clone(record)
-    return { fingerprint: record.fingerprint, proposed_verdict: verdict, hunter_ids: [], units: [unit.coverage_id], record: rest, carried_from: { run_id: prior.run_id, commit: prior.commit } }
+  const leads = [...found.values()]
+  const label = priorLabel({ status: newest.was.status, sameSource: same }, leads)
+  const carry = unit.status === 'planned' && CARRIED.includes(label) ? leads.filter(l => l.same && VERDICTS.includes(l.record.verdict)) : []
+  const worked = leads.filter(l => !l.record || VERDICTS.includes(l.record.verdict))
+  const stale = leads.filter(l => l.record && !l.same && l.record.verdict !== 'rejected').map(l => l.fingerprint)
+  const evidence = same && ARCHIVABLE.includes(newest.was.status)
+  const staleUnit = !same && ARCHIVABLE.includes(newest.was.status)
+  const { run_id, commit } = newest.prior
+  const out = {
+    ...unit, prior_status: label,
+    ...(evidence && { prior_evidence: clone({ run_id, commit, wave: newest.was.wave, status: newest.was.status, reviewed_paths: newest.was.reviewed_paths, local_checks: newest.was.local_checks, unresolved: newest.was.unresolved }) }),
+    ...((staleUnit || stale.length) && { prior_invalidated: { run_id, commit, reason: 'the source it rests on changed (git diff against this run\'s commit)', fingerprints: stale } }),
+    ...(worked.length && { prior_leads: worked.map(l => ({ fingerprint: l.fingerprint, verdict: l.record?.verdict ?? null, carried: carry.includes(l) })) }),
+    ...(carry.some(l => l.record.verdict === 'confirmed') && { carried_exclusions: carry.filter(l => l.record.verdict === 'confirmed').map(l => ({ fingerprint: l.fingerprint, title: l.record.title, root_cause: l.record.root_cause })) }),
+    ...(leads.some(l => l.record?.verdict === 'rejected' && l.same) && { suppressed_claims: leads.filter(l => l.record?.verdict === 'rejected' && l.same).map(l => l.fingerprint) }),
+  }
+  const entries = carry.map(l => {
+    const { verdict, ...rest } = clone(l.record)
+    return { fingerprint: l.fingerprint, proposed_verdict: verdict, hunter_ids: [], units: [unit.coverage_id], record: rest, carried_from: { run_id: l.prior.run_id, commit: l.prior.commit } }
   })
   return { unit: out, entries, stale: stale.length, evidence: evidence ? 1 : 0 }
 }
@@ -519,23 +547,36 @@ function forceAdd(was, prior, ctx) {
   return built.unit ? { ...built.unit, force_added_from: prior.run_id } : null
 }
 
-// The seeded units with every usable earlier run folded in, and the carried records for candidates.json. Later runs win a
-// coverage_id they share. A unit this run's scope or recon made not-planned keeps that state: a record is carried only into a
-// planned unit.
+// The seeded units with every usable earlier run folded in, and the carried records for candidates.json. An earlier unit belongs
+// to the unit of this run with its coverage_id, or else with the same labels (the same semantic tuple is one unit, whatever its
+// refs: a renamed file must not make the validator refuse the seed for good); one with neither is added back. A unit this run's
+// scope or recon made not-planned keeps that state: a record is carried only into a planned unit.
 export function carryForward(meta, priors, seeded, ctx) {
   const notes = [], counts = { earlier_runs: priors.length, matched: 0, force_added: 0, records_carried: 0, records_stale: 0, evidence_kept: 0 }
   const units = new Map(seeded.map(u => [u.coverage_id, u]))
-  const latest = new Map()
-  for (const prior of priors) for (const was of prior.ledger) latest.set(was.coverage_id, { was, prior })
+  const bySemantic = new Map(seeded.map(u => [semanticOf(u), u.coverage_id]))
+  const added = new Set(), history = new Map()
+  for (const prior of priors) {
+    for (const was of prior.ledger) {
+      if (was.status === 'not_applicable') continue   // a reasoned "does not apply" is not evidence; this run's recon decides again
+      let target = units.has(was.coverage_id) ? was.coverage_id : bySemantic.get(semanticOf(was))
+      if (target === undefined) {
+        const unit = forceAdd(was, prior, ctx)
+        if (!unit) { notes.push(`earlier run ${prior.run_id}: unit ${was.coverage_id} could not be added to this run; it is not carried`); continue }
+        units.set(unit.coverage_id, unit)
+        bySemantic.set(semanticOf(unit), unit.coverage_id)
+        added.add(unit.coverage_id)
+        target = unit.coverage_id
+      } else if (target !== was.coverage_id) notes.push(`earlier run ${prior.run_id}: unit ${was.coverage_id} matched this run's unit ${target} by its labels (the refs differ)`)
+      history.set(target, [...(history.get(target) ?? []), { was, prior }])
+    }
+  }
   const entries = []
-  for (const { was, prior } of latest.values()) {
-    if (was.status === 'not_applicable') continue   // a reasoned "does not apply" is not evidence; this run's recon decides again
-    const base = units.get(was.coverage_id) ?? forceAdd(was, prior, ctx)
-    if (!base) { notes.push(`earlier run ${prior.run_id}: unit ${was.coverage_id} could not be added to this run; it is not carried`); continue }
-    counts[units.has(was.coverage_id) ? 'matched' : 'force_added'] += 1
-    const carried = withPrior(base, prior, was, meta.target, meta.source_ref.commit)
-    units.set(base.coverage_id, carried.unit)
+  for (const [id, held] of history) {
+    const carried = withPrior(units.get(id), held, meta.target, meta.source_ref.commit)
+    units.set(id, carried.unit)
     entries.push(...carried.entries)
+    counts[added.has(id) ? 'force_added' : 'matched'] += 1
     counts.records_stale += carried.stale
     counts.evidence_kept += carried.evidence
   }

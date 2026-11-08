@@ -214,6 +214,27 @@ await test('a candidate whose unit was reopened is still a record to validate: `
   assert.equal(audit(['next', runDir]).last, 'NEXT: validate run=workflow', 'the lead in candidates.json must still go to a verifier')
 })
 
+await test('an apply-critic that died after the ledger and the queue were written, before its step was saved, is finished by running it again', () => {
+  const { runDir } = afterWave([named('a')])
+  queueGap(runDir)
+  const c = critic(), m = { units: [minted('queued')] }
+  applyCritic(runDir, c, m)
+  const done = ledgerBytes(runDir)
+  writeFileSync(join(runDir, 'stage-state.json'), JSON.stringify({ version: 1, last: 'mint', wave: 1, critic_kind: 'post-wave', updated: 'x' }))   // the crash: the queue is already empty
+  const again = applyCritic(runDir, c, m)
+  assert.equal(ledgerBytes(runDir), done)
+  assert.match(again.notes.join('\n'), /already in the ledger/)
+  assert.ok(!/dropped/.test(again.notes.join('\n')), 'an empty queue is not a proposal the mint dropped')
+  assert.equal(readJsonFile(runDir, 'stage-state.json').last, 'apply-critic')
+})
+await test('the queue of hunter gaps is cleared only once the ledger holds what was made of it: a refused apply keeps every queued gap', () => {
+  const { runDir } = afterWave([named('a')])
+  queueGap(runDir)
+  const queued = readFileSync(join(runDir, 'uncovered.json'), 'utf8')
+  refused(runDir, critic({ missing_units: [gap('x')] }), { units: [minted('a', { surface: 'Another display label' })] }, /coverage ID collision/)
+  assert.equal(readFileSync(join(runDir, 'uncovered.json'), 'utf8'), queued)
+})
+
 console.log('== apply-critic: prior leads')
 await test('a prior lead named by the critic is marked resolved on its unit with who resolved it; an unknown fingerprint is said, not applied', () => {
   const { runDir } = afterWave([named('a'), named('b')])

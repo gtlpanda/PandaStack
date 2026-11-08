@@ -7,9 +7,9 @@ import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import { applyCritic, loadPriors, planWave, seed, sourceUnchanged } from '../skills/security-audit/audit-ledger.mjs'
 import { advanceState } from '../skills/security-audit/audit-run.mjs'
-import { validateFindingsFile, validateLedgerFile } from '../skills/security-audit/upstream.mjs'
+import { canonicalCoverageId as canonicalIdOf, validateFindingsFile, validateLedgerFile } from '../skills/security-audit/upstream.mjs'
 import { audit, fresh, init, mkRepo, sh } from './audit-fixtures.mjs'
-import { commitChange, confirmedRecord, ledgerBytes, ledgerValid, needsValidationRecord, priorRun, priorUnit, readJsonFile, readLedger, reconInput, rejectedRecord, unitInput } from './ledger-fixtures.mjs'
+import { commitChange, confirmedRecord, ledgerBytes, ledgerValid, needsValidationRecord, priorRun, priorUnit, readJsonFile, readLedger, reconInput, refsOf, rejectedRecord, unitInput } from './ledger-fixtures.mjs'
 
 const FILES = { 'src/app.js': 'export const a = 1\n', 'src/db.js': 'export const q = s => s\n', 'src/a[1].js': 'bracket\n', 'src/a1.js': 'one\n', 'src/old.js': 'old\n', 'docs/guide.md': 'guide\n', 'README.md': '# r\n' }
 const names = runDir => Object.fromEntries(readLedger(runDir).map(u => [u.canonical_refs.surface.split('#')[1], u]))
@@ -186,7 +186,7 @@ await test('an out_of_scope or scoped run keeps its states: a carried record is 
   assert.ok(ledgerValid(runDir))
   assert.equal(audit(['check', runDir]).last, `AUDIT: OK ${runDir} passes check`)
 })
-await test('two units that carry one fingerprint are one candidate with both units; a lead with no record in findings.json is covered-style, not carried', () => {
+await test('two units that carry one fingerprint are one candidate with both units; a lead with no record in findings.json is a gap to hunt, kept as a lead, never dropped', () => {
   const units = [priorUnit('a', 'candidate', { result_fingerprints: ['fp-shared'] }), priorUnit('b', 'candidate', { result_fingerprints: ['fp-shared'] }), priorUnit('c', 'candidate', { result_fingerprints: ['fp-unrecorded'] })]
   const { runDir } = scenario({ units, findings: [needsValidationRecord('fp-shared')] })
   seed(runDir, reconInput([unitInput('a'), unitInput('b'), unitInput('c')]))
@@ -194,8 +194,9 @@ await test('two units that carry one fingerprint are one candidate with both uni
   assert.equal(pool(runDir).length, 1)
   assert.deepEqual([only.fingerprint, only.units.length], ['fp-shared', 2])
   const u = names(runDir)
-  assert.equal(u.c.prior_status, 'prior_covered_same_source')
-  assert.equal(u.c.prior_leads, undefined)
+  assert.equal(u.c.prior_status, 'prior_blocked', 'an unvalidated lead is a prior gap: upstream keeps it an unresolved candidate')
+  assert.deepEqual(u.c.prior_leads, [{ fingerprint: 'fp-unrecorded', verdict: null, carried: false }])
+  assert.equal(pool(runDir).length, 1, 'there is no record to carry, only the fingerprint')
 })
 await test('when two earlier runs hold the same unit, the later run is the one used', () => {
   const repo = mkRepo(FILES)
@@ -218,6 +219,69 @@ await test('an explicit --prior run outside the repository\'s own runs is carrie
   seed(r.runDir, reconInput([unitInput('x')]))
   const [u] = readLedger(r.runDir)
   assert.deepEqual([u.prior_status, u.prior_evidence.status, u.prior_evidence.run_id], ['prior_blocked', 'blocked', 'run-1'])
+})
+
+console.log('== carry-forward: found by an independent audit, each reproduced by a failing test first')
+await test('a later run that never closed or never saw a unit does not erase an earlier run\'s confirmed record on it', () => {
+  const repo = mkRepo(FILES)
+  priorRun(repo, [priorUnit('conf', 'candidate', { result_fingerprints: ['fp-conf'] })], [confirmedRecord('fp-conf')])
+  priorRun(repo, [priorUnit('conf', 'out_of_scope')], [])
+  const r = init([repo, '--full'])
+  advanceState(r.runDir, 'recon')
+  seed(r.runDir, reconInput([unitInput('conf')]))
+  const [u] = readLedger(r.runDir)
+  assert.deepEqual([u.prior_status, u.prior_leads, pool(r.runDir).map(c => c.fingerprint)], ['prior_confirmed_same_source', [{ fingerprint: 'fp-conf', verdict: 'confirmed', carried: true }], ['fp-conf']])
+  assert.equal(u.carried_exclusions.length, 1)
+})
+await test('a record the later run re-verified replaces the earlier run\'s for the same fingerprint, and records on one unit from two runs are both carried', () => {
+  const repo = mkRepo(FILES)
+  priorRun(repo, [priorUnit('conf', 'candidate', { result_fingerprints: ['fp-a', 'fp-same'] })], [confirmedRecord('fp-a'), confirmedRecord('fp-same')])
+  priorRun(repo, [priorUnit('conf', 'candidate', { result_fingerprints: ['fp-b', 'fp-same'] })], [needsValidationRecord('fp-b'), needsValidationRecord('fp-same')])
+  const r = init([repo, '--full'])
+  advanceState(r.runDir, 'recon')
+  seed(r.runDir, reconInput([unitInput('conf')]))
+  assert.deepEqual(pool(r.runDir).map(c => [c.fingerprint, c.proposed_verdict, c.carried_from.run_id]), [['fp-a', 'confirmed', 'run-1'], ['fp-b', 'needs_validation', 'run-2'], ['fp-same', 'needs_validation', 'run-2']])
+})
+await test('prior units that differ only in source ref from a seeded unit are the same unit, not a collision that refuses the seed for good', () => {
+  const renamed = { ...priorUnit('moved', 'covered'), canonical_refs: refsOf('old-name') }
+  renamed.coverage_id = canonicalIdOf(renamed.canonical_refs)
+  renamed.surface = 'Route moved'   // the label recon will use again
+  const { runDir } = scenario({ units: [renamed], findings: [] })
+  const out = seed(runDir, reconInput([unitInput('moved')]))
+  const units = readLedger(runDir)
+  assert.equal(units.length, 1, 'one semantic tuple is one unit')
+  assert.equal(units[0].canonical_refs.surface, 'src/app.js#moved', 'the refs recon derived win')
+  assert.deepEqual([units[0].prior_status, units[0].prior_evidence?.run_id], ['prior_covered_same_source', 'run-1'])
+  assert.match(out.notes.join('\n'), /matched this run's unit .* by its labels/)
+  assert.ok(ledgerValid(runDir))
+})
+await test('a unit with a carried record and a changed one is hunted, and the carried record is not left in the pool with no verifier to own it', () => {
+  const units = [priorUnit('mixed', 'candidate', { result_fingerprints: ['fp-conf', 'fp-nv'], starting_paths: ['src/db.js'], reviewed_paths: ['src/db.js'] })]
+  const { runDir } = scenario({ units, findings: [confirmedRecord('fp-conf', 'src/db.js'), needsValidationRecord('fp-nv', 'src/app.js')], change: { 'src/app.js': 'edited\n' } })
+  seed(runDir, reconInput([unitInput('mixed', { starting_paths: ['src/db.js'] })]))
+  const [u] = readLedger(runDir)
+  assert.equal(u.prior_status, 'prior_blocked')
+  assert.deepEqual(u.prior_leads.map(l => [l.fingerprint, l.carried]), [['fp-conf', false], ['fp-nv', false]])
+  assert.equal(u.carried_exclusions, undefined, 'a root cause is excluded from hunters only when its record is carried')
+  assert.deepEqual(pool(runDir), [])
+  planWave(runDir)
+  assert.equal(readLedger(runDir)[0].status, 'in_progress')
+})
+await test('a changed rejected claim is current work even beside a carried record: the unit is hunted', () => {
+  const units = [priorUnit('both', 'candidate', { result_fingerprints: ['fp-conf', 'fp-rej'], starting_paths: ['src/db.js'], reviewed_paths: ['src/db.js'] })]
+  const { runDir } = scenario({ units, findings: [confirmedRecord('fp-conf', 'src/db.js'), rejectedRecord('fp-rej', 'src/app.js')], change: { 'src/app.js': 'edited\n' } })
+  seed(runDir, reconInput([unitInput('both', { starting_paths: ['src/db.js'] })]))
+  assert.equal(readLedger(runDir)[0].prior_status, 'prior_rejected_claim_changed')
+  assert.deepEqual(pool(runDir), [])
+})
+await test('a replace ref cannot make edited source look unchanged: git is run without replacement objects', () => {
+  const repo = mkRepo({ 'a.txt': '1\n' })
+  const first = sh(repo, 'rev-parse', 'HEAD')
+  const second = commitChange(repo, { 'a.txt': '2\n' })
+  assert.equal(sourceUnchanged(repo, first, second, ['a.txt']), false)
+  sh(repo, 'replace', second, first)   // refs/replace/<second> -> <first>: plain git now reads <second> as <first>
+  assert.equal(sh(repo, 'show', `${second}:a.txt`), '1', 'the probe: without --no-replace-objects git sees the old bytes')
+  assert.equal(sourceUnchanged(repo, first, second, ['a.txt', 'a.txt ']), false, 'the replace ref did not hide the edit')
 })
 
 console.log('== carry-forward: earlier runs that do not validate are never read as empty')
