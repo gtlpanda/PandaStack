@@ -43,6 +43,7 @@ export const MAX_SCRIPT_BYTES = 500_000
 // ends the run. The reason string is PandaStack's own (the plan, 4.3), not one of upstream's five.
 export const MAX_SYNTH_ATTEMPTS = 2
 export const LEDGER_FAILED = 'ledger_validation_failed'
+export const STAGE_TOO_LARGE = 'stage_input_too_large'   // PandaStack's own reason: a wave stage whose input will not fit one run script ends the run
 const SEED_FEEDBACK = 'seed-feedback.json'
 const MINT_FEEDBACK = 'mint-feedback.json'   // the same for a minter result apply-critic would refuse, kept per wave
 const MAX_DROPPED_LISTED = 200
@@ -174,16 +175,36 @@ export function huntInput(runDir, run, next) {
   }
 }
 
-// A unit as the critic needs it: the semantic fields, the block map, the state and the evidence's shape. A check's `result` prose is dropped (up to 4,096
-// characters a check), nothing else is cut or reworded; the full ledger stays on disk.
-const compactUnit = u => ({
-  coverage_id: u.coverage_id, surface: u.surface, boundary: u.boundary, subsystem: u.subsystem, attack_class: u.attack_class, ...(u.lifecycle !== undefined && { lifecycle: u.lifecycle }),
-  starting_paths: u.starting_paths, ordinary_attack_class_block: u.ordinary_attack_class_block, selected_companion_blocks: u.selected_companion_blocks, excluded_blocks: u.excluded_blocks,
-  prior_status: u.prior_status, status: u.status, wave: u.wave, agent_id: u.agent_id, reviewed_paths: u.reviewed_paths,
-  checks: u.local_checks.map(c => ({ agent_id: c.agent_id, reviewed_paths: c.reviewed_paths, invariant: c.invariant, method: c.method })),
-  result_fingerprints: u.result_fingerprints, unresolved: u.unresolved, attempts: u.attempts.map(a => ({ wave: a.wave, status: a.status, agent_id: a.agent_id, result_fingerprints: a.result_fingerprints })),
-  ...(u.prior_leads && { prior_leads: u.prior_leads }),
-})
+// What the critic and the minter are sent of text that came from agents reading hostile source: a hunter may fill a unit with up to 64 KiB of evidence, so
+// long text and long lists are cut here, never passed whole. The cut is visible (a unit says `truncated`, a text ends in an ellipsis).
+const CLIP = { text: 300, list: 20, keys: 20, depth: 4 }
+const clipText = v => (typeof v === 'string' && v.length > CLIP.text ? `${v.slice(0, CLIP.text)}…` : v)
+function clipValue(v, depth = 0) {
+  if (typeof v === 'string') return clipText(v)
+  if (Array.isArray(v)) return depth >= CLIP.depth ? null : v.slice(0, CLIP.list).map(x => clipValue(x, depth + 1))
+  if (isObj(v)) return depth >= CLIP.depth ? null : Object.fromEntries(Object.entries(v).slice(0, CLIP.keys).map(([k, x]) => [clipText(k), clipValue(x, depth + 1)]))
+  return v
+}
+
+// A unit as the critic needs it: the semantic fields, the block map, the state and the evidence's shape (HUNTING.md: the critic checks units "closed without
+// paths/checks"). Left out: a check's result prose and its own path list (the unit's reviewed_paths is their union), priority and hardening notes, and the
+// bookkeeping of earlier runs' evidence; cut: any text over 300 characters and any list over 20 entries. The full ledger stays on disk.
+function compactUnit(u) {
+  let cut = false
+  const text = v => { const t = clipText(v); if (t !== v) cut = true; return t }
+  const list = (a, f = x => x) => { if (!Array.isArray(a)) return a; if (a.length > CLIP.list) cut = true; return a.slice(0, CLIP.list).map(f) }
+  const out = {
+    coverage_id: u.coverage_id, surface: text(u.surface), boundary: text(u.boundary), subsystem: text(u.subsystem), attack_class: text(u.attack_class), ...(u.lifecycle !== undefined && { lifecycle: text(u.lifecycle) }),
+    starting_paths: list(u.starting_paths, text), ordinary_attack_class_block: u.ordinary_attack_class_block, selected_companion_blocks: list(u.selected_companion_blocks),
+    excluded_blocks: list(u.excluded_blocks, e => ({ block: e.block, reason: text(e.reason) })),
+    prior_status: u.prior_status, status: u.status, wave: u.wave, agent_id: u.agent_id, reviewed_paths: list(u.reviewed_paths, text),
+    checks: list(u.local_checks, c => ({ agent_id: c.agent_id, method: c.method, invariant: text(c.invariant) })),
+    result_fingerprints: list(u.result_fingerprints), unresolved: list(u.unresolved, text),
+    attempts: list(u.attempts, a => ({ wave: a.wave, status: a.status, agent_id: a.agent_id, result_fingerprints: list(a.result_fingerprints) })),
+    ...(u.prior_leads && { prior_leads: list(u.prior_leads) }),
+  }
+  return cut ? { ...out, truncated: true } : out
+}
 
 export function criticInput(runDir, run, next) {
   const pool = readJson(join(runDir, 'candidates.json')) ?? []
@@ -217,8 +238,8 @@ export function mintInput(runDir, run, next) {
   const kind = run.state.critic_kind   // the critic whose gaps these are: set when its result was saved
   const queue = readJson(join(runDir, 'uncovered.json')) ?? []
   const proposals = [
-    ...critic.missing_units.map(u => ({ ...u, source: `the wave ${next.wave} critic` })),
-    ...(Array.isArray(queue) ? queue : []).map(({ hunter_id, wave, ...rest }) => ({ ...rest, source: `hunter ${hunter_id}, wave ${wave}` })),
+    ...critic.missing_units.map(u => ({ ...clipValue(u), source: `the wave ${next.wave} critic` })),
+    ...(Array.isArray(queue) ? queue : []).map(({ hunter_id, wave, ...rest }) => ({ ...clipValue(rest), source: `hunter ${clipText(String(hunter_id))}, wave ${wave}` })),
   ]
   return {
     ...baseInput(runDir, run.meta, 'mint'), wave: next.wave, kind, profile: run.meta.profile, scope_paths: run.meta.scope_paths, architecture_md: architectureOf(runDir), proposals,
@@ -296,9 +317,17 @@ export function planStage(runDir) {
   const r = spawnSync(process.execPath, [RUN_SCRIPT, SEAM, input, WORKFLOW_FILE, script], { encoding: 'utf8' })
   if (r.status !== 0 || !r.stdout.startsWith('run-script: wrote')) refuse(`run-script.mjs did not write the run script: ${(r.stdout + r.stderr).trim().split('\n').at(-1)}`)
   const bytes = statSync(script).size
+  if (bytes > MAX_SCRIPT_BYTES && next.step !== 'recon') {
+    // The Workflow tool would refuse this script and nothing here can split the input, so the stage can never run: the run ends, as upstream's early stop says
+    // (mark every untouched unit deferred, disclose the gap), instead of staying at a step that cannot be planned.
+    rmSync(stage.dir, { recursive: true, force: true })
+    const deferred = stopHunting(runDir, STAGE_TOO_LARGE, run)
+    appendEvent(runDir, { cmd: 'plan', stage: next.step, result: 'refused', reason: STAGE_TOO_LARGE, counts: { deferred, script_bytes: bytes } })
+    refuse(`${STAGE_TOO_LARGE}: the ${next.step} stage's input would make a run script of ${bytes} bytes, over the ${MAX_SCRIPT_BYTES} this version sends one prompt of; no agent was launched, ${deferred} unit(s) were deferred and the run is marked incomplete`)
+  }
   if (bytes > MAX_SCRIPT_BYTES) {
     rmSync(script)
-    refuse(`the run script would be ${bytes} bytes; the Workflow tool refuses a script file over 524288 bytes and this version stops at ${MAX_SCRIPT_BYTES} (input: ${statSync(input).size} bytes).${next.step === 'recon' ? ' If the facts are the cause, delete recon-facts.json and plan again to run the facts part afresh' : " This stage's input is architecture.md, the ledger and the blocks it names; this version sends one prompt per stage and cannot split a ledger this large"}`)
+    refuse(`the run script would be ${bytes} bytes; the Workflow tool refuses a script file over 524288 bytes and this version stops at ${MAX_SCRIPT_BYTES} (input: ${statSync(input).size} bytes).${' If the facts are the cause, delete recon-facts.json and plan again to run the facts part afresh'}`)
   }
   appendEvent(runDir, { cmd: 'plan', stage: next.step, result: 'ok', duration_ms: Date.now() - started, part: planned.part, stage_dir: stage.name, script_bytes: bytes })
   return { step: next.step, part: planned.part, stage, script, bytes, returned: join(stage.dir, 'returned.json') }

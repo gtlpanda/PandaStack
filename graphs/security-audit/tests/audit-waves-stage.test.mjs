@@ -10,7 +10,7 @@ import { criticInput, huntInput, mintInput } from '../skills/security-audit/audi
 import { loadRun, nextStep, recordSpend, REASONS } from '../skills/security-audit/audit-run.mjs'
 import { parts, resolve as block } from '../skills/security-audit/blocks.mjs'
 import { audit, ledgerCli, meta } from './audit-fixtures.mjs'
-import { assignments, candidateOf, confirmedRecord, ledgerValid, priorRun, priorUnit, readJsonFile, readLedger } from './ledger-fixtures.mjs'
+import { assignments, candidateOf, checkOf, confirmedRecord, ledgerValid, priorRun, priorUnit, readJsonFile, readLedger } from './ledger-fixtures.mjs'
 import { UNIT, files, fuzzApply, reconToSeed, restore, returnedFile, runScript, runStage, snapshot, stage, stageDirs } from './stage-fixtures.mjs'
 
 const P = parts()
@@ -507,21 +507,83 @@ await test('a second refused minter result ends the run incomplete with ledger_v
   assert.equal(next(runDir), 'NEXT: write-findings run=helper')
 })
 
+console.log('== a stage input too big for the Workflow tool')
+await test('what a hunter wrote into a unit is cut before it reaches the critic, so an inflated ledger still fits: long texts and lists are clipped, the unit says it was truncated, and a unit that was not cut says nothing', async () => {
+  const { runDir } = await reconToSeed(three())
+  ledgerCli(['plan-wave', runDir])
+  const asg = assignments(runDir)
+  const fat = (label, ids) => covered(label, ids, { units: ids.map(id => ({ coverage_id: id, disposition: 'blocked', reviewed_paths: ['src/app.js'], checks: [checkOf(label, ['src/app.js'], { invariant: 'i'.repeat(4000) })], candidate_fingerprints: [], unresolved: Array.from({ length: 30 }, (_, i) => `fact ${i} ${'u'.repeat(1900)}`) })) })
+  await runStage(runDir, { 'audit-analyst': hunters(runDir, (label, ids) => (label === 'h1-01' ? fat(label, ids) : covered(label, ids))) })
+  const m = ledgerCli(['merge-wave', runDir, join(runDir, 'hunter-results.json')])
+  assert.match(m.last, /merged=3 failed=0/, m.stdout)
+  const run = loadRun(runDir)
+  const input = criticInput(runDir, run, nextStep(run))
+  const cut = input.ledger.filter(u => u.truncated)
+  assert.equal(cut.length, 1, 'only the inflated unit is marked')
+  assert.equal(cut[0].unresolved.length, 20, 'a list over 20 entries is cut to 20')
+  assert.ok(cut[0].unresolved.every(t => t.length <= 301), 'long text is clipped')
+  assert.ok(cut[0].checks.every(c => c.invariant.length <= 301))
+  assert.equal(input.ledger.filter(u => !u.truncated).length, 2)
+  assert.ok(!input.ledger.filter(u => !u.truncated).some(u => 'truncated' in u))
+  const p = stage(['plan', runDir])
+  assert.equal(p.status, 0, p.stdout)
+  assert.ok(Number(p.last.match(/bytes=(\d+)/)[1]) < 200_000)
+})
+await test('the gaps the hunters and the critic name are cut the same way before the minter sees them, whatever extra fields a hunter put in', async () => {
+  const { runDir } = await reconToSeed(three())
+  ledgerCli(['plan-wave', runDir])
+  const asg = assignments(runDir)
+  const gap = { surface: 's'.repeat(4000), boundary: 'b', subsystem: 's', attack_class: 'a', starting_paths: Array.from({ length: 60 }, () => 'src/db.js'), reason: 'r'.repeat(4000), junk: 'j'.repeat(60_000), nested: { deep: { deeper: { deepest: 'd'.repeat(5000) } } } }
+  await runStage(runDir, { 'audit-analyst': hunters(runDir, (label, ids) => covered(label, ids, label === 'h1-01' ? { uncovered: [gap] } : {})) })
+  ledgerCli(['merge-wave', runDir, join(runDir, 'hunter-results.json')])
+  await runStage(runDir, { 'audit-researcher': [CRITIC({ stop: false, missing_units: [{ ...GAP(), reason: 'c'.repeat(9000) }] })] })
+  const run = loadRun(runDir)
+  const input = mintInput(runDir, run, nextStep(run))
+  assert.equal(input.proposals.length, 2)
+  const text = JSON.stringify(input.proposals)
+  assert.ok(text.length < 8000, `${text.length} bytes of proposals`)
+  for (const pr of input.proposals) assert.ok(pr.starting_paths.length <= 20 && String(pr.reason).length <= 301)
+  const p = stage(['plan', runDir])
+  assert.equal(p.status, 0, p.stdout)
+})
+await test('a stage input that is still too big ends the run instead of leaving it stuck: no agent, the units a hunter would take deferred with stage_input_too_large, the run incomplete, `next` goes on', async () => {
+  const stuck = async (setup, step) => {
+    const { runDir } = await reconToSeed(three())
+    ledgerCli(['plan-wave', runDir])
+    const asg = assignments(runDir)
+    if (step === 'hunt') { writeFileSync(join(runDir, 'architecture.md'), `${'architecture '.repeat(60_000)}\n`); return { runDir, asg } }
+    await runStage(runDir, { 'audit-analyst': [covered('h1-01', asg['h1-01']), { throws: 'boom' }, covered('h1-03', asg['h1-03'])] })
+    ledgerCli(['merge-wave', runDir, join(runDir, 'hunter-results.json')])
+    if (step === 'critic') { writeFileSync(join(runDir, 'architecture.md'), `${'architecture '.repeat(60_000)}\n`); return { runDir, asg } }
+    await runStage(runDir, { 'audit-researcher': [CRITIC({ stop: false, missing_units: [GAP()] })] })
+    writeFileSync(join(runDir, 'architecture.md'), `${'architecture '.repeat(60_000)}\n`)
+    return { runDir, asg }
+  }
+  for (const [step, deferred] of [['hunt', 3], ['critic', 1], ['mint', 1]]) {
+    const { runDir } = await stuck(null, step)
+    const dirs = stageDirs(runDir)
+    const r = stage(['plan', runDir])
+    assert.equal(r.status, 1, step)
+    assert.match(r.last, new RegExp(`^AUDIT: FAIL stage_input_too_large: the ${step} stage's input would make a run script of \\d{6,} bytes, over the 500000 this version sends one prompt of; no agent was launched, ${deferred} unit\\(s\\) were deferred and the run is marked incomplete$`), `${step}: ${r.last}`)
+    assert.deepEqual(stageDirs(runDir), dirs, `${step}: no stage directory is left`)
+    assert.deepEqual([meta(runDir).run_status, meta(runDir).incomplete_reason], ['incomplete', 'stage_input_too_large'])
+    assert.equal(readLedger(runDir).filter(u => u.status === 'deferred').length, deferred, step)
+    assert.deepEqual([...new Set(readLedger(runDir).filter(u => u.status === 'deferred').flatMap(u => u.unresolved))], ['stage_input_too_large'])
+    ok(runDir)
+    assert.match(next(runDir), /^NEXT: (write-findings|validate|consolidate) /, step)
+  }
+})
+
 console.log('== the script a wave stage generates')
-await test('the hunt script is the workflow with the seam line replaced and is far under the ceiling; one too big is refused with what to do, and no script is left', async () => {
+await test('the hunt script is far under the ceiling: the shared upstream parts plus the blocks the wave names', async () => {
   const { runDir } = await reconToSeed(three())
   ledgerCli(['plan-wave', runDir])
   const r = stage(['plan', runDir])
   assert.equal(r.status, 0, r.stdout)
   const bytes = Number(r.last.match(/bytes=(\d+)/)[1])
   assert.ok(bytes > 30_000 && bytes < 150_000, `${bytes} bytes: the shared upstream parts plus one block`)
-  writeFileSync(join(runDir, 'architecture.md'), `${'architecture '.repeat(60_000)}\n`)   // a hand-edit: seed caps it at 1,100 words
-  const big = stage(['plan', runDir])
-  assert.equal(big.status, 1)
-  assert.match(big.last, /^AUDIT: FAIL the run script would be \d{6,} bytes; the Workflow tool refuses a script file over 524288 bytes and this version stops at 500000 \(input: \d+ bytes\)\. This stage's input is architecture\.md, the ledger and the blocks it names; this version sends one prompt per stage and cannot split a ledger this large$/)
-  assert.ok(!existsSync(join(runDir, 'stages', '03-hunt-w1', 'run.js')))
 })
-await test('the critic input trims a check\'s result prose and nothing else, carries every candidate with its units, and the ledger it sends is the ledger on disk', async () => {
+await test('the critic input drops a check\'s result prose and path list and the notes it does not need, carries every candidate with its units, and the ledger it sends is the ledger on disk', async () => {
   const { runDir } = await reconToSeed(three())
   ledgerCli(['plan-wave', runDir])
   const fp = 'fixture-lead-1'
@@ -534,7 +596,8 @@ await test('the critic input trims a check\'s result prose and nothing else, car
   for (const [i, u] of run.ledger.entries()) {
     const c = input.ledger[i]
     assert.deepEqual([c.coverage_id, c.status, c.agent_id, c.reviewed_paths, c.result_fingerprints, c.unresolved], [u.coverage_id, u.status, u.agent_id, u.reviewed_paths, u.result_fingerprints, u.unresolved])
-    assert.deepEqual(c.checks, u.local_checks.map(({ result, artifact, ...rest }) => rest))
+    assert.deepEqual(c.checks, u.local_checks.map(({ agent_id, method, invariant }) => ({ agent_id, method, invariant })))
+    assert.ok(!('truncated' in c), 'ordinary evidence is not cut')
     assert.ok(!('local_checks' in c) && !JSON.stringify(c).includes('the handler calls it'), 'the prose of a check\'s result is not sent')
   }
   assert.deepEqual(input.candidates, [{ fingerprint: fp, proposed_verdict: 'needs_validation', units: [readLedger(runDir).find(u => u.status === 'candidate').coverage_id], hunter_ids: ['h1-01'] }])
