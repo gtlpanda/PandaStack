@@ -30,7 +30,7 @@ import {
 import { defaultBase, finalQaPrompt, qaReport, prBody, pushAndOpenPr } from './finish.mjs'
 import { prepareHunt, readHunt, landHunt, keepAttempt, bughuntPrompt, bughuntLine } from '../../../../hunt/skills/bughunt/land.mjs'
 import { parseResetTime, planLimitWait } from './limits.mjs'
-import { buildEnv, git, run } from './proc.mjs'
+import { buildEnv, git, run, isOurs } from './proc.mjs'
 import { sessionSettings, sliceArgs, runClaude, sessionVerdict, probeUntilAvailable, stopSessions, writeJson, readResult, NO_BG_CEILING } from './session.mjs'
 import { sliceChecks, devReport, outcomeOf, TEST_FILE } from './checks.mjs'
 
@@ -75,19 +75,8 @@ function readBacklogAt(repo, integration) {
   return { backlog, problems: validateBacklog(backlog) }
 }
 
-function isAlive(pid) {
-  try { process.kill(pid, 0); return true } catch { return false }
-}
-
-// A pid file outlives a SIGKILL or a reboot, and pids are reused: a live pid
-// counts only when its command line is still ours (Linux /proc; elsewhere,
-// alive is all we can tell).
-export function isOurs(pid, marker) {
-  if (!Number.isInteger(pid) || pid <= 0 || !isAlive(pid)) return false
-  const cmdline = `/proc/${pid}/cmdline`
-  if (!existsSync('/proc/self/cmdline')) return true
-  try { return readFileSync(cmdline, 'utf8').split('\0').some(a => a.includes(marker)) } catch { return false }
-}
+// isOurs lives in proc.mjs, shared with autobuild's loop lock.
+export { isOurs }
 function readPid(file) {
   return existsSync(file) ? Number(readFileSync(file, 'utf8').trim()) : 0
 }

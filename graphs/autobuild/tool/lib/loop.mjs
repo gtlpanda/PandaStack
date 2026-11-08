@@ -23,10 +23,12 @@ import { frozenChanges } from "./gate.mjs";
 import { huntEnabled, runBughunt, stopHunt } from "./bughunt.mjs";
 import { classifyOutcome, parseResetTime, planLimitWait } from "./limits.mjs";
 import { buildEnv, git, sh } from "./proc.mjs";
+import { isOurs } from "../../../build/skills/build-app/driver/proc.mjs";
 import { clearStopFailure, readStopFailure, writeSession } from "./session.mjs";
 import { runFeatureTests } from "./tests.mjs";
 
 const HOME = path.resolve(import.meta.dirname, "..");
+const CLI_FILE = path.join(HOME, "lib", "cli.mjs");
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const REVIEW_COMMIT = "^chore(review):";
 
@@ -84,23 +86,24 @@ export async function runLoop(config, options = {}) {
   const limits = config.limits;
   const sleepMs = (ms) => sleep(Math.min(ms, Number(process.env.AUTOBUILD_MAX_SLEEP_MS ?? ms)));
 
-  // One loop per project.
+  // One loop per project: the pid file is created exclusively, so two loops starting together
+  // cannot both take it. One left by a dead loop, or holding a pid reused by another program,
+  // is taken over: a pid counts only while its command line is this tool's cli.mjs.
   const pidFile = statePath(config, "loop.pid");
-  if (existsSync(pidFile)) {
-    const pid = Number(readFileSync(pidFile, "utf8"));
-    let alive = false;
+  for (let attempt = 0; ; attempt += 1) {
     try {
-      process.kill(pid, 0);
-      alive = true;
-    } catch {
-      alive = false;
-    }
-    if (alive && pid !== process.pid) {
-      log(`another autobuild loop (pid ${pid}) is running for this project`);
-      return 11;
+      writeFileSync(pidFile, String(process.pid), { flag: "wx" });
+      break;
+    } catch (error) {
+      if (error.code !== "EEXIST" || attempt > 0) throw error;
+      const pid = Number(readFileSync(pidFile, "utf8"));
+      if (pid !== process.pid && isOurs(pid, CLI_FILE)) {
+        log(`another autobuild loop (pid ${pid}) is running for this project`);
+        return 11;
+      }
+      rmSync(pidFile, { force: true });
     }
   }
-  writeFileSync(pidFile, String(process.pid));
   const cleanup = () => rmSync(pidFile, { force: true });
   let interrupted = false;
   const onSignal = () => {

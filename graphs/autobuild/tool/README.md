@@ -129,6 +129,7 @@ See `templates/autobuild.json`. Defaults are in `lib/config.mjs`.
 
 ## Limits and caveats
 
+- **The guard resolves paths from the project root.** So it denies `cd` (or `pushd`) into a frozen directory, out of the project (temp dirs excepted), or to a computed path: run commands with paths from the root instead.
 - **The guard is a tripwire, not a sandbox.** It inspects commands with patterns, and permission rules can be bypassed, so a determined session could find a gap. The independent frozen-file check after every session is the backstop.
 - **Stopping relies on Claude Code ending its own tool processes.** The loop stops the session; whether `claude` also ends a test run it started in its own process group is untested.
 - **The machine must stay awake.** If the host sleeps, the loop sleeps. On WSL, keep Windows from sleeping.

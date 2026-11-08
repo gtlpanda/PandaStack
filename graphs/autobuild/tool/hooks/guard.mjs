@@ -111,6 +111,15 @@ if (tool === "Bash") {
     if (GIT_DENIED.has(sub)) deny(`git ${sub} can discard, rewrite or fetch work. Allowed: git status/diff/log/show/add/commit.`);
     if ((sub === "branch" || sub === "tag") && /\s-[a-zA-Z]*[dDmM]/.test(rest)) deny(`git ${sub} -d/-m is not allowed.`);
   }
+  // Paths below are resolved from the project root, so a command that first changes directory to
+  // a frozen, outside, or computed place could write anywhere (cd .git && cat >> config).
+  for (const { word, args } of simpleCommands(command)) {
+    if (word !== "cd" && word !== "pushd") continue;
+    const target = args.find((arg) => !arg.startsWith("-")) ?? "~";
+    // The shell reader shows a command substitution as SUBST.
+    if (/[$`]|SUBST/.test(target)) deny("cd to a computed directory is not allowed; use paths from the project root.");
+    if (isFrozen(target)) deny(`cd into ${target} is not allowed (frozen or outside the project); use paths from the project root.`);
+  }
   if (/\brm\s+(?:-[^\s]*[rR]|--recursive)/.test(command) || /\brm\s+-[^\s]+\s+-[^\s]*[rR]/.test(command)) deny("recursive rm is not allowed.");
   if (/\bfind\b[^\n]*\s-delete\b/.test(command)) deny("find -delete is not allowed.");
   if (/(^|[\s;&|(])(curl|wget|npx|bunx|pip3?|pipx|apt(-get)?|brew|yarn|bun|gem|cargo|npm)(\s|$)/.test(command)) {

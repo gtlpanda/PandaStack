@@ -1710,3 +1710,15 @@ partial). 3 findings, all reproduced; the recheck agreed with each.
 - F8: a session that ran `mark-passed` but never committed left `passes: true` in the tree, and
   the loop skipped the feature as built. Fixed: the flag is reset when there is no
   `feat(<ID>)` commit.
+
+**/bughunt round 3** (5.7 min, 17 agents; security now covered, contract and concurrency partial).
+3 findings, all reproduced; one more was refuted.
+- F7 (id reused again): `cd .git && cat >> config <<EOF` got past the guard, because it resolves
+  redirect targets from the project root. Fixed: `cd` and `pushd` into a frozen dir, out of the
+  project, or to a computed path are denied.
+- F10: autobuild's env cleanup dropped `CLAUDE_CODE_OAUTH_TOKEN` and `CLAUDE_CODE_USE_*`, so a
+  token- or provider-authenticated box failed with an auth error. Fixed: it starts from
+  `/build-app`'s `buildEnv`, which keeps them.
+- F11: the loop lock was a plain pid file checked with "is any process alive with this pid".
+  Fixed: it is created exclusively, and a pid counts only while its command line is this tool's
+  `cli.mjs`. That reuses `/build-app`'s `isOurs`, now in its `proc.mjs`.
