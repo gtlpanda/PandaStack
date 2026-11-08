@@ -268,7 +268,7 @@ export function planStage(runDir) {
   const bytes = statSync(script).size
   if (bytes > MAX_SCRIPT_BYTES) {
     rmSync(script)
-    refuse(`the run script would be ${bytes} bytes; the Workflow tool refuses a script file over 524288 bytes and this version stops at ${MAX_SCRIPT_BYTES} (input: ${statSync(input).size} bytes).${next.step === 'recon' ? ' If the facts are the cause, delete recon-facts.json and plan again to run the facts part afresh' : ' The stage input is the ledger and its blocks: a wave of fewer units, or --max-units-per-hunter, makes it smaller'}`)
+    refuse(`the run script would be ${bytes} bytes; the Workflow tool refuses a script file over 524288 bytes and this version stops at ${MAX_SCRIPT_BYTES} (input: ${statSync(input).size} bytes).${next.step === 'recon' ? ' If the facts are the cause, delete recon-facts.json and plan again to run the facts part afresh' : " This stage's input is architecture.md, the ledger and the blocks it names; this version sends one prompt per stage and cannot split a ledger this large"}`)
   }
   appendEvent(runDir, { cmd: 'plan', stage: next.step, result: 'ok', duration_ms: Date.now() - started, part: planned.part, stage_dir: stage.name, script_bytes: bytes })
   return { step: next.step, part: planned.part, stage, script, bytes, returned: join(stage.dir, 'returned.json') }

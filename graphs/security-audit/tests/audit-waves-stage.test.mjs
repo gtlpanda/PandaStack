@@ -442,7 +442,7 @@ await test('the hunt script is the workflow with the seam line replaced and is f
   writeFileSync(join(runDir, 'architecture.md'), `${'architecture '.repeat(60_000)}\n`)   // a hand-edit: seed caps it at 1,100 words
   const big = stage(['plan', runDir])
   assert.equal(big.status, 1)
-  assert.match(big.last, /^AUDIT: FAIL the run script would be \d{6,} bytes; the Workflow tool refuses a script file over 524288 bytes and this version stops at 500000 \(input: \d+ bytes\)\. The stage input is the ledger and its blocks: a wave of fewer units, or --max-units-per-hunter, makes it smaller$/)
+  assert.match(big.last, /^AUDIT: FAIL the run script would be \d{6,} bytes; the Workflow tool refuses a script file over 524288 bytes and this version stops at 500000 \(input: \d+ bytes\)\. This stage's input is architecture\.md, the ledger and the blocks it names; this version sends one prompt per stage and cannot split a ledger this large$/)
   assert.ok(!existsSync(join(runDir, 'stages', '03-hunt-w1', 'run.js')))
 })
 await test('the critic input trims a check\'s result prose and nothing else, carries every candidate with its units, and the ledger it sends is the ledger on disk', async () => {
