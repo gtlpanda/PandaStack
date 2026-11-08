@@ -36,6 +36,7 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildEnv, git as rawGit, tail } from '../../../build/skills/build-app/driver/proc.mjs'
 import { VENDOR_DIR, isSafeRelativePath, validateFindingsFile, validateLedgerFile } from './upstream.mjs'
+import { PROFILES, QUICK_DEFERRED } from './audit-profile.mjs'
 
 // Every git call here runs without the target's hooks or fsmonitor: both are config a repo may set with a
 // relative path, which resolves inside the checkout, the code under audit. A local copy of the flags in
@@ -45,7 +46,7 @@ import { VENDOR_DIR, isSafeRelativePath, validateFindingsFile, validateLedgerFil
 export const SAFE_GIT = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false']
 export const git = (dir, args, opts) => rawGit(dir, [...SAFE_GIT, ...args], opts)
 
-export const KNOWN_PROFILES = ['quick', 'standard', 'deep']
+export const KNOWN_PROFILES = PROFILES                                  // audit-profile.mjs: the one table of what each profile does
 export const SUPPORTED_PROFILES = ['standard']                          // plan section 0: the others wait for PR 9
 export const DEFAULTS = { maxParallel: 8, maxUnitsPerHunter: 4 }        // decision D9
 export const EXECUTION_POLICY = 'sandboxed-source-and-local-only'       // SKILL.md, "run-metadata.json" paragraph
@@ -347,7 +348,7 @@ export const REASONS = Object.freeze({
   reserve: 'budget_cannot_reserve_critics_and_validation',   // a wave (or a focused recon agent) the reserves leave no room for: its units are deferred
   critic: 'critic_budget_exhausted',                         // the final critic's reserve is gone: run incomplete, planned work deferred
   validation: 'validation_budget_exhausted',                 // candidates outnumber the validation reserve: run incomplete
-  quick: 'quick_profile_final_critic',                       // quick's accepted discoveries and reassignments, deferred
+  quick: QUICK_DEFERRED,                                     // quick_profile_final_critic: quick's accepted discoveries and reassignments, deferred
 })
 // PandaStack's own reason strings, which are not upstream's five (so not in REASONS): a ledger or findings.json a vendored validator would not pass, ending the run.
 export const LEDGER_FAILED = 'ledger_validation_failed'

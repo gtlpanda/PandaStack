@@ -16,7 +16,7 @@
       ],
       "test": "graphs/security-audit/tests/profile-rules.test.mjs",
       "testKind": "profile",
-      "passes": false
+      "passes": true
     },
     {
       "id": "P-02",

@@ -28,3 +28,9 @@ REVIEW <YYYY-MM-DD>: DEFECT <file:line> <title> — <failure scenario; suggested
 ---
 
 <!-- Entries start below. -->
+
+## P-01 — The profile rules table (2026-11-08)
+- What: new `audit-profile.mjs` (PROFILES, QUICK_SUBSYSTEM_REF, QUICK_DEFERRED, frozen `profileRules`, tolerant `rulesOf`); `audit-run.mjs` takes `KNOWN_PROFILES` (same array) and `REASONS.quick` from it.
+- Tests: graphs/security-audit/tests/profile-rules.test.mjs passing (6/6); new audit-profile.test.mjs (3); regression suite green (`node scripts/test-workflow.mjs`: 1254 passed, 0 failed)
+- Decisions: none
+- Notes: `audit-report.mjs` WHY still has the literal key `quick_profile_final_critic`; P-07 can key it `[QUICK_DEFERRED]` when it imports audit-profile.mjs. `criticReserve`/`validationReserve` untouched, as the contract asks.
