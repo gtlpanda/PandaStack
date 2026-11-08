@@ -160,7 +160,8 @@ export function applyVerify({ runDir, run, stage, input, result, event, notes })
   const removed = entries.filter(e => e.phase5?.state === 'removed' && input.items.some(i => i.fingerprint === e.fingerprint))
   for (const e of removed) markIncomplete(runDir, e.phase5.reason)
   // A replacement applied or a record removed changes the final records: the ledger says which candidate is unresolved, findings.json is rewritten through both validators.
-  if (!isDeepStrictEqual(finalRecords(out), finalRecords(decisions))) {
+  // Compared with the file on disk, not with the decisions as they were: an apply that is run again after a crash finds its decisions already saved and findings.json not.
+  if (!isDeepStrictEqual(finalRecords(out), run.findings)) {
     try { commitRemoval(runDir, run, out, 'verify') } catch (err) {
       if (!err.problems) throw err
       markIncomplete(runDir, FINDINGS_FAILED)

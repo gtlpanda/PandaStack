@@ -368,6 +368,7 @@ export function completeProblems(runDir) {
   const history = historyOf(runDir)
   for (const p of historyProblems(history)) note(p)
   for (const e of decisions?.entries ?? []) if (e.state !== 'decided') note(`candidate ${show(e.fingerprint)} was never decided (${e.state})`)
+  if (decisions && !isDeepStrictEqual(finalRecords(decisions), run.findings)) note('findings.json is not the decided records (a record Phase 5 removed is in it, or one it kept is missing)')
   for (const r of run.findings) {
     const e = decisions && entryOf(decisions, r.fingerprint)
     if (!e || e.state !== 'decided') { note(`record ${show(r.fingerprint)} has no decision`); continue }

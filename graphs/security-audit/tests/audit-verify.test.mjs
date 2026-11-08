@@ -369,6 +369,48 @@ await test('independence is asserted again at apply: a hunter ID written into th
   assert.match(r.last, /^AUDIT: FAIL agent r01 already served as hunter of fp-a: it cannot also be its verifier/)
   assert.deepEqual(snapshot(run.runDir), before)
 })
+await test('a crash after a record was removed and before findings.json was rewritten is finished by applying the same result again: the file loses the record, the ledger and the run say why, and verify is not wedged', async () => {
+  for (const withReplacement of [false, true]) {
+    const name = withReplacement ? 'beside a replacement applied in the same round' : 'alone'
+    const run = await atVerify([...TWO, { name: 'c', candidates: ['fp-c'] }])
+    // round 1: fp-a's result is unusable (a second try is due); fp-b proposes a material replacement when the case wants one
+    await verifyRound(run.runDir, (l, item) => (item.fingerprint === 'fp-a' ? null : item.fingerprint === 'fp-b' && withReplacement ? replaced(item, { claimed_root_cause: 'NEW ROOT' }) : passed(item)))
+    // round 2 is the one whose effects a crash cuts in half: fp-a is removed, and fp-b's replacement is verified and applied
+    const snap = snapshot(run.runDir)
+    const plan = stage(['plan', run.runDir])
+    const dir = stageDirOf(plan, run.runDir)
+    const input = readJsonFile(dir, 'input.json')
+    assert.deepEqual(input.items.map(i => i.agent_id), withReplacement ? ['r01-t2', 'x02'] : ['r01-t2'], name)
+    const ran = await runScript(join(dir, 'run.js'), { 'audit-researcher': input.items.filter(i => i.kind === 'phase5').map(() => () => null), 'audit-analyst': input.items.filter(i => i.kind === 'replacement').map(i => () => passed(i)) })
+    const file = returnedFile(dir, ran.result)
+    const stale = readFileSync(join(run.runDir, 'findings.json'), 'utf8')
+    assert.equal(stage(['apply', run.runDir, file]).status, 0, name)
+    const done = found(run.runDir)
+    assert.deepEqual(done.map(r => r.fingerprint), ['fp-b', 'fp-c'], name)
+    // the crash: decisions, history, spend and the incomplete mark were written; the ledger, findings.json and the step were not
+    writeFileSync(join(run.runDir, 'findings.json'), stale)
+    writeFileSync(join(run.runDir, 'stage-state.json'), snap.get('stage-state.json'))
+    writeFileSync(join(run.runDir, 'coverage-ledger.json'), snap.get('coverage-ledger.json'))
+    const again = stage(['apply', run.runDir, file])
+    assert.equal(again.status, 0, `${name}: ${again.stdout}`)
+    assert.deepEqual(found(run.runDir), done, `${name}: the removed record is out of findings.json and the applied replacement is in it`)
+    assert.deepEqual(unitByName(run.runDir).a.unresolved, ['record_verification_unresolved'], `${name}: the ledger says why`)
+    assert.equal(next(run.runDir), 'NEXT: report run=helper reason=record_verification_unresolved', name)
+    assert.deepEqual(completeProblems(run.runDir).problems.filter(p => /not the decided records/.test(p)), [], `${name}: the file is the decided records`)
+    ok(run.runDir)
+  }
+})
+await test('complete-check finds a findings.json that holds a record Phase 5 removed, or lacks one it kept: the file is the decided records, exactly', async () => {
+  const run = await atVerify(TWO)
+  assert.equal((await verifyRound(run.runDir, (l, item) => passed(item))).apply.status, 0)
+  assert.deepEqual(completeProblems(run.runDir).problems, [])
+  const d = decisions(run.runDir)
+  writeFileSync(join(run.runDir, 'decisions.json'), JSON.stringify({ ...d, entries: d.entries.map(e => (e.fingerprint === 'fp-a' ? { ...e, phase5: { ...e.phase5, state: 'removed', reason: 'record_verification_unresolved' } } : e)) }))
+  assert.ok(completeProblems(run.runDir).problems.some(p => /findings\.json is not the decided records/.test(p)), 'a removed record is still in the file')
+  writeFileSync(join(run.runDir, 'decisions.json'), JSON.stringify(d))
+  writeFileSync(join(run.runDir, 'findings.json'), JSON.stringify(found(run.runDir).filter(r => r.fingerprint !== 'fp-b')))
+  assert.ok(completeProblems(run.runDir).problems.some(p => /findings\.json is not the decided records/.test(p)), 'a kept record is missing from the file')
+})
 await test('a result with a verifier missing, an ID the plan did not make, or the wrong shape is refused whole, and a tampered plan is refused; nothing changes', async () => {
   const run = await atVerify(TWO)
   const plan = stage(['plan', run.runDir])
