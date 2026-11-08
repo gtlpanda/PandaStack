@@ -2144,3 +2144,130 @@ Cloudflare-style directory) is not. Quick and deep are refused, so `next` has no
 Targets on `/mnt/c` (DrvFS) were not tried. A very large prior history is validated serially (two node starts per
 run). The scratch repository is made inside the run directory and removed after the export; a crash in between
 leaves `.export-<pid>/` there (not tested).
+
+## 37. security-audit PR 4: audit-ledger.mjs (2026-11-07)
+
+PR 4 of the `security-audit` graph (plan: `tasks/plan-security-audit.md`, checked against
+`tasks/plan-security-audit-verify.md`, both in the main checkout). One module of real code,
+`graphs/security-audit/skills/security-audit/audit-ledger.mjs`: the only writer of `coverage-ledger.json`
+(and of `architecture.md`, `candidates.json` and `uncovered.json`). Entry 35 is PR 2's, on
+`feat/security-audit-2-blocks`; this branch does not depend on `blocks.mjs`.
+
+**What changed.**
+- One write path, `commitLedger`: sort in code-unit order (never `localeCompare`), run upstream's validator in
+  memory for readable errors, write `coverage-ledger.json.candidate`, run the validator CLI on it through
+  `upstream.mjs` (exit 0 and a PASS line), and only then rename it over the ledger. Side files are written after the
+  ledger passed and before the rename. A ledger that would fail is refused and every file is left as it was. Both
+  checks are needed: the in-memory validator does not read bytes, so a ledger of valid units over the 5 MiB read limit
+  passes it and fails only the CLI (tested).
+- Every operation runs only when `audit-run.mjs next` names it, saves its step with `advanceState` and writes one
+  `events.jsonl` line. `seed <run> <recon.json>`: `{architecture_md, units}` becomes a ledger; IDs come from the
+  vendored `canonicalCoverageId`; a non-NFC ref is refused with its unit named, never normalized; a planned unit with
+  no path inside `--scope` is recorded `out_of_scope`; `deferred`, `not_applicable` and `out_of_scope` seed with their
+  reason and stay what they are; `architecture.md` is written with a word cap. `plan-wave`: rank (`priority_class`, then
+  prior gaps and changed source before same-source, then `coverage_id`), group by subsystem up to
+  `max_units_per_hunter`, size with `waveAllowance`, set `in_progress` with owner `h<wave>-<NN>` (wave-unique, so
+  every owner is fresh); a wave the reserves cannot fund launches nothing and defers its planned units with
+  `budget_cannot_reserve_critics_and_validation`; a unit a verifier owns (a carried prior record) is not hunter work.
+  `merge-wave <run> <results>`: results keyed by hunter ID; `disposition` becomes `status`, `checks` become
+  `local_checks`, `candidate_fingerprints` become `result_fingerprints`; the vendored validator judges each updated
+  unit alone, so a failed or malformed result returns only that unit to `planned` (owner and evidence cleared, failure
+  counted, `deferred` with PandaStack's own `hunter_result_invalid_twice` after two). Candidates are pooled by
+  fingerprint, hardening notes kept once per hunter, hunter gaps queued for mint. `apply-critic <run> <critic> <mint>`:
+  a reopened `covered`, `candidate` or `blocked` unit has its terminal state archived into `attempts` exactly as
+  upstream lists the fields, then goes back to `planned` one wave higher with no live evidence; any other state is named
+  and left alone; minted units are scope-checked, path-checked against `tree/`, deduplicated, and an ID collision fails
+  the whole apply. Carry-forward: `seed` folds in every earlier run `prior-runs.json` calls compatible (validated
+  again): evidence and records are kept only while `git diff --quiet <prior commit> <this commit>` says the unit's
+  reviewed and starting paths, its boundary file and the record's trace and evidence files are unchanged; changed
+  evidence is dropped and recorded as invalidated; a prior unit recon did not seed is added back.
+- `audit-run.mjs`: five helpers exported (`git`, `Usage`, `refuse`, `readJson`, `CARRIED`), and one behavior fix, below.
+- Tests: `audit-ledger-{seed,wave,critic,carry,cli}.test.mjs` and `ledger-fixtures.mjs`; `audit-fixtures.mjs` gained
+  `newRun` and `ledgerCli`.
+
+**Numbers (measured).**
+- Non-test change: audit-ledger.mjs 590 lines (473 without comments and blank lines) against the plan's ~350, plus
+  14 changed lines in audit-run.mjs. Split in commits as the task asked: exports (5 lines), seed + plan-wave + merge-wave
+  + write path (368 lines), apply-critic (+80), carry-forward (+142, with review fixes).
+- Tests: 732 workflow tests before, 818 after (+86: 17 seed, 26 wave, 19 critic, 21 carry, 3 cli), 117 install and 22
+  secret checks unchanged, `TEST: PASS`. The five files take about 11 s in parallel (23 s one after another).
+- Mutation check: 49 single-line breaks (the write gate and each of its two halves, step order, scope, the status and
+  architecture gates, ranking, grouping, hunter IDs, the budget deferral, each merge-wave rule, the failure count, the
+  archive fields, reassignment states, collision handling, queue draining, each git flag and guard in `sourceUnchanged`,
+  record and boundary staleness, each prior-status rule, re-validation of earlier runs, and the `next` fix). 45 were killed
+  first time. Four survived: two were dead code (a check that the validator's own state table already makes, and
+  clearing evidence from a unit that has none yet), now deleted; one was a missing test (a unit carries the wave it was
+  hunted in, which matters for the archive after a failed first wave) and one was a missing case (an earlier run's
+  ledger, not its findings, damaged after init), both added and killed. Restored by script after each; the final
+  suite is the one above.
+
+**Found while building (each one a test result, not an inference).**
+1. `next` skipped validation of a lead (PR 3, audit-run.mjs:407 and :420 on the base, a bug reachable by this PR).
+   `candidateFingerprints` read only live `candidate` units, but upstream lets the critic reopen a `candidate` unit
+   (RECONNAISSANCE.md:139), which moves its fingerprint into `attempts`. Reproduced first: a candidate unit reopened,
+   re-hunted `covered`, final-clean critic empty: `next` said `write-findings` while `candidates.json` held the lead. It
+   now counts archived attempts too (a test in audit-ledger-critic.test.mjs; PR 3's own tests are unchanged and pass).
+2. `describePrior` records `source_ref.commit` of a prior run unchecked (audit-run.mjs:365, a string of anything). Passed
+   to `git diff` as a revision, `--output=<file>` is an option: run by hand, git exited 0 and created that file. A
+   `--prior` directory can therefore name a file for git to create or empty. `sourceUnchanged` accepts only a 40 or 64
+   hex commit ID (tested with `--output=...`, `-p`, `main`, short and uppercase values); the value stays unchecked in
+   `prior-runs.json` (not fixed there: PR 3).
+3. `waveAllowance('standard', Infinity)` returns `hunters: null` (`Infinity - 2 - Infinity` is NaN), so an unset budget
+   cannot be passed to it. `plan-wave` treats `budget: null` as no cap itself.
+4. Nothing writes `agents_spent` or `agents_planned`, and nothing can mark a run `incomplete` (audit-run.mjs owns
+   run-metadata.json and has no command for it). `plan-wave` reads `agents_spent`, so its budget math is only as good as
+   whoever saves it (PR 5 or 6). Left undone, with their consumers: the seed retry that ends `incomplete:
+   ledger_validation_failed` (plan:427-429), `critic_budget_exhausted` and `validation_budget_exhausted`
+   (SKILL.md, "Cost budget"). Not added as an `updateMetadata` here: it would move a shared file's ownership (SHARED_FILE_OWNERS).
+5. Per-unit validity is not whole-ledger validity: the validator checks nested arrays (1,000) and text (4,096) per field, and the
+   CLI adds a 5 MiB read limit, so one unit with 900 valid checks yields a ledger the CLI rejects (measured). A hunter
+   result like that makes `merge-wave` refuse the whole wave and leave every file as it was; the session can pass that
+   hunter's result as null and merge again (not run). Hardening notes are capped at 20 entries of 1,000 characters
+   because they are the one field this module adds from hunter text.
+
+**Plan and verify-file claims that were wrong, imprecise, or needed an interpretation.**
+- plan:459 and RECONNAISSANCE.md:139 ask for "the critic's source-backed `reassignment_reason`", but the critic JSON a
+  critic must return exactly (HUNTING.md:225-243) has `reassign_ids` as bare strings and no reason anywhere. Upstream
+  contradicts itself; the archive says the critic's result gives no per-unit reason instead of inventing a source-backed
+  one. The validator only requires visible text.
+- plan:457-460 against HUNTING.md:247 ("receives an `in_progress` unit with empty live evidence"): both hold.
+  `apply-critic` returns the unit to `planned` (the table requires null owner and empty evidence there) and `plan-wave`
+  makes it `in_progress` with a fresh owner. Tested end to end, three waves.
+- plan:447 names `hunter_result_invalid_twice` among reason strings; it is not upstream's (no such text in the vendored
+  files), and PR 3's test pins `REASONS` to exactly upstream's five, so it is a separate PandaStack constant.
+- verify:193 (change 12) and plan:446: no unit-level pre-check list is needed. The vendored `validateDocument` accepts a
+  one-unit ledger, so `merge-wave` and minting run each updated unit through it alone and fail that unit (not the wave)
+  on any error: text limits, canonical refs, owned paths, the state table, fresh owners, all upstream's own. Verify's
+  `HUNTING.md:217` cite for "local_checks holds source checks too" is right for that half; "nonempty" is the state table
+  (RECONNAISSANCE.md:141) and HUNTING.md:213.
+- verify:194 (change 13) omitted the third rename: a hunter's `checks` become the ledger's `local_checks`.
+- plan:433 ranks by `priority_class` then `prior_status`; upstream's order (HUNTING.md:7) puts prior gaps third, between
+  value and productivity. One `priority_class` cannot interleave them, so criterion 3 follows it. A finer synthesizer field
+  would fix that; not invented here.
+- plan:548-550: "Exit 0 = same source, exit 1 = changed; a commit not in this clone counts as changed". git exits 128 for an
+  unknown commit; anything but 0 is "changed". Not in the plan and needed: `--literal-pathspecs` (a path with `[` or `*`
+  is otherwise a pattern: probed, `src/a[1].js` and `src/a?.js` disagree), `--no-ext-diff --no-textconv` on a hostile
+  repository, and a guard for an empty path list (git reads it as the whole tree, and `git diff --quiet X X` with none
+  exits 0: "same").
+- plan:553-555 says the cases follow RECONNAISSANCE.md:59-71 exactly, but upstream's `prior_status` list has no value for a
+  needs_validation lead whose source changed or for a unit a stopped run never reached. They are `prior_blocked` and
+  `prior_deferred` (the nearest), with the real reason in `prior_invalidated`; a same-source prior-covered unit is
+  `planned`, ranked last, because the state table has no "covered, awaiting the critic" and PR 3's `next` treats every other
+  planned unit as hunter work. Upstream leaves that choice to the critic (SKILL.md, "Coverage and prior runs", 5).
+- plan:419-421 does not give the recon or mint contract. This PR defines it: units with `canonical_refs`, labels, paths,
+  blocks, `priority_class` (1-4), optional `status` (`deferred`, `not_applicable`, `out_of_scope`) with a `reason`; a
+  mint returns at most one unit per proposal. `candidates.json` entries have `hunter_ids` (plural: the same fingerprint
+  from two hunters is one candidate) and carried ones `carried_from`.
+- plan:424 (the seed gate that block references exist in the vendored files) is not done: it needs `blocks.mjs` from PR 2,
+  which this branch must not depend on. PR 2's retro shows upstream's ledger validator accepts blocks that do not exist,
+  so nothing checks them yet; wiring is one call in `unitFromInput` once both land.
+- plan:403-405 has the session run three commands per stage, but PR 3 has only `init`, `next`, `status` and `check`: no
+  command saves the `recon`, `hunt`, `critic` or `mint` steps or sets `critic_kind` (`advanceState` is a function). The tests
+  call it; the session needs one (PR 5).
+
+**Unchecked on purpose.** Block-reference existence (above). `agents_spent` accounting (item 4). A `local` check is
+refused outright until PR 10 can prove an artifact was promoted. Several earlier runs name one coverage_id: the later
+run wins (order in `prior-runs.json`), not tested against a clock. A very large earlier ledger runs two validators and
+one `git diff` per unit and per record (cached by path set); not timed. `candidates.json`, `uncovered.json` and the
+ledger are three files with one rename between them: a crash between leaves a state a rerun repairs (the merge and the
+apply are idempotent, tested), never a corrupt ledger.
