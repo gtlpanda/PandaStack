@@ -513,6 +513,12 @@ function reassign(unit, reason) {
   return { ...rest, ...LIVE_EVIDENCE, attempts: [...unit.attempts, attempt], wave: wave + 1, status: 'planned' }
 }
 
+// Deep's second pass (upstream SKILL.md "Run profiles and scope": deep gives "prior_covered_same_source units an independent second pass").
+// PandaStack's reading: once this run's own pass covered such a unit, archive that pass and plan the unit again for a fresh owner. Once: the
+// archive (attempts) is what stops a second time. A unit the critic reopened in the same application is already planned, so it is not archived twice.
+export const SECOND_PASS_REASON = 'the deep profile gives a unit an earlier run covered on unchanged source (prior_covered_same_source) an independent second pass'
+const needsSecondPass = u => u.prior_status === 'prior_covered_same_source' && u.status === 'covered' && u.attempts.length === 0
+
 // The critic's `reassign_ids` carry no per-unit reason (HUNTING.md's JSON, which a critic must return exactly), though
 // RECONNAISSANCE.md asks for "the critic's source-backed reassignment_reason": the archive says so instead of inventing one.
 // Everything apply-critic does up to the write: the next ledger and the tallies. Throws a refusal (or a failure with its problems) for what
@@ -564,7 +570,14 @@ function buildCritic(runDir, run, critic, mint) {
     tally.resolved += 1
   }
   const next = [...ledger.map(u => patched.get(u.coverage_id) ?? u), ...fresh]
-  if (rulesOf(meta).hunterWaves !== 1) return { next, tally, notes, rejections }
+  const rules = rulesOf(meta)
+  if (rules.sameSourceSecondPass) {
+    // After the critic's own work, so a unit whose prior lead it resolved is passed again with the lead resolved.
+    const passed = next.map(u => (needsSecondPass(u) ? reassign(u, SECOND_PASS_REASON) : u))
+    tally.second_pass = passed.filter((u, i) => u !== next[i]).length
+    return { next: passed, tally, notes, rejections }
+  }
+  if (rules.hunterWaves !== 1) return { next, tally, notes, rejections }
   // Quick's one critic is final: no wave follows it (HUNTING.md: "exactly one hunter wave followed by exactly one final critic pass"). What it
   // reopened (already archived by reassign()), what it found (minted, planned) and what no hunter reached are deferred with upstream's reason;
   // a unit a verifier owns (a carried record) is not hunter work and stays planned for validation.
@@ -597,7 +610,9 @@ export function applyCritic(runDir, critic, mint) {
   commitLedger(runDir, next)
   writeJson(join(runDir, 'uncovered.json'), [])   // after the ledger holds what was made of the queue: a crash in between keeps the gaps
   finish(runDir, 'apply-critic', started, tally, {}, { wave: state.wave, critic_kind: state.critic_kind, critic_stop: critic.stop })
-  return { summary: `wave=${state.wave} kind=${state.critic_kind} units_added=${tally.units_added} out_of_scope=${tally.out_of_scope} reassigned=${tally.reassigned} resolved=${tally.resolved} rejected=${tally.reassign_rejected + tally.minted_rejected}${tally.deferred === undefined ? '' : ` deferred=${tally.deferred}`}`, notes }
+  // A profile's own count (quick's deferred, deep's second_pass) is the last field, and only for the profile that has it.
+  const profileCount = key => (tally[key] === undefined ? '' : ` ${key}=${tally[key]}`)
+  return { summary: `wave=${state.wave} kind=${state.critic_kind} units_added=${tally.units_added} out_of_scope=${tally.out_of_scope} reassigned=${tally.reassigned} resolved=${tally.resolved} rejected=${tally.reassign_rejected + tally.minted_rejected}${profileCount('deferred')}${profileCount('second_pass')}`, notes }
 }
 
 

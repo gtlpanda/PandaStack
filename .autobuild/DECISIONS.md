@@ -37,6 +37,9 @@ Index first, then the entries. Keep this file's formats exact: it is read by peo
 | D13 | Quick's validate refusal says `with one verifier each, which is also its final record check` | P-05 |
 | D14 | `writeFindings` calls `finishRun` once: the quick branch is an `else if` after the no-Phase-5 branch | P-05 |
 | D15 | The facts-script bound in `audit-stage.test.mjs` is raised from 60,000 to 61,000 (measured 60,087) | P-05 |
+| D16 | `SECOND_PASS_REASON` is exported from `audit-ledger.mjs`, next to `reassign()`, not from `audit-profile.mjs` | P-06 |
+| D17 | The second pass is one sweep over the post-critic `next` ledger (status/attempts test), not a check against `patched` | P-06 |
+| D18 | `tally.second_pass` is set only for deep; the summary suffix and event counts key on it, like quick's `deferred` | P-06 |
 
 ## Entries
 
@@ -72,3 +75,6 @@ Index first, then the entries. Keep this file's formats exact: it is read by peo
 - **D13** Refusal wording — the contract allows "Phase 5 verifier" only for profiles that have one; quick's says one verifier per candidate, which is also its final record check. Standard and deep keep `with a Phase 5 verifier each` exactly.
 - **D14** One `finishRun` — a quick run with no needs-Phase-5 record takes the existing branch (its note is accurate there too); one with such a record gets the merged-pass note. `finishRun` returns its problems and does not throw, so a bad marker leaves the run `incomplete` with `complete_check_failed` (frozen tamper tests).
 - **D15** Facts-script bound — the validator prompt's merged section is in the workflow file, which every script carries. It measured 60,120 bytes and 60,087 after the sentence was cut down; cutting further would drop the return-shape instruction (D12). SPEC §7 allows up to 62,000, and 61,000 is the smallest round bound that fits.
+- **D16** Reason location — the contract names only `audit-ledger.mjs` for P-06, and the string is PandaStack's reading (SPEC M2), not an upstream reason, so convention 5's "reason strings that are upstream's" does not pull it into `audit-profile.mjs`; it lives once, beside the `reassign()` it is passed to, exported for tests (`audit-deep-second-pass.test.mjs` imports it).
+- **D17** Sweep on `next` — a unit the critic reopened in the same application is already `planned` with one attempt after `reassign()`, so `status === 'covered' && attempts.length === 0` alone implements "not already reassigned"; `patched` also holds units whose prior lead was resolved this application (still covered), and those must keep their second pass, so a `patched.has` guard would be wrong. Seed never writes `covered`, so a covered unit with no attempts is this run's own pass.
+- **D18** Deep-only key — convention 2: standard's summary and event counts do not move, and quick has no second pass (tested: `audit-deep-second-pass.test.mjs` checks the event counts of all three profiles). The summary builds both optional suffixes through one `profileCount(key)` helper, `deferred` first; the two never occur together (quick and deep are exclusive).
