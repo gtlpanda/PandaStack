@@ -48,7 +48,10 @@ export function consolidateInput(runDir, run) {
   const input = { ...baseInput(runDir, run.meta, 'consolidate'), architecture_md: architectureOf(runDir), candidates, parts: { consolidation: blockText(CONSOLIDATION) } }
   if (pool.length < 2) skipConsolidation(runDir, `${pool.length} candidate(s): fewer than two have nothing to group`)
   const left = run.meta.budget === null ? Infinity : run.meta.budget - run.meta.agents_spent
+  // Validation funds floor(left / 2) candidates (each keeps a Phase 5 verifier, validateInput below). The grouping's one agent is worth spending only when it does not
+  // lower that number: at 2 left it would leave 1, which funds none.
   if (left < 2) skipConsolidation(runDir, `${left} agent(s) left of the budget: the grouping would take the one a verifier needs`)
+  if (Math.floor((left - 1) / 2) < Math.min(pool.length, Math.floor(left / 2))) skipConsolidation(runDir, `${left} agent(s) left of the budget: the grouping's agent would leave validation able to fund fewer candidates`)
   if (encodedSize(input) > MAX_CONSOLIDATE_BYTES) skipConsolidation(runDir, `the ${pool.length} candidates would make an input of ${encodedSize(input)} bytes, over the ${MAX_CONSOLIDATE_BYTES} one script can carry`)
   return input
 }

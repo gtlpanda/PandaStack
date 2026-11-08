@@ -195,7 +195,7 @@ await test('with fewer than two candidates nothing is asked: the plan says so, c
   assert.equal(next(run.runDir), 'NEXT: validate run=workflow')
   assert.deepEqual(stageDirs(run.runDir), [], 'no stage directory, no script')
 })
-await test('with one agent left of the budget grouping is skipped: it would take the one a verifier needs; with two it runs', async () => {
+await test('grouping is skipped when its agent would lower what validation can fund (1 or 2 left of the budget); with three left it runs', async () => {
   const run = atValidation([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }], { args: ['--budget', '40'] })
   recordSpend(run.runDir, 'earlier', 39)
   const res = stage(['plan', run.runDir])
@@ -203,7 +203,10 @@ await test('with one agent left of the budget grouping is skipped: it would take
   assert.equal(next(run.runDir), 'NEXT: validate run=workflow')
   const run2 = atValidation([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }], { args: ['--budget', '40'] })
   recordSpend(run2.runDir, 'earlier', 38)
-  assert.match(stage(['plan', run2.runDir]).last, /^AUDIT: OK plan consolidate /)
+  assert.match(stage(['plan', run2.runDir]).last, /consolidation skipped: 2 agent\(s\) left of the budget: the grouping's agent would leave validation able to fund fewer candidates/)
+  const run3 = atValidation([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }], { args: ['--budget', '40'] })
+  recordSpend(run3.runDir, 'earlier', 37)
+  assert.match(stage(['plan', run3.runDir]).last, /^AUDIT: OK plan consolidate /)
 })
 await test('an input that cannot fit one script skips grouping instead of ending the run', () => {
   const run = atValidation([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }])
