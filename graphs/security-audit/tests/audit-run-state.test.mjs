@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import {
   REASONS, RECON_CALLS, STATUSES, STEPS, RUNNERS, EXECUTION_BLOCKERS, EXECUTION_POLICY, SUPPORTED_PROFILES,
-  budgetGate, minimumBudget, criticReserve, validationReserve, waveAllowance, countStatuses, nextStep, formatNext, advanceState, writeJson, makeWritable,
+  budgetGate, minimumBudget, criticReserve, validationReserve, waveAllowance, countStatuses, nextStep, formatNext, advanceState, writeJson, makeWritable, recordSpend,
 } from '../skills/security-audit/audit-run.mjs'
 import { VENDOR_SKILL_DIR, canonicalCoverageId } from '../skills/security-audit/upstream.mjs'
 import { fresh, put, mkRepo, init, audit, meta } from './audit-fixtures.mjs'
@@ -421,7 +421,7 @@ await test('check names each problem: a writable or non-regular tree, bad metada
   assert.deepEqual(problems(d => edit(d, m => ({ ...m, execution_policy: 'anything-goes' }))), [`run-metadata.json: execution_policy must be "${EXECUTION_POLICY}"`])
   assert.deepEqual(problems(d => edit(d, m => ({ ...m, run_status: 'incomplete' }))), [reason])
   assert.deepEqual(problems(d => edit(d, m => ({ ...m, run_status: 'in_progress', incomplete_reason: 'x' }))), [reason])
-  assert.deepEqual(problems(d => edit(d, m => ({ ...m, budget: 10, agents_spent: 11 }))), ['run-metadata.json: 11 agents spent against a budget of 10, and the run is not marked incomplete'])
+  assert.deepEqual(problems(d => edit(d, m => ({ ...m, budget: 10, agents_spent: 11, stage_spend: { recon: 11 } }))), ['run-metadata.json: 11 agents spent against a budget of 10, and the run is not marked incomplete'])
   assert.deepEqual(problems(d => edit(d, m => ({ ...m, profile: 'quick' }))), ['run-metadata.json: profile must be one of standard'])
   assert.deepEqual(problems(d => edit(d, m => ({ ...m, scope_paths: ['../x'], limits: { max_parallel: 17, max_units_per_hunter: 0 } }))), ['run-metadata.json: scope_paths must be safe repository-relative paths', 'run-metadata.json: limits.max_parallel is 1-16 and limits.max_units_per_hunter at least 1'])
   assert.deepEqual(problems(d => edit(d, m => ({ ...m, execution_blockers: [] }))), ['run-metadata.json: execution_capability must be none (with its blockers) or sandboxed'])
@@ -445,6 +445,52 @@ await test('check refuses a directory that is not a run, and a file that is not 
   assert.match(audit(['check', runDir]).last, /^AUDIT: FAIL .*run-metadata\.json has no valid run_status/)
   put(join(runDir, 'run-metadata.json'), '{"run_status": "done"}')
   assert.match(audit(['check', runDir]).last, /no valid run_status \(in_progress, complete, incomplete\)/)
+})
+
+console.log('== agents spent')
+await test('recordSpend keeps agents_spent as the sum of per-stage counts, so applying one stage twice changes nothing', () => {
+  const runDir = init([mkRepo(), '--full']).runDir
+  assert.deepEqual([meta(runDir).agents_spent, meta(runDir).stage_spend], [0, {}])
+  recordSpend(runDir, '01-recon-facts', 4)
+  assert.deepEqual([meta(runDir).agents_spent, meta(runDir).stage_spend], [4, { '01-recon-facts': 4 }])
+  recordSpend(runDir, '01-recon-facts', 4)
+  assert.equal(meta(runDir).agents_spent, 4, 'the same stage applied again')
+  recordSpend(runDir, '02-recon-synthesize', 1)
+  assert.equal(meta(runDir).agents_spent, 5)
+  recordSpend(runDir, '01-recon-facts', 3)
+  assert.equal(meta(runDir).agents_spent, 4, 'a stage re-recorded with another count replaces its own, not adds')
+  recordSpend(runDir, 'zero', 0)
+  assert.equal(meta(runDir).agents_spent, 4)
+  assert.match(audit(['status', runDir]).stdout, /^agents: 4 \(no budget set\)$/m)
+  assert.equal(audit(['check', runDir]).last, `AUDIT: OK ${runDir} passes check`)
+  const keep = meta(runDir)
+  assert.equal(JSON.stringify({ ...keep, agents_spent: 0, stage_spend: {} }), JSON.stringify({ ...meta(runDir), agents_spent: 0, stage_spend: {} }), 'no other field of run-metadata.json moved')
+})
+await test('recordSpend refuses a count or key that is not what it says, and leaves the file as it was', () => {
+  const runDir = init([mkRepo(), '--full']).runDir
+  recordSpend(runDir, 'a', 2)
+  const before = readFileSync(join(runDir, 'run-metadata.json'), 'utf8')
+  for (const n of [-1, 1.5, '4', NaN, Infinity, null, undefined, {}, [4], 2 ** 53]) assert.throws(() => recordSpend(runDir, 'b', n), TypeError, String(n))
+  for (const key of ['', null, 5, {}, undefined]) assert.throws(() => recordSpend(runDir, key, 1), TypeError, String(key))
+  assert.throws(() => recordSpend(fresh('not-a-run'), 'a', 1), /has no run-metadata\.json: it is not a run directory/)
+  assert.equal(readFileSync(join(runDir, 'run-metadata.json'), 'utf8'), before)
+})
+await test('check names a stage_spend that is not a map of counts, or an agents_spent that is not its sum; a run with none is unchanged', () => {
+  const repo = mkRepo({ 'a.txt': 'x\n' })
+  const problems = mutate => {
+    const runDir = init([repo, '--full']).runDir
+    mutate(runDir)
+    return audit(['check', runDir]).lines.slice(0, -1).map(l => l.slice(7))
+  }
+  const edit = (runDir, fn) => writeJson(join(runDir, 'run-metadata.json'), fn(meta(runDir)))
+  const sum = 'run-metadata.json: agents_spent must equal the sum of stage_spend'
+  const shape = 'run-metadata.json: stage_spend must map a stage name to a non-negative integer'
+  assert.deepEqual(problems(d => edit(d, m => ({ ...m, stage_spend: { a: 2, b: 3 }, agents_spent: 4 }))), [sum])
+  assert.deepEqual(problems(d => edit(d, m => ({ ...m, stage_spend: { a: -1 }, agents_spent: -1 }))), ['run-metadata.json: agents_spent must be a non-negative integer', shape])
+  assert.deepEqual(problems(d => edit(d, m => ({ ...m, stage_spend: [1], agents_spent: 1 }))), [shape])
+  assert.deepEqual(problems(d => edit(d, m => ({ ...m, stage_spend: null, agents_spent: 0 }))), [shape])
+  assert.deepEqual(problems(d => edit(d, m => ({ ...m, stage_spend: { a: 1.5 }, agents_spent: 1.5 }))), ['run-metadata.json: agents_spent must be a non-negative integer', shape])
+  assert.deepEqual(problems(d => edit(d, m => { const { stage_spend, ...rest } = m; return { ...rest, agents_spent: 9 } })), [], 'a run from before stage_spend: agents_spent alone is accepted')
 })
 
 console.log('== review findings')

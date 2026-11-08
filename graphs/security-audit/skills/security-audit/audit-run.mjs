@@ -128,6 +128,19 @@ export function advanceState(runDir, step, extra = {}) {
   writeJson(join(runDir, 'stage-state.json'), { ...state, ...wave, ...extra, version: 1, last: step, updated: new Date().toISOString() })
 }
 
+// What a stage's agents cost, recorded under the stage's own key: agents_spent is the sum over the keys, so applying the same stage
+// result twice (a crash between two writes) changes nothing. The count is invocations, as upstream's budget is (SKILL.md, "Cost
+// budget"); a failed or skipped agent was one. run-metadata.json has one writer (SHARED_FILE_OWNERS): this module.
+export function recordSpend(runDir, key, invocations) {
+  if (typeof key !== 'string' || key === '') throw new TypeError(`a stage key is a non-empty string, not ${JSON.stringify(key)}`)
+  if (!isInt(invocations)) throw new TypeError(`agent invocations are a non-negative integer, not ${JSON.stringify(invocations)}`)
+  const file = join(runDir, 'run-metadata.json')
+  const meta = readJson(file)
+  if (meta === undefined) refuse(`${runDir} has no run-metadata.json: it is not a run directory`)
+  const stage_spend = { ...(typeof meta.stage_spend === 'object' && meta.stage_spend !== null && !Array.isArray(meta.stage_spend) ? meta.stage_spend : {}), [key]: invocations }
+  writeJson(file, { ...meta, stage_spend, agents_spent: Object.values(stage_spend).reduce((a, b) => a + b, 0) })
+}
+
 // ---------- the target ----------
 const line = text => text.replace(/\n$/, '')   // not trim(): a path may end in a space
 
@@ -529,6 +542,11 @@ function metadataProblems(m) {
   need(Object.keys(SHARED_FILE_OWNERS).every(f => isStr(m.shared_file_owners?.[f])), 'shared_file_owners must name an owner for every shared file')
   need(isInt(m.limits?.max_parallel, 1) && m.limits.max_parallel <= 16 && isInt(m.limits?.max_units_per_hunter, 1), 'limits.max_parallel is 1-16 and limits.max_units_per_hunter at least 1')
   need(isInt(m.agents_spent), 'agents_spent must be a non-negative integer')
+  if (m.stage_spend !== undefined) {   // what each stage's agents cost; agents_spent is their sum (recordSpend keeps it so)
+    const ok = typeof m.stage_spend === 'object' && m.stage_spend !== null && !Array.isArray(m.stage_spend) && Object.values(m.stage_spend).every(v => isInt(v))
+    need(ok, 'stage_spend must map a stage name to a non-negative integer')
+    need(!ok || m.agents_spent === Object.values(m.stage_spend).reduce((a, b) => a + b, 0), 'agents_spent must equal the sum of stage_spend')
+  }
   need((m.run_status === 'incomplete') === isStr(m.incomplete_reason), 'incomplete_reason is set exactly when run_status is incomplete')
   need(m.budget === null || !isInt(m.agents_spent) || m.agents_spent <= m.budget || m.run_status === 'incomplete', `${m.agents_spent} agents spent against a budget of ${m.budget}, and the run is not marked incomplete`)
   return p
@@ -602,7 +620,7 @@ export function init(opts) {
       selected_companion_files: [], prior_run_paths: (priors || []).map(p => p.path), shared_file_owners: SHARED_FILE_OWNERS,
       upstream_pin: { repo: pin.repo, commit: pin.commit },
       snapshot: snapshot && { path: 'tree', files: snapshot.files, bytes: snapshot.bytes, skipped_total: snapshot.skipped.length, skipped: snapshot.skipped.slice(0, MAX_SKIPPED_LISTED) },
-      agents_spent: 0, agents_planned: null, run_status: gate.ok ? 'in_progress' : 'incomplete', incomplete_reason: gate.reason, created: new Date().toISOString(),
+      agents_spent: 0, stage_spend: {}, agents_planned: null, run_status: gate.ok ? 'in_progress' : 'incomplete', incomplete_reason: gate.reason, created: new Date().toISOString(),
     }
     writeJson(join(runDir, 'run-metadata.json'), metadata)
     if (priors) writeJson(join(runDir, 'prior-runs.json'), priors)

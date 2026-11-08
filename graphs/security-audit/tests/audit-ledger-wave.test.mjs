@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import { FAILED_TWICE, MAX_UNIT_ATTEMPTS, applyCritic, commitLedger, groupIntoHunters, hunterId, isHunterWork, mergeWave, planWave, rankUnits } from '../skills/security-audit/audit-ledger.mjs'
-import { REASONS, advanceState } from '../skills/security-audit/audit-run.mjs'
+import { REASONS, advanceState, recordSpend } from '../skills/security-audit/audit-run.mjs'
 import { isSafeAgentId } from '../skills/security-audit/upstream.mjs'
 import { audit, fresh, ledgerCli, newRun } from './audit-fixtures.mjs'
 import { assignments, candidateOf, checkOf, coverAll, hunterResult, hunterUnit, ledgerBytes, ledgerValid, readJsonFile, readLedger, reconInput, refsOf, seeded, unitInput } from './ledger-fixtures.mjs'
@@ -21,7 +21,6 @@ function hunting(units, opts) {
 }
 // What the critic, mint and apply-critic steps leave in stage-state.json (their own helpers come later): wave N is over.
 const passCritic = runDir => { advanceState(runDir, 'critic', { critic_kind: 'post-wave' }); advanceState(runDir, 'mint'); advanceState(runDir, 'apply-critic') }
-const setMeta = (runDir, patch) => { const f = join(runDir, 'run-metadata.json'); writeFileSync(f, JSON.stringify({ ...JSON.parse(readFileSync(f, 'utf8')), ...patch }, null, 2)) }
 const withPrior = (runDir, prior) => commitLedger(runDir, readLedger(runDir).map(u => ({ ...u, prior_status: prior[u.canonical_refs.surface.split('#')[1]] ?? u.prior_status })))
 
 console.log('== plan-wave: rank, group, assign')
@@ -89,7 +88,7 @@ await test('hunter IDs match upstream\'s agent ID pattern and are unique across 
 console.log('== plan-wave: the budget')
 await test('a wave the reserves leave no room for launches no hunter and defers its planned units with upstream\'s reason', () => {
   const { runDir } = seeded([named('a'), named('b', { subsystem: 'other' })], { args: ['--budget', '10'] })
-  setMeta(runDir, { agents_spent: 7 })   // 3 left: two critics and a verifier, no hunter
+  recordSpend(runDir, 'earlier-stages', 7)   // 3 left: two critics and a verifier, no hunter
   const out = planWave(runDir)
   assert.match(out.summary, /^wave=1 hunters=0 assigned=0 deferred=2 reason=budget_cannot_reserve_critics_and_validation$/)
   assert.deepEqual(readLedger(runDir).map(u => [u.status, u.agent_id, u.unresolved, u.reviewed_paths]), Array(2).fill(['deferred', null, [REASONS.reserve], []]))
@@ -99,7 +98,7 @@ await test('a wave the reserves leave no room for launches no hunter and defers 
 })
 await test('a wave the budget only partly funds takes the best units first and leaves the rest planned for a later wave, never silently dropped', () => {
   const { runDir } = seeded(['a', 'b', 'c'].map((n, i) => named(n, { subsystem: n, priority_class: i + 1 })), { args: ['--budget', '10'] })
-  setMeta(runDir, { agents_spent: 6 })   // 4 left: two critics, one verifier, one hunter
+  recordSpend(runDir, 'earlier-stages', 6)   // 4 left: two critics, one verifier, one hunter
   assert.match(planWave(runDir).summary, /^wave=1 hunters=1 assigned=1 deferred=0$/)
   const units = byName(runDir)
   assert.deepEqual(['a', 'b', 'c'].map(n => units[n].status), ['in_progress', 'planned', 'planned'])
