@@ -40,7 +40,13 @@ const subjectOf = e => (slotOf(e) === 'phase5' ? e.record : e.phase5.replacement
 export function verifyInput(runDir, run) {
   let decisions = decisionsOf(runDir)
   if (!decisions) refuse('decisions.json is missing: write-findings ran without validation')
-  if (!isDeepStrictEqual(finalRecords(decisions), run.findings)) refuse('findings.json is not the decided records: it is written by write-findings and by verify only, never by hand')
+  // findings.json is derived from decisions.json. It lags when a write after a saved decision failed (a rename, a validator timeout, a crash): rebuild it from the
+  // decisions instead of refusing forever. A rebuild that fails again throws, and the next plan tries again.
+  if (!isDeepStrictEqual(finalRecords(decisions), run.findings)) {
+    commitRemoval(runDir, run, decisions, 'plan')
+    appendEvent(runDir, { cmd: 'plan', stage: 'verify', result: 'repaired', reason: 'findings.json lagged decisions.json and was rebuilt from it' })
+    run = { ...run, findings: finalRecords(decisions) }
+  }
   decisions = { ...decisions, entries: decisions.entries.map(e => (retained(e) && needsPhase5(e.record) && e.phase5 === null ? { ...e, phase5: FRESH() } : e)) }
   const pending = decisions.entries.filter(e => retained(e) && needsPhase5(e.record) && e.phase5.state === 'pending')
   const left = run.meta.budget === null ? Infinity : Math.max(0, run.meta.budget - run.meta.agents_spent)
@@ -169,9 +175,11 @@ export function applyVerify({ runDir, run, stage, input, result, event, notes })
   for (const e of removed) markIncomplete(runDir, e.phase5.reason)
   // A replacement applied or a record removed changes the final records: the ledger says which candidate is unresolved, findings.json is rewritten through both validators.
   // Compared with the file on disk, not with the decisions as they were: an apply that is run again after a crash finds its decisions already saved and findings.json not.
+  let writeFailed = false
   if (!isDeepStrictEqual(finalRecords(out), run.findings)) {
     try { commitRemoval(runDir, run, out, 'verify') } catch (err) {
       if (!err.problems) throw err
+      writeFailed = true
       markIncomplete(runDir, FINDINGS_FAILED)
       appendEvent(runDir, { cmd: 'apply', stage: 'verify', result: 'failed', reason: FINDINGS_FAILED, problems: err.problems.slice(0, 5) })
       notes.push(`findings.json could not be rewritten (${err.message}); it is left as it was and the run is marked incomplete (${FINDINGS_FAILED})`)
@@ -181,7 +189,8 @@ export function applyVerify({ runDir, run, stage, input, result, event, notes })
   writeJson(join(stage.dir, 'result.json'), result)
   const pending = entries.filter(e => retained(e) && needsPhase5(e.record) && e.phase5?.state === 'pending').length
   let finished = null
-  if (pending === 0) finished = closeVerify(runDir)
+  // A failed rewrite keeps the step open: the next verify plan rebuilds findings.json from the decisions before anything reads it.
+  if (pending === 0 && !writeFailed) finished = closeVerify(runDir)
   for (const e of entries) for (const a of e.phase5?.attempts.filter(x => x.stage === stage.name) ?? []) notes.push(`discarded, never repaired: ${a.id}: ${a.problems[0]}`)
   for (const e of entries.filter(x => x.phase5?.replacement && x.phase5.last_stage === stage.name)) notes.push(`${e.fingerprint}: a material replacement (${e.phase5.replacement.changes.join(', ')}) goes to a new independent verifier, round ${e.phase5.replacement.round}`)
   if (finished) notes.push(finished.message)

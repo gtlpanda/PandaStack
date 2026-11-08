@@ -58,10 +58,14 @@ await test('a hunter, a Phase 3 verifier or a reused ID cannot be a record\'s Ph
   assert.match(r.last, /^AUDIT: FAIL agent r01 already served as hunter of fp-a: it cannot also be its verifier/)
   assert.deepEqual(stageDirs(run.runDir).filter(d => d.includes('verify')), [], 'no verify stage was written')
 })
-await test('findings.json that is not the decided records is refused at the plan: it is written by write-findings and verify, never by hand', async () => {
+await test('findings.json that is not the decided records is rebuilt from decisions.json at the plan (it is derived, never edited by hand), and the rebuild is logged', async () => {
   const run = await atVerify(TWO)
-  writeFileSync(join(run.runDir, 'findings.json'), JSON.stringify(found(run.runDir).map(r => ({ ...r, title: 'edited' }))))
-  assert.match(stage(['plan', run.runDir]).last, /^AUDIT: FAIL findings\.json is not the decided records/)
+  const decided = found(run.runDir)
+  writeFileSync(join(run.runDir, 'findings.json'), JSON.stringify(decided.map(r => ({ ...r, title: 'edited' }))))
+  const res = stage(['plan', run.runDir])
+  assert.equal(res.status, 0, res.stdout)
+  assert.deepEqual(found(run.runDir), decided, 'the edit does not survive: findings.json is the decided records again')
+  assert.ok(readFileSync(join(run.runDir, 'events.jsonl'), 'utf8').includes('"result":"repaired"'), 'the rebuild is in events.jsonl')
 })
 
 console.log('== a record every verifier verified')
