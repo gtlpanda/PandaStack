@@ -129,7 +129,8 @@ done
 
 # The audit agents read hostile source: Read, Grep and Glob and nothing else (no Bash, Write, Edit, network or MCP tool).
 for f in graphs/security-audit/agents/*.md; do
-  if [ "$(fm_get "$f" tools)" = "Read, Grep, Glob" ]; then ok "agent $(basename "$f" .md) has only Read, Grep, Glob"
+  # one tools: line (fm_get reads only the first, so a second key could hide a wider list), and exactly this list
+  if [ "$(frontmatter "$f" | grep -c '^tools:')" = 1 ] && [ "$(fm_get "$f" tools)" = "Read, Grep, Glob" ]; then ok "agent $(basename "$f" .md) has only Read, Grep, Glob"
   else bad "$f: tools must be exactly 'Read, Grep, Glob' (the audit reads hostile source)"; fi
 done
 
