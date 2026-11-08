@@ -9,7 +9,7 @@
 // The session runs with /build-app's session settings (its guard opens only the hunt's state dir
 // in .git), never with the loop's review settings, which forbid the Workflow tool.
 // Off with `"bughunt": false` in autobuild.json or AUTOBUILD_BUGHUNT=0.
-import { appendFileSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { prepareHunt, readHunt, landHunt, keepAttempt, bughuntPrompt, bughuntLine, residualDisposition } from "../../../hunt/skills/bughunt/land.mjs";
 import { sessionSettings, sliceArgs, runClaude, sessionVerdict, stopSessions, NO_BG_CEILING } from "../../../build/skills/build-app/driver/session.mjs";
@@ -92,9 +92,12 @@ export async function runBughunt(config, { log, runId, stopped = () => false }) 
   }
 
   const frozen = frozenFiles(config);
-  const guardFile = statePath(config, "hunt-guard.json");
-  const settingsFile = statePath(config, "hunt-settings.json");
-  const stopFailure = statePath(config, "hunt-stop-failure.json");
+  // The session's own control files live in the git dir, which its guard never lets it edit.
+  const controlDir = path.join(git(config, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).output.trim(), "autobuild");
+  mkdirSync(controlDir, { recursive: true });
+  const guardFile = path.join(controlDir, "hunt-guard.json");
+  const settingsFile = path.join(controlDir, "hunt-settings.json");
+  const stopFailure = path.join(controlDir, "hunt-stop-failure.json");
   writeFileSync(guardFile, `${JSON.stringify({ repo, frozen, writable: [], writableDirs: [prep.stateDir] }, null, 2)}\n`);
   writeFileSync(settingsFile, `${JSON.stringify(sessionSettings(HUNT_HOOKS), null, 2)}\n`);
   rmSync(stopFailure, { force: true });
@@ -148,8 +151,12 @@ export async function runBughunt(config, { log, runId, stopped = () => false }) 
   const date = new Date().toISOString().slice(0, 10);
   const entry = `BUGHUNT ${date}: ${result.disposition}; fixed ${fixed.length ? fixed.join(", ") : "none"}; open ${open.length ? open.join(", ") : "none"}${result.because.length ? ` (${result.because.join(", ")})` : ""}; report ${path.join(prep.stateDir, "report.md")}`;
   appendFileSync(path.join(config.root, config.progressFile), `\n${entry}\n`);
-  git(config, ["add", config.progressFile]);
-  git(config, ["commit", "-q", "-m", `chore(bughunt): ${result.disposition}`]);
+  const added = git(config, ["add", config.progressFile]);
+  const committed = added.ok ? git(config, ["commit", "-q", "-m", `chore(bughunt): ${result.disposition}`]) : added;
+  if (!committed.ok) {
+    log(`bug hunt: ${landed.commits} fix(es) landed, but committing its ${config.progressFile} line failed (left uncommitted; commit it, then rerun):\n${committed.output.slice(-1500)}`);
+    return HUNT_EXIT;
+  }
   const exit = result.disposition === "pass" ? 0 : HUNT_EXIT;
   writeFileSync(record, `${JSON.stringify({ head: git(config, ["rev-parse", "HEAD"]).output.trim(), code: exit, disposition: result.disposition })}\n`);
   log(`bug hunt: ${landed.commits} verified fix(es) landed on ${target}; ${result.disposition}\n${bughuntLine(ledger, landed.commits > 0)}`);

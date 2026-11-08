@@ -67,6 +67,16 @@ function isFrozen(file) {
   return isFrozenAt(lexical, ROOT) || isFrozenAt(realish(lexical), REAL_ROOT);
 }
 
+/** Whether a directory is out of the project (temp dirs excepted) or in its .git, as written or through symlinks. */
+function outsideOrGitDir(dir) {
+  return [[dir, ROOT], [realish(dir), REAL_ROOT]].some(([absolute, root]) => {
+    const rel = path.relative(root, absolute).split(path.sep).join("/");
+    if (rel === ".git" || rel.startsWith(".git/")) return true;
+    if (!rel.startsWith("..") && !path.isAbsolute(rel)) return false;
+    return !TEMP_DIRS.some((temp) => absolute === temp || absolute.startsWith(`${temp}/`));
+  });
+}
+
 function isFrozenAt(absolute, root) {
   const rel = path.relative(root, absolute).split(path.sep).join("/");
   // The project's git dir: a hook or config written there runs on every later commit, the owner's too.
@@ -109,16 +119,20 @@ if (tool === "Bash") {
     const rest = words.slice(1).join(" ");
     if (sub === "push") deny("git push is not allowed; the owner reviews and pushes.");
     if (GIT_DENIED.has(sub)) deny(`git ${sub} can discard, rewrite or fetch work. Allowed: git status/diff/log/show/add/commit.`);
-    if ((sub === "branch" || sub === "tag") && /\s-[a-zA-Z]*[dDmM]/.test(rest)) deny(`git ${sub} -d/-m is not allowed.`);
+    if ((sub === "branch" || sub === "tag") && /(^|\s)(-[a-zA-Z]*[dDmM]|--delete|--move)(\s|$)/.test(rest)) deny(`git ${sub} -d/-m is not allowed.`);
   }
-  // Paths below are resolved from the project root, so a command that first changes directory to
-  // a frozen, outside, or computed place could write anywhere (cd .git && cat >> config).
+  // A cd changes what a relative path means. cd out of the project (temp dirs excepted), into its
+  // .git, or to a computed place is denied; after a cd inside the project, every path below is
+  // checked from that directory as well as from the root (cd tests && echo x > a.test).
+  const cdDirs = [];
   for (const { word, args } of simpleCommands(command)) {
     if (word !== "cd" && word !== "pushd") continue;
     const target = args.find((arg) => !arg.startsWith("-")) ?? "~";
     // The shell reader shows a command substitution as SUBST.
     if (/[$`]|SUBST/.test(target)) deny("cd to a computed directory is not allowed; use paths from the project root.");
-    if (isFrozen(target)) deny(`cd into ${target} is not allowed (frozen or outside the project); use paths from the project root.`);
+    const dir = path.resolve(ROOT, expand(target));
+    if (outsideOrGitDir(dir)) deny(`cd into ${target} is not allowed (outside the project, or its .git); use paths from the project root.`);
+    cdDirs.push(dir);
   }
   if (/\brm\s+(?:-[^\s]*[rR]|--recursive)/.test(command) || /\brm\s+-[^\s]+\s+-[^\s]*[rR]/.test(command)) deny("recursive rm is not allowed.");
   if (/\bfind\b[^\n]*\s-delete\b/.test(command)) deny("find -delete is not allowed.");
@@ -128,7 +142,9 @@ if (tool === "Bash") {
   if (/\bpnpm\s+(dlx|create)\b/.test(command)) deny("pnpm dlx/create download and run remote code; use `pnpm add` and `pnpm exec`.");
   if (/(^|[\s;&|(])docker(\s|$)/.test(command) && !/\bdocker\s+(ps|compose\s+ps)\b/.test(command)) deny("docker is managed by the owner; only `docker ps` is allowed.");
 
-  const frozenTarget = (token) => Boolean(token) && !/^-/.test(token) && /[/.~]/.test(token) && isFrozen(token);
+  const frozenHere = (token) => isFrozen(token) || cdDirs.some((dir) => isFrozen(path.resolve(dir, expand(token))));
+  // A token is taken for a path when it looks like one, or when the command cd'd (then a bare name is one).
+  const frozenTarget = (token) => Boolean(token) && !/^-/.test(token) && (/[/.~]/.test(token) || cdDirs.length > 0) && frozenHere(token);
   // Every write redirect: >, >>, >|, with or without an fd (1>, 2>>) or & (&>, >&file). Only fd
   // duplication (2>&1, >&2) and /dev/null are not a write to a file.
   for (const match of command.matchAll(/(?:^|[^<>])(?:\d+|&)?(>>|>\||>)(&?)\s*([^\s;&|<>]+)/g)) {

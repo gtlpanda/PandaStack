@@ -1722,3 +1722,30 @@ partial). 3 findings, all reproduced; the recheck agreed with each.
 - F11: the loop lock was a plain pid file checked with "is any process alive with this pid".
   Fixed: it is created exclusively, and a pid counts only while its command line is this tool's
   `cli.mjs`. That reuses `/build-app`'s `isOurs`, now in its `proc.mjs`.
+
+**/bughunt round 4** (7.2 min, 22 agents; logic and errors covered, the other four partial).
+5 findings. Each reproduction test was checked against the unfixed head, and one turned out not
+to be a reproduction at all.
+- F13 was my own regression from round 3. The `cd` rule reused `isFrozen`, which for review
+  sessions denies everything but the progress file, so reviews could not
+  `cd packages/api && pnpm test`. Redesigned:
+  - `cd` is denied only out of the project, into `.git`, or to a computed path;
+  - after a `cd` inside the project, every path is checked from that dir as well as from the root.
+- F14: the hunt session's guard rules file sat in `.harness/`, which the hunt's own guard did not
+  protect. Editing it switched the guard off. Fixed:
+  - the hunt's control files live in the git dir, which /build-app's guard never lets a session
+    edit;
+  - that guard now denies every call when its rules file is unreadable.
+- F12: `git branch -D x` and `git tag -d v1` passed, because the flag check needed a leading
+  space. Fixed.
+- F15: a failed commit of the `BUGHUNT` line was ignored, and the run reported done. Fixed: it is
+  exit 12, and nothing is recorded.
+- F11 again: the lock had a window between create and write, and two loops could both take over
+  a stale lock. Fixed:
+  - the pid file is linked into place whole;
+  - a stale one is moved aside and its content re-checked, so a rival's fresh lock goes back.
+- **A false reproduction.** F11's race test imported `syncBuiltinESMExports` from `node:fs`
+  (it lives in `node:module`), so the loop crashed before reaching the lock. The test still
+  failed with its marker, so evidence.mjs and the recheck both counted it as reproduced. With the
+  import fixed, it fails on the old lock for the real reason and passes on the new one. Logged as
+  a /bughunt follow-up.

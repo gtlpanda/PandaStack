@@ -15,7 +15,7 @@
 // the branch and lands its verified fixes before the loop reports done.
 
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, openSync, closeSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, linkSync, mkdirSync, openSync, closeSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { statePath } from "./config.mjs";
 import { countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures, blockedClosure } from "./features.mjs";
@@ -72,6 +72,57 @@ function passedSince(config, sha) {
   return readFeatures(config).features.filter((feature) => feature.passes && !before.has(feature.id)).length;
 }
 
+function readPid(file) {
+  try {
+    return Number(readFileSync(file, "utf8").trim());
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Takes the project's loop lock and returns the pid that holds it (this process when taken).
+ * - The pid file is linked into place whole (link fails when it exists), so it is never read half written.
+ * - A file held by a dead loop, or by a pid reused by another program (a pid counts only while its
+ *   command line is this tool's cli.mjs), is moved aside first; if what was moved is not that stale
+ *   pid, a rival loop took the lock meanwhile, and its file goes back.
+ */
+function takeLock(pidFile) {
+  const mine = `${pidFile}.${process.pid}`;
+  writeFileSync(mine, String(process.pid));
+  try {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        linkSync(mine, pidFile);
+        return process.pid;
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
+      }
+      const pid = readPid(pidFile);
+      if (pid === process.pid) return pid;
+      if (isOurs(pid, CLI_FILE)) return pid;
+      const aside = `${pidFile}.stale.${process.pid}`;
+      try {
+        renameSync(pidFile, aside);
+      } catch {
+        continue;
+      }
+      const moved = readPid(aside);
+      if (moved !== pid && isOurs(moved, CLI_FILE)) {
+        try {
+          linkSync(aside, pidFile);
+        } catch {
+          /* a third loop took it; the next attempt reads that one */
+        }
+      }
+      rmSync(aside, { force: true });
+    }
+    return readPid(pidFile) || process.pid;
+  } finally {
+    rmSync(mine, { force: true });
+  }
+}
+
 export async function runLoop(config, options = {}) {
   const runId = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
   const logsDir = path.join(config.root, config.logsDir);
@@ -86,25 +137,16 @@ export async function runLoop(config, options = {}) {
   const limits = config.limits;
   const sleepMs = (ms) => sleep(Math.min(ms, Number(process.env.AUTOBUILD_MAX_SLEEP_MS ?? ms)));
 
-  // One loop per project: the pid file is created exclusively, so two loops starting together
-  // cannot both take it. One left by a dead loop, or holding a pid reused by another program,
-  // is taken over: a pid counts only while its command line is this tool's cli.mjs.
+  // One loop per project (takeLock). Cleanup removes the pid file only while it is still ours.
   const pidFile = statePath(config, "loop.pid");
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      writeFileSync(pidFile, String(process.pid), { flag: "wx" });
-      break;
-    } catch (error) {
-      if (error.code !== "EEXIST" || attempt > 0) throw error;
-      const pid = Number(readFileSync(pidFile, "utf8"));
-      if (pid !== process.pid && isOurs(pid, CLI_FILE)) {
-        log(`another autobuild loop (pid ${pid}) is running for this project`);
-        return 11;
-      }
-      rmSync(pidFile, { force: true });
-    }
+  const owner = takeLock(pidFile);
+  if (owner !== process.pid) {
+    log(`another autobuild loop (pid ${owner}) is running for this project`);
+    return 11;
   }
-  const cleanup = () => rmSync(pidFile, { force: true });
+  const cleanup = () => {
+    if (readPid(pidFile) === process.pid) rmSync(pidFile, { force: true });
+  };
   let interrupted = false;
   const onSignal = () => {
     if (interrupted) return;
