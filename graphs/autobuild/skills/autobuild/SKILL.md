@@ -79,5 +79,6 @@ Run `autobuild status` in the project.
   - `2` (no progress) or `3` (blocked): read the BLOCKER lines and the last iteration logs. Fix contracts or tests yourself; that is a human-level change. Then rerun.
   - `8`: wait for the reset.
   - `9` or `10`: billing or auth needs the user.
+  - `13`: the final review ended twice without its commit; rerun `autobuild run` to retry it.
   - `12`: the bug hunt needs the user. Read the `BUGHUNT` line in PROGRESS.md and the hunt's report it names: open findings, a lens not covered, or a hunt that could not run or land (the loop log says which; its branch is kept as `attempt/bughunt-<stamp>`).
 - **Review findings.** Review sessions append `REVIEW` lines to PROGRESS.md for the user.

@@ -386,6 +386,10 @@ do_uninstall() {
   log "restoring from: $backup"
   while IFS= read -r rel; do
     [ -n "$rel" ] || continue
+    if [ -z "$LOCAL_BIN" ] && [ "${rel#local-bin/}" != "$rel" ]; then
+      warn "'$rel' kept in the backup: HOME is not set; set PANDASTACK_BIN_DIR and run --uninstall again to restore it"
+      remaining+=("$rel"); continue
+    fi
     dest="$(dest_of "$rel")"
     if [ ! -e "$backup/$rel" ] && [ ! -L "$backup/$rel" ]; then
       warn "'$rel' listed in manifest but missing from backup; skipped"; continue

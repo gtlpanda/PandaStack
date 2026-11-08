@@ -1790,3 +1790,19 @@ partial). 4 findings, all reproduced; each test was checked against the unfixed 
 cover, so it was fixed and hunting this branch stops after one more round, the one the gate needs
 to open the PR. A disposition other than `pass` goes to the owner for a by-hand merge, as with
 PR3.
+
+**/bughunt round 7** (7.3 min, 23 agents; every lens covered except errors, which was partial). 5 findings, none HIGH,
+all reproduced; each test checked against the unfixed head.
+- F20: two install tests from PR #35 set only CLAUDE_CONFIG_DIR. Once install.sh linked
+  autobuild into `$HOME/.local/bin`, they rewrote the developer's real `~/.local/bin/autobuild`
+  and dropped its backup with their temp dir. **It happened on this machine at 20:03:** the link
+  had been switched to the checkout. I restored the original link, `~/.autobuild/bin/autobuild`;
+  no loop was running. Fixed: those tests use a temp HOME, and a regression test runs them under
+  a fake HOME and checks it stays untouched.
+- F21: the guard allowed everything when autobuild.json could not be loaded. Fixed: inside a loop
+  session it denies everything.
+- F22: a final review that ended without its commit still reported Done (exit 0). Fixed: it is
+  retried once, then exit 13.
+- F23: a documented writable exception inside a frozen path stopped the loop with exit 4. Fixed.
+- F24: uninstall with no HOME restored a local-bin backup to `/autobuild`. Fixed: it is kept in
+  the backup with a note.

@@ -29,7 +29,9 @@ try {
 let config;
 try {
   config = loadConfig(findProjectRoot(projectRootFromHookEnv()));
-} catch {
+} catch (error) {
+  // In a loop session, a config that cannot be read must not switch the guard off.
+  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: `Autobuild guard: autobuild.json cannot be loaded (${error instanceof Error ? error.message : error}), so every call is denied; a human must repair it.` } }));
   process.exit(0);
 }
 const ROOT = config.root;

@@ -9,6 +9,7 @@
 //   7 max iterations reached     8 usage limit resets too far away (rerun later)
 //   9 billing / spend limit      10 auth problem              11 another loop is running
 //   12 the bug hunt needs a human (findings left open, or it could not run or land)
+//   13 the final review ended twice without its commit (the last features are unreviewed)
 //   130 interrupted
 //
 // Once every feature passes (and the final review ran), lib/bughunt.mjs runs /bughunt --fix over
@@ -216,7 +217,18 @@ export async function runLoop(config, options = {}) {
         if (doc.features.every((candidate) => candidate.passes)) {
           if (limits.finalReview !== false && completedSinceReview > 0) {
             log(`review: final review, ${completedSinceReview} features passed since ${lastReviewSha.slice(0, 8)} without a review`);
-            if ((await reviewIfDue({ final: true })) !== 0) return 4;
+            // A final review that ends without its commit is retried once; twice is a stop, never Done.
+            for (let attempt = 1; completedSinceReview > 0; attempt += 1) {
+              const before = lastReviewSha;
+              if ((await reviewIfDue({ final: true })) !== 0) return 4;
+              if (interrupted) return 130;
+              if (lastReviewSha !== before) break;
+              completedSinceReview = passedSince(config, lastReviewSha);
+              if (attempt === 2) {
+                log(`review: the final review ended twice without a chore(review) commit; the last features are unreviewed. Stopping; rerun \`autobuild run\` to retry it.`);
+                return 13;
+              }
+            }
             if (interrupted) return 130;
           }
           if (huntEnabled(config)) {

@@ -125,6 +125,7 @@ See `templates/autobuild.json`. Defaults are in `lib/config.mjs`.
 | 10 | Auth |
 | 11 | Another loop is running |
 | 12 | The bug hunt needs a human (findings left open, or it could not run or land) |
+| 13 | The final review ended twice without its `chore(review)` commit; rerun to retry it |
 | 130 | Interrupted |
 
 ## Limits and caveats

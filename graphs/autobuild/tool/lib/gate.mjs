@@ -32,10 +32,13 @@ export function frozenChanges(config, baseSha) {
   const paths = config.frozen.filter((entry) => entry !== config.featuresFile);
   const diff = git(config, ["diff", "--name-only", baseSha, "--", ...paths]);
   const untracked = git(config, ["ls-files", "--others", "--exclude-standard", "--", ...paths]);
+  // A writable entry is an exception inside a frozen path (frozen: spec, writable: spec/DECISIONS.md).
+  const writable = config.writable ?? [];
   const changed = `${diff.output}\n${untracked.output}`
     .split("\n")
     .map((line) => line.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((file) => !writable.some((entry) => file === entry || file.startsWith(`${entry}/`)));
   const before = git(config, ["show", `${baseSha}:${config.featuresFile}`]);
   const now = existsSync(path.join(config.root, config.featuresFile)) ? readFileSync(path.join(config.root, config.featuresFile), "utf8") : "";
   if (before.ok && featuresWithoutPasses(before.output) !== featuresWithoutPasses(now)) changed.push(`${config.featuresFile} (changed beyond passes flags)`);

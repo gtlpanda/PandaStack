@@ -19,7 +19,7 @@ test('install.sh still installs when ~/.claude/commands is a symlink (directly o
     symlinkSync(mine, join(home, 'commands'))
     const install = args => spawnSync('bash', [join(REPO, 'install.sh'), ...args], {
       encoding: 'utf8',
-      env: { ...process.env, CLAUDE_CONFIG_DIR: home, HARNESS_NO_GIT_CONFIG: '1' },
+      env: { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: home, HARNESS_NO_GIT_CONFIG: '1' },
     })
     let r = install([])
     if (r.status !== 0) r = install(['--skip=commands'])   // the user's opt-out must be honored
