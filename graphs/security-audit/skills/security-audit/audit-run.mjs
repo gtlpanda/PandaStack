@@ -295,7 +295,7 @@ function describePrior(path, source, repo) {
   const reasons = []
   if (ledger.state !== 'pass') reasons.push(ledger.state === 'missing' ? 'coverage-ledger.json is missing' : `coverage-ledger.json did not validate: ${ledger.last_line}`)
   if (findings.state === 'fail' || findings.state === 'error') reasons.push(`findings.json did not validate: ${findings.last_line}`)
-  if (str(m.repo) && m.repo !== repo) reasons.push(`it audited a different repository (${m.repo})`)
+  if (source === '--prior' && str(m.repo) && m.repo !== repo) reasons.push(`it audited a different repository (${m.repo})`)   // runs beside this one are this repository whatever it was called then
   return {
     path, run_id: basename(path), number: RUN_NAME.test(basename(path)) ? Number(basename(path).slice(4)) : null, source,
     run_status: str(m.run_status), profile: str(m.profile), scope_paths: Array.isArray(m.scope_paths) ? m.scope_paths : null,

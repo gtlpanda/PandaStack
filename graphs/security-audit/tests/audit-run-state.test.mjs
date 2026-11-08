@@ -142,7 +142,7 @@ await test('earlier runs are found, numbered, and judged by upstream\'s validato
   priorFiles(repo, 4, { 'coverage-ledger.json': LEDGER(), 'findings.json': [{ verdict: 'confirmed' }] })   // invalid findings
   priorFiles(repo, 5, { 'coverage-ledger.json': '[' })                                            // not JSON
   priorFiles(repo, 6, {})                                                                          // nothing at all
-  priorFiles(repo, 7, { 'coverage-ledger.json': LEDGER(), 'run-metadata.json': { repo: 'some-other-repo', run_status: 'complete' } })
+  priorFiles(repo, 7, { 'coverage-ledger.json': LEDGER(), 'run-metadata.json': { repo: 'renamed-since', run_status: 'complete' } })   // same git directory, so same repository whatever name it had
   priorFiles(repo, 8, { 'run-metadata.json': { repo: 5, run_status: ['x'], source_ref: 'abc', scope_paths: {}, profile: null } })   // metadata of the wrong types
   mkdirSync(join(repo, '.git', 'security-audit', 'notes')); mkdirSync(join(repo, '.git', 'security-audit', 'run-x'))   // not run directories
   const linked = fresh('linked-run')                                                              // a link to a perfectly good run elsewhere: never followed
@@ -155,19 +155,19 @@ await test('earlier runs are found, numbered, and judged by upstream\'s validato
   const priors = readJson(join(r.runDir, 'prior-runs.json'))
   assert.deepEqual(priors.map(p => p.number), [1, 2, 3, 4, 5, 6, 7, 8, 10], 'numeric order, not run-10 before run-2; run-9 (a symlink) and run-x are not runs')
   const by = n => priors.find(p => p.number === n)
-  assert.deepEqual(priors.map(p => p.compatible), [true, true, false, false, false, false, false, false, false])
+  assert.deepEqual(priors.map(p => p.compatible), [true, true, false, false, false, false, true, false, false])
   assert.deepEqual([by(1).ledger, by(1).findings], [{ state: 'pass', last_line: 'PASS: 1 coverage units valid' }, { state: 'pass', last_line: 'PASS: 1 findings valid' }])
   assert.deepEqual([by(2).ledger.state, by(2).findings.state], ['pass', 'missing'])
   assert.match(by(3).reasons[0], /^coverage-ledger\.json did not validate: FAIL: \d+ validation error/)
   assert.match(by(4).reasons[0], /^findings\.json did not validate: FAIL: /)
   assert.match(by(5).reasons[0], /^coverage-ledger\.json did not validate: /)
   assert.deepEqual(by(6).reasons, ['coverage-ledger.json is missing'])
-  assert.deepEqual(by(7).reasons, ['it audited a different repository (some-other-repo)'])
+  assert.deepEqual([by(7).reasons, by(7).repo], [[], 'renamed-since'])
   assert.deepEqual([by(8).run_status, by(8).repo, by(8).source_commit, by(8).scope_paths, by(8).profile], [null, null, null, null, null])
   assert.deepEqual([by(1).run_status, by(1).profile, by(1).repo, by(1).source_commit.length, by(1).scope_paths, by(1).source], ['in_progress', 'standard', meta(good).repo, 40, [], 'default'])
   assert.equal(by(2).path, ledgerOnly)
   assert.deepEqual(meta(r.runDir).prior_run_paths, priors.map(p => p.path))
-  assert.match(r.stdout, /earlier_runs=9 compatible=2$/m)
+  assert.match(r.stdout, /earlier_runs=9 compatible=3$/m)
   assert.match(r.stdout, /note: earlier run run-3 is incompatible \(coverage-ledger\.json did not validate: .*it is recorded in prior-runs\.json, never treated as empty coverage/)
   assert.equal(r.stdout.split('\n').filter(l => l.startsWith('note: earlier run')).length, 5, 'at most five notes')
 })
@@ -176,10 +176,13 @@ await test('--prior adds a run directory from anywhere (a Cloudflare-style one h
   const own = init([repo, '--full']).runDir
   const foreign = fresh('foreign')
   put(join(foreign, 'coverage-ledger.json'), JSON.stringify(LEDGER())); put(join(foreign, 'findings.json'), JSON.stringify(FINDINGS()))
-  const r = init([repo, '--full', '--prior', foreign, '--prior', own, '--prior', foreign])
+  const stranger = fresh('stranger')                                                // another repository's run: valid files, a different name
+  put(join(stranger, 'coverage-ledger.json'), JSON.stringify(LEDGER())); put(join(stranger, 'run-metadata.json'), JSON.stringify({ repo: 'some-other-repo' }))
+  const r = init([repo, '--full', '--prior', foreign, '--prior', own, '--prior', foreign, '--prior', stranger])
   assert.equal(r.status, 0, r.stdout)
   const priors = readJson(join(r.runDir, 'prior-runs.json'))
-  assert.deepEqual(priors.map(p => [p.path, p.source, p.compatible]), [[own, 'default', false], [foreign, '--prior', true]])
+  assert.deepEqual(priors.map(p => [p.path, p.source, p.compatible]), [[own, 'default', false], [foreign, '--prior', true], [stranger, '--prior', false]])
+  assert.deepEqual(priors[2].reasons, ['it audited a different repository (some-other-repo)'])
   assert.equal(priors[1].number, null)
   assert.match(init([repo, '--full', '--prior', join(foreign, 'coverage-ledger.json')]).last, /^AUDIT: FAIL --prior .* is not a directory$/)
   assert.match(init([repo, '--full', '--prior', join(foreign, 'nope')]).last, /^AUDIT: FAIL --prior .* is not a directory$/)
