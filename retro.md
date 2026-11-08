@@ -1759,3 +1759,15 @@ reproduced; each test was checked against the unfixed head.
 - F17: a restart before the first review started the review range at the restart, so features
   passed before it were never reviewed. Fixed: with no review yet, the range starts at the
   commit that added the feature list.
+
+**Changing course after round 5.** 11 of the 20 findings were bypasses of the regex Bash guard,
+and that class was not converging: each round found a new spelling. The logic bugs were
+converging. So instead of patching each new guard bypass, this commit adds the backstop the
+README already claimed:
+- the loop's own git runs with `core.hooksPath=/dev/null` and `core.fsmonitor=false`;
+- `.git/config`, `hooks/` and `info/` are digested around every session, and any change exits 4;
+- the hunt's control files are per worktree (`--git-dir`).
+
+The README now says plainly that writes outside the project have no backstop. Mutation-checked:
+dropping the safe-git flags, or the post-session check, fails a test. Cost so far: about 7 min and
+about 1M subagent tokens per hunt round; 5 rounds.

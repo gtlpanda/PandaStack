@@ -6,7 +6,8 @@
 //   5. browser suites: the regression command plus passing and current browser specs
 // failFast stops at the first failing step.
 
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
 import path from "node:path";
 import { featureById, readFeatures } from "./features.mjs";
 import { git, sh, tail } from "./proc.mjs";
@@ -39,6 +40,41 @@ export function frozenChanges(config, baseSha) {
   const now = existsSync(path.join(config.root, config.featuresFile)) ? readFileSync(path.join(config.root, config.featuresFile), "utf8") : "";
   if (before.ok && featuresWithoutPasses(before.output) !== featuresWithoutPasses(now)) changed.push(`${config.featuresFile} (changed beyond passes flags)`);
   return { ok: diff.ok && untracked.ok, changed: [...new Set(changed)] };
+}
+
+/**
+ * A digest of the git files that make git run code: config, hooks/, info/ (and a worktree's
+ * config.worktree). Compared before and after each session: frozenChanges sees only tracked
+ * files, so a hook or an fsmonitor written into .git would otherwise go unnoticed.
+ */
+export function gitControlDigest(config) {
+  const dir = (flag) => git(config, ["rev-parse", "--path-format=absolute", flag]).output.trim();
+  const common = dir("--git-common-dir");
+  const own = dir("--git-dir");
+  const roots = [path.join(common, "config"), path.join(common, "hooks"), path.join(common, "info"), path.join(own, "config.worktree")];
+  const digest = {};
+  const walk = (file) => {
+    let stat;
+    try {
+      stat = lstatSync(file);
+    } catch {
+      return;
+    }
+    if (stat.isDirectory()) {
+      for (const entry of readdirSync(file)) walk(path.join(file, entry));
+      return;
+    }
+    const content = stat.isSymbolicLink() ? `link:${readlinkSync(file)}` : readFileSync(file);
+    digest[file] = `${stat.mode.toString(8)}:${createHash("sha1").update(content).digest("hex")}`;
+  };
+  for (const root of [...new Set(roots)]) walk(root);
+  return digest;
+}
+
+/** The git control files added, removed or changed since `before` (a gitControlDigest). */
+export function gitControlChanges(config, before) {
+  const after = gitControlDigest(config);
+  return [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((file) => before[file] !== after[file]).sort();
 }
 
 export function runGate(config, { featureId = null, baseSha = null, failFast = false, skipBrowser = false } = {}) {

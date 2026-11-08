@@ -15,6 +15,7 @@ import { prepareHunt, readHunt, landHunt, keepAttempt, bughuntPrompt, bughuntLin
 import { sessionSettings, sliceArgs, runClaude, sessionVerdict, stopSessions, NO_BG_CEILING } from "../../../build/skills/build-app/driver/session.mjs";
 import { defaultBase } from "../../../build/skills/build-app/driver/finish.mjs";
 import { statePath } from "./config.mjs";
+import { gitControlChanges, gitControlDigest } from "./gate.mjs";
 import { buildEnv, git, quote } from "./proc.mjs";
 
 /** Exit code when the bug hunt needs a human: findings left open, or the hunt could not run or land. */
@@ -34,6 +35,12 @@ let landing = null;
 
 /** Ends a running hunt session and waits for a landing in progress to clean up (the loop's stop calls this). */
 export const stopHunt = () => Promise.all([stopSessions(), landing ?? Promise.resolve()]);
+
+/** Where the hunt session's control files go: in the git dir (no session may edit it), and per
+ * worktree (--git-dir), so loops in two linked worktrees never share one. */
+export function huntControlDir(config) {
+  return path.join(git(config, ["rev-parse", "--path-format=absolute", "--git-dir"]).output.trim(), "autobuild");
+}
 
 /** Every tracked file under a frozen path, except the writable ones: what the fixes may not change. */
 export function frozenFiles(config) {
@@ -93,7 +100,7 @@ export async function runBughunt(config, { log, runId, stopped = () => false }) 
 
   const frozen = frozenFiles(config);
   // The session's own control files live in the git dir, which its guard never lets it edit.
-  const controlDir = path.join(git(config, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).output.trim(), "autobuild");
+  const controlDir = huntControlDir(config);
   mkdirSync(controlDir, { recursive: true });
   const guardFile = path.join(controlDir, "hunt-guard.json");
   const settingsFile = path.join(controlDir, "hunt-settings.json");
@@ -104,6 +111,7 @@ export async function runBughunt(config, { log, runId, stopped = () => false }) 
   const logFile = path.join(config.root, config.logsDir, `${runId}-bughunt.jsonl`);
   const prompt = bughuntPrompt({ repo, stateDir: prep.stateDir, configDir: CONFIG_DIR, branch: prep.branch, label: "an autobuild run", scope: `the branch ${target}` });
   log(`bug hunt: /bughunt --fix over ${target} against ${base} (state ${prep.stateDir}; up to $${config.limits.bughuntBudgetUsd})`);
+  const control = gitControlDigest(config);
   const code = await runClaude({
     bin: config.claudeBin,
     repo,
@@ -113,6 +121,11 @@ export async function runBughunt(config, { log, runId, stopped = () => false }) 
     env: buildEnv(config, { ...NO_BG_CEILING, HARNESS_BUILD_ACTIVE: "1", HARNESS_BUILD_GUARD: guardFile, HARNESS_BUILD_STOP_FAILURE: stopFailure }),
   });
   const keep = (why) => `${why}; its branch is kept as ${keepAttempt(repo, prep.branch, stamp)}`;
+  const tampered = gitControlChanges(config, control);
+  if (tampered.length) {
+    log(keep(`bug hunt: GIT CONTROL FILES CHANGED (hooks, config or info under .git) — stopping for a human:\n${tampered.join("\n")}`));
+    return 4;
+  }
   if (stopped()) {
     log(keep("bug hunt: stopped by request"));
     return 130;

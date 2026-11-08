@@ -8,10 +8,11 @@
 //   { "ok": true }          a successful no-op answer (the usage probe, or a review that commits nothing)
 //   { "review": true }      a review that appends a finding to PROGRESS.md and commits it as chore(review)
 //   { "hang": true }        write its pid to <script>.pid, then run until killed
+//   { "plant": "<path>" }   write an executable file at that path (relative to the project), commit nothing
 //   { "hunt": ... }         the bug hunt session, acted out by /build-app's fake (its format, its
 //                           <script>.hunt.calls record): fix commits, then a real findings ledger
 import { execFileSync } from "node:child_process";
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const scriptFile = process.env.FAKE_CLAUDE_SCRIPT;
@@ -20,6 +21,10 @@ const step = steps.shift() ?? { ok: true };
 writeFileSync(scriptFile, JSON.stringify(steps));
 appendFileSync(`${scriptFile}.calls`, `${JSON.stringify({ step, args: process.argv.slice(2).filter((arg) => arg.startsWith("--")) })}\n`);
 
+if (step.plant) {
+  writeFileSync(step.plant, "#!/bin/sh\ntouch planted-ran\n");
+  chmodSync(step.plant, 0o755);
+}
 if (step.hunt) {
   const huntScript = `${scriptFile}.hunt`;
   writeFileSync(huntScript, JSON.stringify([step]));

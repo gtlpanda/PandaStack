@@ -19,7 +19,7 @@ import { appendFileSync, existsSync, linkSync, mkdirSync, openSync, closeSync, r
 import path from "node:path";
 import { statePath } from "./config.mjs";
 import { countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures, blockedClosure } from "./features.mjs";
-import { frozenChanges } from "./gate.mjs";
+import { frozenChanges, gitControlChanges, gitControlDigest } from "./gate.mjs";
 import { huntEnabled, runBughunt, stopHunt } from "./bughunt.mjs";
 import { classifyOutcome, parseResetTime, planLimitWait } from "./limits.mjs";
 import { buildEnv, git, sh } from "./proc.mjs";
@@ -51,6 +51,13 @@ async function stopSessions() {
   await Promise.race([Promise.all(closed), sleep(30_000)]);
   for (const child of sessions) child.kill("SIGKILL");
   await hunt;
+}
+
+/** Logs and returns true when a session changed git's control files (hooks, config, info). */
+function controlTampered(config, before, who, log) {
+  const changed = gitControlChanges(config, before);
+  if (changed.length) log(`${who}: GIT CONTROL FILES CHANGED (hooks, config or info under .git) — stopping for a human:\n${changed.join("\n")}`);
+  return changed.length > 0;
 }
 
 /** The newest commit a review session made on this branch, or null when there is none. */
@@ -184,18 +191,22 @@ export async function runLoop(config, options = {}) {
     let lastReviewSha = lastReviewCommit(config) ?? firstCommitOf(config, config.featuresFile) ?? git(config, ["rev-parse", "HEAD"]).output.trim();
     let completedSinceReview = passedSince(config, lastReviewSha);
     // `final`: the last features of a run are reviewed even when fewer than reviewEvery passed since the last review.
+    // Returns 4 when the review session changed git's control files, else 0.
     const reviewIfDue = async ({ final = false } = {}) => {
-      if (completedSinceReview === 0) return;
-      if (!final && completedSinceReview < limits.reviewEvery) return;
+      if (completedSinceReview === 0) return 0;
+      if (!final && completedSinceReview < limits.reviewEvery) return 0;
+      const control = gitControlDigest(config);
       await runReview(config, { since: lastReviewSha, iteration, runId, log });
-      if (interrupted) return;
+      if (interrupted) return 0;
+      if (controlTampered(config, control, "review", log)) return 4;
       completedSinceReview = 0;
       const reviewed = lastReviewCommit(config);
       if (reviewed && reviewed !== lastReviewSha) lastReviewSha = reviewed;
       else log(`review: no chore(review) commit; the next review covers ${lastReviewSha.slice(0, 8)}..HEAD again`);
+      return 0;
     };
     if (completedSinceReview > 0) log(`review: ${completedSinceReview} features passed since ${lastReviewSha.slice(0, 8)} without a review`);
-    await reviewIfDue();
+    if ((await reviewIfDue()) !== 0) return 4;
 
     while (iteration < limits.maxIterations && !interrupted) {
       const doc = readFeatures(config);
@@ -205,7 +216,7 @@ export async function runLoop(config, options = {}) {
         if (doc.features.every((candidate) => candidate.passes)) {
           if (limits.finalReview !== false && completedSinceReview > 0) {
             log(`review: final review, ${completedSinceReview} features passed since ${lastReviewSha.slice(0, 8)} without a review`);
-            await reviewIfDue({ final: true });
+            if ((await reviewIfDue({ final: true })) !== 0) return 4;
             if (interrupted) return 130;
           }
           if (huntEnabled(config)) {
@@ -232,6 +243,7 @@ export async function runLoop(config, options = {}) {
 
       log(`iteration ${iteration + 1}: ${feature.id} — ${feature.title} (base ${base.slice(0, 8)}, ${passingBefore} passing)`);
       const started = Date.now();
+      const control = gitControlDigest(config);
       const exitCode = await runClaude(config, {
         role: "builder",
         prompt: config.prompt,
@@ -247,6 +259,7 @@ export async function runLoop(config, options = {}) {
       totalCost += Number(result?.total_cost_usd ?? 0);
 
       // Independent verification: never trust the session's own account.
+      if (controlTampered(config, control, `iteration ${iteration + 1}`, log)) return 4;
       const frozen = frozenChanges(config, base);
       if (frozen.changed.length > 0) {
         log(`iteration ${iteration + 1}: FROZEN FILES CHANGED — stopping for a human:\n${frozen.changed.join("\n")}`);
@@ -265,11 +278,12 @@ export async function runLoop(config, options = {}) {
           const fresh = readFeatures(config);
           featureById(fresh, feature.id).passes = false;
           writeFeatures(config, fresh);
-          sh(config, `git add ${config.featuresFile} && git commit -q -m "chore(autobuild): ${feature.id} test fails after the session; passes reverted"`);
+          if (git(config, ["add", config.featuresFile]).ok) git(config, ["commit", "-q", "-m", `chore(autobuild): ${feature.id} test fails after the session; passes reverted`]);
         }
       } else if (blockerNow && !blockers.has(feature.id)) {
         outcome = "BLOCKED";
-        sh(config, `git add ${config.progressFile} && git diff --cached --quiet || git commit -q -m "chore(${feature.id}): BLOCKER logged"`);
+        git(config, ["add", config.progressFile]);
+        if (!git(config, ["diff", "--cached", "--quiet"]).ok) git(config, ["commit", "-q", "-m", `chore(${feature.id}): BLOCKER logged`]);
       }
 
       // A passes flag without its feat commit is not a pass: left in the tree, nextFeature would skip it.
@@ -353,7 +367,7 @@ export async function runLoop(config, options = {}) {
         log(`${noProgress} consecutive iterations without progress. Stopping for a human.`);
         return 2;
       }
-      await reviewIfDue();
+      if ((await reviewIfDue()) !== 0) return 4;
     }
     if (interrupted) return 130;
     log(`maxIterations=${limits.maxIterations} reached (estimated total $${totalCost.toFixed(2)}). Stopping.`);

@@ -46,8 +46,12 @@ export function quote(arg) {
   return /^[A-Za-z0-9_./=:@+-]+$/.test(arg) ? arg : `'${String(arg).replace(/'/g, `'\\''`)}'`;
 }
 
+// The loop's own git never runs repo hooks or an fsmonitor: a session could have planted either,
+// and the loop must not run what a session wrote.
+const SAFE_GIT = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"];
+
 export function git(config, args) {
-  return sh(config, ["git", ...args].map(quote).join(" "));
+  return sh(config, ["git", ...SAFE_GIT, ...args].map(quote).join(" "));
 }
 
 /** The last `chars` characters, starting at a line boundary. */
