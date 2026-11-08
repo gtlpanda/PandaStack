@@ -179,6 +179,19 @@ await test('a block that does not resolve, or resolves but is the wrong kind of 
   bad({ excluded_blocks: [{ block: 'AI-AND-LLM.md#Nope', reason: 'r' }] }, /excluded_blocks\[0\]\.block: unknown block AI-AND-LLM\.md#Nope/)
   bad({ excluded_blocks: [{ block: 'RECONNAISSANCE.md#Phase 1: Map the source and plan coverage', reason: 'r' }] }, /excluded_blocks\[0\]\.block RECONNAISSANCE\.md#Phase 1: Map the source and plan coverage resolves but is not an attack-class block/)
 })
+await test('a companion block is selected only with its file\'s three fixed blocks: a class without Core discipline, Universal moves or Validation rules is refused naming what is missing', () => {
+  const { runDir } = newRun()
+  const bad = (selected, pattern) => seedRefused(runDir, reconInput([unitInput('a', { selected_companion_blocks: selected })]), pattern)
+  bad([AI.classes[1]], new RegExp(`selected_companion_blocks: AI-AND-LLM\\.md is selected without ${AI.core.replace(/[#.]/g, '\\$&')}, ${AI.universal.replace(/[#.]/g, '\\$&')}, ${AI.validation.replace(/[#.]/g, '\\$&')}`))
+  bad([AI.classes[1], AI.core, AI.universal], /selected without AI-AND-LLM\.md#Validation rules\b/)
+  bad([AI.core], /selected without AI-AND-LLM\.md#Universal moves, AI-AND-LLM\.md#Validation rules/)
+  const web = companions().find(c => c.file === 'WEB-PROTOCOL-AND-AUTH.md')
+  bad([...AI.blocks, web.classes[0]], /selected_companion_blocks: WEB-PROTOCOL-AND-AUTH\.md is selected without /)
+  const whole = [web.classes[0], web.core, web.universal, web.validation, ...AI.blocks]
+  assert.deepEqual(seedProblems(runDir, reconInput([unitInput('a', { selected_companion_blocks: whole })])), [], 'two companions, each whole, and the file\'s classes in any order')
+  assert.deepEqual(seedProblems(runDir, reconInput([unitInput('a', { selected_companion_blocks: [AI.validation, AI.universal, AI.classes[0], AI.core] })])), [])
+  assert.deepEqual(seedProblems(runDir, reconInput([unitInput('a', { selected_companion_blocks: [] })])), [], 'no companion at all is fine')
+})
 await test('a block field of the wrong type is refused, never coerced: null or a number in a list, an object, a string where a list belongs', () => {
   const { runDir } = newRun()
   const bad = (over, pattern) => seedRefused(runDir, reconInput([unitInput('a', over)]), pattern)

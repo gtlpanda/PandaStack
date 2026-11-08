@@ -6,6 +6,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import { applyCritic, loadPriors, planWave, seed, sourceUnchanged } from '../skills/security-audit/audit-ledger.mjs'
+import { companions } from '../skills/security-audit/blocks.mjs'
 import { advanceState } from '../skills/security-audit/audit-run.mjs'
 import { canonicalCoverageId as canonicalIdOf, validateFindingsFile, validateLedgerFile } from '../skills/security-audit/upstream.mjs'
 import { audit, fresh, init, mkRepo, sh } from './audit-fixtures.mjs'
@@ -199,6 +200,19 @@ await test('a prior unit that names a block this pin does not have is not added 
   const out = seed(runDir, reconInput([unitInput('fresh')]))
   assert.deepEqual(Object.keys(names(runDir)).sort(), ['fresh', 'kept'])
   assert.match(out.notes.join('\n'), /earlier run run-1: unit .*ghost.* could not be added to this run; it is not carried/)
+  assert.ok(ledgerValid(runDir))
+})
+await test('a prior unit that selected a companion class without its three fixed blocks is added with them (appended, and the note says so), unless it excluded one: then it is not added', () => {
+  const AI = companions().find(c => c.file === 'AI-AND-LLM.md')
+  const partial = priorUnit('part', 'blocked', { selected_companion_blocks: [AI.classes[1]] })
+  const conflict = priorUnit('clash', 'blocked', { selected_companion_blocks: [AI.classes[1]], excluded_blocks: [{ block: AI.core, reason: 'no model in this app' }] })
+  const { runDir } = scenario({ units: [partial, conflict], findings: [] })
+  const out = seed(runDir, reconInput([unitInput('fresh')]))
+  const u = names(runDir)
+  assert.deepEqual(u.part.selected_companion_blocks, [AI.classes[1], AI.core, AI.universal, AI.validation])
+  assert.match(out.notes.join('\n'), /earlier run run-1: unit .*part.* selected a companion block without its file's Core discipline, Universal moves and Validation rules; they were added/)
+  assert.ok(!u.clash, 'a unit that excluded one of them cannot be completed, so it is not carried')
+  assert.match(out.notes.join('\n'), /earlier run run-1: unit .*clash.* could not be added to this run; it is not carried/)
   assert.ok(ledgerValid(runDir))
 })
 await test('an out_of_scope or scoped run keeps its states: a carried record is not carried into a unit this run\'s scope excludes', () => {

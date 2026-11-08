@@ -109,9 +109,24 @@ let blockSets
 const blockRegistry = () => {
   if (!blockSets) {
     const files = companions()
-    blockSets = { ordinary: new Set(ordinary()), companion: new Set(files.flatMap(c => c.blocks)), considered: new Set([...ordinary(), ...files.flatMap(c => [c.whenToUse, ...c.blocks])]) }
+    blockSets = {
+      ordinary: new Set(ordinary()), companion: new Set(files.flatMap(c => c.blocks)), considered: new Set([...ordinary(), ...files.flatMap(c => [c.whenToUse, ...c.blocks])]),
+      fixedOf: new Map(files.flatMap(c => c.blocks.map(b => [b, { file: c.file, fixed: [c.core, c.universal, c.validation] }]))),   // a companion block -> its file and the file's three fixed blocks
+    }
   }
   return blockSets
+}
+
+// The fixed blocks (Core discipline, Universal moves, Validation rules) of every companion file that `selected` takes a block from and does not
+// take them of. Upstream (RECONNAISSANCE.md, "Architecture summary and companion selection"): the selected companion list includes each applicable
+// class plus its companion's three fixed sections, and the hunter prompt carries exactly the selected blocks (HUNTING.md part 4).
+function missingFixed(selected) {
+  const reg = blockRegistry(), missing = new Map()
+  for (const ref of selected) {
+    const owner = typeof ref === 'string' ? reg.fixedOf.get(ref) : undefined
+    if (owner) missing.set(owner.file, owner.fixed.filter(f => !selected.includes(f)))
+  }
+  return [...missing].filter(([, refs]) => refs.length)
 }
 
 // Why the blocks a unit names cannot be used, as plain strings (empty when each is a block of the right kind). A reference
@@ -125,7 +140,10 @@ function blockProblems(input) {
     found.push(`${where} ${ref} resolves but is not ${kind}`)
   }
   if (input.ordinary_attack_class_block !== null && input.ordinary_attack_class_block !== undefined) check('ordinary_attack_class_block', input.ordinary_attack_class_block, reg.ordinary, 'an ordinary attack-class block')
-  if (Array.isArray(input.selected_companion_blocks)) input.selected_companion_blocks.forEach((ref, i) => check(`selected_companion_blocks[${i}]`, ref, reg.companion, 'a companion block'))
+  if (Array.isArray(input.selected_companion_blocks)) {
+    input.selected_companion_blocks.forEach((ref, i) => check(`selected_companion_blocks[${i}]`, ref, reg.companion, 'a companion block'))
+    if (!found.length) for (const [file, refs] of missingFixed(input.selected_companion_blocks)) found.push(`selected_companion_blocks: ${file} is selected without ${refs.join(', ')} (upstream selects a companion's Core discipline, Universal moves and Validation rules with any of its blocks)`)
+  }
   if (Array.isArray(input.excluded_blocks)) input.excluded_blocks.forEach((e, i) => { if (isObj(e)) check(`excluded_blocks[${i}].block`, e.block, reg.considered, 'an attack-class block') })
   return found
 }
@@ -645,17 +663,19 @@ function withPrior(unit, history, top, head) {
 // A prior unit this run's recon did not seed, as a unit of this run: planned work (never dropped), or not_applicable when none of
 // its paths is in the snapshot any more, or out_of_scope when this run's scope excludes it.
 function forceAdd(was, prior, ctx) {
+  // An earlier run may have selected a companion class without its three fixed blocks: this run's unit takes them too, appended, and says so.
+  const added = Array.isArray(was.selected_companion_blocks) ? missingFixed(was.selected_companion_blocks).flatMap(([, refs]) => refs) : []
   const present = was.starting_paths.filter(p => existsSync(join(ctx.runDir, 'tree', p)))
   const gone = present.length === 0
   const input = {
     canonical_refs: was.canonical_refs, surface: was.surface, boundary: was.boundary, subsystem: was.subsystem, attack_class: was.attack_class,
     ...(was.lifecycle !== undefined && { lifecycle: was.lifecycle }), starting_paths: gone ? was.starting_paths : present,
-    ordinary_attack_class_block: was.ordinary_attack_class_block, selected_companion_blocks: was.selected_companion_blocks, excluded_blocks: was.excluded_blocks,
+    ordinary_attack_class_block: was.ordinary_attack_class_block, selected_companion_blocks: [...was.selected_companion_blocks, ...added], excluded_blocks: was.excluded_blocks,
     priority_class: was.priority_class ?? 4, ...(typeof was.priority_why === 'string' && { priority_why: was.priority_why }),
     ...(gone && { status: 'not_applicable', reason: `none of its starting paths is in the audited snapshot; it was a unit of earlier run ${prior.run_id}` }),
   }
   const built = unitFromInput(input, { ...ctx, skipPathCheck: gone })
-  return built.unit ? { ...built.unit, force_added_from: prior.run_id } : null
+  return built.unit ? { ...built.unit, force_added_from: prior.run_id, ...(added.length && { companion_blocks_added: added }) } : null
 }
 
 // The seeded units with every usable earlier run folded in, and the carried records for candidates.json. An earlier unit belongs
@@ -674,6 +694,7 @@ export function carryForward(meta, priors, seeded, ctx) {
       if (target === undefined) {
         const unit = forceAdd(was, prior, ctx)
         if (!unit) { notes.push(`earlier run ${prior.run_id}: unit ${was.coverage_id} could not be added to this run; it is not carried`); continue }
+        if (unit.companion_blocks_added) notes.push(`earlier run ${prior.run_id}: unit ${was.coverage_id} selected a companion block without its file's Core discipline, Universal moves and Validation rules; they were added (${unit.companion_blocks_added.join(', ')})`)
         units.set(unit.coverage_id, unit)
         bySemantic.set(semanticOf(unit), unit.coverage_id)
         added.add(unit.coverage_id)
