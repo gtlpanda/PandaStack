@@ -1,5 +1,5 @@
 // audit-verdicts.mjs - the three Workflow stages between hunting and the report, planned and applied: consolidate (one synthesizer groups the candidates
-// of one root cause), validate (Phase 3: one fresh verifier per candidate) and verify (Phase 5: one fresh verifier per final record, and a new one for
+// of one root cause), validate (Phase 3: one fresh verifier per candidate; in a quick run it makes the Phase 5 record checks too) and verify (Phase 5: one fresh verifier per final record, and a new one for
 // a material replacement). audit-stage.mjs calls the planners and appliers from its tables; the rules they apply (IDs, independence, transitions,
 // materiality, what a record must be) and the one writer of findings.json are in audit-findings.mjs. Upstream's text
 // (vendor/cloudflare-security-audit/skills/security-audit/VALIDATION-AND-REPORTING.md, HUNTING.md) is the authority.
@@ -11,9 +11,10 @@ import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import { CARRIED, LEDGER_FAILED, REASONS, advanceState, appendEvent, markIncomplete, readJson, recordSpend, refuse, writeJson } from './audit-run.mjs'
 import { MAX_CANDIDATE_BYTES, commitLedger, loadPriors } from './audit-ledger.mjs'
-import { CLIP, architectureOf, baseInput, blockText, clipText, clipValue, encodedSize } from './audit-inputs.mjs'
-import { CANDIDATES_FILE, CONFIRMED_WITHOUT_EVIDENCE, HISTORY_FILE, MAX_TRIES, VERDICTS, agentId, decisionsOf, ensureDecisions, entryOf, historyOf, readPool, recordAgent, recordProblems, saveDecisions, transitionProblem } from './audit-findings.mjs'
+import { CLIP, PHASE5, architectureOf, baseInput, blockText, clipText, clipValue, encodedSize } from './audit-inputs.mjs'
+import { CANDIDATES_FILE, CONFIRMED_WITHOUT_EVIDENCE, HISTORY_FILE, MAX_TRIES, VERDICTS, agentId, decisionsOf, ensureDecisions, entryOf, historyOf, needsPhase5, readPool, recordAgent, recordProblems, saveDecisions, transitionProblem } from './audit-findings.mjs'
 import { companions, parts } from './blocks.mjs'
+import { rulesOf } from './audit-profile.mjs'
 
 const isObj = v => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isText = v => typeof v === 'string' && v.trim() !== ''
@@ -48,10 +49,11 @@ export function consolidateInput(runDir, run) {
   const input = { ...baseInput(runDir, run.meta, 'consolidate'), architecture_md: architectureOf(runDir), candidates, parts: { consolidation: blockText(CONSOLIDATION) } }
   if (pool.length < 2) skipConsolidation(runDir, `${pool.length} candidate(s): fewer than two have nothing to group`)
   const left = run.meta.budget === null ? Infinity : run.meta.budget - run.meta.agents_spent
-  // Validation funds floor(left / 2) candidates (each keeps a Phase 5 verifier, validateInput below). The grouping's one agent is worth spending only when it does not
-  // lower that number: at 2 left it would leave 1, which funds none.
+  // Validation funds floor(left / verifiersPerCandidate) candidates (validateInput below: two in standard and deep, which keep a Phase 5 verifier each; one in quick). The grouping's
+  // one agent is worth spending only when it does not lower that number: in standard at 2 left it would leave 1, which funds none.
+  const per = rulesOf(run.meta).verifiersPerCandidate
   if (left < 2) skipConsolidation(runDir, `${left} agent(s) left of the budget: the grouping would take the one a verifier needs`)
-  if (Math.floor((left - 1) / 2) < Math.min(pool.length, Math.floor(left / 2))) skipConsolidation(runDir, `${left} agent(s) left of the budget: the grouping's agent would leave validation able to fund fewer candidates`)
+  if (Math.floor((left - 1) / per) < Math.min(pool.length, Math.floor(left / per))) skipConsolidation(runDir, `${left} agent(s) left of the budget: the grouping's agent would leave validation able to fund fewer candidates`)
   if (encodedSize(input) > MAX_CONSOLIDATE_BYTES) skipConsolidation(runDir, `the ${pool.length} candidates would make an input of ${encodedSize(input)} bytes, over the ${MAX_CONSOLIDATE_BYTES} one script can carry`)
   return input
 }
@@ -264,10 +266,13 @@ export function validateInput(runDir, run) {
   let decisions = ensureDecisions(runDir, pool)
   const pending = decisions.entries.filter(e => e.state === 'pending')
   const left = run.meta.budget === null ? Infinity : Math.max(0, run.meta.budget - run.meta.agents_spent)
+  const rules = rulesOf(run.meta)
   // Strict budget: validate in fingerprint order while it permits; what it cannot fund stays an unvalidated candidate of the ledger, with upstream's reason, and the run is incomplete.
-  // Each candidate funded keeps one agent for the Phase 5 verifier of what it finds (SKILL.md reserves "about 1 or 2 agents per expected candidate"): validating both of two would leave no
-  // verifier for either, and every record would be removed unverified, where validating one gives one verified finding. A retry is funded the same way, from what is left.
-  const fundable = Math.floor(left / 2)
+  // A candidate costs the verifiers its profile runs (SKILL.md reserves "about 1 or 2 agents per expected candidate"). In standard and deep each funded candidate keeps one agent for the
+  // Phase 5 verifier of what it finds: validating both of two would leave no verifier for either, and every record would be removed unverified, where validating one gives one verified
+  // finding. Quick's one verifier is its Phase 5 too (VALIDATION-AND-REPORTING.md, Phase 5), so it keeps none. A retry is funded the same way, from what is left.
+  const fundable = Math.floor(left / rules.verifiersPerCandidate)
+  const each = rules.verifiersPerCandidate === 1 ? 'one verifier each, which is also its final record check' : 'a Phase 5 verifier each'
   const unfunded = pending.slice(fundable)
   if (unfunded.length) {
     decisions = markUnvalidated(decisions, unfunded, REASONS.validation)
@@ -279,7 +284,7 @@ export function validateInput(runDir, run) {
   if (!funded.length) {
     closeValidation(runDir, run, decisions)
     appendEvent(runDir, { cmd: 'plan', stage: 'validate', result: 'refused', reason: unfunded.length ? REASONS.validation : 'nothing is pending', counts: { unvalidated: unfunded.length } })
-    refuse(unfunded.length ? `${REASONS.validation}: ${left} agent(s) are left of the budget (--budget ${run.meta.budget}, ${run.meta.agents_spent} spent), enough for ${fundable} candidate(s) with a Phase 5 verifier each, and ${unfunded.length} candidate(s) need a verifier; none was launched, they stay unvalidated candidates in the ledger and the run is marked incomplete`
+    refuse(unfunded.length ? `${REASONS.validation}: ${left} agent(s) are left of the budget (--budget ${run.meta.budget}, ${run.meta.agents_spent} spent), enough for ${fundable} candidate(s) with ${each}, and ${unfunded.length} candidate(s) need a verifier; none was launched, they stay unvalidated candidates in the ledger and the run is marked incomplete`
       : 'every candidate is already decided or unvalidated; the step is closed. `audit-run.mjs next` says what is next')
   }
   const p = parts()
@@ -288,7 +293,7 @@ export function validateInput(runDir, run) {
   let history = before
   const shared = {
     ...baseInput(runDir, run.meta, 'validate'), round: decisions.rounds.validate + 1, architecture_md: architectureOf(runDir), blocks,
-    parts: { verifierPrompt: p.verifierPrompt.text, verifierPromotion: p.verifierPromotion.text, localBoundaries: blockText(LOCAL_BOUNDARIES), recordContract: p.recordContract.text, schema_confirmed: p.schema_confirmed.text, schema_needs_validation: p.schema_needs_validation.text, schema_rejected: p.schema_rejected.text },
+    parts: { verifierPrompt: p.verifierPrompt.text, verifierPromotion: p.verifierPromotion.text, localBoundaries: blockText(LOCAL_BOUNDARIES), recordContract: p.recordContract.text, schema_confirmed: p.schema_confirmed.text, schema_needs_validation: p.schema_needs_validation.text, schema_rejected: p.schema_rejected.text, ...(rules.mergedValidation && { phase5: blockText(PHASE5) }) },
   }
   const priors = loadPriors(runDir)
   const candidates = []
@@ -348,6 +353,10 @@ export function applyValidate({ runDir, run, stage, input, result, event, notes 
   let history = historyOf(runDir)
   const cache = new Map()
   const tally = { decided: 0, retried: 0, unvalidated: 0 }
+  // Quick merges Phase 3 and Phase 5 (VALIDATION-AND-REPORTING.md, Phase 5): the verifier whose result is kept also made the record checks, so a record Phase 5 would read is marked
+  // as passed by that verifier; complete-check accepts the marker in quick only, and only when it names the entry's own Phase 3 verifier. A rejected record is final as it stands.
+  const merged = rulesOf(run.meta).mergedValidation
+  const phase5Of = (record, id) => (merged && needsPhase5(record) ? { state: 'merged', verifier_id: id } : null)
   const entries = decisions.entries.map(e => {
     const c = input.candidates.find(x => x.fingerprint === e.fingerprint)
     if (!c) return e
@@ -358,7 +367,7 @@ export function applyValidate({ runDir, run, stage, input, result, event, notes 
     if (c.agent_id !== expected || !pool.some(p => p.fingerprint === e.fingerprint)) refuse(`${c.agent_id} is not the verifier planned for ${e.fingerprint} (that is ${expected}): plan the stage again`)
     history = recordAgent(history, e.fingerprint, 'validator', c.agent_id)
     const judged = judgeValidator(runDir, e, got[c.agent_id], cache)
-    if (judged.decision) { tally.decided += 1; return { ...e, state: 'decided', decision: judged.decision, record: judged.record, verifier_id: c.agent_id, decided_in: stage.name } }
+    if (judged.decision) { tally.decided += 1; return { ...e, state: 'decided', decision: judged.decision, record: judged.record, verifier_id: c.agent_id, decided_in: stage.name, phase5: phase5Of(judged.record, c.agent_id) } }
     const attempts = [...e.attempts, { id: c.agent_id, stage: stage.name, kind: judged.kind, problems: judged.problems }]
     if (attempts.length < MAX_TRIES) { tally.retried += 1; return { ...e, attempts } }
     tally.unvalidated += 1

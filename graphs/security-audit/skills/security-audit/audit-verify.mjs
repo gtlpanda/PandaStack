@@ -12,7 +12,7 @@
 import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import { REASONS, advanceState, appendEvent, markIncomplete, recordSpend, refuse, writeJson } from './audit-run.mjs'
-import { architectureOf, baseInput, blockText, encodedSize } from './audit-inputs.mjs'
+import { PHASE5, architectureOf, baseInput, blockText, encodedSize } from './audit-inputs.mjs'
 import { FINDINGS_FAILED } from './audit-run.mjs'
 import { HISTORY_FILE, MAX_REPLACEMENT_ROUNDS, MAX_TRIES, RECORD_UNRESOLVED, agentId, commitFindings, decisionsOf, finalRecords, finishRun, historyOf, materialChanges, needsPhase5, recordAgent, recordProblems, retained, saveDecisions, transitionProblem } from './audit-findings.mjs'
 import { parts } from './blocks.mjs'
@@ -22,7 +22,6 @@ const isObj = v => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isText = v => typeof v === 'string' && v.trim() !== ''
 const show = v => String(JSON.stringify(v)).slice(0, 80)
 
-const PHASE5 = 'VALIDATION-AND-REPORTING.md#Phase 5: Verify the final records with fresh eyes'
 const LOCAL_BOUNDARIES = 'HUNTING.md#Local validation boundaries'
 // What one verify input may be once written into a script (the ceiling is 524,288 bytes and the script itself is about 100 KB), and at most this many items: a record is up to 64 KiB, so
 // records go in rounds, the first of a round always fits, and the rest wait pending for the next.

@@ -24,6 +24,8 @@ export const blockText = ref => {
 // a standard run's inputs have no such key, so its prompts are unchanged.
 const PROFILE_SECTION = 'SKILL.md#Run profiles and scope'
 export const profilePart = meta => (rulesOf(meta).profile === 'standard' ? {} : { profile: blockText(PROFILE_SECTION) })
+// Upstream's Phase 5 section: what the verify stage's verifiers follow, and what a quick run's validate stage adds to its one verifier per candidate (Phase 3 and 5 merged).
+export const PHASE5 = 'VALIDATION-AND-REPORTING.md#Phase 5: Verify the final records with fresh eyes'
 
 // What the critic and the minter are sent of text that came from agents reading hostile source: a hunter may fill a unit with up to 64 KiB of evidence, so
 // long text and long lists are cut here, never passed whole. The cut is visible (a unit says `truncated`, a text ends in an ellipsis).

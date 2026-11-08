@@ -496,7 +496,11 @@ The needs_validation branch:
 ${PARTS.schema_needs_validation}
 
 The rejected branch:
-${PARTS.schema_rejected}
+${PARTS.schema_rejected}${isText(PARTS.phase5) ? `
+
+## Phase 5 record checks, merged into this pass, verbatim
+This quick run has no later Phase 5 pass: the record you return is final. Check it by these rules, but return the object named at the end, not a verified or replace object.
+${PARTS.phase5}` : ''}
 ${c.feedback ? `
 ## 11. A note from the parent (attempt ${c.feedback.attempt} of ${c.feedback.of})
 ${fenced('parent-note', c.feedback.problems.join('\n'))}

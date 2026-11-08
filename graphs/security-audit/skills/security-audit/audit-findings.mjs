@@ -22,6 +22,7 @@ import { FINDINGS_FAILED, Usage, advanceState, appendEvent, formatNext, loadRun,
 import { LEDGER_FILE, MAX_CANDIDATE_BYTES } from './audit-ledger.mjs'
 import { refProblem } from './audit-facts.mjs'
 import { isSafeAgentId, validateFindingsDocument, validateFindingsFile, validateLedgerFile } from './upstream.mjs'
+import { rulesOf } from './audit-profile.mjs'
 
 export const CONFIRMED_REACHABLE = false   // plan D1 A: nothing in v1 can establish a bounded local observed result
 // PandaStack's own reason strings (upstream's five are in audit-run.mjs REASONS). validation_budget_exhausted is upstream's, and is used for
@@ -349,8 +350,9 @@ export function writeFindings(runDir) {
   const counts = Object.fromEntries(VERDICTS.map(v => [v, records.filter(r => r.verdict === v).length]))
   appendEvent(runDir, { cmd: 'write-findings', stage: 'write-findings', result: 'ok', duration_ms: Date.now() - started, counts })
   const notes = []
-  // Nothing for Phase 5 to read (no confirmed or needs_validation record): the run ends here, and complete-check says how.
+  // Nothing for Phase 5 to read (no confirmed or needs_validation record), or a quick run, whose validate stage was Phase 5 too: the run ends here, and complete-check says how.
   if (!records.some(needsPhase5)) notes.push(`no record needs Phase 5; ${finishRun(runDir).message}`)
+  else if (rulesOf(run.meta).mergedValidation) notes.push(`the quick profile's merged pass: each record's Phase 3 verifier made the Phase 5 record checks too, so no verify stage runs; ${finishRun(runDir).message}`)
   return { summary: `records=${records.length} confirmed=${counts.confirmed} needs_validation=${counts.needs_validation} rejected=${counts.rejected}`, notes }
 }
 
@@ -359,6 +361,17 @@ export function writeFindings(runDir) {
 // upstream (neither validator reads run status). Here: both validators pass on the files on disk, the link-check is clean with nothing unresolved, every candidate is decided,
 // every retained confirmed or needs_validation record passed Phase 5, and the independence history has no reuse. A run that is incomplete stays so; a run that is in progress and
 // fails is marked incomplete with complete_check_failed; one that passes is marked complete.
+//
+// Whether a decided entry passed Phase 5, given the non-hunter roles the independence history holds for its fingerprint. In every profile: a verifier that is not the hunter or the
+// Phase 3 verifier said so (the Phase 5 verifier, or the new one a material replacement went to). In a profile that merges Phase 3 and Phase 5 (quick) also: the `merged` marker
+// audit-verdicts.mjs applyValidate writes, naming the entry's own kept Phase 3 verifier, which the history holds as that fingerprint's validator. Both identities are checked: a
+// discarded attempt is a validator in the history too, and only the entry says whose result was kept.
+function passedPhase5(e, roles, rules) {
+  const p5 = e.phase5
+  if (p5?.state === 'verified') return roles.some(h => ['verifier', 'replacer'].includes(h.role) && h.id === p5.verifier_id)
+  if (p5?.state === 'merged' && rules.mergedValidation) return p5.verifier_id === e.verifier_id && roles.some(h => h.role === 'validator' && h.id === p5.verifier_id)
+  return false
+}
 export function completeProblems(runDir) {
   const run = loadRun(runDir)
   const problems = []
@@ -374,6 +387,7 @@ export function completeProblems(runDir) {
   for (const p of link.problems) note(p)
   for (const u of link.unresolved) note(`candidate ${show(u.fingerprint)} is unresolved: ${u.reason}`)
   const history = historyOf(runDir)
+  const rules = rulesOf(run.meta)
   for (const p of historyProblems(history)) note(p)
   for (const e of decisions?.entries ?? []) if (e.state !== 'decided') note(`candidate ${show(e.fingerprint)} was never decided (${e.state})`)
   if (decisions && !isDeepStrictEqual(finalRecords(decisions), run.findings)) note('findings.json is not the decided records (a record Phase 5 removed is in it, or one it kept is missing)')
@@ -382,8 +396,7 @@ export function completeProblems(runDir) {
     if (!e || e.state !== 'decided') { note(`record ${show(r.fingerprint)} has no decision`); continue }
     const roles = (history.fingerprints[r.fingerprint] ?? []).filter(h => !['hunter'].includes(h.role))
     if (!roles.some(h => h.role === 'validator')) note(`record ${show(r.fingerprint)} was verified by no Phase 3 verifier`)
-    // Phase 5 passed means a verifier that is not the hunter or the Phase 3 verifier said so: the Phase 5 verifier, or the new one a material replacement went to.
-    if (needsPhase5(r) && !(e.phase5?.state === 'verified' && roles.some(h => ['verifier', 'replacer'].includes(h.role) && h.id === e.phase5.verifier_id))) note(`record ${show(r.fingerprint)} did not pass Phase 5`)
+    if (needsPhase5(r) && !passedPhase5(e, roles, rules)) note(`record ${show(r.fingerprint)} did not pass Phase 5`)
     if (!isDeepStrictEqual(e.record, r)) note(`record ${show(r.fingerprint)} in findings.json is not the decided record`)
   }
   return { problems, unresolved: link.unresolved }

@@ -543,6 +543,8 @@ export function nextStep({ meta, state, ledger, findings }) {
       // the one it already had, which stands), and the report says why. Only that explains a missing file.
       if (findings === undefined && state.write_failed === true && meta.run_status === 'incomplete') return toReport()
       if (!Array.isArray(findings)) refuse('findings.json is missing or not an array after write-findings')
+      // Quick merges Phase 3 and Phase 5 (VALIDATION-AND-REPORTING.md, Phase 5): its validate stage was the records' final check, and write-findings ended the run.
+      if (rulesOf(meta).mergedValidation) return toReport()
       return findings.some(r => r?.verdict === 'confirmed' || r?.verdict === 'needs_validation') ? go('verify') : toReport()
     }
     case 'verify': return toReport()

@@ -139,7 +139,7 @@ await test('the whole path: plan, run the generated script, apply, plan, run, ap
   assert.deepEqual(readdirSync(dir1).sort(), ['input.json', 'run.js'])
   const script1 = readFileSync(join(dir1, 'run.js'), 'utf8')
   assert.equal(script1.split('\n').filter(l => l.startsWith('const INJECTED_INPUT = JSON.parse(')).length, 1)
-  assert.ok(statSync(join(dir1, 'run.js')).size < 60_000, `the facts script is small (${statSync(join(dir1, 'run.js')).size} bytes)`)
+  assert.ok(statSync(join(dir1, 'run.js')).size < 61_000, `the facts script is small (${statSync(join(dir1, 'run.js')).size} bytes)`)
   const input1 = readJsonFile(dir1, 'input.json')
   assert.deepEqual([input1.stage, input1.part, input1.tree, input1.maxParallel], ['recon', 'facts', join(runDir, 'tree'), 8])
   const ran1 = await runScript(join(dir1, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })
