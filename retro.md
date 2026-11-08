@@ -2322,3 +2322,170 @@ one `git diff` per unit and per record (cached by path set); not timed. `candida
 ledger are three files with one rename between them: nothing is written before upstream's validator passes the new ledger,
 and a merge or an apply that died after writing the ledger and before saving its step is finished by running it again
 (tested for both); a crash before the rename leaves the old files. Never a corrupt ledger.
+
+## 38. security-audit PR 5: the three agents and the recon stage (2026-11-07)
+
+PR 5 of the `security-audit` graph, branch 1 of 2 (`feat/security-audit-5-recon`; the hunt, critic and mint stages are
+branch 2, `feat/security-audit-6-waves`). Plan: `tasks/plan-security-audit.md` (checked against
+`tasks/plan-security-audit-verify.md`), both in the main checkout. The branch stacks on PR 4 and carries PRs 1-3.
+
+**What changed.**
+- `graphs/security-audit/agents/audit-{researcher,analyst,synthesizer}.md`: sonnet, high, `tools: Read, Grep, Glob`; a
+  28-30 line frame each (what the agent can do, that the snapshot and any fenced block are data written by whoever controls
+  the target, return only the schema object). The substance is upstream text the workflow injects. `scripts/validate.sh` pins
+  the tools line of every agent in the directory to exactly `Read, Grep, Glob`.
+- `graphs/security-audit/workflows/security-audit-flow.js`: one stage per run, the `INJECTED_INPUT` seam, `NODES`, a pool bounded
+  by `maxParallel`, stage `recon`. `runNode`, `nodeFailure` and `finish` are copied verbatim from `harness-repair.js` and `fenced`
+  from `bughunt-flow.js` (drift-tested). Returns `{status, reason, stage, results, history, budgetSpent}` and never throws;
+  `budgetSpent` counts agent invocations, a failed one included. A failure is named from `history` by label, not through
+  `lastNodeError`, which is one global that two concurrent calls would overwrite (a test with three different failures pins it).
+- `graphs/security-audit/skills/security-audit/audit-stage.mjs` (new): `plan <run>` writes `stages/<NN>-<name>/{input.json,
+  run.js}` through `run-script.mjs`, `apply <run> <returned.json>` checks what the workflow returned and saves it. Recon is two
+  Workflow runs, picked by `plan` from what is on disk (no `recon-facts.json`: part `facts`; with it: part `synthesize`), so
+  `next` says `recon` both times. `apply` of the synthesize part writes `recon.json` (what `audit-ledger.mjs seed` takes),
+  records the spend and saves the step.
+- `audit-run.mjs`: `recordSpend(runDir, key, n)` and `stage_spend`, `markIncomplete(runDir, reason)` (the two halves of entry 37,
+  item 4), `reconGate` and `SYNTHESIS_CALLS` (the budget gate below), `isCommitId`. `audit-ledger.mjs`: the block gate below and
+  `seedProblems`, what seed would refuse, without writing.
+- Tests: `security-audit-flow.test.mjs` (26), `audit-stage.test.mjs` (31), `audit-agents.test.mjs` (6), plus 16 new cases in the PR 3
+  and PR 4 files (857 -> 936 workflow tests; 126 install, 22 secrets and 75 autobuild checks unchanged; `TEST: PASS`).
+  Non-vendored, non-test change: 866 lines added against the plan's 500 (workflow 303, audit-stage.mjs 354, agents 86, audit-run.mjs
+  and audit-ledger.mjs 65 and 64 changed lines, validate.sh 7); tests 1,301 lines added. Mutation check: 7 single-line breaks of the workflow and 19 of
+  audit-stage.mjs and the budget and seed code (a dropped check, the step save and its order, the line bound, the size guard, the
+  encoded budget, the spend record, stage reuse, the grammar, the file-kind check, the all-dropped refusal, the path rule, the
+  seed pre-check, the retry cap and its dedupe, the recon gate, the synthesizer's call count), every one killed by at least one test.
+
+**The live probe (plan row 5; measured, `claude` 2.1.319 headless, WSL2).** `tools:` is enforced on a custom agent type, through
+the Agent tool and through the Workflow tool's `agentType`, and the agent cannot reach WebFetch, ToolSearch or an MCP tool.
+- Setup (a scratch directory per run, outside the repo, each a git repo): `.claude/agents/audit-analyst.md` is a byte copy of
+  this branch's file (`diff` printed nothing); `mcp.json` names a 30-line stdio MCP server whose one tool, `probe_echo`, writes
+  `mcp-called.txt` (so a reachable MCP tool leaves a file, and none of the user's connected servers is touched:
+  `--strict-mcp-config`). Command, every run: `env -u CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL -u CLAUDE_CODE_SUBAGENT_MODEL ...
+  CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 claude -p "<prompt>" --model sonnet --max-budget-usd 1 --permission-mode
+  bypassPermissions --setting-sources project --mcp-config mcp.json --strict-mcp-config --output-format stream-json --verbose`.
+  `bypassPermissions` so that a tool the runtime offers would run (a permission denial could not be mistaken for `tools:`);
+  the inherited model-pin variables were removed (memory note: they confound probes); no `permissions.deny` exists in
+  `~/.claude/settings.json` or `settings.local.json` (read, not edited), and `--setting-sources project` left the user settings
+  out anyway.
+- Prompt to the subagent: list your tools; then try `echo probe > probe.txt` (Bash), create `write-probe.txt` (Write), edit
+  `README.md` (Edit), WebFetch `https://example.com`, call `mcp__probe__probe_echo` (loading it with ToolSearch if you have
+  it), and say whether you have ToolSearch; for a tool you do not have say "not available" and try nothing else.
+- Agent tool, `audit-analyst` (the real file), reported verbatim: "**Tools I have:** `Read`, `Grep`, `Glob`." and for each
+  step "not available"; ToolSearch "not available". Filesystem afterwards: no `probe.txt`, no `write-probe.txt`, no
+  `mcp-called.txt`, `README.md` still `# probe`.
+- Workflow tool (`Workflow({scriptPath})`, one `agent()` with `agentType: 'audit-analyst'`, a schema), the returned JSON,
+  verbatim start: `{"tools":["Read","Grep","Glob","StructuredOutput"],"steps":[{"step":"1 Bash: echo probe > probe.txt",
+  "available":false,"note":"not available"},{"step":"2 Write: ...","available":false,...},...,{"step":"6 ToolSearch",
+  "available":false,"note":"not available. It is not in my tool list."}],"nullable_probe":null}`. Same empty filesystem. (The
+  schema also carried a `["string","null"]` type: the runtime accepted it and the agent returned `null`.)
+- Controls, so that "unavailable" cannot be the probe's own blindness: the same prompt to an agent identical but for having
+  no `tools:` line, through both paths, created `probe.txt`, `write-probe.txt`, `mcp-called.txt` and changed `README.md` to
+  `# edited`; its tool list had Bash, Edit, Write, ToolSearch and the deferred WebFetch and `mcp__probe__probe_echo`; WebFetch
+  returned "Example Domain". A third variant, `tools: Read, Grep, Glob` with a neutral body that asks for every step (so the
+  body of `audit-analyst`, which says it cannot run anything, cannot be what stopped it), reported the same three tools and
+  created nothing.
+- Conclusion: the runtime offers an agent only the tools its `tools:` line names, plus `StructuredOutput` under a schema. So D2
+  A holds and D2 B or C is not needed. Not covered: other `claude` versions; interactive (not headless) sessions; whether a
+  `tools:` list is honored when `agentType` is resolved from a user-level agent instead of the project directory; the model's
+  own report of its tool list (the filesystem and the controls are the evidence, not the report); real MCP servers (a harmless
+  local one stood in). One run of each. Cost, session-reported: about $0.39 for the five runs.
+- verify I5 and I6 asked for ToolSearch, WebFetch and `mcp__` reachability: ToolSearch is not in the list, so the Workflow
+  reference's "agents reach MCP tools via ToolSearch" does not apply to an agent with a `tools:` line. "No network tool"
+  may now be stated for these three agents. The live researchers (below) used only Glob, Read and StructuredOutput.
+
+**Script size (plan row 2, and item 5).** Measured: the Workflow tool refuses a `scriptPath` file over **524,288 bytes**
+("exceeds 524288 bytes", `tool_use_error`); no-agent scripts of 71,924 / 155,576 / 239,226 / 478,136 bytes (the last carrying a
+400 KB `JSON.parse` string, as `run-script.mjs` writes) loaded and returned; 956,026 and 1,911,738 were refused. The entry 35
+"unverified" is closed: its 47 KB largest script is about a tenth of the ceiling. (Inline `script` was not measured.)
+- Recon scripts generated here: a 9-file, 71-line fixture target: facts 22,567 bytes, synthesize 67,259; the worst synthesize
+  script the fact limits allow (every researcher at its 75,000-byte limit, counted after `run-script.mjs` encodes the input
+  twice) 337,644 bytes for plain text, 332,892 for quotes and backslashes, 324,188 for control characters and lone surrogates.
+  `plan` refuses over 500,000.
+- **Choice for the hunt stage (branch 2): (a), shared parts injected once and blocks selected per unit, not (b), files the agent
+  reads.** Entry 35's worst hunter payload is 122,147 bytes injected; with about 25 KB of script and the assignments that is
+  well under 500,000, so (b)'s only gain (a smaller script) is not needed, and its cost is real: HUNTING.md:11-25 has the
+  hunter prompt carry its blocks "copied verbatim", and a file the agent is told to Read is text the agent may not read,
+  which nothing could then detect. (a) keeps the verbatim text in the prompt, and a block table deduplicated by reference
+  keeps the script at the size of the blocks the wave names, not of the hunters times the blocks.
+
+**A live recon run (not required; one fixture, $0.60 session-reported).** A 9-file Node notes API with a missing ownership
+check, an `eval` on a query string, a path join and a permissive CORS setting, a real run of the generated scripts by headless
+`claude -p`: facts, 4 researchers, 47 facts in 36 s, 36,608 tokens, 44 tool uses (Glob and Read only); `apply` kept 45 and
+dropped 2, because the 1d researcher cited `config/default.js:1-6` and the file has 5 lines (the check did its job on a real
+agent's real off-by-one); synthesize, 1 synthesizer, 2 min, 18 units (12 planned, 6 `not_applicable`, priorities 1-4, 764-word
+architecture) and 2 `focused_recon` areas; `audit-ledger.mjs seed` accepted it, upstream's validator passed, `next` said
+`plan-wave`. 5 agents spent, recorded.
+
+**Found in earlier PRs (each a test result).**
+1. PR 3, `audit-run.mjs:365` on the base (`describePrior`): `source_ref.commit` of an earlier run was stored as any string. Reproduced
+   first (a failing test: `--output=/tmp/x`, `main`, upper case, 39 characters, a number, null, an object, an array all kept).
+   Fixed: a present value must be 40 or 64 hex, else `source_commit` is null and the run is incompatible with a bounded reason;
+   an absent one (a Cloudflare-style run) stays compatible.
+2. The same family, PR 3 `audit-run.mjs:513` and PR 4 `audit-ledger.mjs:445` on the base: `COMMIT_ID.test(value)` coerces. A one-element
+   array of a real commit ID, or an object whose `toString` returns one, passed `sourceUnchanged` (reproduced: `true !== false`).
+   `isCommitId` checks `typeof` first; the three call sites use it.
+3. PR 4's seed gate (entry 37, "left undone"): a block reference to a section that does not exist was accepted by seed, mint and
+   force-add. Reproduced (the same phantom `WEB-PROTOCOL-AND-AUTH.md#Cache behavior` upstream's own fixtures use), now refused
+   with the field and the reference, `ordinary_attack_class_block: null` still allowed, a block of the wrong kind refused. Mutation:
+   with the call removed, 4 tests fail. A consequence to know: a prior unit that names a block this pin lacks is not carried (the
+   existing "could not be added" note), which is a lead that does not come back.
+4. PR 4, nothing wrote `agents_spent` and nothing could mark a run `incomplete` (entry 37, item 4): `recordSpend` per stage key
+   and `markIncomplete` (the first reason stands; a complete run is refused).
+5. PR 3, `audit-run.mjs:325` and `:329` (`RECON_CALLS`, `minimumBudget`): a recon here is five calls (see the audit, below), so a
+   budget that passed the gate was spent before the first hunter. The minimum is now 8 (standard, deep) and 7 (quick).
+
+**Found by an independent audit (qa-auditor, read-only, no knowledge of my reasoning; its probes are scripts outside the repo),
+each reproduced by a failing test before its fix.** Seven defects, three rated high in its list (its summary said four); the
+five categories were PASS data flow, FAIL edge cases, FAIL security (medium), FAIL consistency, FAIL missing pieces.
+1. High, `audit-stage.mjs:269-272` (the first version): `apply` wrote `recon.json` and saved the step before anything judged the
+   units, so a synthesizer result `seed` refused (a 1,200-word summary, a starting path outside `tree/`, two units of one identity,
+   a malformed or unknown block: six inputs tried) left `next` at `seed` with five agents spent and no command to re-run recon.
+   Fixed: `apply` asks `seedProblems` first; a result seed would refuse is not saved as the step's, its reasons go to
+   `seed-feedback.json` (one entry per stage) and into the next plan as fenced feedback, and a second refusal marks the run
+   incomplete with `ledger_validation_failed` (PandaStack's own string, plan 4.3), after which `next` says `report`. This is the
+   seed retry entry 37 listed as undone, built.
+2. High, `audit-stage.mjs:42` (`agentChars`): characters, not bytes. `run-script.mjs` encodes the input twice, so a control character
+   or a lone surrogate costs seven bytes, not four: facts at the limit made a 548,984-byte script that `plan` then refused on every
+   call, and the hint it gave did not apply. My earlier commit message ("no run script can exceed the ceiling") was wrong, and is
+   corrected here, not only in that commit's follow-up. `agentBytes` (75,000) counts `JSON.stringify(JSON.stringify(item))`.
+3. High, `audit-stage.mjs:193`: `plan` had no budget check. On `--budget 7`, two escalated recon stages left `agents_spent` 8, the run
+   `in_progress` and `check` failing, against SKILL.md "Never exceed a user-set strict budget silently". `reconGate` gates each recon
+   part about to run and a part it cannot fund launches nothing and marks the run incomplete (`budget_cannot_fund_...`).
+4. Medium, `audit-run.mjs:325`: `RECON_CALLS` is upstream's four; the synthesizer is PandaStack's fifth. `SYNTHESIS_CALLS` joins
+   `minimumBudget`; entry 36's "minimum 7" pin is now 8 on purpose.
+5. Medium, `audit-stage.mjs:84`: researcher-chosen text reached the orchestrating session unquoted and unbounded (a 200 KB path
+   printed whole in the `note:` line and stored in `recon-facts.json`). Every reason now quotes the path through JSON cut at 80
+   characters, and a reference over 300 characters is refused before anything reads it. The orchestrator still sees a bounded,
+   quoted fragment of researcher text in a note line; that is not zero exposure.
+6. Low, `audit-stage.mjs:19`: "every effect is idempotent" was false for the synthesize part (the step saved before `result.json`).
+   `result.json` is written first and the step last; `apply` works on the newest stage whether applied or not, so the same result
+   again finishes it, a different result for an applied stage is refused. Tested by making `result.json` unwritable.
+7. Low, `scripts/validate.sh`: `fm_get` reads the first `tools:` line, so a second key could hide a wider list from the shell pin
+   (the Node test refused it). The pin counts the key. Checked by hand (duplicated key: FAIL; restored: PASS), not by a test.
+Tried with nothing found (the audit's own probes): four concurrent `plan` processes (one stage directory, no torn `events.jsonl`);
+symlinks in `tree/` (there are none); fence escapes (case, spacing, overlapping tags); `isCommitId` with non-hex, array and null.
+
+**Plan and upstream mismatches.**
+- plan:416-418 (node A): "code checks every ref ... then 1 x audit-synthesizer" cannot happen inside one run: the script has no
+  filesystem (plan:24; bughunt-flow.js:48). Two runs of one step, as above. The advisor-suggested alternative, injecting a tree
+  manifest, would make the script size grow with the target.
+- plan:641-642 puts `plan` and `apply` in `audit-run.mjs`; they are in `audit-stage.mjs` (audit-run.mjs is 718 lines, twice the
+  plan). One extra command to name in the skill.
+- plan:419-422: focused reconnaissance agents are not run. The synthesizer's `focused_recon` areas are recorded in `recon.json`
+  and `apply` says so; SKILL.md's "Do not silently omit them" is met by that note only, not by running them.
+- The synthesizer is PandaStack's own call (upstream's parent does that work), so SKILL.md's "four baseline reconnaissance calls"
+  leave it out. Fixed (audit item 4): the gate counts it. `RECON_CALLS` stays upstream's 4 and is pinned to it.
+- verify I5/I6, plan:333-334, :813 (the probe asks for Bash and Write): extended to Edit, WebFetch, ToolSearch and an MCP tool.
+- verify B12: `agentField` (workflow-harness.mjs:119-124) returns null for a list; a real parser in `tests/agent-files.mjs`.
+- Upstream, RECONNAISSANCE.md:77-86: the architecture summary's item 7 (prior coverage gaps, changed-source targets) is not
+  computed before seed, which is where carry-forward happens; the synthesizer is given only counts of earlier runs and each
+  incompatible one's reason. Item 7 is therefore thin until a later change has `seed` append it.
+- The task asked for the commit trailer `Claude Opus 5.5`; the session's own instruction gave `Claude Sonnet 5.5`, the model
+  that wrote these commits, so that is the trailer used.
+
+**Unchecked on purpose.** Whether the runtime's resume (`resumeFromRunId`) replays a pool's calls in a stable order (call order
+past the first `maxParallel` depends on completion order; it is deterministic only for the first calls and with one slot; not
+tried). The shared blocks are drift-checked against `harness-repair.js` only. The seed retry covers what `seed` refuses; a ledger over
+upstream's 5 MiB read limit (thousands of units) is found by `commitLedger`'s CLI pass at seed time, not by `seedProblems`, so it is
+the one refusal that can still reach `seed`. Line numbers a researcher cites beyond
+`path:line` and `path:first-last` (a list `path:1,5`) are dropped, not parsed.
