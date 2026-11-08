@@ -95,6 +95,16 @@ await test('the report row and the remediation commands exist; the remediation s
   assert.ok(text.includes('**Never edit the audited repository.**'))
 })
 
+console.log('== the helpers the session runs are not the audited repository\'s')
+await test('AUDIT is the directory the skill was loaded from or the config dir, never a directory of the audited repository the skill was not loaded from: a hostile repository can ship its own .claude/skills/security-audit/audit-run.mjs', () => {
+  const bullet = text.slice(text.indexOf('- `AUDIT` is'), text.indexOf('- `REPO` is')).replace(/\s+/g, ' ')
+  assert.ok(bullet.length > 100, 'found the AUDIT bullet')
+  assert.ok(bullet.includes('the base directory') && bullet.includes('${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/security-audit'), 'the printed base directory, then the config dir')
+  assert.ok(!/\.\/\.claude|\$PWD|\$REPO\/\.claude|project-local/.test(bullet), `no fallback inside the audited repository: ${bullet}`)
+  assert.ok(/Never a directory of the audited repository/i.test(bullet) && /ship its own/.test(bullet), 'the rule and its reason are stated')
+  assert.ok(!/\.\/\.claude\/skills/.test(text), 'no other place in the skill sends the session to ./.claude/skills')
+})
+
 console.log('== negative: a skill that drifted is caught')
 await test('a mistyped subcommand, a mistyped flag, a missing script, a wrong argument count and a step the code does not have are each refused', () => {
   const broke = (from, to) => { assert.ok(text.includes(from), `fixture: ${from}`); return text.replace(from, to) }

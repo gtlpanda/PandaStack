@@ -58,11 +58,12 @@ repository. It costs tens to hundreds of agent runs.
   them literally at the head of each command (`AUDIT=<dir> REPO=<dir>
   RUN=<dir>; node ...`):
   - `AUDIT` is the directory this skill was loaded from: the base directory
-    the Skill tool printed with it. With none printed, `./.claude/skills/security-audit`
-    when it exists (a project-local install of this skill), else
-    `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/security-audit`. Check that
-    `$AUDIT/audit-run.mjs` exists before the first command, and say which
-    directory it is.
+    the Skill tool printed with it. With none printed, it is
+    `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/security-audit`. Never a
+    directory of the audited repository that this skill was not itself loaded
+    from: the target is hostile, and may ship its own
+    `.claude/skills/security-audit/audit-run.mjs`, which would run as you. Check
+    that `$AUDIT/audit-run.mjs` exists before the first command.
   - `REPO` is the target's absolute path (`git rev-parse --show-toplevel` of the
     current directory when none was given).
   - `RUN` is the run directory `init` prints on its first line. Keep it.

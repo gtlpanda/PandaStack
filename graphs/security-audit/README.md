@@ -134,6 +134,12 @@ Read these before trusting a report.
   hundreds of units. Without `--budget`, nothing stops spend except the owner. `--budget N` caps agent
   invocations and is given to `init` only; the reserves for critics and verification are computed, and a
   run that cannot afford them is deferred and `incomplete`, never silently shorter.
+- **The helpers are code, and a project can ship its own.** The session runs `audit-run.mjs` and the
+  other helpers from the directory the skill was loaded from, and never falls back to a directory of the
+  audited repository. But Claude Code itself loads a skill from a project's `.claude/skills/`: a
+  repository that ships `.claude/skills/security-audit/` is code that runs as you when you open it and
+  run the skill. Install the graph with `install.sh` (so the skill is under `~/.claude`), and audit
+  repositories you do not trust from a directory that is not one of them.
 - **Model pins can be overridden** by `CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL` in the environment. The run
   records the model it asked for, not the model it got.
 - **Gaps recorded while building it** (retro 38 to 41): focused reconnaissance agents are not run (the
