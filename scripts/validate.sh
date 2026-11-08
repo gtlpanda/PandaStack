@@ -134,6 +134,11 @@ for f in graphs/security-audit/agents/*.md; do
   else bad "$f: tools must be exactly 'Read, Grep, Glob' (the audit reads hostile source)"; fi
 done
 
+# ... and none of them lists Bash, said on its own so a failure names the tool (the exact-list check above would also catch it).
+for f in graphs/security-audit/agents/*.md; do
+  if fm_get "$f" tools | grep -qiE '(^|[ ,])bash([ ,]|$)'; then bad "$f: an audit agent must not have Bash (a hostile repository could make it run code)"; else ok "agent $(basename "$f" .md) has no Bash"; fi
+done
+
 # ---- Commands: a markdown prompt each, no frontmatter required ----
 for f in core/commands/* kit/commands/* graphs/*/commands/*; do
   case "$f" in *.md) [ -s "$f" ] && ok "command $(basename "$f" .md)" || bad "$f is empty" ;; *) bad "$f: a command is a .md file" ;; esac
@@ -253,6 +258,22 @@ rule graphs/hunt/skills/bughunt/review-status.mjs 'if (facts.merge) return null'
 rule graphs/hunt/skills/bughunt/review-status.mjs 'if (fixCommit === sha) return' 'only the verified fix commit itself, or its patch, is exempt; a subject proves nothing'
 rule scripts/merge-settings.mjs "if (k === 'permissions') continue" 'install never merges permissions'
 rule graphs/hunt/skills/bughunt/SKILL.md 'Never use ScheduleWakeup or sleep to wait for it' 'a bughunt session waits for the workflow notification, never a long wakeup'
+
+SA=graphs/security-audit/skills/security-audit/SKILL.md
+rule "$SA" 'Run a full audit only when the user explicitly asks for one' 'a full security audit starts only on an explicit request'
+rule "$SA" '**Ordinary security questions never start an audit.**' 'an ordinary security question never starts a full audit'
+rule "$SA" 'also refuses without `--full`' 'init is the third gate on a full audit'
+rule "$SA" 'Under `--unattended` nobody is there: never ask' 'an unattended run never waits for an answer'
+rule "$SA" '**Never edit the audited repository.**' 'the audit never edits the repository it audits'
+rule "$SA" 'This skill never fixes anything.' 'remediation is a separate step, through /dev'
+rule "$SA" 'v1 is source-only: never say a finding is confirmed' 'a source-only audit never claims a confirmed finding'
+rule "$SA" 'Never edit, delete, or hand-write a file in `$RUN`' 'only the helpers write the run directory'
+rule "$SA" 'Do not choose a step yourself, skip one, or run one out' 'the session follows next and nothing else'
+rule graphs/security-audit/agents/audit-analyst.md 'You cannot run, build, fetch, or write' 'an audit agent never claims to run or write anything'
+rule graphs/security-audit/agents/audit-researcher.md 'You cannot run, build, fetch, or write' 'an audit agent never claims to run or write anything'
+rule graphs/security-audit/agents/audit-synthesizer.md 'You cannot run, build, fetch, or write' 'an audit agent never claims to run or write anything'
+rule graphs/security-audit/README.md 'It is explicit-request only.' 'the graph README states the explicit-request rule'
+rule graphs/security-audit/README.md 'not a clean bill of health' 'a zero-confirmed report is never presented as clean'
 
 # ---- CLAUDE.md: loads every session, so it stays small and keeps its rails ----
 lines="$(wc -l < CLAUDE.md)"

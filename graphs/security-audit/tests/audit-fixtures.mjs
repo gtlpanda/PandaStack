@@ -51,8 +51,9 @@ export const audit = (args, cwd = sandbox) => {
 }
 
 // A run directory at the point audit-ledger.mjs starts: init done, recon saved (so `next` says seed). { repo, runDir }.
-export function newRun({ files = FILES, args = [] } = {}) {
+export function newRun({ files = FILES, args = [], before = () => {} } = {}) {
   const repo = mkRepo(files)
+  before(repo)   // where an earlier run is made, so this run finds it
   const r = init([repo, '--full', ...args])
   if (!r.ok) throw new Error(`init failed: ${r.stdout}${r.stderr}`)
   advanceState(r.runDir, 'recon')

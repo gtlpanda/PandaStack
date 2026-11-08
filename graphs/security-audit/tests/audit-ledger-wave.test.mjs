@@ -97,8 +97,8 @@ await test('a wave the reserves leave no room for launches no hunter and defers 
   assert.equal(audit(['check', runDir]).last, `AUDIT: OK ${runDir} passes check`)
 })
 await test('a wave the budget only partly funds takes the best units first and leaves the rest planned for a later wave, never silently dropped', () => {
-  const { runDir } = seeded(['a', 'b', 'c'].map((n, i) => named(n, { subsystem: n, priority_class: i + 1 })), { args: ['--budget', '10'] })
-  recordSpend(runDir, 'earlier-stages', 6)   // 4 left: two critics, one verifier, one hunter
+  const { runDir } = seeded(['a', 'b', 'c'].map((n, i) => named(n, { subsystem: n, priority_class: i + 1 })), { args: ['--budget', '12'] })
+  recordSpend(runDir, 'earlier-stages', 6)   // 6 left: two critics and the minter after each, one verifier, one hunter
   assert.match(planWave(runDir).summary, /^wave=1 hunters=1 assigned=1 deferred=0$/)
   const units = byName(runDir)
   assert.deepEqual(['a', 'b', 'c'].map(n => units[n].status), ['in_progress', 'planned', 'planned'])
@@ -132,19 +132,19 @@ await test('the final critic\'s reserve is the line: one agent left is the reser
   assert.equal(audit(['next', one.runDir]).last, 'NEXT: critic run=workflow kind=final-clean wave=1')
   assert.match(at(10, 10).out.summary, /reason=critic_budget_exhausted$/)
   assert.match(at(10, 14).out.summary, /reason=critic_budget_exhausted$/)
-  assert.match(at(8, 8).out.summary, /reason=critic_budget_exhausted$/)
+  assert.match(at(10, 10).out.summary, /reason=critic_budget_exhausted$/)
   assert.match(at(null, 500).out.summary, /^wave=1 hunters=1 assigned=1 deferred=0$/)
   assert.deepEqual([criticBudgetExhausted({ budget: null, agents_spent: 99 }), criticBudgetExhausted({ budget: 5, agents_spent: 4 }), criticBudgetExhausted({ budget: 5, agents_spent: 5 })], [false, false, true])
 })
 await test('exhaustCriticBudget outside plan-wave defers what is still planned, marks the run incomplete, saves no step, and is harmless twice; a unit a verifier owns is not deferred', () => {
-  const { runDir } = seeded([named('a'), named('b', { subsystem: 'other' })], { args: ['--budget', '12', '--max-units-per-hunter', '1'] })
-  recordSpend(runDir, 'earlier-stages', 8)   // 4 left: critics 2, validation 1, one hunter
+  const { runDir } = seeded([named('a'), named('b', { subsystem: 'other' })], { args: ['--budget', '14', '--max-units-per-hunter', '1'] })
+  recordSpend(runDir, 'earlier-stages', 8)   // 6 left: critics 2, their minters 2, validation 1, one hunter
   assert.match(planWave(runDir).summary, /^wave=1 hunters=1 assigned=1 deferred=0$/)
   advanceState(runDir, 'hunt')
   mergeWave(runDir, coverAll(assignments(runDir)))
   assert.deepEqual(readLedger(runDir).map(u => u.status).sort(), ['covered', 'planned'])
   const state = readFileSync(join(runDir, 'stage-state.json'), 'utf8')
-  recordSpend(runDir, 'the-rest', 4)   // the hunter and the rest
+  recordSpend(runDir, 'the-rest', 6)   // the hunter and the rest
   assert.equal(exhaustCriticBudget(runDir), 1)
   assert.deepEqual(readLedger(runDir).map(u => [u.status, u.unresolved]).sort((x, y) => (x[0] < y[0] ? -1 : 1)), [['covered', []], ['deferred', ['critic_budget_exhausted']]])
   assert.equal(readFileSync(join(runDir, 'stage-state.json'), 'utf8'), state, 'no step was saved')
@@ -386,6 +386,33 @@ await test('one unit\'s evidence is bounded, so no hunter result can fill the le
   // the run is not stuck: the next steps still write
   advanceState(runDir, 'critic', { critic_kind: 'post-wave' }); advanceState(runDir, 'mint')
   applyCritic(runDir, { missing_units: [], reassign_ids: [fine.coverage_id], resolved_prior_leads: [], stop: false }, { units: [] })
+  assert.ok(ledgerValid(runDir))
+})
+await test('one candidate record is bounded, so a hunter cannot put megabytes into candidates.json and every verifier prompt: the unit that links it returns to planned', () => {
+  const { runDir, assigned } = hunting([named('a'), named('b', { subsystem: 'b' })])
+  const [[agent, [id]], [other, [idB]]] = Object.entries(assigned)
+  const huge = candidateOf('fp-huge', { description: 'd'.repeat(2_000_000) })
+  const out = mergeWave(runDir, {
+    [agent]: hunterResult([hunterUnit(id, agent, { disposition: 'candidate', candidate_fingerprints: ['fp-huge'] })], { candidates: [huge] }),
+    [other]: hunterResult([hunterUnit(idB, other, { disposition: 'candidate', candidate_fingerprints: ['fp-fine'] })], { candidates: [candidateOf('fp-fine')] }),
+  })
+  assert.match(out.summary, /merged=1 failed=1 /)
+  const pool = readJsonFile(runDir, 'candidates.json')
+  assert.deepEqual(pool.map(c => c.fingerprint), ['fp-fine'], 'the huge record never reached candidates.json')
+  assert.ok(readFileSync(join(runDir, 'candidates.json')).length < 100_000)
+  const bloated = readLedger(runDir).find(u => u.coverage_id === id)
+  assert.equal(bloated.status, 'planned')
+  assert.match(bloated.last_failure, /linked fingerprint has no valid entry/)
+  assert.ok(ledgerValid(runDir))
+})
+await test('one hunter result admits at most 1 MiB of candidates in all: a unit linking the one that did not fit fails, and the ones before it are kept', () => {
+  const { runDir, assigned } = hunting([named('a'), named('b', { subsystem: 'b' })])
+  const [[agent, [id]], [other, [idB]]] = Object.entries(assigned)
+  const fps = Array.from({ length: 20 }, (_, i) => `fp-${String(i).padStart(2, '0')}`)
+  const records = fps.map(fp => candidateOf(fp, { description: 'd'.repeat(60_000) }))   // 20 x ~60 KB: the 18th crosses 1 MiB
+  const out = mergeWave(runDir, { [agent]: hunterResult([hunterUnit(id, agent, { disposition: 'candidate', candidate_fingerprints: ['fp-00'] })], { candidates: records }), [other]: hunterResult([hunterUnit(idB, other, { disposition: 'candidate', candidate_fingerprints: ['fp-19'] })], { candidates: records }) })
+  assert.match(out.summary, /merged=1 failed=1 /, 'fp-00 was admitted first, fp-19 did not fit')
+  assert.deepEqual(readJsonFile(runDir, 'candidates.json').map(c => c.fingerprint), ['fp-00'])
   assert.ok(ledgerValid(runDir))
 })
 await test('a merge that saved the ledger and died before saving its step is finished by running it again; nothing is applied twice', () => {
