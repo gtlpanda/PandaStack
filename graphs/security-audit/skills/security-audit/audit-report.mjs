@@ -17,7 +17,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSy
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FINDINGS_FAILED, FINDINGS_REJECTED, LEDGER_FAILED, LEDGER_REJECTED, Usage, advanceState, appendEvent, formatNext, loadRun, markIncomplete, nextStep, readJson, refuse, STATUSES } from './audit-run.mjs'
-import { byFingerprint, completeProblems, decisionsOf, finishRun, linkCheck, readPool } from './audit-findings.mjs'
+import { COMPLETE_CHECK_FAILED, byFingerprint, completeProblems, decisionsOf, finishRun, linkCheck, readPool } from './audit-findings.mjs'
 import { LEDGER_FILE } from './audit-ledger.mjs'
 import { validateFindingsFile, validateLedgerFile } from './upstream.mjs'
 import { cell, code, fence, fenceTag, inline, plain, plural, where } from './audit-md.mjs'
@@ -61,12 +61,15 @@ export function reportContext(runDir, rejected = { findings: null, ledger: null 
   const priors = readJson(join(runDir, 'prior-runs.json'))
   const critic = readJson(join(runDir, 'critic.json'))
   const link = ledger ? linkCheck({ runDir, records, ledger, decisions, pool, meta }) : { problems: [], unresolved: [] }
-  const missing = rejected.findings !== null ? FINDINGS_REJECTED : meta.incomplete_reason ?? 'no_record_written'
+  const missing = rejected.findings !== null && rejected.findings !== MISSING ? FINDINGS_REJECTED : meta.incomplete_reason ?? 'no_record_written'
   return { meta, state, ledger, records, decisions, rejected, priors: Array.isArray(priors) ? priors : [], critic: isObj(critic) ? critic : null, unresolved: unresolvedOf({ meta, records, decisions, pool, link, missing }), problems: [...rejectionProblems(rejected), ...problemsOf(runDir, meta)] }
 }
+// Why a file is not read: what upstream's validator said when it rejected the file, or that a run marked complete has no such file (complete-check requires both).
+export const MISSING = 'the file is missing'
+const unread = (name, why) => (why === MISSING ? `${name} is missing from a run marked complete` : `${name} was rejected by upstream's validator (${plain(why, 200)})`)
 const rejectionProblems = rejected => [
-  ...(rejected.findings !== null ? [`upstream's validator rejected findings.json (${rejected.findings}): no record in it is reported`] : []),
-  ...(rejected.ledger !== null ? [`upstream's validator rejected coverage-ledger.json (${rejected.ledger}): no coverage figure from it is reported`] : []),
+  ...(rejected.findings !== null ? [rejected.findings === MISSING ? `${unread('findings.json', MISSING)}: no record is reported` : `upstream's validator rejected findings.json (${rejected.findings}): no record in it is reported`] : []),
+  ...(rejected.ledger !== null ? [rejected.ledger === MISSING ? `${unread('coverage-ledger.json', MISSING)}: no coverage figure is reported` : `upstream's validator rejected coverage-ledger.json (${rejected.ledger}): no coverage figure from it is reported`] : []),
 ]
 
 // Every candidate with no record in findings.json: what the link-check lists (an unvalidated candidate, a record Phase 5 removed), and what it flags instead of listing, a candidate that was decided
@@ -145,15 +148,15 @@ function runSection(ctx, validators) {
     `- Agents: ${meta.agents_spent} invoked${meta.budget === null ? ' (no budget set)' : ` of a budget of ${meta.budget}`}${meta.agents_planned === null || meta.agents_planned === undefined ? '; no planned count was computed' : `, ${meta.agents_planned} planned`}.`,
     `- Earlier runs: ${priors.length} found, ${priors.filter(p => p.compatible).length} compatible. Carried same-source confirmations: ${count(CARRIED_CONFIRMED)}. Changed-source revalidations: ${count(CHANGED)}. Carried needs-validation leads: ${count(CARRIED_LEAD)}.`,
     ...priorLines(leads),
-    `- Validators: findings.json: ${validators.findings ?? 'not written'}; coverage-ledger.json: ${validators.ledger ?? 'not written'}.`,
+    `- Validators: findings.json: ${plain(validators.findings ?? 'not written', 200)}; coverage-ledger.json: ${plain(validators.ledger ?? 'not written', 200)}.`,
     ...(partial.length ? ['', `**This is a partial pass:** ${partial.join('; ')}.`] : [])]
 }
 
 // What stands where a section would have shown records from a file upstream's validator rejected: not an empty section, which would read as none found.
-const NOT_REPORTED = 'Not reported: findings.json was rejected by upstream\'s validator, so no record of it is read and nothing is said about leads, confirmed findings or rejected candidates.'
+const notReported = ctx => `Not reported: ${unread('findings.json', ctx.rejected.findings)}, so no record of it is read and nothing is said about leads, confirmed findings or rejected candidates.`
 
 function postureSection(ctx) {
-  if (ctx.rejected.findings !== null) return ['## Security posture', '', `No verdict is reported: findings.json was rejected by upstream's validator (${plain(ctx.rejected.findings, 200)}), so no record of it is read. Nothing here is a clean bill of health, and no lead or finding is being reported as absent.`]
+  if (ctx.rejected.findings !== null) return ['## Security posture', '', `No verdict is reported: ${unread('findings.json', ctx.rejected.findings)}, so no record of it is read. Nothing here is a clean bill of health, and no lead or finding is being reported as absent.`]
   const by = countBy(ctx.records, r => r.verdict)
   const c = by.get('confirmed') ?? 0, n = by.get('needs_validation') ?? 0, r = by.get('rejected') ?? 0
   const limit = ctx.meta.run_status === 'complete' && !(ctx.ledger ?? []).some(u => u.status === 'deferred' || u.status === 'blocked') ? '' : ' Coverage is not complete (see the coverage summary), so this is not a clean bill of health.'
@@ -162,7 +165,7 @@ function postureSection(ctx) {
 }
 
 function confirmedSection(ctx) {
-  if (ctx.rejected.findings !== null) return ['## Confirmed findings', '', NOT_REPORTED]
+  if (ctx.rejected.findings !== null) return ['## Confirmed findings', '', notReported(ctx)]
   const confirmed = ctx.records.filter(r => r.verdict === 'confirmed').sort((a, b) => rank(a.severity?.overall_severity) - rank(b.severity?.overall_severity) || byFingerprint(a, b))
   const out = ['## Confirmed findings', '']
   if (!confirmed.length) return [...out, 'None. A report with no confirmed finding is not a clean bill of health: it states only that no vulnerability was established, and the coverage and validation limits above and below still apply. No finding of any severity is invented to fill this table.']
@@ -186,7 +189,7 @@ const needsRows = ctx => ctx.records.filter(r => r.verdict === 'needs_validation
 const priorityOf = (ctx, r) => Math.min(5, ...(ctx.ledger ?? []).filter(u => list(u.result_fingerprints).includes(r.fingerprint)).map(u => (Number.isSafeInteger(u.priority_class) ? u.priority_class : 5)))
 
 function needsSection(ctx) {
-  if (ctx.rejected.findings !== null) return ['## NEEDS VALIDATION', '', NOT_REPORTED]
+  if (ctx.rejected.findings !== null) return ['## NEEDS VALIDATION', '', notReported(ctx)]
   const rows = needsRows(ctx)
   const out = ['## NEEDS VALIDATION', '', 'Leads with an exact unresolved blocker. Each is source-grounded, none is a confirmed vulnerability, and none has a severity. Ordered by the priority of the coverage that found them.', '']
   if (!rows.length) return [...out, 'None.']
@@ -208,7 +211,7 @@ function hardeningSection(ctx) {
 function coverageSection(ctx) {
   const { ledger, state, critic, meta } = ctx
   const out = ['## Coverage summary', '']
-  if (!ledger) return [...out, ctx.rejected.ledger !== null ? `coverage-ledger.json was rejected by upstream's validator (${plain(ctx.rejected.ledger, 200)}): no coverage claim is made.` : 'No coverage ledger was written: no coverage claim is made.']
+  if (!ledger) return [...out, ctx.rejected.ledger !== null ? `${unread('coverage-ledger.json', ctx.rejected.ledger)}: no coverage claim is made.` : 'No coverage ledger was written: no coverage claim is made.']
   const counts = countBy(ledger, u => u.status)
   out.push('| Status | Units |', '|---|---|', ...STATUSES.map(s => `| ${s} | ${counts.get(s) ?? 0} |`), `| **total** | ${ledger.length} |`, '',
     'Each status is counted on its own: a blocked unit is not covered, and a deferred one is not reviewed.')
@@ -233,11 +236,11 @@ export function buildReports(ctx, validators = {}) {
     ...statusSection(ctx), '', ...runSection(ctx, validators), '', ...postureSection(ctx), '', ...confirmedSection(ctx), '', ...needsSection(ctx), '', ...hardeningSection(ctx), '', ...coverageSection(ctx)].join('\n') + '\n'
   const detailed = ctx.records.filter(r => r.verdict === 'confirmed' && DETAIL_SEVERITIES.includes(r.severity?.overall_severity)).sort((a, b) => rank(a.severity?.overall_severity) - rank(b.severity?.overall_severity) || byFingerprint(a, b))
   const detail = [...head('Findings detail', 'Each confirmed medium, high or critical finding, with its source path and its bounded reproduction. Generated from findings.json.'),
-    ...(ctx.rejected.findings !== null ? [NOT_REPORTED] : detailed.length ? detailed.flatMap(r => detailSection(r)) : ['No confirmed medium, high or critical finding: nothing to detail. Confirmed low and informational findings, leads that need validation, and rejected candidates are not detailed here.'])].join('\n') + '\n'
+    ...(ctx.rejected.findings !== null ? [notReported(ctx)] : detailed.length ? detailed.flatMap(r => detailSection(r)) : ['No confirmed medium, high or critical finding: nothing to detail. Confirmed low and informational findings, leads that need validation, and rejected candidates are not detailed here.'])].join('\n') + '\n'
   const rows = needsRows(ctx)
   const needs = [...head('Needs validation', 'Leads, not findings: each has an exact unresolved blocker and no severity. Generated from findings.json.'),
     ...(ctx.unresolved.length ? ['## Unresolved candidates (not findings)', '', ...ctx.unresolved.map(u => `- ${code(u.fingerprint)}: ${code(u.reason, 80)} (${unitsOf(ctx.ledger, u.units).map(labelOf).join('; ') || 'no unit'})`), ''] : []),
-    ...(ctx.rejected.findings !== null ? [NOT_REPORTED] : rows.length ? rows.flatMap(r => needsDetail(ctx, r)) : ['No lead needs validation.'])].join('\n') + '\n'
+    ...(ctx.rejected.findings !== null ? [notReported(ctx)] : rows.length ? rows.flatMap(r => needsDetail(ctx, r)) : ['No lead needs validation.'])].join('\n') + '\n'
   return { 'REPORT.md': report, 'FINDINGS-DETAIL.md': detail, 'NEEDS-VALIDATION.md': needs }
 }
 
@@ -275,18 +278,26 @@ export function writeReport(runDir) {
   // The report follows complete-check, or an incomplete run's disclosure: a run still in progress is decided first (complete only if it passes, else incomplete with its reason).
   if (run.meta.run_status === 'in_progress') { notes.push(finishRun(runDir).message); run = loadRun(runDir) }
   const checked = { findings: verdictOf(join(runDir, 'findings.json'), validateFindingsFile), ledger: verdictOf(join(runDir, LEDGER_FILE), validateLedgerFile) }
-  const rejected = { findings: checked.findings.rejected, ledger: checked.ledger.rejected }
-  // A file a vendored validator rejects at the end of a run (nothing this graph writes is unvalidated, so it was changed by hand, or the validator changed): the report is still the one
-  // way forward, and it says so. The run cannot be complete: one that complete-check had passed is marked down for exactly this reason, an incomplete one keeps the reason it has, and no
-  // record or figure from the rejected file is read.
+  const gone = file => run.meta.run_status === 'complete' && !existsSync(join(runDir, file))   // complete-check requires both files: a complete run without one is not whole
+  const rejected = { findings: checked.findings.rejected ?? (gone('findings.json') ? MISSING : null), ledger: checked.ledger.rejected ?? (gone(LEDGER_FILE) ? MISSING : null) }
+  // A file a vendored validator rejects at the end of a run (nothing this graph writes is unvalidated, so it was changed by hand, or the validator changed), or that a run marked complete
+  // no longer has: the report is still the one way forward, and it says so. The run cannot be complete: one that complete-check had passed is marked down for exactly this reason (a
+  // missing file is complete-check's own reason), an incomplete one keeps the reason it has, and no record or figure from the file is read.
   if (rejected.findings !== null || rejected.ledger !== null) {
-    const reason = rejected.findings !== null ? FINDINGS_REJECTED : LEDGER_REJECTED
+    const reason = rejected.findings !== null && rejected.findings !== MISSING ? FINDINGS_REJECTED : rejected.ledger !== null && rejected.ledger !== MISSING ? LEDGER_REJECTED : COMPLETE_CHECK_FAILED
     const before = run.meta.run_status
     const standing = markIncomplete(runDir, reason, { downgrade: true })
-    notes.push(...[['findings.json', rejected.findings], ['coverage-ledger.json', rejected.ledger]].filter(([, line]) => line !== null).map(([name, line]) => `upstream's validator rejected ${name} (${line}): the report discloses it and reads nothing from that file; the run is ${before === 'complete' ? `no longer complete (${reason})` : `incomplete (${standing})`}`))
+    notes.push(...[['findings.json', rejected.findings], ['coverage-ledger.json', rejected.ledger]].filter(([, why]) => why !== null).map(([name, why]) => `${why === MISSING ? `${name} is missing from a run marked complete` : `upstream's validator rejected ${name} (${why})`}: the report discloses it and reads nothing from that file; the run is ${before === 'complete' ? `no longer complete (${reason})` : `incomplete (${standing})`}`))
   }
   const validators = { findings: checked.findings.line, ledger: checked.ledger.line }
-  const ctx = reportContext(runDir, rejected)
+  let ctx = reportContext(runDir, rejected)
+  // A run marked complete has no unresolved candidate (complete-check: every candidate has an independent final disposition). A findings.json emptied or cut while its candidates were decided
+  // is a valid file that says "none found", so it is judged by what it leaves unresolved.
+  if (loadRun(runDir).meta.run_status === 'complete' && ctx.unresolved.length > 0) {
+    markIncomplete(runDir, COMPLETE_CHECK_FAILED, { downgrade: true })
+    notes.push(`the run is marked complete and ${ctx.unresolved.length} candidate(s) are unresolved: no longer complete (${COMPLETE_CHECK_FAILED})`)
+    ctx = reportContext(runDir, rejected)
+  }
   const files = buildReports(ctx, validators)
   for (const [name, text] of Object.entries(files)) writeText(join(runDir, name), text)
   advanceState(runDir, 'report')

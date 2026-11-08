@@ -4,7 +4,7 @@
 // line, and the command refuses to derive prose from records a vendored validator rejects. Every fixture passes both vendored validators.
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
@@ -348,12 +348,16 @@ await test('a findings.json that a vendored validator rejects at the report is d
   assert.equal(out.summary, 'report status=incomplete confirmed=0 needs_validation=0 rejected=0 unresolved=2')
   assert.match(out.notes.join('\n'), /upstream's validator rejected findings\.json \(FAIL: \d+ validation error\(s\)\)/)
   assert.match(out.notes.join('\n'), /the run is no longer complete \(findings_rejected_by_validator\)/)
+  assert.equal(out.notes.length, 1, 'one note for the one file the validator rejected, none for the one it passed')
+  assert.match(out.notes[0], /^upstream's validator rejected findings\.json /)
   assert.deepEqual([meta(runDir).run_status, meta(runDir).incomplete_reason], ['incomplete', 'findings_rejected_by_validator'], 'a complete run is marked down for exactly this reason')
   assert.equal(next(runDir), 'NEXT: done status=incomplete reason=findings_rejected_by_validator')
   const text = readFileSync(join(runDir, 'REPORT.md'), 'utf8')
   assert.match(text, /\*\*INCOMPLETE\*\* \(`findings_rejected_by_validator`\)/)
   assert.match(text, /What went wrong:[\s\S]*upstream's validator rejected findings\.json \(FAIL: \d+ validation error\(s\)\): no record in it is reported/)
   assert.match(text, /findings\.json: REJECTED \(FAIL: /)
+  assert.ok(text.includes('upstream\'s validator rejected findings.json when the report was made'), 'the reason is in words, not only its name')
+  assert.match(text.match(/## NEEDS VALIDATION\n\n([^\n]*)/)[1], /^Not reported: findings\.json was rejected/, 'the report\'s own needs-validation section does not read as "None."')
   for (const fp of ['fp-a', 'fp-b']) assert.match(text, new RegExp(`\\| \`${fp}\` \\| \`findings_rejected_by_validator\` \\|`), `${fp} is unresolved, with the reason`)
   assert.ok(!text.includes('Lead fp-a') && !text.includes('Lead fp-b'), 'nothing is derived from the rejected records')
   assert.match(text, /No verdict is reported: findings\.json was rejected/)
@@ -378,8 +382,54 @@ await test('a run already incomplete for another reason keeps that reason, and a
   assert.match(text, /upstream's validator rejected coverage-ledger\.json \(FAIL: .*\): no coverage figure from it is reported/)
   assert.match(text, /coverage-ledger\.json was rejected by upstream's validator .*: no coverage claim is made/)
   assert.match(text, /coverage-ledger\.json: REJECTED \(FAIL: /)
+  assert.deepEqual(out.notes.map(n => n.split(' (')[0]), ['upstream\'s validator rejected coverage-ledger.json'], 'only the ledger is named: findings.json passed')
+  assert.match(text, /\(`critic_budget_exhausted`\)/, 'the first reason stands in the status')
+  assert.ok(!text.includes('when the report was made'), 'the standing reason is critic_budget_exhausted: the rejection is a problem line, not the status')
   assert.ok(text.includes('Lead fp-a'), 'findings.json passed, so its records are reported')
   assert.equal(next(runDir), 'NEXT: done status=incomplete reason=critic_budget_exhausted')
+})
+await test('a complete run whose findings.json or ledger is gone is not reported as complete: it is marked down (complete_check_failed), every candidate is unresolved, and nothing says "none found"', async () => {
+  const gone = async (file, check) => {
+    const { runDir } = await atReport()
+    assert.equal(meta(runDir).run_status, 'complete')
+    rmSync(join(runDir, file))
+    const out = writeReport(runDir)
+    assert.deepEqual([meta(runDir).run_status, meta(runDir).incomplete_reason], ['incomplete', 'complete_check_failed'], file)
+    assert.equal(next(runDir), 'NEXT: done status=incomplete reason=complete_check_failed', file)
+    const text = readFileSync(join(runDir, 'REPORT.md'), 'utf8')
+    assert.ok(!text.includes('The run is **complete**'), `${file}: the report must not call the run complete`)
+    assert.match(text, /\*\*INCOMPLETE\*\* \(`complete_check_failed`\)/)
+    assert.match(text, new RegExp(`${file.replace('.', '\\.')} is missing from a run marked complete`), file)
+    check(text, out, runDir)
+  }
+  await gone('findings.json', (text, out, runDir) => {
+    assert.equal(out.summary, 'report status=incomplete confirmed=0 needs_validation=0 rejected=0 unresolved=2')
+    for (const fp of ['fp-a', 'fp-b']) assert.match(text, new RegExp(`\\| \`${fp}\` \\|`), `${fp} is unresolved`)
+    assert.match(text, /No verdict is reported: findings\.json is missing from a run marked complete/)
+    assert.match(readFileSync(join(runDir, 'NEEDS-VALIDATION.md'), 'utf8'), /Not reported: findings\.json is missing from a run marked complete/)
+    assert.ok(!/No lead needs validation|0 leads need validation/.test(text + readFileSync(join(runDir, 'NEEDS-VALIDATION.md'), 'utf8')))
+  })
+  await gone('coverage-ledger.json', (text) => {
+    assert.match(text, /coverage-ledger\.json is missing from a run marked complete: no coverage claim is made/)
+    assert.ok(text.includes('Lead fp-a'), 'findings.json is there: its records are reported')
+  })
+})
+await test('a complete run whose findings.json was emptied (a valid file) while candidates were decided is marked down: complete means no unresolved candidate', async () => {
+  const { runDir } = await atReport()
+  corrupt(runDir, 'findings.json', f => f.splice(0, f.length))
+  const out = writeReport(runDir)
+  assert.equal(out.summary, 'report status=incomplete confirmed=0 needs_validation=0 rejected=0 unresolved=2')
+  assert.deepEqual([meta(runDir).run_status, meta(runDir).incomplete_reason], ['incomplete', 'complete_check_failed'])
+  assert.match(out.notes.join('\n'), /2 candidate\(s\) are unresolved: no longer complete \(complete_check_failed\)/)
+  const text = readFileSync(join(runDir, 'REPORT.md'), 'utf8')
+  assert.ok(!text.includes('The run is **complete**'))
+  assert.match(text, /What went wrong:[\s\S]*is not the decided records|candidate "fp-a" is unresolved/)
+})
+await test('a run that is complete and whole is untouched by these checks: no note, no downgrade, the same report', async () => {
+  const { runDir } = await atReport()
+  const out = writeReport(runDir)
+  assert.deepEqual(out.notes, [])
+  assert.deepEqual([meta(runDir).run_status, meta(runDir).incomplete_reason], ['complete', null])
 })
 await test('a run still in progress with a rejected file is decided first (complete_check_failed stands as its reason), and each candidate is unresolved for the reason that holds', async () => {
   const run = await atVerify([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }])
