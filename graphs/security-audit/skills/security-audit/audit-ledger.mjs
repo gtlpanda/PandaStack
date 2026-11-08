@@ -180,7 +180,7 @@ export function unitFromInput(input, ctx) {
   if (minted.problems) problems.push(...minted.problems)
   problems.push(...blockProblems(input))
   problems.push(...profileProblems(input, ctx.profile))
-  const paths =Array.isArray(input.starting_paths) ? input.starting_paths : []
+  const paths = Array.isArray(input.starting_paths) ? input.starting_paths : []
   for (const p of paths) {
     if (!ctx.skipPathCheck && typeof p === 'string' && isSafeRelativePath(p) && !existsSync(join(ctx.runDir, 'tree', p))) problems.push(`starting path ${p} is not in tree/ (the audited snapshot)`)
   }
