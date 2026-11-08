@@ -10,7 +10,7 @@ import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import {
   VENDOR_DIR, VENDOR_SKILL_DIR, lastLine, passed, runValidator, validateFindingsFile, validateLedgerFile,
-  canonicalCoverageId, isSafeAgentId, validateFindingsDocument, validateLedgerDocument,
+  canonicalCoverageId, isSafeAgentId, isSafeRelativePath, validateFindingsDocument, validateLedgerDocument,
 } from '../skills/security-audit/upstream.mjs'
 
 const SKILL_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'skills', 'security-audit')
@@ -117,6 +117,10 @@ await test('canonicalCoverageId and isSafeAgentId are the validator\'s own, and 
   assert.throws(() => canonicalCoverageId({ surface: 'a', boundary: 'b', subsystem: 'c' }), /missing or unexpected/)
   for (const id of ['hunter-1', 'verifier_2', 'a0']) assert.equal(isSafeAgentId(id), true, id)
   for (const id of ['Hunter-1', 'con', 'com1', '../hunter', 'hunter.1', '', null, 7]) assert.equal(isSafeAgentId(id), false, String(id))
+})
+await test('isSafeRelativePath is the validator\'s own rule: no absolute, .., backslash, drive, Windows device name, or non-string', () => {
+  for (const p of ['src/app.ts', 'a', 'dir/sub/file.name.js']) assert.equal(isSafeRelativePath(p), true, p)
+  for (const p of ['../x', 'a/../b', '/etc', 'a\\b', 'C:/x', '~/x', 'src//a', 'src/', 'src/aux.ts', 'nul', 'a/COM1.txt', ' a', 'a ', 'a/b.', '', null, undefined, 7, {}, ['a']]) assert.equal(isSafeRelativePath(p), false, String(p))
 })
 await test('the document validators return the error lists the CLIs print, so both gates agree', () => {
   assert.deepEqual(validateFindingsDocument(validFindings()), [])
