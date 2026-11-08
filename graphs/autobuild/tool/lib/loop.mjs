@@ -459,7 +459,12 @@ export function sessionSettings(config) {
     hooks.PreToolUse = [{ matcher: "Edit|Write|MultiEdit|NotebookEdit|Bash", hooks: [{ type: "command", command: `node "${path.join(HOME, "hooks", "guard.mjs")}"`, timeout: 30, onFailure: "block" }] }];
     hooks.Stop = hook("stop-gate.mjs", 2700);
   }
-  const deny = config.frozen.filter((entry) => !(config.writable ?? []).includes(entry)).flatMap((entry) => [`Edit(/${entry})`, `Edit(/${entry}/**)`]);
+  // A deny rule cannot carve out an exception, so a frozen dir holding a writable file gets no
+  // dir-wide rule; the guard hook still keeps the rest of that dir frozen.
+  const writable = config.writable ?? [];
+  const deny = config.frozen
+    .filter((entry) => !writable.includes(entry))
+    .flatMap((entry) => (writable.some((file) => file.startsWith(`${entry}/`)) ? [`Edit(/${entry})`] : [`Edit(/${entry})`, `Edit(/${entry}/**)`]));
   // The subagent model lives here, not in the process env: a user's ~/.claude/settings.json `env`
   // overrides the process env, and these --settings override the user's.
   const env = { CLAUDE_CODE_SUBAGENT_MODEL: config.subagentModel, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: config.subagentModelForce === false ? "0" : "1", CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL: config.subagentModel };

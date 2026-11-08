@@ -127,6 +127,9 @@ function allCommands(command, depth = 0) {
 if (tool === "Bash") {
   const command = String(params.command ?? "");
   const commands = allCommands(command);
+  // What the shell reader cannot read is denied, as /build-app's guard and the review gate do:
+  // a script piped into a shell (echo 'git push' | bash), or nesting past its depth limit.
+  if (commands.some((cmd) => cmd.tooDeep || cmd.stdinScript)) deny("a command the guard cannot read (a script fed to a shell on stdin, or nested too deeply) is not allowed; run the commands directly.");
 
   const GIT_DENIED = new Set(["push", "reset", "checkout", "restore", "clean", "stash", "rebase", "filter-branch", "filter-repo", "update-ref",
     "switch", "worktree", "rm", "mv", "config", "remote", "gc", "prune", "reflog", "am", "apply", "cherry-pick", "revert", "merge", "pull", "fetch", "clone", "submodule"]);
@@ -188,6 +191,12 @@ if (tool === "Bash") {
       if (arg.startsWith("--output=")) targets.push(arg.slice("--output=".length));
       else if (arg === "--output" && args[i + 1]) targets.push(args[i + 1]);
       if (word === "find" && ["-fprint", "-fprint0", "-fprintf", "-fls"].includes(arg) && args[i + 1]) targets.push(args[i + 1]);
+      // The destination directory of cp, mv, install and ln, when named by option.
+      if (["cp", "mv", "install", "ln"].includes(word)) {
+        if (arg.startsWith("--target-directory=")) targets.push(arg.slice("--target-directory=".length));
+        else if ((arg === "--target-directory" || arg === "-t") && args[i + 1]) targets.push(args[i + 1]);
+        else if (/^-t./.test(arg)) targets.push(arg.slice(2));
+      }
     });
     if (word === "sed") {
       for (const arg of args) {

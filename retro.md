@@ -1812,3 +1812,17 @@ got past the guard, because a quoted `$HOME` was not resolved. It came in with t
 The owner chose fix-then-merge over merging with it open. Fixed: shell quotes are dropped before a
 path is resolved, and a write target the guard cannot resolve (an unknown `$VAR`, backticks,
 `$(…)`) is denied. Quoted paths inside the project stay allowed.
+
+**/bughunt round 9** (7.1 min, 16 agents; contract partial, as in every round): 3 findings.
+- F2 (id reused) HIGH: the guard allowed commands its shell reader marks as unreadable
+  (`echo 'git push' | bash`, or nesting past depth 5). /build-app's guard and the review gate
+  both deny these. Fixed: autobuild's guard denies them too. This closes a class, not a spelling.
+- F16 HIGH: `cp --target-directory=` / `-t` (and mv, install, ln) wrote outside the project.
+  Fixed: the option's directory is checked as a write target.
+- F26: a writable file inside a frozen dir was still blocked by the injected `Edit(/dir/**)` deny
+  rule. Fixed: such a dir gets no dir-wide rule, and the guard hook keeps the rest of it frozen.
+
+**Stopping here.** Contract coverage has been partial in all 9 rounds, so the gate can never
+reach `pass` on this branch by itself. The guard's text-matching class keeps producing new
+spellings. The owner merges by hand, with the residual risk stated in the README: writes outside
+the project have no backstop beyond the tripwire.
