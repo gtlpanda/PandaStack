@@ -1843,3 +1843,164 @@ the path a change takes to `main`. On this machine after the merge:
 - `autobuild status` read a real project correctly;
 - `~/.autobuild` moved to `~/.claude/backups/20261107-213504-autobuild-home`, with its history
   already in PandaStack.
+
+## 34. security-audit PR 1: vendored Cloudflare skill, pinned, drift-checked (2026-11-07)
+
+PR 1 of the `security-audit` graph (plan: `tasks/plan-security-audit.md`). It adds no skill, agent,
+or workflow: only the vendored upstream, the pin, and the checks that keep the copy honest.
+
+**What changed.**
+- `graphs/security-audit/vendor/cloudflare-security-audit/`: LICENSE, README.md, and
+  `skills/security-audit/`, byte for byte from github.com/cloudflare/security-audit-skill at
+  `c1c8a8c14710` (full SHA in `UPSTREAM.json`), MIT, "Copyright (c) 2025-2026 Cloudflare, Inc.".
+  22 files, 322,698 bytes: LICENSE 1,078, README.md 6,950, and 20 files (314,670 bytes) in the skill
+  directory. That is every file the repo has at the pin. Copied with `git archive`; every staged
+  blob id and mode was compared with `git ls-tree` at the pin (two files are 100755).
+- `UPSTREAM.json`: commit, date, pin date, license, `skillsTree`, and per file blob hash, size, mode,
+  generated from upstream's git tree, not from the copies. `vendor/README.md`: attribution, the MIT
+  notice kept, the update policy (manual PR only), what is not vendored.
+- `vendor/check-vendor.mjs`: recomputes each blob hash offline and fails naming every changed,
+  missing, unlisted, or non-regular file. `--online` (manual, never CI) reports whether the pin is
+  current or how many commits behind, with subjects.
+- `skills/security-audit/upstream.mjs`: `VENDOR_DIR` (from the real file, so the install symlink does
+  not matter), `validateFindingsFile` / `validateLedgerFile` -> `{lastLine, exitCode, valid}`, and
+  `canonicalCoverageId`, `isSafeAgentId`, `validateLedgerDocument`, `validateFindingsDocument`.
+- `scripts/check-refs.mjs` skips any `vendor/` directory; `.gitattributes` turns text conversion off
+  for the vendored tree so a Windows checkout cannot change the bytes (not in the plan).
+
+**Numbers (measured).**
+- Upstream's own two `*.test.cjs` files, run unmodified through `node --test`: 65 tests (34 + 31),
+  65 pass, 0 skipped, 0.47-0.49 s wall (about 0.7 s CPU). No env flag needed; the test only caps a
+  hang at 60 s. Read in full first: node: modules only, writes only to mkdtemp dirs, spawns only
+  node and `mkfifo`, no network.
+- `check-refs` on origin/main: 223 references, all resolve. With the vendored markdown and no skip:
+  13 of 237 do not resolve. With the skip: 223.
+- Mutation check: with check-vendor's hash comparison disabled, `one flipped byte ... names that
+  file` fails (the size comparison still catches the other edits); restored, all pass.
+- `--online` run by hand against GitHub: "the pin c1c8a8c14710 is current" in 0.6 s. The behind and
+  diverged paths, run against the real remote with an older and a made-up pin: 6 commits ahead, and
+  "not in the history". The suite itself never uses the network (a local repo stands in).
+- Suite: 646 -> 670 workflow tests (+24: 1 check-refs, 9 upstream, 13 drift, 1 vendored), 117
+  install checks, 22 secret checks, `TEST: PASS`. Non-vendored, non-test change: 304 lines, of
+  which 206 are code (upstream.mjs 62, check-vendor.mjs 136, check-refs 6, .gitattributes 2).
+
+**Plan claims that were wrong or unverifiable.**
+- Validator output (plan:204, :540, :639): only `PASS: N ... valid` goes to stdout. `ERROR:` lines
+  and `FAIL: N validation error(s)` go to stderr, and a read or parse failure prints one message on
+  stderr and no `FAIL:` line (up:validate-findings.cjs:719-755, up:validate-coverage-ledger.cjs:814-851).
+  `upstream.mjs` merges both streams for `lastLine` and calls a run valid only on exit 0 plus a PASS
+  line on stdout.
+- `validateDocument` (plan:639) exists in both validators with different signatures, `(findings,
+  schema)` at up:validate-findings.cjs:585 and `(ledger)` at up:validate-coverage-ledger.cjs:761;
+  `loadSchema` is not exported (:759-771). The wrappers have distinct names and read the schema JSON.
+- `--online` (plan:676): `git ls-remote` cannot give "how many commits ahead (subjects only)". It
+  fetches commit history only (`--filter=blob:none`) into a throwaway bare repo instead.
+- `check-vendor.mjs` has no path in the plan's file table (plan:629-650). It lives at
+  `graphs/security-audit/vendor/check-vendor.mjs`. Being under `vendor/`, `check-refs` skips it too.
+- "in `scripts/test.sh`" (plan:673): there is no direct hook; the check runs through the
+  auto-discovered `graphs/security-audit/tests/*.test.mjs`.
+- plan:254-260: the baseline moved to 223 / 237 (plan: 242 / 256); the 13 unresolved holds. The skip
+  is at scripts/check-refs.mjs:79 now (a `SKIPPED_DIRS` set), not :77.
+- plan:241, :681: the upstream tests' runtime was "unverified"; measured above. Their `mkfifo` and
+  O_NOFOLLOW paths ran, with nothing skipped, on this Linux.
+- "22 files" (plan:58) is the whole repo, not the skill directory (20 files, 314,670 bytes); the
+  plan's own file table (plan:635) is right, and `UPSTREAM.json` and the vendor README now say so.
+- Not in the plan: `install.sh` will link `~/.claude/skills/security-audit` to a directory with only
+  `upstream.mjs` (no SKILL.md until PR 8). Verified on a copy with a temporary HOME. It also moves
+  aside an upstream copy someone installed with `npx skills add`, as plan section 1.5 expects.
+- `tasks/` is git-ignored here, so the plan is not in this worktree.
+
+**Unchecked on purpose.** File modes (recorded, not enforced: the validators are always run as
+`node <file>`), and `skillsTree` (recorded; it cannot be recomputed from bytes without the modes).
+
+## 35. security-audit PR 2: blocks.mjs, verbatim upstream blocks (2026-11-07)
+
+PR 2 of the `security-audit` graph (plan: `tasks/plan-security-audit.md`; the verification:
+`tasks/plan-security-audit-verify.md`, both in the main checkout, `tasks/` being git-ignored). One new
+module, `graphs/security-audit/skills/security-audit/blocks.mjs`: every piece of upstream text a later
+prompt carries is a contiguous slice of a vendored file, found by its heading, never retyped.
+
+**What changed.**
+- Reference grammar `FILE.md#Name`: an upstream `.md` file, then the section name matched exactly
+  against the file text (case and spaces included): the bold class name in ATTACK-CLASSES.md, or a
+  heading with a trailing parenthetical dropped. A block runs from its heading line to the line before
+  the heading that closes it, minus trailing blank lines; headings inside code fences are text. A
+  malformed, unknown, or ambiguous ref, a missing file, an unclosed fence throw `BlockError` naming it.
+- Registry derived from the vendored headings: `ordinary()` (the bold `(subagent_type: ...)` lines of
+  ATTACK-CLASSES.md) and `companions()` (the files ATTACK-CLASSES.md links to; each has Core discipline,
+  Universal moves, Validation rules, class sections, and a `When to use this file` section that recon
+  reads but a ledger unit does not select). A renamed fixed section, an unknown `##` section, a
+  duplicate, or a missing companion file fails by file and section name instead of being skipped.
+- `parts()`: recon prompts 1a-1d, hunter method, promotion procedure, validation rules, critic JSON,
+  candidate-verifier prompt and its promotion copy (the text inside their fences), the whole
+  "Structured hunter result" section, and the three `report-schema.json` branches (whole lines from the
+  branch's brace line to its closing brace, without the separating comma, proven equal to the parsed
+  `oneOf` entry before it is returned).
+- `guidance <question>` (D12 A): keyword-matched vendored excerpts with their line numbers, plus a pointer
+  to the `security` skill and to an explicit full-audit request; writes nothing, starts nothing. `size`:
+  the payload measurement below. `ref` and `list` print blocks exactly.
+
+**Numbers (measured).**
+- 9 ordinary blocks; 10 companions with 44 class sections and 30 fixed sections (10 x 3), plus 10
+  `When to use this file` sections; 14 shared parts (4 recon, method, promotion, validation rules, critic
+  JSON, verifier prompt, verifier promotion, hunter result, 3 schema branches). All 107 slices were also
+  compared with `sed -n 'a,bp'` of the vendored file in a one-off script: 0 mismatches.
+- Hunter payload, upstream text only (bytes). Shared parts (promotion 2,160 + method 4,426 + validation
+  rules 1,087 + result contract 3,325 + `confirmed` branch 7,906 + `needs_validation` branch 3,516):
+  22,420. Ordinary blocks, all nine: 12,283. Companion blocks per file: 6,621 to 11,305, 81,579 in all.
+  Typical hunter (shared + largest ordinary + all of the largest companion): 36,050. Worst (shared +
+  every ordinary + every companion block): 116,282; as a stage-input line `run-script.mjs` has written
+  into a script (it double-encodes the JSON): 122,147. `architecture.md` (about 1,000 words), the block
+  map and PandaStack's own wording come on top and were not measured.
+- Workflow script size: **no ceiling is documented** in the Workflow tool reference (it gives 1,000
+  agents per workflow, 4,096 items per `parallel`/`pipeline` call, concurrency min(16, CPUs-2)); I have no
+  Workflow tool here to probe one, so a ceiling is **unverified**. Largest script persisted in this
+  machine's run records (`~/.claude/projects/*/*/workflows/scripts/`): 47,171 bytes, an unpatched
+  `blueprint-design.js`. retro entry "Why" above (line 281) reports, second hand and not checkable
+  here, four `dev-build` runs with a 52 KB plan patched into the script (about 90 KB in all, by adding today's
+  39,732-byte `dev-build.js`; not measured). So 36 KB of
+  blocks per hunter is inside what is known to work; the 122 KB worst case is above it.
+- Tests: 27 in `graphs/security-audit/tests/blocks.test.mjs` (670 -> 697 workflow tests), `TEST: PASS`,
+  22 secret checks clean. Non-vendored, non-test change: blocks.mjs 260 lines (204 of code), one
+  comment in upstream.mjs.
+- Mutation check, each restored afterwards: the section slice one line too long (7 tests fail), one line
+  too short at the start (8), trailing blanks kept (7), the fence text one line wide (4), a schema branch
+  one line too long (5). Baseline 0.
+
+**Plan and verification claims that were wrong or imprecise.**
+- plan:68 names the seventh class "Chained vulnerabilities"; the block is `ATTACK-CLASSES.md#Chained
+  vulnerabilities and trust boundaries` (ATTACK-CLASSES.md:83); the short form does not resolve. The
+  verification (A7, verify:26) is right, and so is its `**Important**` finding (:130, inside Obvious
+  things); both are now pinned by tests.
+- verify:186 (change 9): the schema ranges are right (:6-245, :246-362, :363-458) but the first two end in
+  `},`, so `JSON.parse` of the slice as written fails; only the last ends in `}`. The comma separates
+  branches and is not part of the branch, so `schemaBranch` drops it.
+- verify:27 (A8) writes class headings as `## <group> attack classes`; two of the 44 end otherwise:
+  AI-AND-LLM.md:51 `MCP and sub-agent trust classes`, CLIENT-SIDE.md:55 `Cross-site information leak
+  classes`. A registry keyed on "attack classes" would silently lose both; the code requires a name
+  ending " classes" and fails on any other `##`.
+- plan:100: the repeated promotion block is not "HUNTING.md:99-136" and "VALIDATION-AND-REPORTING.md:50-85"
+  (:99 is a heading, :101/:136 and :50/:85 are the fences). The text is HUNTING.md:102-135 and
+  VALIDATION-AND-REPORTING.md:51-84: 34 lines, byte-identical (asserted).
+- plan:594-595 says guidance "may use read-only agents through the Agent tool (D12)"; only D12 B has
+  agents (plan:904). The recommended A (plan:903) is what `guidance` implements.
+- plan:75 "companion payload is about 89 KB" is the ten files' bytes (89,069); the blocks a ledger can
+  select total 81,579.
+- plan:795 and plan:810 ("every `FILE.md#Name` resolves") need a scope. The vendored markdown holds exactly two real refs
+  (`ATTACK-CLASSES.md#Access control`, RECONNAISSANCE.md:113 and :120) and five placeholders (`FILE.md#section` and `FILE.md#`, HUNTING.md:234-235,
+  RECONNAISSANCE.md:94, :121-122). Upstream's own test fixtures use blocks that do not exist
+  (`WEB-PROTOCOL-AND-AUTH.md#Cache behavior`, `AI-AND-LLM.md#Tool calls`) and its ledger validator accepts
+  them (asserted), so `blocks.mjs` is the only place a block's existence is checked.
+- Not wrong, not in the plan: ATTACK-CLASSES.md has a preface (lines 3-27) that names the ten companions;
+  it resolves as its own section (`ATTACK-CLASSES.md#Attack classes — choose and split based on Phase 1`).
+  `blocks.mjs` takes the companion file list from its links.
+
+**Decisions.** A block includes its heading line (so `Core discipline` is the heading plus its fence, and
+a hunter prompt carries upstream's own heading text); the shared fenced parts are the text between the
+fence lines. The structured hunter result is the whole section, because the rules after the JSON
+(HUNTING.md:208-213) are part of the contract.
+
+**Unchecked on purpose.** The Workflow script ceiling (above). Whether a hunter prompt should carry
+upstream's heading line for Core discipline, or only the fence: upstream says "copied verbatim", and a
+section copied whole has its heading. The `guidance` ranking is a keyword count, not a judgment; PR 8's
+skill decides when to call it.

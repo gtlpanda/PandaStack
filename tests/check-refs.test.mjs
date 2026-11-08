@@ -74,6 +74,21 @@ test('a name only another tool ships is reported with its file and line (the gst
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
+test('a vendor/ directory is skipped, the same text anywhere else is flagged', () => {
+  // Lines from the vendored Cloudflare skill that read as references: a probe path and a role name.
+  const text = 'Probe `/origin` and `/admin` first.\nSpawn the `research` agent.\n'
+  const dir = fixture('Nothing here.\n', {
+    'graphs/x/vendor/up/skills/s/notes.md': text,
+    'graphs/x/vendor/up/helper.mjs': "agentType: 'not-ours'\n",
+    'graphs/x/skills/y/notes.md': text,
+    'graphs/x/skills/y/vendor.md': text,  // a file called vendor.md is not a vendor directory
+  })
+  try {
+    const files = [...new Set(checkRefs(dir).unresolved.map(u => u.file))].sort()
+    assert.deepEqual(files, ['graphs/x/skills/y/notes.md', 'graphs/x/skills/y/vendor.md'])
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
 test('an agent reference needs an agent: a skill of the same name does not satisfy agentType', () => {
   const dir = fixture("agentType: 'verify'\n")
   try {

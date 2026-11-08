@@ -1,0 +1,2 @@
+# Vendored upstream files are byte-for-byte copies pinned by a hash: never convert line endings.
+graphs/security-audit/vendor/cloudflare-security-audit/** -text
