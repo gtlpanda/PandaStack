@@ -3,7 +3,7 @@
 //
 // Two ways in, both reading the vendored files exactly as they are:
 //   - run a validator the way a person would (node <file>) and gate on what it printed and its
-//     exit code: validateFindingsFile(path), validateLedgerFile(path) -> { lastLine, exitCode }
+//     exit code: validateFindingsFile(path), validateLedgerFile(path) -> { lastLine, exitCode, valid }
 //   - call the functions the validators export: canonicalCoverageId, isSafeAgentId,
 //     validateFindingsDocument, validateLedgerDocument
 // Vendored code loads on first use, never at import, so the drift check (vendor/check-vendor.mjs)
@@ -31,15 +31,23 @@ export const validateFindingsDocument = findings => vendored('validate-findings.
 
 const VALIDATOR_TIMEOUT_MS = 30_000
 
-// The last non-empty line of a validator's output. A pass prints PASS on stdout; a failure prints
-// ERROR lines and then FAIL on stderr, so callers pass stdout then stderr and read the verdict.
+// The last non-empty line of a validator's output. Only a pass writes to stdout (PASS: N ... valid).
+// A validation failure writes ERROR lines and then FAIL: N validation error(s) to stderr; a read or
+// parse failure writes one message to stderr and no FAIL line. Callers pass stdout then stderr, so
+// the verdict is the last line either way.
 export function lastLine(text) {
   const lines = text.split('\n').map(l => l.trimEnd()).filter(Boolean)
   return lines.length ? lines[lines.length - 1] : ''
 }
 
-// Run one vendored validator on one file: { lastLine, exitCode }. A run that gave no verdict (the
-// validator is missing, timed out, or was killed) throws, so no caller can mistake it for a fail.
+// A run is valid only on exit 0 and a last stdout line that is the validator's PASS line. Anything
+// else (a message on stderr, a clean exit with other output) is not a pass.
+export function passed(exitCode, stdout) {
+  return exitCode === 0 && /^PASS: \d+ (findings|coverage units) valid$/.test(lastLine(stdout))
+}
+
+// Run one vendored validator on one file: { lastLine, exitCode, valid }. A run that gave no verdict
+// (the validator is missing, timed out, or was killed) throws, so no caller can mistake it for a fail.
 export function runValidator(script, file, { timeoutMs = VALIDATOR_TIMEOUT_MS } = {}) {
   if (typeof file !== 'string' || file === '') throw new TypeError(`${script}: a file path is required`)
   const path = join(VENDOR_SKILL_DIR, script)
@@ -47,7 +55,7 @@ export function runValidator(script, file, { timeoutMs = VALIDATOR_TIMEOUT_MS } 
   const r = spawnSync(process.execPath, [path, file], { encoding: 'utf8', timeout: timeoutMs })
   if (r.error) throw new Error(`${script}: ${r.error.code === 'ETIMEDOUT' ? `no answer in ${timeoutMs} ms` : r.error.message}`)
   if (r.status === null) throw new Error(`${script}: ended by signal ${r.signal}`)
-  return { lastLine: lastLine(r.stdout + r.stderr), exitCode: r.status }
+  return { lastLine: lastLine(r.stdout + r.stderr), exitCode: r.status, valid: passed(r.status, r.stdout) }
 }
 
 export const validateFindingsFile = (file, options) => runValidator('validate-findings.cjs', file, options)

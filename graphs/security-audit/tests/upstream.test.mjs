@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import {
-  VENDOR_DIR, VENDOR_SKILL_DIR, lastLine, runValidator, validateFindingsFile, validateLedgerFile,
+  VENDOR_DIR, VENDOR_SKILL_DIR, lastLine, passed, runValidator, validateFindingsFile, validateLedgerFile,
   canonicalCoverageId, isSafeAgentId, validateFindingsDocument, validateLedgerDocument,
 } from '../skills/security-audit/upstream.mjs'
 
@@ -76,21 +76,31 @@ await test('lastLine is the last non-empty line, ignoring trailing blanks and ca
   assert.equal(lastLine('\n \n'), '')
 })
 await test('findings validator: a valid document is its PASS line and exit 0; an invalid one is its FAIL line and exit 1', () => {
-  assert.deepEqual(withFile(validFindings(), validateFindingsFile), { lastLine: 'PASS: 2 findings valid', exitCode: 0 })
+  assert.deepEqual(withFile(validFindings(), validateFindingsFile), { lastLine: 'PASS: 2 findings valid', exitCode: 0, valid: true })
   // Only the order is wrong, so exactly one error.
-  assert.deepEqual(withFile(validFindings().reverse(), validateFindingsFile), { lastLine: 'FAIL: 1 validation error(s)', exitCode: 1 })
+  assert.deepEqual(withFile(validFindings().reverse(), validateFindingsFile), { lastLine: 'FAIL: 1 validation error(s)', exitCode: 1, valid: false })
   assert.equal(withFile([{ verdict: 'confirmed' }], validateFindingsFile).exitCode, 1)
 })
 await test('ledger validator: a valid document is its PASS line and exit 0; an invalid one is its FAIL line and exit 1', () => {
-  assert.deepEqual(withFile([plannedUnit()], validateLedgerFile), { lastLine: 'PASS: 1 coverage units valid', exitCode: 0 })
-  assert.deepEqual(withFile([plannedUnit({ coverage_id: 'display-label-slug' })], validateLedgerFile), { lastLine: 'FAIL: 1 validation error(s)', exitCode: 1 })
+  assert.deepEqual(withFile([plannedUnit()], validateLedgerFile), { lastLine: 'PASS: 1 coverage units valid', exitCode: 0, valid: true })
+  assert.deepEqual(withFile([plannedUnit({ coverage_id: 'display-label-slug' })], validateLedgerFile), { lastLine: 'FAIL: 1 validation error(s)', exitCode: 1, valid: false })
 })
 await test('input a validator rejects before validating: its own message is the last line, exit 1', () => {
-  assert.deepEqual(withFile('[', validateFindingsFile), { lastLine: 'Failed to parse findings JSON: invalid JSON syntax', exitCode: 1 })
-  assert.deepEqual(withFile('[', validateLedgerFile), { lastLine: 'Failed to parse coverage ledger: input has truncated JSON structure', exitCode: 1 })
+  assert.deepEqual(withFile('[', validateFindingsFile), { lastLine: 'Failed to parse findings JSON: invalid JSON syntax', exitCode: 1, valid: false })
+  assert.deepEqual(withFile('[', validateLedgerFile), { lastLine: 'Failed to parse coverage ledger: input has truncated JSON structure', exitCode: 1, valid: false })
   const missing = join(tmpdir(), 'upstream-test-no-such-dir', 'x.json')
-  assert.deepEqual(validateFindingsFile(missing), { lastLine: 'Failed to read findings JSON: input could not be opened or read safely', exitCode: 1 })
-  assert.deepEqual(validateLedgerFile(missing), { lastLine: 'Failed to read coverage ledger: input could not be opened or read safely', exitCode: 1 })
+  assert.deepEqual(validateFindingsFile(missing), { lastLine: 'Failed to read findings JSON: input could not be opened or read safely', exitCode: 1, valid: false })
+  assert.deepEqual(validateLedgerFile(missing), { lastLine: 'Failed to read coverage ledger: input could not be opened or read safely', exitCode: 1, valid: false })
+})
+await test('only exit 0 plus a PASS line on stdout is a pass; a message on stderr, or a clean exit with other output, is not', () => {
+  assert.equal(passed(0, 'PASS: 3 findings valid\n'), true)
+  assert.equal(passed(0, 'PASS: 0 coverage units valid\n'), true)
+  for (const [code, out] of [[1, 'PASS: 3 findings valid\n'], [0, ''], [0, 'noise\n'], [0, 'PASS: 1 findings valid\ntrailing\n'], [0, 'PASS: x findings valid\n'],
+    [0, 'PASS: 1 findings valid extra\n'], [0, 'FAIL: 1 validation error(s)\n'], [null, 'PASS: 1 findings valid\n']]) {
+    assert.equal(passed(code, out), false, `${code} ${JSON.stringify(out)}`)
+  }
+  // A read or parse failure prints no FAIL line at all, only its message on stderr.
+  withFile('[', file => { const r = validateFindingsFile(file); assert.equal(r.valid, false); assert.doesNotMatch(r.lastLine, /^FAIL:/) })
 })
 await test('a run with no verdict throws instead of returning an exit code', () => {
   withFile([], file => {
