@@ -11,7 +11,7 @@ import { loadRun, nextStep, recordSpend, REASONS } from '../skills/security-audi
 import { parts, resolve as block } from '../skills/security-audit/blocks.mjs'
 import { audit, ledgerCli, meta } from './audit-fixtures.mjs'
 import { assignments, candidateOf, ledgerValid, readJsonFile, readLedger } from './ledger-fixtures.mjs'
-import { UNIT, files, fuzzApply, reconToSeed, returnedFile, runScript, runStage, stage, stageDirs } from './stage-fixtures.mjs'
+import { UNIT, files, fuzzApply, reconToSeed, restore, returnedFile, runScript, runStage, snapshot, stage, stageDirs } from './stage-fixtures.mjs'
 
 const P = parts()
 const three = () => [UNIT('a', { subsystemRef: 'one' }), UNIT('b', { subsystemRef: 'two' }), UNIT('c', { subsystemRef: 'three' })]
@@ -297,6 +297,46 @@ await test('an artifact deleted after its step was saved stops the next helper w
   assert.match(r.last, /^AUDIT: FAIL .*hunter-results\.json does not exist$/)
   assert.equal(readFileSync(join(runDir, 'coverage-ledger.json'), 'utf8'), ledgerBefore)
   ok(runDir)
+})
+
+await test('`next` is read from stage-state.json, the ledger and findings.json only: deleting any other artifact of any stage, in turn, leaves it where it was, and deleting the state or the metadata makes it refuse by name, and the ledger is refused by the helper that needs it', async () => {
+  const { runDir } = await reconToSeed(three())
+  ledgerCli(['plan-wave', runDir])
+  const asg = assignments(runDir)
+  await runStage(runDir, { 'audit-analyst': Object.keys(asg).map(l => covered(l, asg[l])) })
+  assert.equal(next(runDir), 'NEXT: merge-wave run=helper wave=1')
+  ledgerCli(['merge-wave', runDir, join(runDir, 'hunter-results.json')])
+  await runStage(runDir, { 'audit-researcher': [CRITIC({ stop: false, missing_units: [GAP()] })] })
+  await runStage(runDir, { 'audit-synthesizer': [MINTED(['m1'])] })
+  assert.equal(next(runDir), 'NEXT: apply-critic run=helper wave=1')
+  const snap = snapshot(runDir)
+  const was = next(runDir)
+  const artifacts = ['recon-facts.json', 'recon.json', 'hunter-results.json', 'critic.json', 'mint.json', 'candidates.json', 'uncovered.json', 'architecture.md', 'prior-runs.json', 'events.jsonl', ...stageDirs(runDir).flatMap(d => ['input.json', 'run.js', 'result.json', 'returned.json'].map(f => `stages/${d}/${f}`))]
+  for (const a of artifacts) {
+    assert.ok(existsSync(join(runDir, a)), `${a} exists`)
+    rmSync(join(runDir, a))
+    assert.equal(next(runDir), was, `deleting ${a} does not change \`next\``)
+    restore(runDir, snap)
+  }
+  rmSync(join(runDir, 'stages'), { recursive: true })
+  assert.equal(next(runDir), was, 'nor does deleting every stage directory')
+  restore(runDir, snap)
+  // In this state `next` does not read the ledger, so it still names the step, and the helper that needs the ledger says so by name
+  rmSync(join(runDir, 'coverage-ledger.json'))
+  assert.equal(next(runDir), was)
+  const noLedger = ledgerCli(['apply-critic', runDir, join(runDir, 'critic.json'), join(runDir, 'mint.json')])
+  assert.equal(noLedger.status, 1)
+  assert.match(noLedger.last, /^AUDIT: FAIL coverage-ledger\.json is missing or not an array of units: nothing can be changed without the ledger$/)
+  assert.equal(stage(['plan', runDir]).status, 1)
+  restore(runDir, snap)
+  for (const [file, pattern] of [['stage-state.json', /^NEXT: FAIL .* has no stage-state\.json/], ['run-metadata.json', /^NEXT: FAIL .* has no run-metadata\.json: it is not a run directory/]]) {
+    rmSync(join(runDir, file))
+    const r = audit(['next', runDir])
+    assert.equal(r.status, 1, file)
+    assert.match(r.last, pattern, file)
+    restore(runDir, snap)
+  }
+  assert.equal(next(runDir), was)
 })
 
 console.log('== the budget gates')

@@ -65,8 +65,8 @@ import { checkRun } from '../skills/security-audit/audit-run.mjs'
 
 const REPLACEMENTS = [null, 0, -1, 1.5, 2 ** 53, '', 'x', 'a'.repeat(5000), [], {}, true, [null], [{}], { a: 1 }, { __proto__: null, x: 1 }, [[]], '__proto__']
 // Every non-tree file of the run, so each mutation starts from the same disk.
-const snapshot = runDir => new Map(files(runDir).map(f => [f, readFileSync(join(runDir, f))]))
-function restore(runDir, snap) {
+export const snapshot = runDir => new Map(files(runDir).map(f => [f, readFileSync(join(runDir, f))]))
+export function restore(runDir, snap) {
   for (const f of files(runDir)) if (!snap.has(f)) rmSync(join(runDir, f), { force: true })
   for (const [f, bytes] of snap) { mkdirSync(dirname(join(runDir, f)), { recursive: true }); writeFileSync(join(runDir, f), bytes) }
 }

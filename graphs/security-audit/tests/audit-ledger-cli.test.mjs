@@ -1,13 +1,13 @@
 // audit-ledger-cli.test.mjs - audit-ledger.mjs end to end on the command line, with `audit-run.mjs next` and `check` between
 // every step: the state contract the two files share, a whole run through two waves and both critics, and the symlinked skill dir.
 import { dirname, join } from 'node:path'
-import { symlinkSync, writeFileSync } from 'node:fs'
+import { rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import { advanceState } from '../skills/security-audit/audit-run.mjs'
 import { AUDIT_LEDGER, ENV, audit, fresh, ledgerCli, newRun, sandbox } from './audit-fixtures.mjs'
-import { assignments, candidateOf, hunterResult, hunterUnit, readJsonFile, readLedger, reconInput, refsOf, unitInput } from './ledger-fixtures.mjs'
+import { assignments, candidateOf, hunterResult, hunterUnit, readJsonFile, readLedger, reconInput, refsOf, seeded, unitInput } from './ledger-fixtures.mjs'
 
 const named = (name, over = {}) => unitInput(name, { canonical_refs: refsOf(name, { subsystem: over.subsystem ?? 'src' }), ...over })
 const inputs = fresh('cli-inputs')
@@ -96,4 +96,19 @@ await test('audit-ledger.mjs runs through a symlinked skill directory, with its 
   assert.deepEqual([seeded.status, seeded.last], [0, 'AUDIT: OK seed units=1 planned=1'], seeded.out)
   assert.equal(viaLink(['plan-wave', runDir]).last, 'AUDIT: OK plan-wave wave=1 hunters=1 assigned=1 deferred=0')
   assert.equal(viaLink([]).status, 2)
+})
+
+console.log('== a missing ledger is a refusal that says so')
+await test('merge-wave, apply-critic and plan-wave refuse when coverage-ledger.json is missing, naming the file; none writes anything or fails with a JavaScript error', () => {
+  const critic = '{"missing_units":[],"reassign_ids":[],"resolved_prior_leads":[],"stop":true}'
+  for (const [step, cmd, inputs, extra] of [['hunt', 'merge-wave', ['{}'], {}], ['mint', 'apply-critic', [critic, '{"units":[]}'], { critic_kind: 'post-wave' }], ['seed', 'plan-wave', [], {}]]) {
+    const { runDir } = seeded([unitInput('a')])
+    advanceState(runDir, step, extra)
+    const files = inputs.map((text, i) => { const f = join(runDir, `input-${i}.json`); writeFileSync(f, text); return f })
+    rmSync(join(runDir, 'coverage-ledger.json'))
+    const r = ledgerCli([cmd, runDir, ...files])
+    assert.equal(r.status, 1, cmd)
+    assert.match(r.last, /^AUDIT: FAIL coverage-ledger\.json is missing/, `${cmd}: ${r.last}`)
+    assert.doesNotMatch(r.last, /Cannot read properties|undefined/, cmd)
+  }
 })

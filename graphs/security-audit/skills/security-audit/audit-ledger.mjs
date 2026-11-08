@@ -76,6 +76,13 @@ function expectStep(run, step) {
   return next
 }
 
+// The run's ledger, or a refusal naming the file: loadRun returns undefined for a file that is not there, and a helper that is allowed to run
+// (`next` does not read the ledger in every state) must not fail with a JavaScript error on it.
+function ledgerOf(run) {
+  if (!Array.isArray(run.ledger)) refuse(`${LEDGER_FILE} is missing or not an array of units: nothing can be changed without the ledger`)
+  return run.ledger
+}
+
 function finish(runDir, step, started, counts, state = {}, extra = {}) {
   advanceState(runDir, step, state)
   appendEvent(runDir, { cmd: step, stage: step, result: 'ok', duration_ms: Date.now() - started, counts, ...extra })
@@ -245,10 +252,11 @@ export const criticBudgetExhausted = meta => meta.budget !== null && meta.budget
 // that finds the budget gone between stages, or a stage that cannot go on. Returns how many units it deferred (none when it already ran).
 // A unit a verifier owns is not hunter work.
 export function stopHunting(runDir, reason, run = loadRun(runDir)) {
-  const work = run.ledger.filter(isHunterWork)
+  const ledger = ledgerOf(run)
+  const work = ledger.filter(isHunterWork)
   if (work.length) {
     const deferred = new Map(work.map(u => [u.coverage_id, { ...u, status: 'deferred', agent_id: null, unresolved: [reason] }]))
-    commitLedger(runDir, run.ledger.map(u => deferred.get(u.coverage_id) ?? u))
+    commitLedger(runDir, ledger.map(u => deferred.get(u.coverage_id) ?? u))
   }
   markIncomplete(runDir, reason)
   return work.length
@@ -345,7 +353,7 @@ export function mergeWave(runDir, results) {
   const started = Date.now()
   const run = loadRun(runDir)
   expectStep(run, 'merge-wave')
-  const { ledger, state } = run
+  const ledger = ledgerOf(run), { state } = run
   const assigned = ledger.filter(u => u.status === 'in_progress')
   if (assigned.length === 0) {   // an earlier merge saved the ledger and died before saving its step: finish the step
     finish(runDir, 'merge-wave', started, { merged: 0, failed: 0 }, {}, { reason: 'already merged' })
@@ -455,7 +463,8 @@ function reassign(unit, reason) {
 // Everything apply-critic does up to the write: the next ledger and the tallies. Throws a refusal (or a failure with its problems) for what
 // upstream says to fail on, so a caller can ask without writing.
 function buildCritic(runDir, run, critic, mint) {
-  const { meta, state, ledger } = run
+  const { meta, state } = run
+  const ledger = ledgerOf(run)
   if (state.critic_kind === null) refuse('a critic result is being applied but stage-state.json has no critic_kind')
   const problems = criticProblems(critic, mint)
   const proposals = isObj(critic) && Array.isArray(critic.missing_units) ? critic.missing_units.length + readQueue(runDir).length : 0
