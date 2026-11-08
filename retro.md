@@ -1835,3 +1835,72 @@ the path a change takes to `main`. On this machine after the merge:
 - `autobuild status` read a real project correctly;
 - `~/.autobuild` moved to `~/.claude/backups/20261107-213504-autobuild-home`, with its history
   already in PandaStack.
+
+## 34. security-audit PR 1: vendored Cloudflare skill, pinned, drift-checked (2026-11-07)
+
+PR 1 of the `security-audit` graph (plan: `tasks/plan-security-audit.md`). It adds no skill, agent,
+or workflow: only the vendored upstream, the pin, and the checks that keep the copy honest.
+
+**What changed.**
+- `graphs/security-audit/vendor/cloudflare-security-audit/`: LICENSE, README.md, and
+  `skills/security-audit/`, byte for byte from github.com/cloudflare/security-audit-skill at
+  `c1c8a8c14710` (full SHA in `UPSTREAM.json`), MIT, "Copyright (c) 2025-2026 Cloudflare, Inc.".
+  22 files, 322,698 bytes: LICENSE 1,078, README.md 6,950, and 20 files (314,670 bytes) in the skill
+  directory. That is every file the repo has at the pin. Copied with `git archive`; every staged
+  blob id and mode was compared with `git ls-tree` at the pin (two files are 100755).
+- `UPSTREAM.json`: commit, date, pin date, license, `skillsTree`, and per file blob hash, size, mode,
+  generated from upstream's git tree, not from the copies. `vendor/README.md`: attribution, the MIT
+  notice kept, the update policy (manual PR only), what is not vendored.
+- `vendor/check-vendor.mjs`: recomputes each blob hash offline and fails naming every changed,
+  missing, unlisted, or non-regular file. `--online` (manual, never CI) reports whether the pin is
+  current or how many commits behind, with subjects.
+- `skills/security-audit/upstream.mjs`: `VENDOR_DIR` (from the real file, so the install symlink does
+  not matter), `validateFindingsFile` / `validateLedgerFile` -> `{lastLine, exitCode, valid}`, and
+  `canonicalCoverageId`, `isSafeAgentId`, `validateLedgerDocument`, `validateFindingsDocument`.
+- `scripts/check-refs.mjs` skips any `vendor/` directory; `.gitattributes` turns text conversion off
+  for the vendored tree so a Windows checkout cannot change the bytes (not in the plan).
+
+**Numbers (measured).**
+- Upstream's own two `*.test.cjs` files, run unmodified through `node --test`: 65 tests (34 + 31),
+  65 pass, 0 skipped, 0.47-0.49 s wall (about 0.7 s CPU). No env flag needed; the test only caps a
+  hang at 60 s. Read in full first: node: modules only, writes only to mkdtemp dirs, spawns only
+  node and `mkfifo`, no network.
+- `check-refs` on origin/main: 223 references, all resolve. With the vendored markdown and no skip:
+  13 of 237 do not resolve. With the skip: 223.
+- Mutation check: with check-vendor's hash comparison disabled, `one flipped byte ... names that
+  file` fails (the size comparison still catches the other edits); restored, 13 of 13 pass.
+- `--online` run by hand against GitHub: "the pin c1c8a8c14710 is current" in 0.6 s. The behind and
+  diverged paths, run against the real remote with an older and a made-up pin: 6 commits ahead, and
+  "not in the history". The suite itself never uses the network (a local repo stands in).
+- Suite: 646 -> 670 workflow tests (+24: 1 check-refs, 9 upstream, 13 drift, 1 vendored), 117
+  install checks, 22 secret checks, `TEST: PASS`. Non-vendored, non-test change: 304 lines, of
+  which 206 are code (upstream.mjs 62, check-vendor.mjs 136, check-refs 6, .gitattributes 2).
+
+**Plan claims that were wrong or unverifiable.**
+- Validator output (plan:204, :539, :639): only `PASS: N ... valid` goes to stdout. `ERROR:` lines
+  and `FAIL: N validation error(s)` go to stderr, and a read or parse failure prints one message on
+  stderr and no `FAIL:` line (up:validate-findings.cjs:719-755, up:validate-coverage-ledger.cjs:814-851).
+  `upstream.mjs` merges both streams for `lastLine` and calls a run valid only on exit 0 plus a PASS
+  line on stdout.
+- `validateDocument` (plan:639) exists in both validators with different signatures, `(findings,
+  schema)` at up:validate-findings.cjs:585 and `(ledger)` at up:validate-coverage-ledger.cjs:761;
+  `loadSchema` is not exported (:759-771). The wrappers have distinct names and read the schema JSON.
+- `--online` (plan:676): `git ls-remote` cannot give "how many commits ahead (subjects only)". It
+  fetches commit history only (`--filter=blob:none`) into a throwaway bare repo instead.
+- `check-vendor.mjs` has no path in the plan's file table (plan:629-650). It lives at
+  `graphs/security-audit/vendor/check-vendor.mjs`. Being under `vendor/`, `check-refs` skips it too.
+- "in `scripts/test.sh`" (plan:673): there is no direct hook; the check runs through the
+  auto-discovered `graphs/security-audit/tests/*.test.mjs`.
+- plan:254-260: the baseline moved to 223 / 237 (plan: 242 / 256); the 13 unresolved holds. The skip
+  is at scripts/check-refs.mjs:79 now (a `SKIPPED_DIRS` set), not :77.
+- plan:241, :681: the upstream tests' runtime was "unverified"; measured above. Their `mkfifo` and
+  O_NOFOLLOW paths ran, with nothing skipped, on this Linux.
+- "22 files" (plan:58) is the whole repo, not the skill directory (20 files, 314,670 bytes); the
+  plan's own file table (plan:631) is right, and `UPSTREAM.json` and the vendor README now say so.
+- Not in the plan: `install.sh` will link `~/.claude/skills/security-audit` to a directory with only
+  `upstream.mjs` (no SKILL.md until PR 8). Verified on a copy with a temporary HOME. It also moves
+  aside an upstream copy someone installed with `npx skills add`, as plan:1.5 expects.
+- `tasks/` is git-ignored here, so the plan is not in this worktree.
+
+**Unchecked on purpose.** File modes (recorded, not enforced: the validators are always run as
+`node <file>`), and `skillsTree` (recorded; it cannot be recomputed from bytes without the modes).
