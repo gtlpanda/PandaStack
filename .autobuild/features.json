@@ -80,7 +80,7 @@
       ],
       "test": "graphs/security-audit/tests/profile-quick-waves.test.mjs",
       "testKind": "profile",
-      "passes": false
+      "passes": true
     },
     {
       "id": "P-05",

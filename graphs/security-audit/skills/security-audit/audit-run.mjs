@@ -523,13 +523,18 @@ export function nextStep({ meta, state, ledger, findings }) {
       // Planned but not merged: run (or re-run) the wave. After seed or apply-critic, plan-wave died before saving its
       // step, so the wave it planned is the next one.
       if (c.in_progress > 0) return go('hunt', { wave: state.last === 'plan-wave' ? state.wave : state.wave + 1 })
+      // Quick runs exactly one wave and one critic (HUNTING.md, "Coverage-critic waves"): once its result is applied, hunting is over,
+      // whatever apply-critic left (it defers every untouched unit, so only a verifier's carried units can still be planned).
+      const rules = rulesOf(meta)
+      if (state.last === 'apply-critic' && rules.hunterWaves === 1) return coverageDone()
       const huntable = c.planned - awaitingVerifier(ledger)
       if (state.last === 'plan-wave' && huntable > 0) refuse(`plan-wave left ${huntable} unit(s) planned and assigned none: units the budget cannot reach are deferred`)
       if (huntable > 0) return go('plan-wave', { wave: state.wave + 1 })
       if (state.last === 'apply-critic' && state.critic_kind === 'final-clean') return coverageDone()
-      // Nothing left to hunt: the retained final-clean critic. Straight after seed no wave ran (wave 0), but a critic's wave starts at 1
-      // (its ID is cf<wave>), so it runs as wave 1 and says no hunting wave ran.
-      return go('critic', { kind: 'final-clean', wave: Math.max(state.wave, 1), ...(state.wave === 0 ? { hunted: false } : {}) })
+      // Nothing left to hunt: the retained final-clean critic (quick, which has none: its one post-wave critic). Straight after seed no wave
+      // ran (wave 0), but a critic's wave starts at 1 (its ID is cf<wave>, quick's c<wave>), so it runs as wave 1 and says no hunting wave ran.
+      const kind = rules.finalCleanCritic ? 'final-clean' : 'post-wave'
+      return go('critic', { kind, wave: Math.max(state.wave, 1), ...(state.wave === 0 ? { hunted: false } : {}) })
     }
     case 'consolidate': return go('validate')
     case 'validate': return go('write-findings')

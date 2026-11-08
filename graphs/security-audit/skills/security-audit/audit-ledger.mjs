@@ -21,7 +21,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CARRIED, REASONS, Usage, advanceState, appendEvent, countStatuses, formatNext, git, isCommitId, loadRun, markIncomplete, nextStep, readJson, refuse, waveAllowance, writeJson } from './audit-run.mjs'
 import { BlockError, companions, ordinary, resolve as resolveBlock } from './blocks.mjs'
-import { QUICK_SUBSYSTEM_REF, rulesOf } from './audit-profile.mjs'
+import { QUICK_DEFERRED, QUICK_SUBSYSTEM_REF, rulesOf } from './audit-profile.mjs'
 import { canonicalCoverageId, isSafeRelativePath, validateFindingsFile, validateLedgerDocument, validateLedgerFile } from './upstream.mjs'
 
 export const LEDGER_FILE = 'coverage-ledger.json'
@@ -284,6 +284,9 @@ export function groupIntoHunters(ranked, perHunter) {
 export const FINAL_CRITIC_RESERVE = 1
 export const criticBudgetExhausted = meta => meta.budget !== null && meta.budget - meta.agents_spent < FINAL_CRITIC_RESERVE
 
+// A unit no hunter will take, unassigned with the reason. Only for a unit with no live evidence (planned, in_progress, or just reopened by reassign()).
+const deferUnit = (u, reason) => ({ ...u, status: 'deferred', agent_id: null, unresolved: [reason] })
+
 // Defers every unit a hunter would take or already has been given (a wave planned and not run), with the reason, without ending the run: upstream's
 // budget_cannot_reserve_critics_and_validation, after which the retained final-clean critic records the gap. Returns how many units it deferred (none
 // when it already ran). A unit assigned and not yet merged has no evidence, so it can be deferred; a unit a verifier owns is not hunter work.
@@ -291,7 +294,7 @@ export function deferHunting(runDir, reason, run = loadRun(runDir)) {
   const ledger = ledgerOf(run)
   const work = ledger.filter(u => isHunterWork(u) || u.status === 'in_progress')
   if (work.length) {
-    const deferred = new Map(work.map(u => [u.coverage_id, { ...u, status: 'deferred', agent_id: null, unresolved: [reason] }]))
+    const deferred = new Map(work.map(u => [u.coverage_id, deferUnit(u, reason)]))
     commitLedger(runDir, ledger.map(u => deferred.get(u.coverage_id) ?? u))
   }
   return work.length
@@ -323,7 +326,7 @@ export function planWave(runDir) {
   let hunters = []
   if (allowance.hunters === 0) {
     // Upstream: launch no hunter from this wave and defer its planned units (HUNTING.md, "A budget bounds it the same way").
-    for (const u of work) patched.set(u.coverage_id, { ...u, status: 'deferred', agent_id: null, unresolved: [allowance.reason] })
+    for (const u of work) patched.set(u.coverage_id, deferUnit(u, allowance.reason))
   } else {
     const groups = groupIntoHunters(work, meta.limits.max_units_per_hunter)
     hunters = groups.slice(0, allowance.hunters).map((units, i) => ({ agent_id: hunterId(wave, i + 1), units }))
@@ -560,7 +563,14 @@ function buildCritic(runDir, run, critic, mint) {
     }
     tally.resolved += 1
   }
-  return { next: [...ledger.map(u => patched.get(u.coverage_id) ?? u), ...fresh], tally, notes, rejections }
+  const next = [...ledger.map(u => patched.get(u.coverage_id) ?? u), ...fresh]
+  if (rulesOf(meta).hunterWaves !== 1) return { next, tally, notes, rejections }
+  // Quick's one critic is final: no wave follows it (HUNTING.md: "exactly one hunter wave followed by exactly one final critic pass"). What it
+  // reopened (already archived by reassign()), what it found (minted, planned) and what no hunter reached are deferred with upstream's reason;
+  // a unit a verifier owns (a carried record) is not hunter work and stays planned for validation.
+  const quickNext = next.map(u => (isHunterWork(u) || u.status === 'in_progress' ? deferUnit(u, QUICK_DEFERRED) : u))
+  tally.deferred = quickNext.filter((u, i) => u !== next[i]).length
+  return { next: quickNext, tally, notes, rejections }
 }
 
 // What apply-critic would refuse this critic result and mint for, as plain strings (empty when it would write), without writing: the whole-apply
@@ -587,7 +597,7 @@ export function applyCritic(runDir, critic, mint) {
   commitLedger(runDir, next)
   writeJson(join(runDir, 'uncovered.json'), [])   // after the ledger holds what was made of the queue: a crash in between keeps the gaps
   finish(runDir, 'apply-critic', started, tally, {}, { wave: state.wave, critic_kind: state.critic_kind, critic_stop: critic.stop })
-  return { summary: `wave=${state.wave} kind=${state.critic_kind} units_added=${tally.units_added} out_of_scope=${tally.out_of_scope} reassigned=${tally.reassigned} resolved=${tally.resolved} rejected=${tally.reassign_rejected + tally.minted_rejected}`, notes }
+  return { summary: `wave=${state.wave} kind=${state.critic_kind} units_added=${tally.units_added} out_of_scope=${tally.out_of_scope} reassigned=${tally.reassigned} resolved=${tally.resolved} rejected=${tally.reassign_rejected + tally.minted_rejected}${tally.deferred === undefined ? '' : ` deferred=${tally.deferred}`}`, notes }
 }
 
 

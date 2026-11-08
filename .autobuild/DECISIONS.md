@@ -27,6 +27,11 @@ Index first, then the entries. Keep this file's formats exact: it is read by peo
 | D3 | `forceAdd` exempts an earlier run's unit by passing `profile: undefined` in its `ctx` (the gate reads `rulesOf({ profile })`) | P-03 |
 | D4 | The profile text sits right before the first method section of each prompt, inside "upstream text verbatim" | P-03 |
 | D5 | `profilePart(meta)` lives in `audit-inputs.mjs`, the module every stage input is built from | P-03 |
+| D6 | Quick's deferral is one sweep at the end of `buildCritic` over `isHunterWork(u) \|\| in_progress`, after the critic's own work | P-04 |
+| D7 | `deferred` joins apply-critic's tally (so the summary and the event counts) for quick only | P-04 |
+| D8 | `deferUnit(u, reason)` replaces the three copies of the deferred-unit literal (deferHunting, planWave, quick) | P-04 |
+| D9 | `nextStep`'s quick exit after apply-critic sits after the `in_progress → hunt` check; that state is unreachable in quick and not pinned | P-04 |
+| D10 | The two REVIEW defects of 2026-11-08 (critic input lacks `profile`; quick same-ID mint collision) stay open: not in P-04's contract | P-04 |
 
 ## Entries
 
@@ -52,3 +57,8 @@ Index first, then the entries. Keep this file's formats exact: it is read by peo
 - **D3** `profile: undefined` for `forceAdd` — `buildSeed` puts the run's profile in the `ctx` it hands to `carryForward`, and `forceAdd` spreads that `ctx`; clearing the one key there (with a comment) keeps the exemption in the one function the contract names, and `rulesOf` reads an undefined profile as standard (no gate). Tested by profile-granularity's prior-unit test.
 - **D4** Placement — `synthPrompt` and `mintPrompt`: before `--- How units are ranked ---` / `--- Deterministic coverage ledger ---`; `criticPrompt`: before the critic section. The helper returns `''` when `PARTS.profile` is not text, so standard's prompts are byte for byte as before (the stage test's one-line-seam check and profile-granularity's standard test pass).
 - **D5** `audit-inputs.mjs` — the module `audit-stage.mjs` and `audit-verdicts.mjs` already build inputs from, so the profile name check and the section reference live once; it reads `rulesOf(meta).profile`, as the contract allows for this one place.
+- **D6** One sweep in `buildCritic` — `applyCriticProblems` (the mint stage's dry run) validates the same deferred ledger the write makes (tested in `audit-quick-waves.test.mjs`). A reassigned unit is `planned` after `reassign()` and a minted one is `planned` from `unitFromInput`, so the one `isHunterWork || in_progress` test covers contract items 1 to 3; a carried unit (a verifier's) is not hunter work and stays planned, so no prior lead leaves validation.
+- **D7** Quick-only tally key — convention 2: standard's summary and event counts do not move; `tally.deferred` is set only on the quick branch, and the summary suffix keys on it (tested for the event counts of all three profiles).
+- **D8** `deferUnit` — the literal `{ ...u, status: 'deferred', agent_id: null, unresolved: [reason] }` was in two places and P-04 needed a third; every caller hands it a unit with no live evidence (planned, in_progress, or reopened by `reassign()`, which empties it).
+- **D9** Placement of the quick exit — before the `huntable`/`plan-wave` lines (the frozen test leaves a unit planned after quick's apply-critic and wants validation) and after `in_progress → hunt`, so standard's lines and order are untouched. Quick's apply-critic defers every in_progress unit and `plan-wave` is refused after it, so an in_progress unit there is unreachable; no test pins what `next` says for it.
+- **D10** REVIEW defects left open — the critic-input fix is P-03's territory (`audit-stage.mjs`, `WF`); the collision fix would read against `RECONNAISSANCE.md:102` ("If duplicate IDs have different semantic fields, treat that as a canonical identity collision"), so it is a decision for its own session or the owner, not a side edit in P-04. Neither is exercised by P-04's frozen test.
