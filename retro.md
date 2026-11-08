@@ -2489,3 +2489,132 @@ tried). The shared blocks are drift-checked against `harness-repair.js` only. Th
 upstream's 5 MiB read limit (thousands of units) is found by `commitLedger`'s CLI pass at seed time, not by `seedProblems`, so it is
 the one refusal that can still reach `seed`. Line numbers a researcher cites beyond
 `path:line` and `path:first-last` (a list `path:1,5`) are dropped, not parsed.
+
+## 39. security-audit PR 5, branch 2: the hunt, critic and mint stages (2026-11-08)
+
+Branch 2 of PR 5 (`feat/security-audit-6-waves`, from branch 1's final commit `af767ea`, entry 38). The workflow stages `hunt`, `critic`
+and `mint`, their plan and apply in `audit-stage.mjs`, and the budget stops PR 4 left undone.
+
+**What changed.**
+- `security-audit-flow.js`: `hunt`: one `audit-analyst` per assigned owner (`h<wave>-<NN>`) through the pool, and the nine-part
+  hunter prompt of HUNTING.md ("Required hunter prompt") in upstream's order, numbered so the order is checkable: the two-sentence
+  role; `architecture.md` verbatim (fenced); the assignment with each unit's block map; each selected block verbatim, once; the
+  exclusions with reasons; the core method then the promotion procedure; the validation rules; the carried exclusions (three fields)
+  and the peers' coverage IDs; the paths part (snapshot, execution statement, no scratch or artifacts, empty allowlist) with the
+  result contract and both schema branches verbatim. `critic`: one fresh `audit-researcher`, `c<wave>` or the distinct `cf<wave>`,
+  with upstream's whole "Coverage-critic waves" section verbatim and the ledger fenced. `mint`: one `audit-synthesizer`,
+  `synth-mint<wave>` after a wave, `synth-mintf<wave>` after a final-clean critic; with no proposal it calls nobody and costs nothing. Three new nodes in `NODES`, drift-tested.
+- `audit-stage.mjs`: the stage table (`recon`, `hunt`, `critic`, `mint`). `plan` builds each input from the ledger on disk; `apply`
+  checks its part of the result, writes the file the next helper takes (`hunter-results.json` for `merge-wave`; `critic.json` and
+  `mint.json` for `apply-critic`), records the cost, saves `result.json` and then the step (and `critic_kind`). The facts check moved to
+  `audit-facts.mjs` unchanged (a move commit), so neither file is 600 lines.
+- `audit-ledger.mjs`: `plan-wave` ends the run with `critic_budget_exhausted` when `budget - agents_spent < FINAL_CRITIC_RESERVE` (one),
+  by `stopHunting(runDir, reason)` (defer every unit a hunter would take, mark the run incomplete; `exhaustCriticBudget` is it with
+  upstream's reason); `applyCriticProblems` (what `apply-critic` would refuse, without writing: `applyCritic` is split like `seed` was);
+  `criticResultProblems`. `markIncomplete` came with branch 1.
+- Tests: `security-audit-waves.test.mjs` (the workflow stages), `audit-waves-stage.test.mjs` (the stages end to end, with the
+  real validator on every ledger, the crash windows, the budget gates, the minter retry, every other artifact deleted in turn, and
+  a mutation fuzzer for `apply`), `stage-fixtures.mjs` (shared), and new cases in earlier files. The fuzzer (`fuzzApply`) deletes or
+  retypes one field at any depth of a good result, 80 times per stage including recon's, runs `applyStage` in process, and requires
+  that only a refusal is ever thrown and that `check` still passes after each outcome: it found nothing, so it is a guard.
+
+**Script size, measured on a real wave (entry 38 chose "(a), shared parts once and blocks by reference"; this is its first real
+number).** Hunt, 5 hunters over 12 units naming 26 distinct blocks: input 87,373 bytes, script 121,101 (the ceiling is 524,288, the
+guard 500,000). Critic over the 18-unit ledger: 81,061. Mint: 70,231. The critic script grows with the ledger (the whole ledger, fenced,
+in one prompt). A hunt, critic or mint input that still does not fit ends the run (`stage_input_too_large`, below); I did not measure how
+many units that is, only that ordinary evidence costs about 634 bytes a unit in the critic's compact form (the auditor's figure, not
+re-measured), which puts the limit near 750 units. The compaction is mine: a check's result prose and path list, priority and hardening
+notes and earlier runs' evidence bookkeeping are left out, text over 300 characters and lists over 20 entries are cut, and a cut unit
+says `truncated: true`. HUNTING.md says the critic receives the full ledger; this is a deviation, stated in the critic's prompt.
+
+**A live wave (not required; the entry 38 fixture, session-reported cost $0.94).** Hunt: 5 analysts, 71 s, $0.60: `merge-wave`
+merged 12 units, 0 failed, with 7 candidates (all `needs_validation`; units 6 covered and 6 candidate), and upstream's validator
+passed the ledger. Of the 7 candidates the vendored `needs_validation` schema branch accepts 6 as the hunters wrote them; the 7th
+labels a trace step `sink` where upstream wants `propagation` (a real hunter's real slip; PR 6's validate stage will see it). Critic
+c1: 1 agent, 56 s, $0.19: 3 missing units, 1 unit to reassign. Mint: 1 agent, 35 s, $0.15: 3 units for 3 proposals. `apply-critic`:
+3 units added, 1 reassigned, the ledger 21 units (4 planned), 12 agents in all across recon and the wave, `next` says `plan-wave`
+wave 2. No wave 2, final-clean critic or later stage was run live; those are scripted only. One fixture, one run.
+
+**Decisions.**
+- A hunt never escalates, even when every hunter failed: `done` with every key null and the reason naming each failure. `merge-wave`
+  already returns a unit with no usable result to planned, counts it, and defers it after two (PR 4), gated on the budget at the
+  next `plan-wave`; an escalation would have invited a whole-wave retry outside that accounting.
+- A minter result `apply-critic` would refuse (more units than proposals; an ID collision, which upstream says to fail on, never
+  merge) is sent back once, per wave (`mint-feedback.json`), then `stopHunting(..., ledger_validation_failed)`: the same shape as
+  branch 1's seed retry, and for the same reason (without it a refusal at `apply-critic` strands the run).
+- `critic_budget_exhausted` is applied where SKILL.md puts it, "later facts consume the required final-critic reserve": at
+  `plan-wave`, and at the plan of a hunt, a critic or a mint that has something to mint (an empty mint calls nobody). With one agent
+  left the earlier `budget_cannot_reserve_critics_and_validation` deferral applies and the final-clean critic still runs. Not built:
+  `validation_budget_exhausted` (PR 6, with the validate stage that spends it).
+- The final-clean critic is `cf<wave>`, not the plan's `cf<k>` (plan:398): a second final-clean critic only follows a wave, so
+  the wave number is distinct and needs no counter.
+
+**Found in earlier PRs.**
+1. PR 4, `audit-ledger.mjs:380-414` on its base (`applyCritic`): its whole-apply refusals (a unit count above the proposals, an ID
+   collision) have no recourse, so a minter that over-minted or collided stranded the run at `apply-critic` until someone hand-edits
+   `mint.json`. Reproduced by the new tests (`applyCritic` refuses exactly what `applyCriticProblems` lists). Fixed upstream of it:
+   the mint stage asks first and retries.
+2. PR 4, `planWave` and entry 37 item 4: nothing ended a run on `critic_budget_exhausted`, and nothing wrote `agents_spent`.
+   `agents_spent` came with branch 1; the exhaustion is here (reproduced: a wave planned with the budget at zero).
+3. PR 4, `audit-ledger.mjs` `mergeWave` and `applyCritic` on their base: with `coverage-ledger.json` gone they failed with "Cannot read
+   properties of undefined (reading 'filter')" (and 'map'), because `next` does not read the ledger in the states that lead to them.
+   Nothing was written, but the message named a JavaScript error, not the file. Found by a test that deletes each artifact of each
+   stage in turn; reproduced by hand and by that test; `ledgerOf(run)` now refuses naming the file.
+
+**Found by an independent audit (qa-auditor, read-only, no knowledge of my reasoning; its probes are scripts outside the repo), each
+reproduced by a failing test, or for a ledger-level change a failing check, before its fix.** Seven defects (file:line as the auditor cited them, on the head it read), one rated high, five
+medium, one low, and notes; categories: PASS data flow, FAIL state machine, budget, hostile input, conformance, missing pieces.
+1. High, `audit-stage.mjs:175-213` (`compactUnit`, `mintInput`): merge-wave accepts 64 KiB of evidence a unit and the compact ledger kept
+   most of it, so 12 units of 15 x 4,000-character `unresolved` made a 770,649-byte critic script that `plan` then refused on every
+   call, `next` stuck at `critic`, with advice that could not apply. Text over 300 characters and lists over 20 entries are cut
+   (`truncated: true`), mint proposals are clipped recursively (a hunter's queued gap carries any extra fields), and a hunt, critic or
+   mint input that still does not fit removes its stage, defers the units and ends the run `incomplete` with `stage_input_too_large`
+   (PandaStack's own string). Mutation: each of the clip, the list cap, the proposal clip and the stop is killed by a test.
+2. Medium, `audit-stage.mjs:246` (the hunt planner): the only planner with no budget gate. After a crash that left the step unsaved, a
+   new `plan` respent the hunters under a new stage key: three plans took a budget of 10 to 11 spent, `check` failing. The hunt plan asks
+   `waveAllowance` again; with nothing left the run ends (`critic_budget_exhausted`), with less than the hunters need none launches and
+   the wave is deferred with `budget_cannot_reserve_critics_and_validation`, run still in progress (HUNTING.md: the retained final-clean
+   critic records the gap). `deferHunting` defers in_progress units too.
+3. Medium, `audit-stage.mjs:254`, `:110`: the post-wave and final-clean minters of one wave shared attempts (keyed by wave) and the ID
+   `synth-mint<wave>`: a refusal of the first made the second's first refusal "attempt 2 of 2" and ended the run. Attempts are scoped by
+   wave and kind (`1:post-wave`); the second minter is `synth-mintf<wave>`; the mint input names its kind.
+4. Medium, `audit-stage.mjs:194-198`: with `critic.json` deleted after the critic step, `plan` said "plan and apply the critic stage
+   again", which no command could do (`next` was past it). It is rebuilt from the applied critic stage's `result.json`; with none left
+   the refusal says so.
+5. Medium, `audit-stage.mjs:162`: part 8's exclusions were always empty. `carried_exclusions` sits only on units a verifier owns, which
+   stay planned and are never hunted. They are the whole ledger's, the same for every hunter (tested through a real prior run).
+6. Medium, `audit-stage.mjs:165-169`: a unit that selected one companion class got that subsection alone; upstream selects a companion's
+   Core discipline, Universal moves and Validation rules with any of its blocks (RECONNAISSANCE.md "Architecture summary and companion
+   selection"; HUNTING.md part 4). Seed and mint now refuse a unit that breaks it, naming what is missing; a carried prior unit is
+   completed (appended, noted, `companion_blocks_added`) unless it excluded one. Entry 38's seed gate did not check it and
+   entry 38 does not mention it; the audit was right. In the live recon and mint the agents complied for 10 of 10 units that selected a companion.
+7. Medium, `audit-ledger.mjs:481-517`: a minted unit apply-critic would reject one by one (a path outside `tree/`, an unresolvable block)
+   passed the mint stage, then `units_added=0 rejected=1` and `next` went to `write-findings`: the gap the critic found was lost into a
+   note. `applyCriticProblems` now reports those rejections, so the minter gets them as feedback.
+Notes taken: the workflow header still said a failed hunt escalates (fixed); the critic prompt said "trimmed, never reworded" while whole
+fields were dropped (fixed, above). Not changed: `waveAllowance` and `minimumBudget` reserve critics but not the per-wave minter, a call
+PandaStack added, so a minter can take what upstream keeps for verifiers (arithmetic traced by the auditor, not reproduced); no stage
+spends the validation reserve until PR 6.
+Tried with nothing found: fencing (`peers` and `existing` are percent-encoded canonical IDs, so injection through them is not possible),
+the deferral of carried units, hunter-results.json and critic.json and mint.json against what merge-wave and apply-critic take.
+
+**Numbers.** 18 commits on branch 1's head (before this entry), 14 files, +2,042 / -234. `scripts/test.sh` on the head before this
+entry: `TEST-WORKFLOW: 991 passed, 0 failed` (857 at PR 4, 936 at branch 1), `TEST-INSTALL: 126`, `TEST-SECRETS: 22`,
+`TEST-AUTOBUILD: 75`, `TEST: PASS`, exit 0. Lines: `audit-stage.mjs` 508, `audit-facts.mjs` 99 (new), `security-audit-flow.js` 533,
+`audit-ledger.mjs` 769 (PR 4's file, +120 here; not split, and over the 600 lines I held the other two under), tests
+`audit-waves-stage.test.mjs` 628, `security-audit-waves.test.mjs` 332, `stage-fixtures.mjs` 105.
+
+**Plan and upstream mismatches.**
+- plan:394-399 agent IDs: `cf<k>` became `cf<wave>` (above); `v<NN>`, `r<NN>`, `x<NN>`, `synth-cons` are PR 6's.
+- plan:454 (the critic receives "the prior-ledger gap summary"): each unit carries its `prior_status` and `prior_leads` in the compact
+  ledger, and `prior` is the count of earlier runs and why each incompatible one is; there is no separate summary document.
+- HUNTING.md:23, part 9 ("the unique scratch/artifact paths ... predeclared promotion allowlist and byte limits"): in v1 no such
+  directory exists, so the part says so and states an empty allowlist and zero limits. Upstream does not describe this case; the
+  text is mine.
+- HUNTING.md:15, part 1 is "a two-sentence role preamble". The snapshot path and the execution statement are not that, so they
+  sit in part 9 (paths); a test asserts part 1 is exactly two sentences.
+
+**Unchecked on purpose.** A wave larger than 99 hunters (numeric ordering is tested with a fake ledger, not with 100 real
+analysts). The size of a critic script for a ledger of thousands of units (above). Whether the runtime's `resumeFromRunId` replays a
+pool's calls in a stable order. A real final-clean critic, a real second wave. Candidate records are not validated against the
+schema until PR 6; 6 of 7 passed in the one live wave.
