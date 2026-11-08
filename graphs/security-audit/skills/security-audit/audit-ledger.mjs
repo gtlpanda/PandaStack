@@ -241,17 +241,19 @@ export function groupIntoHunters(ranked, perHunter) {
 export const FINAL_CRITIC_RESERVE = 1
 export const criticBudgetExhausted = meta => meta.budget !== null && meta.budget - meta.agents_spent < FINAL_CRITIC_RESERVE
 
-// Defers every unit a hunter would take, with the reason, and marks the run incomplete; not a step, so it also serves a gate that finds
-// the budget gone mid-wave. Returns how many units it deferred (none when it already ran). A unit a verifier owns is not hunter work.
-export function exhaustCriticBudget(runDir, run = loadRun(runDir)) {
+// Stops the hunt: defers every unit a hunter would take, with the reason, and marks the run incomplete. Not a step, so it also serves a gate
+// that finds the budget gone between stages, or a stage that cannot go on. Returns how many units it deferred (none when it already ran).
+// A unit a verifier owns is not hunter work.
+export function stopHunting(runDir, reason, run = loadRun(runDir)) {
   const work = run.ledger.filter(isHunterWork)
   if (work.length) {
-    const deferred = new Map(work.map(u => [u.coverage_id, { ...u, status: 'deferred', agent_id: null, unresolved: [REASONS.critic] }]))
+    const deferred = new Map(work.map(u => [u.coverage_id, { ...u, status: 'deferred', agent_id: null, unresolved: [reason] }]))
     commitLedger(runDir, run.ledger.map(u => deferred.get(u.coverage_id) ?? u))
   }
-  markIncomplete(runDir, REASONS.critic)
+  markIncomplete(runDir, reason)
   return work.length
 }
+export const exhaustCriticBudget = (runDir, run) => stopHunting(runDir, REASONS.critic, run)
 
 export const hunterId = (wave, n) => `h${wave}-${String(n).padStart(2, '0')}`   // matches upstream's agent ID pattern; wave-unique, so fresh
 
@@ -422,12 +424,18 @@ const ARCHIVABLE = ['blocked', 'covered', 'candidate']   // RECONNAISSANCE.md: o
 const LIVE_EVIDENCE = { agent_id: null, reviewed_paths: [], local_checks: [], result_fingerprints: [], unresolved: [] }
 const semanticOf = u => JSON.stringify([u.surface, u.boundary, u.subsystem, u.attack_class, u.lifecycle ?? null])
 
-function criticProblems(critic, mint) {
+// Why a critic result is not upstream's JSON (HUNTING.md, "Coverage-critic waves"), as plain strings; empty when it is.
+export function criticResultProblems(critic) {
   const p = []
   if (!isObj(critic)) return ['the critic result is not a JSON object (a critic result wrapped in prose is not one)']
   for (const k of ['missing_units', 'reassign_ids', 'resolved_prior_leads']) if (!Array.isArray(critic[k])) p.push(`critic.${k} must be an array`)
   if (typeof critic.stop !== 'boolean') p.push('critic.stop must be true or false')
   for (const k of ['reassign_ids', 'resolved_prior_leads']) if (Array.isArray(critic[k]) && !critic[k].every(isText)) p.push(`critic.${k} must hold non-empty strings`)
+  return p
+}
+function criticProblems(critic, mint) {
+  const p = criticResultProblems(critic)
+  if (!isObj(critic)) return p
   if (!isObj(mint) || !Array.isArray(mint.units)) p.push('mint.json must be an object { units: [...] }')
   return p
 }

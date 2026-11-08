@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
-import { applyCritic, applyCriticProblems, commitLedger, mergeWave, planWave } from '../skills/security-audit/audit-ledger.mjs'
+import { applyCritic, applyCriticProblems, commitLedger, criticResultProblems, mergeWave, planWave } from '../skills/security-audit/audit-ledger.mjs'
 import { advanceState } from '../skills/security-audit/audit-run.mjs'
 import { audit, fresh, ledgerCli } from './audit-fixtures.mjs'
 import { assignments, candidateOf, checkOf, coverAll, hunterResult, hunterUnit, ledgerBytes, ledgerValid, readJsonFile, readLedger, refsOf, seeded, unitInput } from './ledger-fixtures.mjs'
@@ -33,6 +33,17 @@ const refused = (runDir, c, m, pattern) => {
   assert.throws(() => applyCritic(runDir, c, m), e => pattern.test(`${e.message}\n${(e.problems ?? []).join('\n')}`), `expected a refusal matching ${pattern}`)
   assert.deepEqual(snapshot(runDir), before, 'a refused apply-critic changes nothing')
 }
+
+console.log('== criticResultProblems: upstream\'s critic JSON, and only that')
+await test('criticResultProblems accepts the critic JSON and names every way a result is not it: prose, a missing or mistyped list, an empty ID, a stop that is not a boolean', () => {
+  assert.deepEqual(criticResultProblems(critic()), [])
+  assert.deepEqual(criticResultProblems(critic({ missing_units: [gap('x')], reassign_ids: ['id'], resolved_prior_leads: ['fp'], stop: false })), [])
+  for (const bad of [null, 'prose', 7, [], undefined]) assert.deepEqual(criticResultProblems(bad), ['the critic result is not a JSON object (a critic result wrapped in prose is not one)'])
+  assert.deepEqual(criticResultProblems({}), ['critic.missing_units must be an array', 'critic.reassign_ids must be an array', 'critic.resolved_prior_leads must be an array', 'critic.stop must be true or false'])
+  assert.deepEqual(criticResultProblems(critic({ reassign_ids: [5, ''] })), ['critic.reassign_ids must hold non-empty strings'])
+  assert.deepEqual(criticResultProblems(critic({ resolved_prior_leads: [null] })), ['critic.resolved_prior_leads must hold non-empty strings'])
+  assert.deepEqual(criticResultProblems(critic({ stop: 1 })), ['critic.stop must be true or false'])
+})
 
 console.log('== applyCriticProblems: what apply-critic would refuse as a whole, without writing')
 await test('applyCriticProblems lists each reason apply-critic would refuse the whole apply for, writes nothing, and agrees with apply-critic', () => {

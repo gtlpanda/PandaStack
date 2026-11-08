@@ -6,39 +6,15 @@ import { fileURLToPath } from 'node:url'
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
-import { test, load, run } from '../../../scripts/workflow-harness.mjs'
+import { test } from '../../../scripts/workflow-harness.mjs'
 import { MAX_SCRIPT_BYTES } from '../skills/security-audit/audit-stage.mjs'
 import { FACT_LIMITS, RECON_IDS, checkFacts, refProblem } from '../skills/security-audit/audit-facts.mjs'
-import { recordSpend, writeJson } from '../skills/security-audit/audit-run.mjs'
-import { audit, ENV, fresh, init, ledgerCli, listFiles, meta, mkRepo, put } from './audit-fixtures.mjs'
-import { planWave } from '../skills/security-audit/audit-ledger.mjs'
+import { advanceState, recordSpend, writeJson } from '../skills/security-audit/audit-run.mjs'
+import { audit, ENV, fresh, init, ledgerCli, meta, mkRepo, put } from './audit-fixtures.mjs'
+import { FILES, RESEARCH, STAGE, SYNTH, UNIT, files, newInit, returnedFile, runScript, stage, stageDirs } from './stage-fixtures.mjs'
 import { ledgerValid, readJsonFile, seeded, unitInput } from './ledger-fixtures.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const STAGE = join(here, '..', 'skills', 'security-audit', 'audit-stage.mjs')
-const stage = (args, cwd = process.cwd()) => {
-  const r = spawnSync(process.execPath, [STAGE, ...args], { cwd, encoding: 'utf8', env: { ...process.env, ...ENV } })
-  const lines = r.stdout.trim().split('\n')
-  return { status: r.status, stdout: r.stdout, stderr: r.stderr, last: lines.at(-1), lines }
-}
-const FILES = { 'src/app.js': 'export const a = 1\n', 'src/db.js': 'export const q = s => s\n', 'src/lines.js': 'one\ntwo\nthree\nfour\nfive\n', 'src/bare.txt': 'one\ntwo', 'src/empty.txt': '', 'README.md': '# fixture\n' }
-const newInit = (args = []) => { const repo = mkRepo(FILES); const r = init([repo, '--full', ...args]); assert.ok(r.ok, r.stdout + r.stderr); return { repo, runDir: r.runDir } }
-const RESEARCH = (id, over = {}) => ({ agent: id, items: [{ text: `fact ${id}`, refs: ['src/app.js:1'] }], limits: [`limit ${id}`], ...over })
-const UNIT = (name, over = {}) => ({
-  canonical_refs: { surface: `src/app.js#${name}`, boundary: 'src/db.js#q', subsystem: 'src', attack_class: 'ATTACK-CLASSES.md#Access control' },
-  surface: `Route ${name}`, boundary: 'Query helper', subsystem: 'Source', attack_class: 'Access control', starting_paths: ['src/app.js'],
-  ordinary_attack_class_block: 'ATTACK-CLASSES.md#Access control', selected_companion_blocks: [], excluded_blocks: [], priority_class: 2, priority_why: 'a lower-trust entry', ...over,
-})
-const SYNTH = (over = {}) => ({ architecture_md: 'The fixture app routes requests to handlers and a tiny data layer.', units: [UNIT('a')], focused_recon: [], ...over })
-
-// Runs the run script `plan` wrote, the way the Workflow tool would, against scripted agents; returns what the workflow returned.
-async function runScript(scriptFile, script) {
-  const { fn } = load(scriptFile)
-  return run(fn, script, undefined)
-}
-const returnedFile = (dir, result) => { const f = join(dir, 'returned.json'); writeFileSync(f, JSON.stringify(result)); return f }
-const files = runDir => listFiles(runDir).filter(f => !f.startsWith('tree/')).sort()
-const stageDirs = runDir => (existsSync(join(runDir, 'stages')) ? readdirSync(join(runDir, 'stages')).sort() : [])
 
 console.log('== references: path:line, and only what holds')
 const treeDir = fresh('tree')
@@ -494,14 +470,14 @@ await test('plan and apply run only when `next` names recon: not after seed, not
   assert.match(stage(['plan', empty]).last, /^AUDIT: FAIL .* has no run-metadata\.json: it is not a run directory/)
   assert.match(stage(['apply', empty, 'x.json']).last, /^AUDIT: FAIL .* has no run-metadata\.json/)
 })
-await test('a later stage is named as not built yet, so a session cannot plan a hunt this version cannot run', () => {
+await test('a later stage is named as not built yet, so a session cannot plan a validation this version cannot run', () => {
   const { runDir } = seeded([unitInput('a')])
-  planWave(runDir)
-  assert.equal(audit(['next', runDir]).last, 'NEXT: hunt run=workflow wave=1')
+  advanceState(runDir, 'consolidate')
+  assert.equal(audit(['next', runDir]).last, 'NEXT: validate run=workflow')
   const r = stage(['plan', runDir])
   assert.equal(r.status, 1)
-  assert.equal(r.last, 'AUDIT: FAIL stage hunt is not built in this version of audit-stage.mjs (it plans recon only): NEXT: hunt run=workflow wave=1')
-  assert.match(stage(['apply', runDir, 'x.json']).last, /^AUDIT: FAIL stage hunt is not built in this version/)
+  assert.equal(r.last, 'AUDIT: FAIL stage validate is not built in this version of audit-stage.mjs (it plans recon, hunt, critic, mint): NEXT: validate run=workflow')
+  assert.match(stage(['apply', runDir, 'x.json']).last, /^AUDIT: FAIL stage validate is not built in this version/)
   assert.ok(!existsSync(join(runDir, 'stages')))
 })
 await test('apply with nothing planned, with a missing file, a torn file, or a value that is not the workflow\'s result, refuses and writes nothing', async () => {

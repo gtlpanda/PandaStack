@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
-import { FAILED_TWICE, FINAL_CRITIC_RESERVE, MAX_UNIT_ATTEMPTS, applyCritic, commitLedger, criticBudgetExhausted, exhaustCriticBudget, groupIntoHunters, hunterId, isHunterWork, mergeWave, planWave, rankUnits } from '../skills/security-audit/audit-ledger.mjs'
+import { FAILED_TWICE, FINAL_CRITIC_RESERVE, MAX_UNIT_ATTEMPTS, applyCritic, commitLedger, criticBudgetExhausted, exhaustCriticBudget, groupIntoHunters, hunterId, isHunterWork, mergeWave, planWave, rankUnits, stopHunting } from '../skills/security-audit/audit-ledger.mjs'
 import { REASONS, advanceState, recordSpend } from '../skills/security-audit/audit-run.mjs'
 import { isSafeAgentId } from '../skills/security-audit/upstream.mjs'
 import { audit, fresh, ledgerCli, newRun } from './audit-fixtures.mjs'
@@ -152,6 +152,16 @@ await test('exhaustCriticBudget outside plan-wave defers what is still planned, 
   assert.equal(exhaustCriticBudget(runDir), 0, 'again: nothing left to defer, the reason unchanged')
   assert.ok(ledgerValid(runDir))
   assert.equal(audit(['next', runDir]).last, 'NEXT: write-findings run=helper')
+})
+await test('stopHunting defers the planned units with any reason it is given and marks the run incomplete with it; exhaustCriticBudget is that with upstream\'s reason', () => {
+  const { runDir } = seeded([named('a'), named('b', { subsystem: 'other' })])
+  assert.equal(stopHunting(runDir, 'ledger_validation_failed'), 2)
+  assert.deepEqual(readLedger(runDir).map(u => [u.status, u.agent_id, u.unresolved]), Array(2).fill(['deferred', null, ['ledger_validation_failed']]))
+  assert.deepEqual([readJsonFile(runDir, 'run-metadata.json').run_status, readJsonFile(runDir, 'run-metadata.json').incomplete_reason], ['incomplete', 'ledger_validation_failed'])
+  assert.ok(ledgerValid(runDir))
+  assert.equal(stopHunting(runDir, 'critic_budget_exhausted'), 0, 'nothing is left to defer, and the first reason stands')
+  assert.equal(readJsonFile(runDir, 'run-metadata.json').incomplete_reason, 'ledger_validation_failed')
+  assert.throws(() => stopHunting(runDir, ''), TypeError)
 })
 await test('no budget set means no cap: every planned unit gets a hunter in the first wave', () => {
   const { runDir } = seeded(Array.from({ length: 9 }, (_, i) => named(`u${i}`, { subsystem: `s${i}` })))
