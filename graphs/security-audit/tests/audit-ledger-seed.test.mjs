@@ -206,7 +206,7 @@ await test('the validator CLI is the gate, not only the in-memory check: a ledge
   const fat = { ...a, note: 'x'.repeat(6 * 1024 * 1024) }   // an extra field is allowed; the file is not
   assert.throws(() => commitLedger(runDir, [fat]), /said "Failed to read coverage ledger: input exceeds 5242880 byte limit" \(exit 1\); coverage-ledger\.json is unchanged/)
   assert.equal(ledgerBytes(runDir), before)
-  assert.deepEqual(readdirSync(runDir).filter(f => f.includes('candidate') || f.includes('.tmp')), [])
+  assert.deepEqual(readdirSync(runDir).filter(f => f.endsWith('.candidate') || f.includes('.tmp')), [])
 })
 await test('beforePublish runs only after the ledger passed, so a refusal writes no side file; a pass writes the ledger last', () => {
   const { runDir } = seeded([unitInput('a')])
@@ -224,5 +224,5 @@ await test('a side-file failure in beforePublish leaves the old ledger in place'
   const before = ledgerBytes(runDir), [a] = readLedger(runDir)
   assert.throws(() => commitLedger(runDir, [{ ...a, wave: 9 }], () => { throw new Error('disk full') }), /disk full/)
   assert.equal(ledgerBytes(runDir), before)
-  assert.deepEqual(readdirSync(runDir).filter(f => f.includes('candidate')), [])
+  assert.deepEqual(readdirSync(runDir).filter(f => f.endsWith('.candidate')), [])
 })

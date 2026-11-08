@@ -404,7 +404,9 @@ export function countStatuses(ledger) {
 export const CARRIED = ['prior_confirmed_same_source', 'prior_needs_validation']
 const awaitingVerifier = ledger => ledger.filter(u => u.status === 'planned' && CARRIED.includes(u.prior_status)).length
 const HUNTING = ['plan-wave', 'hunt', 'merge-wave', 'critic', 'mint', 'apply-critic']
-const candidateFingerprints = ledger => new Set(ledger.filter(u => u.status === 'candidate').flatMap(u => (Array.isArray(u.result_fingerprints) ? u.result_fingerprints.filter(isStr) : [])))
+const fingerprintsOf = u => (u && Array.isArray(u.result_fingerprints) ? u.result_fingerprints.filter(isStr) : [])
+// A candidate unit the critic reopened keeps its lead in `attempts` (RECONNAISSANCE.md), and the lead still has to be validated.
+const candidateFingerprints = ledger => new Set(ledger.flatMap(u => [...(u.status === 'candidate' ? fingerprintsOf(u) : []), ...(Array.isArray(u.attempts) ? u.attempts.flatMap(fingerprintsOf) : [])]))
 
 // The one next step, from what is on disk: the last saved step, the ledger's unit states, the findings records.
 // `ledger` and `findings` are undefined when the file does not exist. Throws a refusal when disk is inconsistent.

@@ -197,6 +197,23 @@ await test('the validator is the backstop for fresh owners: a live unit or check
   }
 })
 
+await test('a candidate whose unit was reopened is still a record to validate: `next` counts the fingerprint from the archive, not only from live candidate units', () => {
+  // The unit is reopened and the second hunter closes it with no candidate. The lead lives in attempts and candidates.json only.
+  const run = seeded([named('a')])
+  const { runDir } = run
+  const wave = results => { planWave(runDir); advanceState(runDir, 'hunt'); mergeWave(runDir, results(assignments(runDir))); advanceState(runDir, 'critic', { critic_kind: 'post-wave' }); advanceState(runDir, 'mint') }
+  wave(assigned => { const [[agent, [id]]] = Object.entries(assigned); return { [agent]: hunterResult([hunterUnit(id, agent, { disposition: 'candidate', candidate_fingerprints: ['fp-lead'] })], { candidates: [candidateOf('fp-lead')] }) } })
+  applyCritic(runDir, critic({ reassign_ids: [readLedger(runDir)[0].coverage_id] }), { units: [] })
+  wave(coverAll)
+  applyCritic(runDir, critic({ stop: true }), { units: [] })
+  advanceState(runDir, 'critic', { critic_kind: 'final-clean' }); advanceState(runDir, 'mint')
+  applyCritic(runDir, critic({ stop: true }), { units: [] })
+  const [u] = readLedger(runDir)
+  assert.deepEqual([u.status, u.result_fingerprints, u.attempts[0].result_fingerprints], ['covered', [], ['fp-lead']])
+  assert.deepEqual(readJsonFile(runDir, 'candidates.json').map(c => c.fingerprint), ['fp-lead'])
+  assert.equal(audit(['next', runDir]).last, 'NEXT: validate run=workflow', 'the lead in candidates.json must still go to a verifier')
+})
+
 console.log('== apply-critic: prior leads')
 await test('a prior lead named by the critic is marked resolved on its unit with who resolved it; an unknown fingerprint is said, not applied', () => {
   const { runDir } = afterWave([named('a'), named('b')])
