@@ -57,3 +57,44 @@ export async function reconToSeed(units, args = []) {
   assert.equal(seed.status, 0, seed.stdout)
   return { repo, runDir }
 }
+
+// ---- a fuzzer for `apply`: one mutation of a good result at a time, in process ----
+import { readFileSync, rmSync, mkdirSync } from 'node:fs'
+import { applyStage } from '../skills/security-audit/audit-stage.mjs'
+import { checkRun } from '../skills/security-audit/audit-run.mjs'
+
+const REPLACEMENTS = [null, 0, -1, 1.5, 2 ** 53, '', 'x', 'a'.repeat(5000), [], {}, true, [null], [{}], { a: 1 }, { __proto__: null, x: 1 }, [[]], '__proto__']
+// Every non-tree file of the run, so each mutation starts from the same disk.
+const snapshot = runDir => new Map(files(runDir).map(f => [f, readFileSync(join(runDir, f))]))
+function restore(runDir, snap) {
+  for (const f of files(runDir)) if (!snap.has(f)) rmSync(join(runDir, f), { force: true })
+  for (const [f, bytes] of snap) { mkdirSync(dirname(join(runDir, f)), { recursive: true }); writeFileSync(join(runDir, f), bytes) }
+}
+// Applies `n` single mutations of `good` (a workflow result) through applyStage and returns how each ended. The invariants: only a refusal is ever thrown
+// (never a TypeError out of a hostile shape), and whatever the outcome the run still passes `check`.
+export function fuzzApply(runDir, good, dir, n = 60, seed = 7) {
+  let x = seed
+  const rnd = k => { x = (x * 1103515245 + 12345) & 0x7fffffff; return x % k }
+  const paths = []
+  const walk = (v, p) => { if (v && typeof v === 'object') for (const k of Object.keys(v)) { paths.push([...p, k]); walk(v[k], [...p, k]) } }
+  walk(good, [])
+  const snap = snapshot(runDir)
+  const outcomes = { ok: 0, refused: 0 }
+  for (let i = 0; i < n; i++) {
+    const m = JSON.parse(JSON.stringify(good))
+    const path = paths[rnd(paths.length)]
+    let at = m
+    for (const k of path.slice(0, -1)) at = at[k]
+    const last = path.at(-1)
+    if (rnd(4) === 0) delete at[last]; else at[last] = REPLACEMENTS[rnd(REPLACEMENTS.length)]
+    const file = join(dir, `fuzz-${i}.json`)
+    writeFileSync(file, JSON.stringify(m))
+    try { applyStage(runDir, file); outcomes.ok += 1 } catch (e) {
+      assert.equal(e.constructor.name, 'Refusal', `mutation ${JSON.stringify(path)}: ${e.stack?.split('\n').slice(0, 3).join(' | ')}`)
+      outcomes.refused += 1
+    }
+    assert.deepEqual(checkRun(runDir), [], `after mutation ${JSON.stringify(path)} the run must still pass check`)
+    restore(runDir, snap)
+  }
+  return outcomes
+}

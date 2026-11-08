@@ -11,7 +11,7 @@ import { MAX_SCRIPT_BYTES } from '../skills/security-audit/audit-stage.mjs'
 import { FACT_LIMITS, RECON_IDS, checkFacts, refProblem } from '../skills/security-audit/audit-facts.mjs'
 import { advanceState, recordSpend, writeJson } from '../skills/security-audit/audit-run.mjs'
 import { audit, ENV, fresh, init, ledgerCli, meta, mkRepo, put } from './audit-fixtures.mjs'
-import { FILES, RESEARCH, STAGE, SYNTH, UNIT, files, newInit, returnedFile, runScript, stage, stageDirs } from './stage-fixtures.mjs'
+import { FILES, RESEARCH, STAGE, SYNTH, UNIT, files, fuzzApply, newInit, returnedFile, runScript, stage, stageDirs } from './stage-fixtures.mjs'
 import { ledgerValid, readJsonFile, seeded, unitInput } from './ledger-fixtures.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -322,6 +322,22 @@ await test('a stage already applied is not applied again with a different result
   assert.equal(readFileSync(join(runDir, 'recon-facts.json'), 'utf8'), facts)
   assert.equal(meta(runDir).agents_spent, 4)
 })
+console.log('== apply under mutation')
+await test('a good facts or synthesizer result with one field of any depth deleted or replaced by the wrong type is refused or applied, never a crash, and the run still passes check', async () => {
+  const { runDir } = newInit()
+  stage(['plan', runDir])
+  const dir1 = join(runDir, 'stages', '01-recon-facts')
+  const good1 = (await runScript(join(dir1, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })).result
+  const facts = fuzzApply(runDir, good1, dir1, 80)
+  assert.ok(facts.refused > 0 && facts.ok > 0, `facts: ${JSON.stringify(facts)}`)
+  assert.equal(stage(['apply', runDir, returnedFile(dir1, good1)]).status, 0)
+  stage(['plan', runDir])
+  const dir2 = join(runDir, 'stages', '02-recon-synthesize')
+  const good2 = (await runScript(join(dir2, 'run.js'), { 'audit-synthesizer': [SYNTH({ units: [UNIT('a'), UNIT('b', { subsystemRef: 'two' })], focused_recon: [{ area: 'x', reason: 'y' }] })] })).result
+  const synth = fuzzApply(runDir, good2, dir2, 80)
+  assert.ok(synth.refused > 0 && synth.ok > 0, `synthesize: ${JSON.stringify(synth)}`)
+})
+
 console.log('== a synthesizer result the ledger would refuse is not saved')
 // A run with the facts part applied: { runDir } ready for the synthesize part.
 async function afterFacts() {

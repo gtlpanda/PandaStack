@@ -11,7 +11,7 @@ import { loadRun, nextStep, recordSpend, REASONS } from '../skills/security-audi
 import { parts, resolve as block } from '../skills/security-audit/blocks.mjs'
 import { audit, ledgerCli, meta } from './audit-fixtures.mjs'
 import { assignments, candidateOf, ledgerValid, readJsonFile, readLedger } from './ledger-fixtures.mjs'
-import { UNIT, files, reconToSeed, returnedFile, runScript, runStage, stage, stageDirs } from './stage-fixtures.mjs'
+import { UNIT, files, fuzzApply, reconToSeed, returnedFile, runScript, runStage, stage, stageDirs } from './stage-fixtures.mjs'
 
 const P = parts()
 const three = () => [UNIT('a', { subsystemRef: 'one' }), UNIT('b', { subsystemRef: 'two' }), UNIT('c', { subsystemRef: 'three' })]
@@ -224,6 +224,33 @@ await test('a stage applied against the wrong plan is refused: a hunt result for
   const r = stage(['apply', runDir, join(h.dir, 'returned.json')])
   assert.equal(r.status, 1)
   assert.match(r.last, /^AUDIT: FAIL the result is not the workflow's: stage is "hunt", but the stage planned is critic/)
+})
+
+console.log('== apply under mutation')
+await test('a good result with one field of any depth deleted or replaced by the wrong type is refused or applied, never a crash, and the run still passes check, for hunt, critic and mint', async () => {
+  const { runDir } = await reconToSeed(three())
+  ledgerCli(['plan-wave', runDir])
+  const asg = assignments(runDir)
+  const plan = (step, script) => {
+    const p = stage(['plan', runDir])
+    assert.equal(p.status, 0, p.stdout)
+    const dir = join(runDir, 'stages', p.last.match(/stages\/([^/]+)\/run\.js/)[1])
+    return runScript(join(dir, 'run.js'), script).then(ran => ({ dir, good: ran.result }))
+  }
+  const hunt = await plan('hunt', { 'audit-analyst': Object.keys(asg).map(l => covered(l, asg[l])) })
+  const huntOutcomes = fuzzApply(runDir, hunt.good, hunt.dir, 80)
+  assert.ok(huntOutcomes.refused > 0 && huntOutcomes.ok > 0, `hunt: ${JSON.stringify(huntOutcomes)} (a hunter's result is passed through for merge-wave to judge, so most mutations of its inside apply)`)
+  assert.equal(stage(['apply', runDir, returnedFile(hunt.dir, hunt.good)]).status, 0)
+  ledgerCli(['merge-wave', runDir, join(runDir, 'hunter-results.json')])
+  const critic = await plan('critic', { 'audit-researcher': [CRITIC({ stop: false, missing_units: [GAP()], reassign_ids: [asg['h1-01'][0]] })] })
+  const criticOutcomes = fuzzApply(runDir, critic.good, critic.dir, 80)
+  assert.ok(criticOutcomes.refused > 0 && criticOutcomes.ok > 0, `critic: ${JSON.stringify(criticOutcomes)}`)
+  assert.equal(stage(['apply', runDir, returnedFile(critic.dir, critic.good)]).status, 0)
+  const mint = await plan('mint', { 'audit-synthesizer': [MINTED(['m1'])] })
+  const mintOutcomes = fuzzApply(runDir, mint.good, mint.dir, 80)
+  assert.ok(mintOutcomes.refused > 0 && mintOutcomes.ok > 0, `mint: ${JSON.stringify(mintOutcomes)}`)
+  assert.equal(stage(['apply', runDir, returnedFile(mint.dir, mint.good)]).status, 0)
+  assert.match(ledgerCli(['apply-critic', runDir, join(runDir, 'critic.json'), join(runDir, 'mint.json')]).last, /^AUDIT: OK apply-critic/); ok(runDir)
 })
 
 console.log('== crash windows')
