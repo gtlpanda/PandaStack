@@ -4,7 +4,7 @@
 // (workflows/security-audit-flow.js) has no filesystem, so everything that reads or writes a run file happens here.
 //
 //   node audit-stage.mjs plan  <run dir>
-//   node audit-stage.mjs apply <run dir> <returned.json>     returned.json: what the Workflow tool returned, as JSON
+//   node audit-stage.mjs apply <run dir> <returned.json>     returned.json: what the Workflow tool returned, as JSON, or the Workflow task's own output file
 //
 // Both run only when `audit-run.mjs next` names a Workflow stage (recon, hunt, critic, mint, consolidate, validate, verify), so a stage cannot be
 // planned or applied out of order. A command's last line is "AUDIT: OK <cmd> ..." (exit 0) or "AUDIT: FAIL <reason>" (exit 1); bad usage is
@@ -331,6 +331,7 @@ export function planStage(runDir) {
 // What the workflow returns, as an untrusted value: the contract of security-audit-flow.js.
 function resultProblems(result, input) {
   if (!isObj(result)) return ['the result is not a JSON object']
+  if (!('status' in result) && typeof result.agentCount === 'number') return ['this is a Workflow output file with no `result`: the run did not return one (its summary and logs say why), so plan the stage again']
   const p = []
   if (result.status !== 'done' && result.status !== 'escalate') p.push(`status is ${show(result.status)}, not done or escalate`)
   if (typeof result.reason !== 'string') p.push('reason is not a string')
@@ -448,6 +449,13 @@ const APPLIERS = {
   verify: applyVerify,
 }
 
+// The Workflow tool's own output file wraps what the script returned: { summary, agentCount, logs, result: { status, ... }, ... } (measured, claude 2.1.319).
+// It is taken as it is, so the session never has to copy a result by hand; a bare result is taken too. A wrapper with no `result` (a run that did not return)
+// is left as it is and refused by resultProblems, which names what is missing.
+export function unwrapOutput(value) {
+  return isObj(value) && !('status' in value) && !('stage' in value) && typeof value.agentCount === 'number' && isObj(value.result) ? value.result : value
+}
+
 export function applyStage(runDir, returnedFile) {
   const started = Date.now()
   const run = loadRun(runDir)
@@ -459,7 +467,7 @@ export function applyStage(runDir, returnedFile) {
   const input = readJson(join(stage.dir, 'input.json'))
   if (!isObj(input)) refuse(`${stage.name} has no input.json: plan it again`)
   if (input.stage !== next.step) refuse(`${stage.name} was planned for ${show(input.stage)}, and the next step is ${next.step}: plan it again`)
-  const result = readJson(resolve(returnedFile))
+  const result = unwrapOutput(readJson(resolve(returnedFile)))
   if (result === undefined) refuse(`${returnedFile} does not exist`)
   if (stage.done && !isDeepStrictEqual(readJson(join(stage.dir, 'result.json')), result)) refuse(`${stage.name} was already applied with a different result: plan the stage again`)
   const problems = resultProblems(result, input)

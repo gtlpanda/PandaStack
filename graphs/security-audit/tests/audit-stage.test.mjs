@@ -11,7 +11,7 @@ import { MAX_SCRIPT_BYTES } from '../skills/security-audit/audit-stage.mjs'
 import { FACT_LIMITS, RECON_IDS, checkFacts, refProblem } from '../skills/security-audit/audit-facts.mjs'
 import { advanceState, recordSpend, writeJson } from '../skills/security-audit/audit-run.mjs'
 import { audit, ENV, fresh, init, ledgerCli, meta, mkRepo, put } from './audit-fixtures.mjs'
-import { FILES, RESEARCH, STAGE, SYNTH, UNIT, files, fuzzApply, newInit, returnedFile, runScript, stage, stageDirs } from './stage-fixtures.mjs'
+import { FILES, RESEARCH, STAGE, SYNTH, UNIT, files, fuzzApply, newInit, returnedFile, runScript, runStage, stage, stageDirs } from './stage-fixtures.mjs'
 import { ledgerValid, readJsonFile, seeded, unitInput } from './ledger-fixtures.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -516,6 +516,50 @@ await test('apply with nothing planned, with a missing file, a torn file, or a v
   assert.equal(meta(runDir).agents_spent, 0, 'a refused result costs nothing on record: its count is not trusted')
   assert.deepEqual(files(runDir).filter(f => !['stages/01-recon-facts/returned.json', 'stages/01-recon-facts/torn.json'].includes(f)), planned)
   assert.notDeepEqual(planned, none)
+})
+// What the Workflow tool writes for a finished run (measured on claude 2.1.319): the script's return value sits under `result`.
+const TASK_OUTPUT = result => ({ summary: 'Full security audit graph', agentCount: result?.budgetSpent ?? 0, logs: ['done'], result, workflowProgress: [], totalTokens: 1, totalToolCalls: 1 })
+await test('apply takes the Workflow task\'s own output file as it is, and the bare result: both save the same stage; the wrapper is unwrapped one level only, and only when it is one', async () => {
+  const wrapped = newInit(), bare = newInit()
+  const ran = await runStage(wrapped.runDir, { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })
+  assert.equal(ran.apply.status, 0, ran.apply.stdout)   // runStage hands apply the bare result
+  const dir = join(wrapped.runDir, 'stages', '01-recon-facts')
+  stage(['plan', bare.runDir])
+  const bareDir = join(bare.runDir, 'stages', '01-recon-facts')
+  const again = await runScript(join(bareDir, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })
+  const out = join(bareDir, 'output.json')
+  writeFileSync(out, JSON.stringify(TASK_OUTPUT(again.result), null, 2))
+  const r = stage(['apply', bare.runDir, out])
+  assert.equal(r.status, 0, r.stdout)
+  assert.equal(r.last, ran.apply.last, 'the same line for the wrapped output and the bare result')
+  assert.deepEqual(readJsonFile(bare.runDir, 'recon-facts.json').facts, readJsonFile(wrapped.runDir, 'recon-facts.json').facts)
+  assert.deepEqual(readJsonFile(bareDir, 'result.json'), again.result, 'what is saved is the result, not the wrapper')
+  assert.ok(dir)
+})
+await test('a wrapper that is not a Workflow output is not unwrapped: no agentCount, a result of the wrong type, a nested wrapper and a wrapper with no result are each refused and change nothing', async () => {
+  const { runDir } = newInit()
+  stage(['plan', runDir])
+  const dir = join(runDir, 'stages', '01-recon-facts')
+  const ran = await runScript(join(dir, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })
+  const good = ran.result
+  const before = files(runDir)
+  const cases = [
+    [{ result: good }, /status is undefined, not done or escalate/],
+    [{ ...TASK_OUTPUT(good), result: JSON.stringify(good) }, /Workflow output file with no `result`/],
+    [{ ...TASK_OUTPUT(good), result: null }, /Workflow output file with no `result`/],
+    [{ ...TASK_OUTPUT(good), result: [good] }, /Workflow output file with no `result`/],
+    [{ ...TASK_OUTPUT(good), result: TASK_OUTPUT(good) }, /Workflow output file with no `result`/],
+    [{ summary: 'x', agentCount: 4, logs: [], error: 'the run was killed' }, /Workflow output file with no `result`/],
+    [{ ...TASK_OUTPUT(good), agentCount: '4' }, /status is undefined, not done or escalate/],
+    [TASK_OUTPUT({ ...good, stage: 'hunt' }), /stage is "hunt", but the stage planned is recon/],
+  ]
+  for (const [bad, pattern] of cases) {
+    const r = stage(['apply', runDir, returnedFile(dir, bad)])
+    assert.equal(r.status, 1, JSON.stringify(bad).slice(0, 80))
+    assert.match(r.last, pattern, JSON.stringify(bad).slice(0, 80))
+  }
+  assert.deepEqual(files(runDir).filter(f => f !== 'stages/01-recon-facts/returned.json'), before, 'a refusal wrote nothing')
+  assert.equal(meta(runDir).agents_spent, 0)
 })
 await test('a result for the other part, and a hand-edited result of the synthesize part, are refused, and the facts part never moves the step', async () => {
   const { runDir } = newInit()
