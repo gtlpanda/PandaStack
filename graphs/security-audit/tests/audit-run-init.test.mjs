@@ -333,12 +333,15 @@ await test('SAFE_GIT equals the flags in evidence.mjs (and gate.mjs, review-stat
   assert.match(readFileSync(join(dir, 'intake.mjs'), 'utf8'), /\['-c', 'core\.hooksPath=\/dev\/null', '-c', 'core\.fsmonitor=false', \.\.\.args\]/, 'intake.mjs no longer carries the same two flags')
   assert.deepEqual(SAFE_GIT, ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false'])
 })
-await test('the tree export keeps the shape of evidence.mjs exportTree: a private index, read-tree, then checkout-index -a -f', () => {
+await test('the tree export keeps the core of evidence.mjs exportTree (read-tree, then checkout-index -a -f) and differs from it on purpose', () => {
   const ev = readFileSync(join(REPO, 'graphs', 'hunt', 'skills', 'bughunt', 'evidence.mjs'), 'utf8')
   const mine = readFileSync(AUDIT_RUN, 'utf8')
-  for (const [name, re] of Object.entries({ privateIndex: /GIT_INDEX_FILE/, readTree: /'read-tree'/, checkoutIndex: /'checkout-index', '-a', '-f'/ })) {
+  for (const [name, re] of Object.entries({ readTree: /'read-tree'/, checkoutIndex: /'checkout-index', '-a', '-f'/ })) {
     assert.match(ev, re, `evidence.mjs lost ${name}: reconcile exportTree in audit-run.mjs`)
     assert.match(mine, re, `audit-run.mjs lost ${name}`)
   }
-  assert.match(mine, /--attr-source=\$\{EMPTY_TREE\}/, 'the deliberate difference from evidence.mjs is gone')
+  assert.match(ev, /GIT_INDEX_FILE/, 'evidence.mjs no longer uses a private index: is the difference below still needed?')
+  for (const [name, re] of Object.entries({ scratchRepo: /'init', '-q', '--bare'/, alternates: /objects', 'info', 'alternates'/, emptyAttrSource: /--attr-source=\$\{emptyTree\}/, noAutocrlf: /core\.autocrlf=false/ })) {
+    assert.match(mine, re, `the deliberate difference from evidence.mjs is gone: ${name}`)
+  }
 })

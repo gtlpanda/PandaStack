@@ -205,7 +205,9 @@ const cand = (...fps) => unit('candidate', { result_fingerprints: fps })
 const M = (extra = {}) => ({ run_status: 'in_progress', incomplete_reason: null, ...extra })
 const S = (last, wave = 0, critic_kind = null) => ({ version: 1, last, wave, critic_kind })
 const refused = message => ({ refused: message })
-const ALL_BUT_REPORT = ['init', 'recon', 'seed', 'plan-wave', 'hunt', 'merge-wave', 'critic', 'mint', 'apply-critic', 'consolidate', 'validate', 'write-findings', 'verify']
+const carried = status => unit('planned', { prior_status: status })
+const INCOMPLETE = (reason = 'critic_budget_exhausted') => M({ run_status: 'incomplete', incomplete_reason: reason })
+const HUNTING = ['plan-wave', 'hunt', 'merge-wave', 'critic', 'mint', 'apply-critic']
 // [name, { meta, state, ledger?, findings? }, the exact line `next` prints, or { refused: message }]
 const FIXTURES = [
   ['a fresh run starts with recon', { meta: M(), state: S('init') }, 'NEXT: recon run=workflow'],
@@ -243,9 +245,29 @@ const FIXTURES = [
   ['a written report of a complete run is done', { meta: M({ run_status: 'complete' }), state: S('report', 3) }, 'NEXT: done status=complete'],
   ['a written report of an incomplete run is done too, with its reason', { meta: M({ run_status: 'incomplete', incomplete_reason: 'validation_budget_exhausted' }), state: S('report', 3) }, 'NEXT: done status=incomplete reason=validation_budget_exhausted'],
   ['a written report with run_status still in_progress is refused', { meta: M(), state: S('report', 3) }, refused('the report is written but run_status is still in_progress: a finished run is complete or incomplete')],
-  ...ALL_BUT_REPORT.map(last => [`an incomplete run goes to the report from ${last}, before anything else`,
-    { meta: M({ run_status: 'incomplete', incomplete_reason: 'critic_budget_exhausted' }), state: S(last, 2, 'post-wave'), ledger: [...units('planned'), ...units('in_progress')] }, 'NEXT: report run=helper reason=critic_budget_exhausted']),
-  ['a reason with a newline still prints one line', { meta: M({ run_status: 'incomplete', incomplete_reason: 'two\nlines  here' }), state: S('hunt', 1) }, 'NEXT: report run=helper reason=two lines here'],
+  // An incomplete run stops hunting but is not reported until what it validated is written and verified (VALIDATION-AND-REPORTING.md
+  // Phase 3 "after ... an explicitly recorded early stop", and Phase 6 "only after Phase 5 passes for every record retained").
+  ...['init', 'recon', 'seed'].map(last => [`an incomplete run with no hunting behind it goes straight to the report from ${last}`,
+    { meta: INCOMPLETE('budget_cannot_fund_reconnaissance_and_reserves'), state: S(last), ledger: [...units('planned', 2)] }, 'NEXT: report run=helper reason=budget_cannot_fund_reconnaissance_and_reserves']),
+  ...HUNTING.map(last => [`an incomplete run stops hunting at ${last} and writes the findings of an empty candidate set`,
+    { meta: INCOMPLETE(), state: S(last, 2, 'post-wave'), ledger: [...units('planned'), ...units('in_progress'), ...units('covered')] }, 'NEXT: write-findings run=helper']),
+  ...HUNTING.map(last => [`an incomplete run stops hunting at ${last} and still validates the one candidate it has`,
+    { meta: INCOMPLETE('validation_budget_exhausted'), state: S(last, 2, 'post-wave'), ledger: [cand('a'), ...units('planned')] }, 'NEXT: validate run=workflow']),
+  ['an incomplete run with two candidates consolidates them first', { meta: INCOMPLETE(), state: S('merge-wave', 2), ledger: [cand('a'), cand('b')] }, 'NEXT: consolidate run=workflow'],
+  ['an incomplete run still follows consolidate with validate', { meta: INCOMPLETE(), state: S('consolidate', 2) }, 'NEXT: validate run=workflow'],
+  ['an incomplete run still follows validate with write-findings', { meta: INCOMPLETE(), state: S('validate', 2) }, 'NEXT: write-findings run=helper'],
+  ['an incomplete run still verifies the records it keeps', { meta: INCOMPLETE(), state: S('write-findings', 2), findings: [{ verdict: 'confirmed' }] }, 'NEXT: verify run=workflow'],
+  ['an incomplete run with nothing to verify goes to the report', { meta: INCOMPLETE(), state: S('write-findings', 2), findings: [{ verdict: 'rejected' }] }, 'NEXT: report run=helper reason=critic_budget_exhausted'],
+  ['an incomplete run reports after verify', { meta: INCOMPLETE('record_verification_unresolved'), state: S('verify', 2) }, 'NEXT: report run=helper reason=record_verification_unresolved'],
+  ['an incomplete run that stopped hunting needs its ledger', { meta: INCOMPLETE(), state: S('hunt', 2) }, refused('coverage-ledger.json is missing after hunt')],
+  // A carried prior record is a planned unit its Phase 3 verifier owns (RECONNAISSANCE.md "Prior-run input"), not hunter work.
+  ['a planned unit carrying a prior confirmed record is the verifier\'s, so nothing is left to hunt', { meta: M(), state: S('seed'), ledger: [carried('prior_confirmed_same_source'), ...units('covered')] }, 'NEXT: critic run=workflow kind=final-clean wave=0'],
+  ['a planned unit carrying a prior needs_validation record is the verifier\'s too', { meta: M(), state: S('seed'), ledger: [carried('prior_needs_validation')] }, 'NEXT: critic run=workflow kind=final-clean wave=0'],
+  ['planned units revalidating changed source, or that were deferred, blocked or out of scope before, are hunter work', { meta: M(), state: S('seed'), ledger: [carried('prior_confirmed_changed_source'), carried('prior_deferred'), carried('prior_blocked'), carried('prior_out_of_scope'), carried('new'), carried('none'), carried(undefined)] }, 'NEXT: plan-wave run=helper wave=1'],
+  ['a plan-wave that left only carried units planned is not stuck', { meta: M(), state: S('plan-wave', 1), ledger: [carried('prior_confirmed_same_source'), ...units('covered')] }, 'NEXT: critic run=workflow kind=final-clean wave=1'],
+  ['coverage complete with only a carried record: validate it', { meta: M(), state: S('apply-critic', 2, 'final-clean'), ledger: [carried('prior_confirmed_same_source'), ...units('covered')] }, 'NEXT: validate run=workflow'],
+  ['coverage complete with a carried record and a candidate: consolidate', { meta: M(), state: S('apply-critic', 2, 'final-clean'), ledger: [carried('prior_needs_validation'), cand('a')] }, 'NEXT: consolidate run=workflow'],
+  ['a reason with a newline still prints one line', { meta: M({ run_status: 'incomplete', incomplete_reason: 'two\nlines  here' }), state: S('recon', 0) }, 'NEXT: report run=helper reason=two lines here'],
   ['a ledger is required once seed has run', { meta: M(), state: S('seed') }, refused('coverage-ledger.json is missing after seed')],
   ['a ledger that is not an array is refused', { meta: M(), state: S('seed'), ledger: { units: [] } }, refused('coverage-ledger.json is not an array of units')],
   ['a unit with a status upstream does not define is refused', { meta: M(), state: S('seed'), ledger: [unit('weird')] }, refused('coverage-ledger.json unit 0 has no known status (got "weird"; upstream\'s are planned, not_applicable, out_of_scope, in_progress, covered, candidate, blocked, deferred)')],
@@ -389,4 +411,51 @@ await test('check refuses a directory that is not a run, and a file that is not 
   assert.match(audit(['check', runDir]).last, /^AUDIT: FAIL .*run-metadata\.json has no valid run_status/)
   put(join(runDir, 'run-metadata.json'), '{"run_status": "done"}')
   assert.match(audit(['check', runDir]).last, /no valid run_status \(in_progress, complete, incomplete\)/)
+})
+
+console.log('== review findings')
+await test('a hunt saved right after apply-critic carries the wave next announced, so the next wave is a new number', () => {
+  const runDir = init([mkRepo(), '--full']).runDir
+  advanceState(runDir, 'recon'); advanceState(runDir, 'seed')
+  writeJson(join(runDir, 'coverage-ledger.json'), [...units('planned', 2)])
+  advanceState(runDir, 'plan-wave', { wave: 1 })
+  writeJson(join(runDir, 'coverage-ledger.json'), [...units('in_progress', 2)])
+  advanceState(runDir, 'hunt'); advanceState(runDir, 'merge-wave', {})
+  writeJson(join(runDir, 'coverage-ledger.json'), [...units('covered', 2), ...units('planned')])
+  advanceState(runDir, 'critic', { critic_kind: 'post-wave' }); advanceState(runDir, 'mint'); advanceState(runDir, 'apply-critic')
+  assert.equal(audit(['next', runDir]).last, 'NEXT: plan-wave run=helper wave=2')
+  // plan-wave ran (the ledger shows it) but died before saving its step: next says hunt wave 2 ...
+  writeJson(join(runDir, 'coverage-ledger.json'), [...units('covered', 2), ...units('in_progress')])
+  assert.equal(audit(['next', runDir]).last, 'NEXT: hunt run=workflow wave=2')
+  advanceState(runDir, 'hunt')                                                  // ... and saving the hunt step keeps that number
+  assert.equal(readJson(join(runDir, 'stage-state.json')).wave, 2)
+  assert.equal(audit(['next', runDir]).last, 'NEXT: merge-wave run=helper wave=2')
+  writeJson(join(runDir, 'coverage-ledger.json'), units('covered', 3))
+  advanceState(runDir, 'merge-wave')
+  assert.equal(audit(['next', runDir]).last, 'NEXT: critic run=workflow kind=post-wave wave=2')
+  advanceState(runDir, 'plan-wave', { wave: 5 }); advanceState(runDir, 'hunt')
+  assert.equal(readJson(join(runDir, 'stage-state.json')).wave, 5, 'a hunt after plan-wave leaves the wave plan-wave set')
+})
+await test('with --out, the run-<N> directories beside it are found too, and earlier runs of the same repository still are', () => {
+  const repo = mkRepo()
+  const own = init([repo, '--full']).runDir
+  const parent = fresh('mine')
+  const first = init([repo, '--full', '--out', join(parent, 'run-1')]).runDir
+  const second = init([repo, '--full', '--out', join(parent, 'run-2')]).runDir
+  const third = init([repo, '--full', '--out', join(parent, 'audit-3')]).runDir
+  assert.deepEqual(readJson(join(second, 'prior-runs.json')).map(p => [p.path, p.source]), [[own, 'default'], [first, 'beside --out']])
+  assert.deepEqual(readJson(join(third, 'prior-runs.json')).map(p => [p.path, p.source]), [[own, 'default'], [first, 'beside --out'], [second, 'beside --out']])
+  put(join(parent, 'run-7', 'coverage-ledger.json'), JSON.stringify(LEDGER())); put(join(parent, 'run-7', 'run-metadata.json'), JSON.stringify({ repo: 'another-project' }))
+  const fourth = readJson(join(init([repo, '--full', '--out', join(parent, 'run-8')]).runDir, 'prior-runs.json'))
+  assert.deepEqual(fourth.find(p => p.run_id === 'run-7').reasons, ['it audited a different repository (another-project)'], 'a directory shared with other work is checked by name')
+})
+await test('init rejects an empty or repeated option instead of picking one silently, and says when --max-parallel was clamped', () => {
+  const repo = mkRepo()
+  for (const args of [['--out', ''], ['--profile', ''], ['--scope', 'a', '--scope', 'b'], ['--out', '/tmp/x', '--out', '/tmp/y'], ['--budget', '8', '--budget', '9']]) {
+    assert.equal(init([repo, '--full', ...args]).status, 2, args.join(' '))
+  }
+  const r = init([repo, '--full', '--max-parallel', '99'])
+  assert.equal(r.status, 0, r.stdout)
+  assert.match(r.stdout, /^note: --max-parallel 99 is above 16: using 16 \(/m)
+  assert.ok(!/--max-parallel/.test(init([repo, '--full', '--max-parallel', '16']).stdout), 'no note when nothing was clamped')
 })
