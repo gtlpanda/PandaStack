@@ -1698,3 +1698,15 @@ each. F2, F3 and F5 came in with the tool; they are PandaStack's to fix now.
     for an in-progress landing to restore the build branch; that bug surfaced once the stop
     worked.
   - `/build-app` gets the async verify too, through `land.mjs`.
+
+**/bughunt round 2** (6.3 min, 16 agents; concurrency now covered, regression and security
+partial). 3 findings, all reproduced; the recheck agreed with each.
+- F5 (the ledger reused this id for a new bug, the known ID-merge issue): a builder could write
+  `.git/hooks/pre-commit`, which then runs on every later commit, the owner's included. Fixed:
+  the project's `.git` is frozen. Inline git config that runs code (`core.hooksPath`,
+  `core.fsmonitor`, aliases) is denied.
+- F7: `sed -E -i` and `sed -e … -i` got past the in-place check. Fixed: in-place flags are read
+  from each command's arguments.
+- F8: a session that ran `mark-passed` but never committed left `passes: true` in the tree, and
+  the loop skipped the feature as built. Fixed: the flag is reset when there is no
+  `feat(<ID>)` commit.

@@ -69,6 +69,8 @@ function isFrozen(file) {
 
 function isFrozenAt(absolute, root) {
   const rel = path.relative(root, absolute).split(path.sep).join("/");
+  // The project's git dir: a hook or config written there runs on every later commit, the owner's too.
+  if (rel === ".git" || rel.startsWith(".git/")) return true;
   if (absolute === KIT_HOME || absolute.startsWith(`${KIT_HOME}/`)) return true;
   if (rel.startsWith("..") || path.isAbsolute(rel)) return !TEMP_DIRS.some((dir) => absolute === dir || absolute.startsWith(`${dir}/`));
   if (role === "review") return rel !== config.progressFile;
@@ -97,9 +99,11 @@ if (tool === "Bash") {
   for (const { word, args } of simpleCommands(command)) {
     if (word !== "git") continue;
     const { opts, sub: words } = gitSubcommand(args);
-    // An alias set on the command line can name any subcommand, or a shell command (!sh).
-    if (opts.some((opt, i) => /^-c\s*alias\./.test(opt) || (opt === "-c" && /^alias\./.test(opts[i + 1] ?? "")) || /^--config-env=alias\./.test(opt))) {
-      deny("git aliases set on the command line are not allowed.");
+    // Config set on the command line that runs code: an alias (any subcommand, or a shell
+    // command with !), a hooks path, or an fsmonitor.
+    const RUNS_CODE = /^(alias\.|core\.hookspath=|core\.fsmonitor=)/i;
+    if (opts.some((opt, i) => RUNS_CODE.test(opt.replace(/^(-c\s*|--config-env=)/, "")) && /^(-c|--config-env=)/.test(opt) || (opt === "-c" && RUNS_CODE.test(opts[i + 1] ?? "")))) {
+      deny("git config that runs code (an alias, core.hooksPath, core.fsmonitor) is not allowed on the command line.");
     }
     const sub = words[0] ?? "";
     const rest = words.slice(1).join(" ");
@@ -132,7 +136,9 @@ if (tool === "Bash") {
   const frozenAnywhere = new RegExp(`(${[...frozenNames, KIT_HOME.replace(/[.+^${}()|[\]\\]/g, "\\$&"), "\\.claude/"].join("|")})`);
   if (scripting.test(command) && frozenAnywhere.test(command)) deny("inline scripts that reference frozen files are not allowed.");
   const mentionsFrozen = command.split(/[\s;&|()]+/).some((token) => frozenTarget(token));
-  if (mentionsFrozen && (mutating.test(command) || scripting.test(command))) {
+  // In-place edits, whatever flags come first (sed -E -i, sed -e s/a/b/ -i, perl -pi).
+  const inPlace = simpleCommands(command).some(({ word, args }) => (word === "sed" || word === "perl") && args.some((arg) => /^-[a-zA-Z]*i/.test(arg) || arg.startsWith("--in-place")));
+  if (mentionsFrozen && (mutating.test(command) || inPlace || scripting.test(command))) {
     deny("that command could modify frozen files or files outside the project. Read them freely; change the project's code instead.");
   }
   process.exit(0);

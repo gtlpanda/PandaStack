@@ -218,6 +218,14 @@ export async function runLoop(config, options = {}) {
         sh(config, `git add ${config.progressFile} && git diff --cached --quiet || git commit -q -m "chore(${feature.id}): BLOCKER logged"`);
       }
 
+      // A passes flag without its feat commit is not a pass: left in the tree, nextFeature would skip it.
+      if (passes && !committed) {
+        const fresh = readFeatures(config);
+        featureById(fresh, feature.id).passes = false;
+        writeFeatures(config, fresh);
+        log(`iteration ${iteration + 1}: ${feature.id} was marked passing but has no feat(${feature.id}) commit; passes reset`);
+      }
+
       const summary = `${result?.subtype ?? "no_result"}, ${result?.num_turns ?? 0} turns, $${Number(result?.total_cost_usd ?? 0).toFixed(2)} est, ${(result?.permission_denials ?? []).length} permission denials, ${elapsed}s`;
 
       // A session that ended on an API problem rather than its own work.
