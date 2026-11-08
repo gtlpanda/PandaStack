@@ -262,18 +262,21 @@ export function validateInput(runDir, run) {
   const pending = decisions.entries.filter(e => e.state === 'pending')
   const left = run.meta.budget === null ? Infinity : Math.max(0, run.meta.budget - run.meta.agents_spent)
   // Strict budget: validate in fingerprint order while it permits; what it cannot fund stays an unvalidated candidate of the ledger, with upstream's reason, and the run is incomplete.
-  const unfunded = pending.slice(left)
+  // Each candidate funded keeps one agent for the Phase 5 verifier of what it finds (SKILL.md reserves "about 1 or 2 agents per expected candidate"): validating both of two would leave no
+  // verifier for either, and every record would be removed unverified, where validating one gives one verified finding. A retry is funded the same way, from what is left.
+  const fundable = Math.floor(left / 2)
+  const unfunded = pending.slice(fundable)
   if (unfunded.length) {
     decisions = markUnvalidated(decisions, unfunded, REASONS.validation)
     saveDecisions(runDir, decisions)
     markIncomplete(runDir, REASONS.validation)
   }
-  const funded = pending.slice(0, left)
+  const funded = pending.slice(0, fundable)
   const byFp = new Map(pool.map(c => [c.fingerprint, c]))
   if (!funded.length) {
     closeValidation(runDir, run, decisions)
     appendEvent(runDir, { cmd: 'plan', stage: 'validate', result: 'refused', reason: unfunded.length ? REASONS.validation : 'nothing is pending', counts: { unvalidated: unfunded.length } })
-    refuse(unfunded.length ? `${REASONS.validation}: ${left} agent(s) are left of the budget (--budget ${run.meta.budget}, ${run.meta.agents_spent} spent) and ${unfunded.length} candidate(s) need a verifier; none was launched, they stay unvalidated candidates in the ledger and the run is marked incomplete`
+    refuse(unfunded.length ? `${REASONS.validation}: ${left} agent(s) are left of the budget (--budget ${run.meta.budget}, ${run.meta.agents_spent} spent), enough for ${fundable} candidate(s) with a Phase 5 verifier each, and ${unfunded.length} candidate(s) need a verifier; none was launched, they stay unvalidated candidates in the ledger and the run is marked incomplete`
       : 'every candidate is already decided or unvalidated; the step is closed. `audit-run.mjs next` says what is next')
   }
   const p = parts()

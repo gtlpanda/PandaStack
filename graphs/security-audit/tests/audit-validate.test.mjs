@@ -16,7 +16,7 @@ import { companions, parts, resolve as block } from '../skills/security-audit/bl
 import { audit, meta } from './audit-fixtures.mjs'
 import { confirmedRecord, ledgerBytes, ledgerValid, needsValidationRecord, priorRun, priorUnit, readJsonFile, readLedger, refsOf, rejectedRecord } from './ledger-fixtures.mjs'
 import { fuzzApply, returnedFile, runScript, snapshot, stage, stageDirOf, stageDirs } from './stage-fixtures.mjs'
-import { decisions, good, history, next, pool, rejected, round, toValidate, unitByName, verified } from './verdict-fixtures.mjs'
+import { decisions, good, history, next, passed, pool, rejected, round, toValidate, unitByName, verified, verifyRound } from './verdict-fixtures.mjs'
 
 const AI = companions().find(c => c.file === 'AI-AND-LLM.md')
 const ok = runDir => { assert.ok(ledgerValid(runDir), 'upstream\'s validator passes the ledger'); assert.equal(audit(['check', runDir]).last, `AUDIT: OK ${runDir} passes check`) }
@@ -266,24 +266,37 @@ await test('the verdict a verifier\'s record names is the decision: a result is 
 console.log('== the budget and the size of a round')
 await test('a strict budget funds candidates in fingerprint order; the rest stay unvalidated candidates with upstream\'s reason, the run is incomplete, and no agent is launched for them', async () => {
   const run = toValidate([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }, { name: 'c', candidates: ['fp-c'] }], { args: ['--budget', '40'] })
-  recordSpend(run.runDir, 'earlier', 38)   // 2 left
+  recordSpend(run.runDir, 'earlier', 35)   // 5 left: two candidates, each with a Phase 5 verifier to come
   const res = await round(run.runDir, (label, c) => good(c))
   assert.deepEqual(res.input.candidates.map(c => c.fingerprint), ['fp-a', 'fp-b'])
   assert.equal(res.apply.status, 0, res.apply.stdout)
   assert.deepEqual(decisions(run.runDir).entries.map(e => [e.fingerprint, e.state, e.unresolved]), [['fp-a', 'decided', null], ['fp-b', 'decided', null], ['fp-c', 'unvalidated', 'validation_budget_exhausted']])
   const m = meta(run.runDir)
-  assert.deepEqual([m.run_status, m.incomplete_reason, m.agents_spent], ['incomplete', 'validation_budget_exhausted', 40])
+  assert.deepEqual([m.run_status, m.incomplete_reason, m.agents_spent], ['incomplete', 'validation_budget_exhausted', 37])
   assert.deepEqual(unitByName(run.runDir).c.unresolved, ['validation_budget_exhausted'])
   assert.deepEqual(unitByName(run.runDir).c.local_checks.map(c => c.agent_id), [run.owners.c])
   assert.equal(next(run.runDir), 'NEXT: write-findings run=helper')
   ok(run.runDir)
+})
+await test('a strict budget keeps a Phase 5 slot for every candidate it funds: with two agents left one candidate is validated and then verified, where funding both would leave findings.json empty', async () => {
+  const run = toValidate([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }], { args: ['--budget', '40'] })
+  recordSpend(run.runDir, 'earlier', 38)
+  const res = await round(run.runDir, (label, c) => good(c))
+  assert.deepEqual(res.input.candidates.map(c => c.fingerprint), ['fp-a'], 'two agents left: one for the Phase 3 verifier, one for the Phase 5 verifier of what it finds')
+  assert.deepEqual(decisions(run.runDir).entries.map(e => [e.fingerprint, e.state]), [['fp-a', 'decided'], ['fp-b', 'unvalidated']])
+  assert.equal(meta(run.runDir).agents_spent, 39)
+  writeFindings(run.runDir)
+  const v = await verifyRound(run.runDir, (l, item) => passed(item))
+  assert.equal(v.apply.status, 0, v.apply.stdout)
+  assert.deepEqual(JSON.parse(readFileSync(join(run.runDir, 'findings.json'), 'utf8')).map(r => r.fingerprint), ['fp-a'], 'the one funded candidate is a verified finding')
+  assert.deepEqual([meta(run.runDir).run_status, meta(run.runDir).incomplete_reason, meta(run.runDir).agents_spent], ['incomplete', 'validation_budget_exhausted', 40])
 })
 await test('with no agent left every candidate is unvalidated at once: the plan launches nobody, says so, closes the step, and next goes on', () => {
   const run = toValidate([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }], { args: ['--budget', '40'] })
   recordSpend(run.runDir, 'earlier', 40)
   const r = stage(['plan', run.runDir])
   assert.equal(r.status, 1)
-  assert.match(r.last, /^AUDIT: FAIL validation_budget_exhausted: 0 agent\(s\) are left of the budget \(--budget 40, 40 spent\) and 2 candidate\(s\) need a verifier; none was launched, they stay unvalidated candidates in the ledger and the run is marked incomplete/)
+  assert.match(r.last, /^AUDIT: FAIL validation_budget_exhausted: 0 agent\(s\) are left of the budget \(--budget 40, 40 spent\), enough for 0 candidate\(s\) with a Phase 5 verifier each, and 2 candidate\(s\) need a verifier; none was launched, they stay unvalidated candidates in the ledger and the run is marked incomplete/)
   assert.deepEqual(stageDirs(run.runDir), [])
   assert.deepEqual(decisions(run.runDir).entries.map(e => e.state), ['unvalidated', 'unvalidated'])
   assert.deepEqual([meta(run.runDir).run_status, meta(run.runDir).incomplete_reason], ['incomplete', 'validation_budget_exhausted'])
@@ -291,14 +304,14 @@ await test('with no agent left every candidate is unvalidated at once: the plan 
   assert.ok(unitByName(run.runDir).a.unresolved.includes('validation_budget_exhausted'))
   ok(run.runDir)
 })
-await test('a retry is gated by the budget like any agent: with the budget gone after the first round the retry is not launched and the candidate is unvalidated', async () => {
+await test('a retry is gated by the budget like any agent: with one agent left after the first round the retry is not launched (it would leave no Phase 5 verifier) and the candidate is unvalidated', async () => {
   const run = toValidate([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }], { args: ['--budget', '40'] })
-  recordSpend(run.runDir, 'earlier', 38)
-  await round(run.runDir, (label, c) => (c.fingerprint === 'fp-a' ? BAD[0][1](c) : good(c)))
-  assert.equal(meta(run.runDir).agents_spent, 40)
+  recordSpend(run.runDir, 'earlier', 38)   // 2 left: one candidate, with its Phase 5 verifier
+  await round(run.runDir, (label, c) => BAD[0][1](c))
+  assert.equal(meta(run.runDir).agents_spent, 39)
   const r = stage(['plan', run.runDir])
-  assert.match(r.last, /^AUDIT: FAIL validation_budget_exhausted: 0 agent\(s\) are left/)
-  assert.equal(entry(run.runDir, 'fp-a').state, 'unvalidated')
+  assert.match(r.last, /^AUDIT: FAIL validation_budget_exhausted: 1 agent\(s\) are left/)
+  assert.deepEqual(decisions(run.runDir).entries.map(e => e.state), ['unvalidated', 'unvalidated'])
   assert.equal(next(run.runDir), 'NEXT: write-findings run=helper')
 })
 await test('a round of first tries that every verifier failed is refused without using a try, and the stage is planned again; a round of retries that all fail uses the try, which is what ends the loop', async () => {

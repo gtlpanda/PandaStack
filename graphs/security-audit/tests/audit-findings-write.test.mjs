@@ -82,7 +82,7 @@ await test('a run whose every candidate was rejected is complete after write: a 
 })
 await test('an incomplete run writes what is decided, lists the unresolved candidate, and stays incomplete: an unvalidated candidate is never in findings.json', async () => {
   const run = toValidate([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }, { name: 'c', candidates: ['fp-c'] }], { args: ['--budget', '40'] })
-  recordSpend(run.runDir, 'earlier', 38)   // two agents left: fp-c is not funded
+  recordSpend(run.runDir, 'earlier', 35)   // five agents left: two candidates with a Phase 5 verifier each, so fp-c is not funded
   const res = await round(run.runDir, (l, c) => verified(c.fingerprint))
   assert.equal(res.apply.status, 0, res.apply.stdout)
   const r = cli('write', run.runDir)
