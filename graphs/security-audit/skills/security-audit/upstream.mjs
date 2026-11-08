@@ -1,5 +1,6 @@
 // upstream.mjs - the one place that knows where the vendored Cloudflare skill lives and how to
-// run its two validators. Nothing else reaches into vendor/ on its own.
+// run its two validators. Nothing else finds vendor/ on its own: blocks.mjs reads the vendored
+// markdown and schema through VENDOR_SKILL_DIR.
 //
 // Two ways in, both reading the vendored files exactly as they are:
 //   - run a validator the way a person would (node <file>) and gate on what it printed and its
