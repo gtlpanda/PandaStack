@@ -23,7 +23,8 @@ import { spawnSync } from 'node:child_process'
 import { isDeepStrictEqual } from 'node:util'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { RUNNERS, Usage, advanceState, appendEvent, formatNext, loadRun, nextStep, readJson, recordSpend, refuse, writeJson } from './audit-run.mjs'
+import { RUNNERS, Usage, advanceState, appendEvent, formatNext, loadRun, markIncomplete, nextStep, readJson, recordSpend, refuse, writeJson } from './audit-run.mjs'
+import { seedProblems } from './audit-ledger.mjs'
 import { companions, ordinary, parts, resolve as resolveBlock } from './blocks.mjs'
 import { isSafeRelativePath } from './upstream.mjs'
 
@@ -36,6 +37,11 @@ export const SEAM = 'INJECTED_INPUT'
 // bytes") and ran one of 478,136. A run script over this is refused here, with room to spare, never handed to the tool.
 export const MAX_SCRIPT_BYTES = 500_000
 export const RECON_IDS = ['1a', '1b', '1c', '1d']
+// A synthesizer result seed would refuse is sent back once with the reasons (plan section 4.2: "bounded feedback retry"); a second refusal
+// ends the run. The reason string is PandaStack's own (the plan, 4.3), not one of upstream's five.
+export const MAX_SYNTH_ATTEMPTS = 2
+export const LEDGER_FAILED = 'ledger_validation_failed'
+const FEEDBACK_FILE = 'seed-feedback.json'
 // What one researcher may contribute. A hostile target can make an agent write without end; a stage input is a script, and a script
 // has a size (above). Over a limit, the item is dropped and logged, never truncated.
 // agentBytes is the one that bounds the script, and it counts what the script holds: facts reach the run script through run-script.mjs,
@@ -173,13 +179,24 @@ function readFacts(runDir) {
   return file.facts
 }
 
+// The refused synthesizer attempts so far, one entry per stage (applying a stage again replaces its own entry, so it counts once).
+function readFeedback(runDir) {
+  const file = readJson(join(runDir, FEEDBACK_FILE))
+  if (file === undefined) return []
+  const ok = isObj(file) && Array.isArray(file.attempts) && file.attempts.every(a => isObj(a) && typeof a.stage === 'string' && Array.isArray(a.problems) && a.problems.every(x => typeof x === 'string'))
+  if (!ok) refuse(`${FEEDBACK_FILE} is not what apply wrote ({attempts: [{stage, problems: [text]}]}); delete it to forget the refused attempts`)
+  return file.attempts
+}
+
 // The stage input for one part of recon: plain data, the text upstream's own files hold (blocks.mjs slices it, nothing here retypes it).
 export function reconInput(runDir, meta, part) {
   const base = { stage: 'recon', part, tree: join(runDir, 'tree'), maxParallel: meta.limits.max_parallel, execution: { capability: meta.execution_capability, blockers: meta.execution_blockers } }
   const p = parts()
   if (part === 'facts') return { ...base, parts: Object.fromEntries(RECON_IDS.map(id => [`recon${id}`, p[`recon${id}`].text])) }
+  const refused = readFeedback(runDir)
   return {
     ...base, profile: meta.profile, scope_paths: meta.scope_paths, prior: priorSummary(runDir), facts: readFacts(runDir),
+    ...(refused.length && { feedback: { attempt: refused.length, of: MAX_SYNTH_ATTEMPTS, problems: refused.at(-1).problems } }),
     parts: {
       ranking: resolveBlock(RANKING).text, architectureSummary: resolveBlock(ARCH_SUMMARY).text, ledger: resolveBlock(LEDGER_SPEC).text,
       registry: { ordinary: ordinary(), companions: companions().map(c => ({ file: c.file, whenToUse: resolveBlock(c.whenToUse).text, blocks: c.blocks })) },
@@ -275,6 +292,18 @@ export function applyStage(runDir, returnedFile) {
   const { architecture_md, units, focused_recon } = result.results
   if (!isText(architecture_md) || !Array.isArray(units) || units.length === 0 || !units.every(isObj) || !Array.isArray(focused_recon)) refuse('the synthesizer result needs architecture_md text, a non-empty list of unit objects and a focused_recon list; nothing was changed')
   const recon = { architecture_md, units: units.map(u => (u.ordinary_attack_class_block === '' ? { ...u, ordinary_attack_class_block: null } : u)), focused_recon }
+  // What seed would do with it, asked now: a result seed would refuse is never saved as the step's, so the run is not left at `seed` with no way back.
+  const refused = seedProblems(runDir, recon)
+  if (refused.length) {
+    const attempts = [...readFeedback(runDir).filter(a => a.stage !== stage.name), { stage: stage.name, problems: refused.slice(0, 20).map(x => x.slice(0, 400)) }]
+    writeJson(join(runDir, FEEDBACK_FILE), { version: 1, attempts })
+    recordSpend(runDir, stage.name, result.budgetSpent)
+    writeJson(join(stage.dir, 'result.json'), result)
+    const giveUp = attempts.length >= MAX_SYNTH_ATTEMPTS
+    if (giveUp) markIncomplete(runDir, LEDGER_FAILED)
+    event(giveUp ? 'failed' : 'refused', { counts: { problems: refused.length, attempt: attempts.length } }, giveUp ? LEDGER_FAILED : 'the ledger would not accept the units')
+    return refuse(`the synthesizer's units would not seed (${refused.length} problem(s)): ${refused[0].slice(0, 200)}${refused.length > 1 ? ` (and ${refused.length - 1} more, in ${FEEDBACK_FILE})` : ''} (attempt ${attempts.length} of ${MAX_SYNTH_ATTEMPTS}${giveUp ? `: the run is marked incomplete (${LEDGER_FAILED}), and the reasons are in ${FEEDBACK_FILE}` : '; plan the stage again: it is sent these reasons'})`)
+  }
   writeJson(join(runDir, 'recon.json'), recon)
   recordSpend(runDir, stage.name, result.budgetSpent)
   writeJson(join(stage.dir, 'result.json'), result)

@@ -197,7 +197,7 @@ export function seedProblems(runDir, input) {
     const { carry } = buildSeed(runDir, run, input)
     return validateLedgerDocument(clone([...carry.units].sort(byId))).slice(0, MAX_PROBLEMS)
   } catch (e) {
-    if (Array.isArray(e.problems)) return [e.message, ...e.problems]
+    if (Array.isArray(e.problems)) return e.problems.length ? e.problems : [e.message]   // the specific reasons; the summary only when there are none
     throw e
   }
 }

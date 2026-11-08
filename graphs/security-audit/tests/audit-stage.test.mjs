@@ -345,6 +345,102 @@ await test('a stage already applied is not applied again with a different result
   assert.equal(readFileSync(join(runDir, 'recon-facts.json'), 'utf8'), facts)
   assert.equal(meta(runDir).agents_spent, 4)
 })
+console.log('== a synthesizer result the ledger would refuse is not saved')
+// A run with the facts part applied: { runDir } ready for the synthesize part.
+async function afterFacts() {
+  const { runDir } = newInit()
+  stage(['plan', runDir])
+  const dir = join(runDir, 'stages', '01-recon-facts')
+  assert.equal(stage(['apply', runDir, returnedFile(dir, (await runScript(join(dir, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })).result)]).status, 0)
+  return { runDir }
+}
+// plan and apply one synthesize attempt with `synth` as the synthesizer's answer: { plan, apply, dir }.
+async function synthAttempt(runDir, synth) {
+  const plan = stage(['plan', runDir])
+  assert.equal(plan.status, 0, plan.stdout)
+  const dir = join(runDir, 'stages', plan.last.match(/script=\S*\/stages\/([^/]+)\/run\.js/)[1])
+  const ran = await runScript(join(dir, 'run.js'), { 'audit-synthesizer': [synth] })
+  return { plan, dir, apply: stage(['apply', runDir, returnedFile(dir, ran.result)]) }
+}
+await test('each result seed would refuse is refused by apply instead: a long summary, a path not in tree/, two units with one identity, a bad or unknown block; the cost is recorded, the step stays at recon, nothing is written for seed', async () => {
+  const words = Array(1200).fill('word').join(' ')
+  const cases = [
+    [SYNTH({ architecture_md: words }), /architecture_md has 1200 words/], [SYNTH({ units: [UNIT('a', { starting_paths: ['src/gone.js'] })] }), /starting path src\/gone\.js is not in tree\//],
+    [SYNTH({ units: [UNIT('a'), UNIT('a')] }), /coverage_id is already unit 0's/], [SYNTH({ units: [UNIT('a', { ordinary_attack_class_block: 'none' })] }), /malformed block reference/],
+    [SYNTH({ units: [UNIT('a', { ordinary_attack_class_block: 'ATTACK-CLASSES.md#Made up' })] }), /unknown block ATTACK-CLASSES\.md#Made up/],
+    [SYNTH({ units: [UNIT('a', { selected_companion_blocks: ['WEB-PROTOCOL-AND-AUTH.md#Cache behavior'] })] }), /unknown block WEB-PROTOCOL-AND-AUTH\.md#Cache behavior/],
+  ]
+  for (const [synth, pattern] of cases) {
+    const { runDir } = await afterFacts()
+    const before = readFileSync(join(runDir, 'stage-state.json'), 'utf8')
+    const { apply, dir } = await synthAttempt(runDir, synth)
+    assert.equal(apply.status, 1, apply.stdout)
+    assert.match(apply.last, /^AUDIT: FAIL the synthesizer's units would not seed \(\d+ problem\(s\)\): /)
+    assert.match(apply.last, pattern)
+    assert.match(apply.last, /\(attempt 1 of 2; plan the stage again: it is sent these reasons\)$/)
+    assert.ok(!existsSync(join(runDir, 'recon.json')), 'nothing is written for seed')
+    assert.equal(readFileSync(join(runDir, 'stage-state.json'), 'utf8'), before, 'the step stays at recon')
+    assert.equal(audit(['next', runDir]).last, 'NEXT: recon run=workflow')
+    assert.equal(meta(runDir).agents_spent, 5, 'the five agents ran')
+    assert.ok(existsSync(join(dir, 'result.json')))
+    const fb = readJsonFile(runDir, 'seed-feedback.json')
+    assert.deepEqual([fb.version, fb.attempts.length, fb.attempts[0].stage], [1, 1, '02-recon-synthesize'])
+    assert.match(fb.attempts[0].problems.join(' '), pattern)
+    assert.equal(meta(runDir).run_status, 'in_progress')
+  }
+})
+await test('the next plan sends the reasons back, and a corrected result seeds: the whole retry, with the cost of both attempts recorded', async () => {
+  const { runDir } = await afterFacts()
+  const first = await synthAttempt(runDir, SYNTH({ units: [UNIT('a', { starting_paths: ['src/gone.js'] })] }))
+  assert.equal(first.apply.status, 1)
+  const second = await synthAttempt(runDir, SYNTH({ units: [UNIT('a'), UNIT('b')] }))
+  assert.match(second.plan.last, /02-recon-synthesize|03-recon-synthesize/)
+  const input = readJsonFile(second.dir, 'input.json')
+  assert.deepEqual([input.feedback.attempt, input.feedback.of, input.feedback.problems.length], [1, 2, 1])
+  assert.match(input.feedback.problems[0], /starting path src\/gone\.js is not in tree\//)
+  assert.equal(second.apply.status, 0, second.apply.stdout)
+  assert.equal(meta(runDir).agents_spent, 6)
+  assert.equal(audit(['next', runDir]).last, 'NEXT: seed run=helper')
+  const seed = ledgerCli(['seed', runDir, join(runDir, 'recon.json')])
+  assert.equal(seed.status, 0, seed.stdout)
+  assert.ok(ledgerValid(runDir))
+  assert.deepEqual(readdirSync(join(runDir, 'stages')).sort(), ['01-recon-facts', '02-recon-synthesize', '03-recon-synthesize'])
+})
+await test('a second refused result ends the run incomplete with ledger_validation_failed, disclosed, and `next` goes to the report; no third attempt is planned', async () => {
+  const { runDir } = await afterFacts()
+  const bad = () => SYNTH({ units: [UNIT('a', { starting_paths: ['src/gone.js'] })] })
+  assert.equal((await synthAttempt(runDir, bad())).apply.status, 1)
+  const last = await synthAttempt(runDir, bad())
+  assert.equal(last.apply.status, 1)
+  assert.match(last.apply.last, /^AUDIT: FAIL the synthesizer's units would not seed .* \(attempt 2 of 2: the run is marked incomplete \(ledger_validation_failed\), and the reasons are in seed-feedback\.json\)$/)
+  assert.deepEqual([meta(runDir).run_status, meta(runDir).incomplete_reason], ['incomplete', 'ledger_validation_failed'])
+  assert.equal(readJsonFile(runDir, 'seed-feedback.json').attempts.length, 2)
+  assert.equal(audit(['next', runDir]).last, 'NEXT: report run=helper reason=ledger_validation_failed')
+  assert.equal(audit(['check', runDir]).last, `AUDIT: OK ${runDir} passes check`)
+  assert.match(stage(['plan', runDir]).last, /^AUDIT: FAIL the next step is not a Workflow stage: NEXT: report/)
+  assert.equal(meta(runDir).agents_spent, 6)
+  assert.ok(!existsSync(join(runDir, 'recon.json')))
+})
+await test('applying the same refused result again counts one attempt, not two', async () => {
+  const { runDir } = await afterFacts()
+  const { dir, apply } = await synthAttempt(runDir, SYNTH({ units: [UNIT('a', { starting_paths: ['src/gone.js'] })] }))
+  assert.equal(apply.status, 1)
+  const again = stage(['apply', runDir, join(dir, 'returned.json')])
+  assert.equal(again.last, apply.last)
+  assert.equal(readJsonFile(runDir, 'seed-feedback.json').attempts.length, 1)
+  assert.equal(meta(runDir).run_status, 'in_progress')
+  assert.equal(meta(runDir).agents_spent, 5)
+})
+await test('a seed-feedback.json that is not what apply wrote stops the plan with the reason, never reads as no attempts', async () => {
+  const { runDir } = await afterFacts()
+  for (const bad of ['[]', '{}', '{"attempts":"x"}', '{"attempts":[{"stage":5,"problems":[]}]}', '{"attempts":[{"stage":"a","problems":[1]}]}', '{not json']) {
+    writeFileSync(join(runDir, 'seed-feedback.json'), bad)
+    const r = stage(['plan', runDir])
+    assert.equal(r.status, 1, bad)
+    assert.match(r.last, /^AUDIT: FAIL (seed-feedback\.json is not what apply wrote|.*seed-feedback\.json is not valid JSON)/, bad)
+  }
+})
+
 console.log('== plan and apply refuse what they must, and change nothing')
 await test('plan and apply run only when `next` names recon: not after seed, not for a run that cannot be funded, not before init has a run', () => {
   const { runDir } = newInit()
@@ -477,19 +573,4 @@ await test('wrong usage is on stderr with exit 2, and the commands also run thro
   const r = spawnSync(process.execPath, [link, 'plan', runDir], { encoding: 'utf8', env: { ...process.env, ...ENV } })
   assert.equal(r.status, 0, r.stdout + r.stderr)
   assert.match(r.stdout.trim().split('\n').at(-1), /^AUDIT: OK plan recon part=facts/)
-})
-await test('a seed refused for a block that does not exist leaves recon saved and seed next, naming the block, so the synthesizer\'s mistake is not silent', async () => {
-  const { runDir } = newInit()
-  stage(['plan', runDir])
-  const dir1 = join(runDir, 'stages', '01-recon-facts')
-  stage(['apply', runDir, returnedFile(dir1, (await runScript(join(dir1, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })).result)])
-  stage(['plan', runDir])
-  const dir2 = join(runDir, 'stages', '02-recon-synthesize')
-  const ran = await runScript(join(dir2, 'run.js'), { 'audit-synthesizer': [SYNTH({ units: [UNIT('a', { selected_companion_blocks: ['WEB-PROTOCOL-AND-AUTH.md#Cache behavior'] })] })] })
-  assert.equal(stage(['apply', runDir, returnedFile(dir2, ran.result)]).status, 0, 'apply does not judge units: seed does')
-  const seed = ledgerCli(['seed', runDir, join(runDir, 'recon.json')])
-  assert.equal(seed.status, 1)
-  assert.ok(seed.lines.some(l => /^ledger: unit 0 .*selected_companion_blocks\[0\]: unknown block WEB-PROTOCOL-AND-AUTH\.md#Cache behavior/.test(l)), seed.stdout)
-  assert.ok(!existsSync(join(runDir, 'coverage-ledger.json')))
-  assert.equal(audit(['next', runDir]).last, 'NEXT: seed run=helper')
 })
