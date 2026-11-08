@@ -2618,3 +2618,129 @@ entry: `TEST-WORKFLOW: 991 passed, 0 failed` (857 at PR 4, 936 at branch 1), `TE
 analysts). The size of a critic script for a ledger of thousands of units (above). Whether the runtime's `resumeFromRunId` replays a
 pool's calls in a stable order. A real final-clean critic, a real second wave. Candidate records are not validated against the
 schema until PR 6; 6 of 7 passed in the one live wave.
+
+## 40. security-audit PR 6: consolidate, validate and verify, and the one writer of findings.json (2026-11-08)
+
+PR 6 of the `security-audit` graph (`feat/security-audit-7-findings`, from `feat/security-audit-6-waves` at `3c62f54`, entry 39). The Workflow stages
+`consolidate`, `validate` and `verify`, planned and applied by `audit-stage.mjs`, and the rules and the one write path of `findings.json`. Plan:
+`tasks/plan-security-audit.md` 4.2-4.7, 5, 7, 8, 9 (row 6), decisions D1 A (v1 is source-only: `confirmed` is unreachable), D2 A, D3-D7 A, D8 B, D9, D10-D12 A.
+
+**What changed.**
+- `audit-findings.mjs` (new, 446 lines): the rules of Phases 3-5 and the writer. `agentId` (`v<NN>` Phase 3, `r<NN>` Phase 5, `x<NN>[-r<round>]` a replacement's
+  verifier, `-t<try>` on a retry, all upstream's ID pattern, the number is the candidate's for life); `agent-history.json` (`recordAgent` refuses an ID that already
+  served a fingerprint in another role, and a verifier's ID under a second fingerprint; the same triple again is the same agent planned again); `transitionProblem` (a table
+  with no row that ends in `confirmed`); `MATERIAL_FIELDS` (one table, below); `recordProblems` (the vendored validator, then every trace and evidence file and line against
+  `tree/`, then no `confirmed`, then at most a candidate's 64 KiB); `decisions.json` (one entry per candidate, its number, its attempts, its decision, its Phase 5 state);
+  `linkCheck` (plan 4.3 D, items 1-4, with the unresolved list); `commitFindings` (in-memory vendored validator, the link-check, then the vendored CLIs on the file and on the
+  ledger, then an atomic rename; any failure leaves the previous file and no candidate file); `write`, `link-check`, `complete-check` on the command line.
+- `audit-verdicts.mjs` (new, 379): `consolidate` and `validate`. `audit-verify.mjs` (new, 190): `verify`. `audit-inputs.mjs` (new, 34): `baseInput`, `architectureOf`, `blockText`
+  and the clip, moved out of `audit-stage.mjs` (a move commit: tests unchanged) so the two new modules do not import it back.
+- `security-audit-flow.js` (+216, now 749): stages `consolidate` (`synth-cons`), `validate` (`audit-analyst`, one per candidate), `verify` (`audit-researcher` per record,
+  `audit-analyst` per replacement); `NODES` +4 (consolidator, validator, verifier, reverifier). A verifier failing leaves its own key null even when all failed: the parent
+  counts the tries (below).
+- `audit-stage.mjs`: a planner and an applier per new stage; the `BUILT` list is gone (every Workflow step has a planner and an applier); the over-size refusal that ends a run
+  is only for `hunt`, `critic` and `mint` (the stages that can neither be split nor skipped). `audit-run.mjs`: `markComplete`, `LEDGER_FAILED` and `FINDINGS_FAILED` (PandaStack's
+  own reasons, not upstream's five), and `next` goes to the report after a write that could not write. `audit-ledger.mjs`: a candidate record is bounded. `blocks.mjs`: `recordContract`.
+- Stage model. The workflow has no filesystem and cannot run upstream's validators, so `apply` judges every result and a stage is a series of rounds (one Workflow run each):
+  validate runs the candidates still pending (a retry, or a batch the script cannot hold, is another round) and saves its step, and writes the ledger once, when none is pending;
+  verify's pending items are a record no Phase 5 verifier settled, or a material replacement waiting for its independent verifier. `decisions.json` is where each stands.
+
+**Decisions, each a choice the plan or upstream left open.**
+- Materiality (plan 4.3 E, "my reading"): verdict, `root_cause`, `claimed_root_cause`, the trace's `(file, kind, scope)` sequence, `execution.payloads|instructions|observed_result`,
+  `severity.impact`, `severity.overall_severity`, as the plan; beyond it `severity.likelihood.score` (upstream says "severity"), the files the evidence rests on, how many blockers,
+  and which contexts the validation plan has (the independent audit, finding 7, below). Wording, a trace step's line or description, an evidence line, the wording of a blocker or a plan are not.
+- A verifier's ledger check (upstream: "set that check's agent_id to the verifier's canonical ID and list its nonempty reviewed_paths ... method: source with artifact: null"): the
+  verifier's result has no list of paths it read, so the check lists the files of the record's trace and evidence (the ones it was told to re-read); `invariant` and `result` are
+  short text built from the decision. Not upstream's text. Phase 5 adds no check; a record Phase 5 removes puts its reason in the unit's `unresolved`.
+- Consolidation (plan 4.3 C): applied only if every pool fingerprint is a `keep` or in one `merge` list exactly once, none is unknown, and no carried prior record is merged away
+  (it is verified as itself). A merge rewrites the live fingerprints of the units that held the merged one and leaves an alias (`merged_fingerprints`) for an archived attempt,
+  which is append-only. Skipped by name when there are fewer than two candidates, one agent is left of the budget, or the input does not fit one script.
+- A verifier result that is not valid (shape, the vendored validator, the snapshot, the transition table, the fingerprint, over 64 KiB) is discarded, never repaired; the
+  candidate or record is retried once under a fresh ID, then it is unvalidated (`validation_budget_exhausted`; `confirmed_without_local_evidence` for a verifier that insisted on
+  confirmed twice) or, in Phase 5, removed from `findings.json` and left an unresolved candidate (`record_verification_unresolved`). A round of first tries that every verifier
+  failed is refused by `apply` without using a try (the environment, not a candidate), and a missing result in a round of retries is a failed try: that bounds the loop.
+- Strict budget: validate funds `floor(left / 2)` candidates in fingerprint order, so each keeps one agent for its Phase 5 verifier (the audit's finding 9); verify funds what is
+  left and removes the rest.
+- A verifier is sent exactly what upstream lists and nothing else; a retry is told only that an earlier attempt was refused; a replacement's verifier is sent the replacement alone
+  (not its proposer's reason, not the record it replaces). "A sentinel in a hunter's output never reaches a verifier prompt" cannot hold literally, since the candidate is hunter
+  output and upstream requires it: the tests plant sentinels in a hunter's `hardening`, its `uncovered`, another candidate, and a unit that does not carry the candidate, and
+  assert none is in any verifier prompt, and that the candidate's own fields (which the method sends) are.
+- `complete-check` runs at the end of a run (`next` says report or done); `write` and `verify` call it themselves where a run ends: `write` when nothing needs Phase 5 (zero
+  records, or all rejected), and verify's last round. Complete only when it passes; an incomplete run stays incomplete; a run in progress that fails is marked
+  `complete_check_failed`.
+
+**A live pass (the PR 5 fixture run, `claude` headless, WSL2; session-reported costs).** A copy of the entry 39 run dir (21 units, 7 candidates), its four planned units
+deferred by hand and its final-clean critic taken by hand, so hunting is not a real complete hunt. Each stage is one `claude -p "Call the Workflow tool exactly once with
+scriptPath <run.js> ..." --model sonnet --max-budget-usd 2 --permission-mode bypassPermissions --setting-sources project --strict-mcp-config` with
+`CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` and the model-pin variables unset.
+- consolidate: 1 agent, 11 s, $0.07: 5 groups for 7 candidates, two pairs merged (the JWT-secret fallback seen from two units, and the poisoned note body seen from two units): a sensible
+  grouping, applied, ledger valid. validate round 1: 5 agents, 31 s, $0.34: four verifiers returned valid records; the fifth (the files route) wrote two `sink` steps in one trace:
+  discarded, never repaired, retried. Round 2: 1 agent, $0.10: the fresh verifier made the same mistake, so the candidate was unvalidated (`validation_budget_exhausted`).
+- That is a defect the scripted tests could not see: the prompt never told a verifier the trace rule, which is Phase 4's text and not the verifier prompt's. `blocks.mjs` now slices
+  upstream's contract paragraph (lines 103-109 of `VALIDATION-AND-REPORTING.md`, by its two anchors) and both prompts carry it verbatim. On a fresh copy of the same run: validate
+  5 agents, $0.34, all five decided at the first try; `write` 5 records; verify 5 agents, $0.26, all five verified; `complete-check` passed, the run is `complete`, link-check 5 records
+  0 unresolved. 23 agents in the run, about $1.11 for the five stages. One fixture, one sample before and one after, so "the contract text fixed it" is a measurement of one, not a rate.
+
+**Found in earlier PRs (each a test result).**
+1. PR 4, `audit-ledger.mjs:356` (`candidateIndex`) on `3c62f54`: merge-wave bounded a unit's evidence and admitted any candidate object. Reproduced first: a 2 MB description merged
+   (`merged=2`, a 2 MB `candidates.json` and a 2 MB prompt for every verifier). A record is at most 64 KiB and one hunter result 1 MiB in all; the unit that links one that does not fit
+   fails like any unit with a bad result.
+2. PR 3, `audit-run.mjs:507` (`nextStep`, `write-findings`) on `3c62f54`: any missing `findings.json` after `write-findings` is a refusal, which was right while nothing could fail to
+   write it; `write` can, so the case is explained by a flag in the step state (the audit's finding 5 shows why the reason alone cannot be).
+3. PR 5, `audit-stage.mjs:252-256` (`BUILT`): a list that named the stages the file could plan, with the refusal for the rest; with the last stage built it was dead code, removed.
+
+**Found by an independent audit (qa-auditor, read-only, no knowledge of my reasoning; its probes are scripts outside the repo, `scratchpad/audit-qa7/p1`-`p9`), each reproduced by a
+failing test before its fix.** Nine findings (file:line as it cited them, on `9d4bd9b`): five high, three medium, one low; categories: data flow FAIL, edge cases FAIL, security (confirmed
+unreachable) PASS, security (independence) FAIL, security (untrusted text bounded) FAIL, consistency PASS with a caveat, missing pieces FAIL. Hostile fingerprints (`constructor`,
+`toString`, `hasOwnProperty`, `valueOf`, `a.b`) ran through every stage and `complete-check` with nothing found.
+1. High, `audit-verify.mjs:163`: the rewrite of `findings.json` was skipped when verify was applied again after a crash, because it compared the decisions with decisions already
+   saved: a removed record stayed in the file (and the report listed it as a lead), or a queued replacement left verify wedged on "findings.json is not the decided records".
+   It compares with the file on disk, and complete-check names a file that is not the decided records.
+2. High, `audit-verdicts.mjs:112-122`: consolidate's "finished" marker was written inside `commitLedger`'s `beforePublish`, before the ledger rename, so a crash between left the merged
+   pool, the old ledger and a marker that made the re-apply skip the ledger, and `write` then failed on a candidate nothing explained (no `findings.json` at all). The marker is
+   written last; a re-apply that finds the pool already merged writes the ledger and then the marker.
+3. High, `audit-verify.mjs:28,53`: no size budget, 40 records a round: twelve records of 60 KB made a 750 KB script that `plan` refused on every call, `next` stuck at verify. It
+   batches by encoded size like validate. The validate input caps its checks (10) and prior records (2 of 32 KiB) so its first candidate always fits (the audit's last note: not
+   reproduced, capped anyway).
+4. High, `audit-findings.mjs:216-228`: a verifier's record was bounded nowhere; a 6 MB description was decided and `write` failed on upstream's 5 MiB limit, losing every other finding.
+5. High, `audit-run.mjs:523`: after a failed first write in a run already incomplete for another reason, `markIncomplete` keeps the first reason, so `next` printed
+   `NEXT: FAIL findings.json is missing` while `write` had said it goes to the report. `write_failed` in the step state.
+6. Medium, `audit-findings.mjs:407`: `complete-check` ran at any step: after `init` it marked the run incomplete and sent `next` to the report with nothing audited. It refuses unless `next` says report or done.
+7. Medium, `audit-findings.mjs:150`: a Phase 5 replacement that rewrote the evidence file, blockers and plan was applied on one verifier's word (upstream: "when they do not change meaning
+   or evidence"; the plan's own list omitted evidence). Material now. A judgement call between upstream's sentence and the plan's reading; upstream's wins.
+8. Medium, `audit-verdicts.mjs:283`: a retry after a refused `confirmed` was told "the previous verifier returned decision confirmed": another verifier's conclusion. A fixed note now.
+9. Low (design), `audit-verdicts.mjs:249`: validate could spend the whole budget and leave nothing for Phase 5 (budget 40, 38 spent: both validated, both removed unverified). `floor(left / 2)`.
+Tried with nothing found (the audit's own probes): fingerprints that are object property names, through consolidate, validate, write, verify and complete-check; `con`, `../x`, `A` and
+65-character IDs (refused); prose-wrapped results (discarded); `confirmed` reachable by any route (no: the transition table, `recordProblems`, link-check item 3 and `judgeVerifier`).
+
+**Numbers.**
+17 commits on the branch (head `45bda40`, before this entry), 23 files, +3,764 / -52: non-test +1,348, tests +2,416. `scripts/test.sh` on the head: `TEST-WORKFLOW: 1137 passed, 0 failed` (991 on
+the base, 857 at PR 4: +146), `TEST-INSTALL: 126`, `TEST-SECRETS: 22`, `TEST-AUTOBUILD: 75`, `VALIDATE: PASS`, `TEST: PASS`, exit 0; `scripts/check-secrets.sh` clean. Lines: `audit-findings.mjs`
+446, `audit-verdicts.mjs` 379, `audit-verify.mjs` 190, `audit-inputs.mjs` 34, `audit-stage.mjs` 510 (508), `audit-run.mjs` 767 (750), `audit-ledger.mjs` 779 (769, not split, over the 600 held for the
+new files), `security-audit-flow.js` 749 (533; a script cannot import, so it grows with its stages); tests `audit-findings.test.mjs`, `audit-findings-write.test.mjs`,
+`audit-consolidate.test.mjs`, `audit-validate.test.mjs`, `audit-verify.test.mjs`, `security-audit-verdicts.test.mjs` (the workflow side of all three stages), `verdict-fixtures.mjs`. Every
+test that makes an artifact runs the real vendored validators (in process through `validateFindingsDocument`/`validateLedgerDocument`, and the CLIs in `commitLedger`, `commitFindings`,
+`complete-check` and the test helpers). Mutation check: 64 single-line breaks of the new modules (an `apply` skip, the independence record, the transition check, the fingerprint check, the
+incomplete mark, the carried unit, the budget split, the batch break, the first-contact refusal, the retry cap, the materiality table, the link-check items, the write gate, the complete-check
+gates, `markComplete`), 61 killed by at least one test and 3 not: `renameSync` against a write of the same bytes (equivalent), the apply-time re-assertion of the history (the plan records it
+first; a test that plants a hunter ID between plan and apply was added, the mutant not re-run), and a reversal of a one-element sort.
+
+**Plan and upstream mismatches.**
+- plan 4.3 C "(2) same fingerprint unless the verifier names a genuinely different root cause (then a new fingerprint re-enters Phase 3)" and 4.3 E "a separate root cause found here gets a new
+  fingerprint and goes back through validate": not built. A verifier result with another fingerprint is a discarded attempt (kind `other_fingerprint`, recorded in `decisions.json`), and
+  after the retry the candidate is unvalidated or the record removed and unresolved: disclosed, never dropped, but the separate root cause is not itself validated. Upstream :89 allows it.
+- plan 4.3 C "(3) ... agent-id history (hunters, earlier verifiers, replacement proposers)": a replacement is verified by an `x` ID and proposed by an `r` ID; history roles are hunter,
+  validator, verifier, replacer.
+- The task and the plan name `validation_budget_exhausted` for a candidate whose verifier failed twice, and upstream bounds retries by budget alone: with `--budget` unset the string
+  names a cause that did not occur. Followed as asked; `confirmed_without_local_evidence`, `record_verification_unresolved`, `findings_validation_failed`, `complete_check_failed` are
+  PandaStack's (the plan 4.3 names the first two) and are not in `REASONS`.
+- plan 4.3 E "replace -> materiality -> new verifier" in one stage: a round per Workflow run, since the comparator is code and the script cannot run it.
+- plan 4.3 D `evidence-links.json`: written with every `findings.json` (fingerprint -> units and their checks).
+- plan 9 row 6 estimates ~400 non-vendored source lines; this branch adds 1,348 (the workflow +216, the four new modules 1,049 in all, the rest edits to six files) (workflow +216, the four new modules 1,049 in all, the rest edits).
+- HUNTING.md:23 and the plan list a verifier's inputs including "architecture facts needed to interpret the path": the whole `architecture.md` is sent (fenced), as the hunters get it.
+
+**Left undone.** The separate-root-cause re-entry (above). A carried prior lead that no verifier validated, on a unit another lead of which was decided, is listed unresolved by
+`link-check` (from the pool) but its fingerprint is not added to that unit's `result_fingerprints`. `verify` of a record with `confirmed` is unreachable by design, so its
+`confirmed` branches (a replacement's materiality for severity, `execution`) are exercised by tests on synthetic records only. The live pass used the entry 39 run with hunting closed by
+hand: no real final-clean critic fed it. `report`, `task` and `export-remediation` are PR 7 (`feat/security-audit-8-report`); the entry skill, the graph README, `validate.sh` pins, the
+README row and the install test are PR 8. Not measured: how many candidates a validate or verify round holds in practice (it depends on record size; the guard is 380,000 encoded bytes).
