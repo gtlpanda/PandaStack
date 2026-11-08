@@ -2,33 +2,13 @@
 // for every agent of the graph. These agents read hostile source, so their tool list is the boundary: `tools:` is parsed
 // here as a list (scripts/workflow-harness.mjs agentField reads only a first token), and the test asserts the whole list.
 // The live probe that `tools:` is enforced at runtime is in retro.md, entry 38.
-import { readFileSync, readdirSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { readdirSync } from 'node:fs'
+import { basename } from 'node:path'
 import assert from 'node:assert/strict'
-import { test, entryDirs, REPO } from '../../../scripts/workflow-harness.mjs'
+import { test, entryDirs } from '../../../scripts/workflow-harness.mjs'
+import { AGENT_DIR, agentFile as agent, parseAgent, toolList } from './agent-files.mjs'
 
-const AGENT_DIR = join(REPO, 'graphs', 'security-audit', 'agents')
 const NAMES = ['audit-analyst', 'audit-researcher', 'audit-synthesizer']
-
-// Frontmatter as { fields, body }: the block between the first two --- lines, `key: value` per line. A key that appears
-// twice, a line that is not `key: value`, or no closing --- is an error, so a malformed file cannot pass as a tidy one.
-export function parseAgent(text) {
-  const lines = text.split('\n')
-  if (lines[0] !== '---') throw new Error('no frontmatter block')
-  const end = lines.indexOf('---', 1)
-  if (end < 0) throw new Error('frontmatter is never closed')
-  const fields = {}
-  for (const l of lines.slice(1, end)) {
-    const m = /^([a-z_-]+):[ \t]*(.*?)[ \t]*$/.exec(l)
-    if (!m) throw new Error(`frontmatter line is not "key: value": ${JSON.stringify(l)}`)
-    if (Object.hasOwn(fields, m[1])) throw new Error(`frontmatter key ${m[1]} appears twice`)
-    fields[m[1]] = m[2]
-  }
-  return { fields, body: lines.slice(end + 1).join('\n') }
-}
-export const toolList = fields => (fields.tools === undefined ? null : fields.tools.split(',').map(t => t.trim()))
-
-const agent = name => parseAgent(readFileSync(join(AGENT_DIR, `${name}.md`), 'utf8'))
 
 console.log('== the frontmatter parser, so the assertions below mean something')
 await test('parseAgent reads a list as a list and refuses a duplicate key, a stray line, an unclosed block and a missing block', () => {
