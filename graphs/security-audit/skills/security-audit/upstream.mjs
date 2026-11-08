@@ -6,7 +6,7 @@
 //   - run a validator the way a person would (node <file>) and gate on what it printed and its
 //     exit code: validateFindingsFile(path), validateLedgerFile(path) -> { lastLine, exitCode, valid }
 //   - call the functions the validators export: canonicalCoverageId, isSafeAgentId,
-//     validateFindingsDocument, validateLedgerDocument
+//     isSafeRelativePath, validateFindingsDocument, validateLedgerDocument
 // Vendored code loads on first use, never at import, so the drift check (vendor/check-vendor.mjs)
 // can still name a missing validator instead of failing to start.
 import { createRequire } from 'node:module'
@@ -25,6 +25,7 @@ const vendored = name => require(join(VENDOR_SKILL_DIR, name))
 
 export const canonicalCoverageId = refs => vendored('validate-coverage-ledger.cjs').canonicalCoverageId(refs)
 export const isSafeAgentId = value => vendored('validate-coverage-ledger.cjs').isSafeAgentId(value)
+export const isSafeRelativePath = value => vendored('validate-coverage-ledger.cjs').isSafeRelativePath(value)
 // Each validator exports a validateDocument, with different signatures: (ledger) and (findings,
 // schema). They get distinct names here, and the findings one reads the co-located schema itself.
 export const validateLedgerDocument = ledger => vendored('validate-coverage-ledger.cjs').validateDocument(ledger)
