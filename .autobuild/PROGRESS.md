@@ -40,3 +40,9 @@ REVIEW <YYYY-MM-DD>: DEFECT <file:line> <title> — <failure scenario; suggested
 - Tests: graphs/security-audit/tests/profile-init.test.mjs passing (11/11); new audit-init-profiles.test.mjs (3); regression suite green (`node scripts/test-workflow.mjs`: 1263 passed, 0 failed); `check-existing-tests.mjs` PASS
 - Decisions: D1, D2
 - Notes: SKILL.md and graph README still say init refuses quick/deep (D2): P-08 fixes them and drops `other than \`standard\`` from audit-readme.test.mjs. `budgetGate`/refusal text needed no change (already per profile).
+
+## P-03 — The units a profile asks for (2026-11-08)
+- What: `audit-ledger.mjs`: `profileProblems` gates `unitFromInput` on `ctx.profile` (quick: fixed subsystem ref, no lifecycle); `buildSeed`/`buildCritic` pass `meta.profile`, `forceAdd` clears it. `audit-inputs.mjs` `profilePart(meta)` adds `parts.profile` (upstream "Run profiles and scope") to the synthesize, critic and mint inputs for quick and deep; the workflow's three prompts carry it under `--- The run profile, upstream text verbatim ---`, empty otherwise.
+- Tests: graphs/security-audit/tests/profile-granularity.test.mjs passing (11/11); new audit-profile-units.test.mjs (4); regression suite green (`node scripts/test-workflow.mjs`: 1278 passed, 0 failed); `check-existing-tests.mjs` PASS; the facts-script bound (`< 60_000`) still holds, not raised
+- Decisions: D3, D4, D5
+- Notes: a quick minted unit that is not coarsened is already counted `rejected=` by apply-critic (tested in audit-profile-units); P-04 adds the deferral. `profilePart` carries only the profile section; P-05's `parts.phase5` is a separate key.

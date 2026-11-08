@@ -57,7 +57,7 @@
       ],
       "test": "graphs/security-audit/tests/profile-granularity.test.mjs",
       "testKind": "profile",
-      "passes": false
+      "passes": true
     },
     {
       "id": "P-04",

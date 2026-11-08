@@ -21,6 +21,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CARRIED, REASONS, Usage, advanceState, appendEvent, countStatuses, formatNext, git, isCommitId, loadRun, markIncomplete, nextStep, readJson, refuse, waveAllowance, writeJson } from './audit-run.mjs'
 import { BlockError, companions, ordinary, resolve as resolveBlock } from './blocks.mjs'
+import { QUICK_SUBSYSTEM_REF, rulesOf } from './audit-profile.mjs'
 import { canonicalCoverageId, isSafeRelativePath, validateFindingsFile, validateLedgerDocument, validateLedgerFile } from './upstream.mjs'
 
 export const LEDGER_FILE = 'coverage-ledger.json'
@@ -151,9 +152,22 @@ function blockProblems(input) {
   return found
 }
 
+// Why `input` is not a unit of the run profile `profile` (empty when it is, or when there is no profile). Only quick gates: its subsystem
+// dimension is upstream's one fixed value and it adds no lifecycle mode (RECONNAISSANCE.md, "Deterministic coverage ledger": "quick coarsens
+// subsystem identity", "deep adds lifecycle modes"). The display label `subsystem` stays free.
+function profileProblems(input, profile) {
+  if (!rulesOf({ profile }).coarseSubsystem) return []
+  const refs = isObj(input.canonical_refs) ? input.canonical_refs : {}
+  const problems = []
+  if (refs.subsystem !== QUICK_SUBSYSTEM_REF) problems.push(`the quick profile coarsens every unit to one subsystem: canonical_refs.subsystem must be ${JSON.stringify(QUICK_SUBSYSTEM_REF)}, not ${String(JSON.stringify(refs.subsystem))}`)
+  if (input.lifecycle !== undefined || refs.lifecycle !== undefined) problems.push('the quick profile does not split units by lifecycle mode: leave out lifecycle and canonical_refs.lifecycle')
+  return problems
+}
+
 // One ledger unit from a recon or mint entry: { unit } or { problems }. The entry names the work (labels, canonical_refs,
 // paths, blocks, priority); this adds the unit's start state. A planned unit outside the run's scope is recorded out_of_scope,
 // never planned (SKILL.md: "record everything else as out_of_scope"). Upstream's validator judges the finished unit.
+// ctx.profile is the run's profile (absent: no profile gate, as for an earlier run's unit carried forward).
 export function unitFromInput(input, ctx) {
   if (!isObj(input)) return { problems: ['is not an object'] }
   const problems = []
@@ -165,7 +179,8 @@ export function unitFromInput(input, ctx) {
   const minted = mintId(input)
   if (minted.problems) problems.push(...minted.problems)
   problems.push(...blockProblems(input))
-  const paths = Array.isArray(input.starting_paths) ? input.starting_paths : []
+  problems.push(...profileProblems(input, ctx.profile))
+  const paths =Array.isArray(input.starting_paths) ? input.starting_paths : []
   for (const p of paths) {
     if (!ctx.skipPathCheck && typeof p === 'string' && isSafeRelativePath(p) && !existsSync(join(ctx.runDir, 'tree', p))) problems.push(`starting path ${p} is not in tree/ (the audited snapshot)`)
   }
@@ -196,7 +211,7 @@ const wordCount = text => text.trim().split(/\s+/).length
 function buildSeed(runDir, run, input) {
   const notes = []
   const priors = loadPriors(runDir, notes)
-  const ctx = { runDir, scope: run.meta.scope_paths, priorStatus: priors.length ? 'new' : 'none' }
+  const ctx = { runDir, scope: run.meta.scope_paths, priorStatus: priors.length ? 'new' : 'none', profile: run.meta.profile }
   const problems = []
   if (!isObj(input)) fail('recon.json must be an object { architecture_md, units }')
   if (!isText(input.architecture_md)) problems.push('architecture_md is missing')
@@ -522,7 +537,7 @@ function buildCritic(runDir, run, critic, mint) {
     patched.set(id, reassign(unit, `the ${by} listed this unit in reassign_ids; the critic result gives no per-unit reason`))
     tally.reassigned += 1
   }
-  const ctx = { runDir, scope: meta.scope_paths, priorStatus: ledger.some(u => u.prior_status !== 'none') ? 'new' : 'none' }   // seed decided whether earlier runs exist
+  const ctx = { runDir, scope: meta.scope_paths, priorStatus: ledger.some(u => u.prior_status !== 'none') ? 'new' : 'none', profile: meta.profile }   // seed decided whether earlier runs exist
   mint.units.forEach((entry, i) => {
     const built = isObj(entry) && entry.status !== undefined && entry.status !== 'planned' ? { problems: [`status ${JSON.stringify(entry.status)}: a minted unit is planned work; scope and budget decide anything else`] } : unitFromInput(entry, ctx)
     if (built.problems) { tally.minted_rejected += 1; rejections.push(`minted unit ${i}: ${built.problems.join('; ')}; rejected`); return notes.push(rejections.at(-1)) }
@@ -693,7 +708,8 @@ function forceAdd(was, prior, ctx) {
     priority_class: was.priority_class ?? 4, ...(typeof was.priority_why === 'string' && { priority_why: was.priority_why }),
     ...(gone && { status: 'not_applicable', reason: `none of its starting paths is in the audited snapshot; it was a unit of earlier run ${prior.run_id}` }),
   }
-  const built = unitFromInput(input, { ...ctx, skipPathCheck: gone })
+  // No profile gate: an earlier run's unit keeps its own references (a quick run never coarsens earlier evidence, so no prior lead vanishes).
+  const built = unitFromInput(input, { ...ctx, profile: undefined, skipPathCheck: gone })
   return built.unit ? { ...built.unit, force_added_from: prior.run_id, ...(added.length && { companion_blocks_added: added }) } : null
 }
 

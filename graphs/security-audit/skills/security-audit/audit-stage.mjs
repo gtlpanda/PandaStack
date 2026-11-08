@@ -35,7 +35,7 @@ import { LEDGER_FAILED, REASONS, RUNNERS, Usage, advanceState, appendEvent, form
 import { applyCriticProblems, criticBudgetExhausted, criticResultProblems, deferHunting, seedProblems, stopHunting } from './audit-ledger.mjs'
 import { RECON_IDS, checkFacts } from './audit-facts.mjs'
 import { companions, ordinary, parts, resolve as resolveBlock } from './blocks.mjs'
-import { CLIP, architectureOf, baseInput, blockText, clipText, clipValue } from './audit-inputs.mjs'
+import { CLIP, architectureOf, baseInput, blockText, clipText, clipValue, profilePart } from './audit-inputs.mjs'
 import { applyConsolidate, applyValidate, consolidateInput, validateInput } from './audit-verdicts.mjs'
 import { applyVerify, verifyInput } from './audit-verify.mjs'
 
@@ -131,6 +131,7 @@ export function reconInput(runDir, meta, part) {
     parts: {
       ranking: resolveBlock(RANKING).text, architectureSummary: resolveBlock(ARCH_SUMMARY).text, ledger: resolveBlock(LEDGER_SPEC).text,
       registry: { ordinary: ordinary(), companions: companions().map(c => ({ file: c.file, whenToUse: resolveBlock(c.whenToUse).text, blocks: c.blocks })) },
+      ...profilePart(meta),
     },
   }
 }
@@ -197,7 +198,7 @@ export function criticInput(runDir, run, next) {
   return {
     ...baseInput(runDir, run.meta, 'critic'), kind: next.kind, wave: next.wave, hunted: next.hunted !== false, architecture_md: architectureOf(runDir), ledger: run.ledger.map(compactUnit),
     candidates: (Array.isArray(pool) ? pool : []).map(c => ({ fingerprint: c.fingerprint, proposed_verdict: c.proposed_verdict, units: c.units, hunter_ids: c.hunter_ids })),
-    prior: priorSummary(runDir), parts: { criticSection: blockText(CRITIC_SECTION) },
+    prior: priorSummary(runDir), parts: { criticSection: blockText(CRITIC_SECTION), ...profilePart(run.meta) },
   }
 }
 
@@ -230,7 +231,7 @@ export function mintInput(runDir, run, next) {
   return {
     ...baseInput(runDir, run.meta, 'mint'), wave: next.wave, kind, profile: run.meta.profile, scope_paths: run.meta.scope_paths, architecture_md: architectureOf(runDir), proposals,
     existing: run.ledger.map(u => u.coverage_id), ...feedbackFor(runDir, MINT_FEEDBACK, `${next.wave}:${kind}`),
-    parts: { ledger: blockText(LEDGER_SPEC), registry: { ordinary: ordinary(), companions: companions().map(c => ({ file: c.file, whenToUse: blockText(c.whenToUse), blocks: c.blocks })) } },
+    parts: { ledger: blockText(LEDGER_SPEC), registry: { ordinary: ordinary(), companions: companions().map(c => ({ file: c.file, whenToUse: blockText(c.whenToUse), blocks: c.blocks })) }, ...profilePart(run.meta) },
   }
 }
 

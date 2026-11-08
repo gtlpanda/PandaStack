@@ -1,10 +1,11 @@
 // audit-inputs.mjs - what every stage input of the security-audit workflow is built from: the fields they share, the architecture summary and an
 // upstream block by reference, and the bound put on text that came from agents reading hostile source. audit-stage.mjs (recon, hunt, critic,
-// mint) and audit-verdicts.mjs (consolidate, validate, verify) both build inputs from these.
+// mint) and audit-verdicts.mjs (consolidate, validate, verify) both build inputs from these, and the run profile's upstream text.
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { refuse } from './audit-run.mjs'
 import { BlockError, resolve as resolveBlock } from './blocks.mjs'
+import { rulesOf } from './audit-profile.mjs'
 
 const isObj = v => typeof v === 'object' && v !== null && !Array.isArray(v)
 
@@ -19,6 +20,10 @@ export function architectureOf(runDir) {
 export const blockText = ref => {
   try { return resolveBlock(ref).text } catch (e) { if (e instanceof BlockError) return refuse(`the ledger names a block that does not resolve: ${e.message}`); throw e }
 }
+// The agents that decide coverage (synthesizer, critic, minter) of a quick or deep run get upstream's profile section verbatim as parts.profile;
+// a standard run's inputs have no such key, so its prompts are unchanged.
+const PROFILE_SECTION = 'SKILL.md#Run profiles and scope'
+export const profilePart = meta => (rulesOf(meta).profile === 'standard' ? {} : { profile: blockText(PROFILE_SECTION) })
 
 // What the critic and the minter are sent of text that came from agents reading hostile source: a hunter may fill a unit with up to 64 KiB of evidence, so
 // long text and long lists are cut here, never passed whole. The cut is visible (a unit says `truncated`, a text ends in an ellipsis).

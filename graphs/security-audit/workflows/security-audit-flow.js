@@ -290,6 +290,9 @@ ${companions}`
 }
 const registryProblem = reg => (isObj(reg) && Array.isArray(reg.ordinary) && reg.ordinary.every(isText) && Array.isArray(reg.companions) && reg.companions.every(c => isObj(c) && isText(c.file) && isText(c.whenToUse) && Array.isArray(c.blocks) && c.blocks.every(isText)) ? null : 'parts.registry must be {ordinary: [ref], companions: [{file, whenToUse, blocks: [ref]}]}')
 
+// Upstream's run-profile section, for the agents that decide coverage; empty (the prompt unchanged) when the input has none (standard).
+const profileSection = () => (isText(PARTS.profile) ? `--- The run profile, upstream text verbatim ---\n${PARTS.profile}\n\n` : '')
+
 function synthPrompt() {
   const facts = A.facts.map(f => `Agent ${f.agent}: ${json({ items: f.items, limits: f.limits })}`).join('\n\n')
   return `You are the synthesizer (agent ID synth-recon) of a full security audit. You turn what four reconnaissance agents reported into the architecture summary and the coverage units the run will hunt. You decide what to cover, never whether something is a vulnerability.
@@ -306,7 +309,7 @@ ${fenced('untrusted-recon-facts', facts)}
 
 The audit method for what you write, upstream text verbatim.
 
---- How units are ranked ---
+${profileSection()}--- How units are ranked ---
 ${PARTS.ranking}
 
 Set each unit's priority_class (1 hunts first, 4 last) from criteria 1, 2 and 4 above and give priority_why in one sentence. Criterion 3 (earlier runs) is applied by the parent from the earlier runs themselves, not by you.
@@ -395,7 +398,7 @@ ${fenced('untrusted-prior-runs', json(A.prior))}
 
 The method, upstream text verbatim.
 
-${PARTS.criticSection}
+${profileSection()}${PARTS.criticSection}
 
 Return exactly the JSON object the method specifies, in the structured output.`
 }
@@ -419,7 +422,7 @@ ${fenced('untrusted-architecture', A.architecture_md)}
 
 The audit method for what you write, upstream text verbatim.
 
---- Deterministic coverage ledger ---
+${profileSection()}--- Deterministic coverage ledger ---
 ${PARTS.ledger}
 
 ${blockLists()}
