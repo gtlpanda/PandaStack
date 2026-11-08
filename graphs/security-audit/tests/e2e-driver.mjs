@@ -17,8 +17,9 @@ const commandFor = (pattern, text = skillText()) => {
 }
 
 // answer(label, ctx) -> what the scripted agent returns (or { throws }); ctx = { agentType, stage, input, prompt }.
-// opts: initArgs (extra flags for init), maxSteps, onStep(trace entry).
-export async function driveAudit({ repo, answer, initArgs = [], maxSteps = 120, onStep = () => {}, stopAt = null }) {
+// opts: initArgs (extra flags for init), maxSteps, onStep(trace entry), tolerateRefusals (a helper that refuses with AUDIT: FAIL is recorded in the entry and the loop asks `next` again,
+// as the skill says to; the same step refused twice in a row stops the drive: a budget run legitimately meets refusals, a stuck one must not loop).
+export async function driveAudit({ repo, answer, initArgs = [], maxSteps = 120, onStep = () => {}, stopAt = null, tolerateRefusals = false }) {
   const text = skillText()
   const vars = { AUDIT: SKILL_DIR, REPO: repo }
   const initCommand = `${commandFor(/audit-run\.mjs" init /, text)}${initArgs.length ? ` ${initArgs.join(' ')}` : ''}`
@@ -34,6 +35,8 @@ export async function driveAudit({ repo, answer, initArgs = [], maxSteps = 120, 
   const trace = []
   const outDir = mkdtempSync(join(sandbox, 'runtime-output-'))
   let agentsCalled = 0
+  let lastRefused = null
+  const refused = (entry, r, what) => { entry.refused = `${what}: ${r.last}`; assert.equal(r.status, 1, `${entry.next}: ${what}\n${r.stdout}${r.stderr}`); assert.match(r.last, /^AUDIT: FAIL /); assert.notEqual(lastRefused, entry.next, `${entry.next} was refused twice in a row: ${r.last}`); lastRefused = entry.next }
   for (let i = 0; i < maxSteps; i++) {
     const next = runCommand(nextCommand, vars, repo)
     const m = next.last.match(/^NEXT: (\S+)(?: run=(\S+))?/)
@@ -46,12 +49,14 @@ export async function driveAudit({ repo, answer, initArgs = [], maxSteps = 120, 
     if (table.has(step)) {
       const r = runCommand(table.get(step), vars, repo)
       entry.commands.push({ command: table.get(step), last: r.last, status: r.status })
+      if (tolerateRefusals && r.status !== 0) { refused(entry, r, table.get(step)); onStep(entry); continue }
       assert.equal(r.status, 0, `${next.last}: ${table.get(step)}\n${r.stdout}${r.stderr}`)
       assert.match(r.last, /^AUDIT: OK /)
     } else {
       assert.equal(runner, 'workflow', `the skill has no row for ${next.last}`)
       const plan = runCommand(planCommand, vars, repo)
       entry.commands.push({ command: planCommand, last: plan.last, status: plan.status })
+      if (tolerateRefusals && plan.status !== 0) { refused(entry, plan, planCommand); onStep(entry); continue }
       assert.equal(plan.status, 0, `${next.last}: plan\n${plan.stdout}${plan.stderr}`)
       const printed = plan.stdout.match(/^Call the Workflow tool with scriptPath (\S+) and no args, then save the JSON it returns to (\S+)$/m)
       assert.ok(printed, `plan printed the script's path: ${plan.stdout}`)
@@ -67,9 +72,11 @@ export async function driveAudit({ repo, answer, initArgs = [], maxSteps = 120, 
       const applied = runCommand(applyCommand, { ...vars, OUT }, repo)
       entry.commands.push({ command: applyCommand, last: applied.last, status: applied.status })
       entry.applied = applied
+      if (tolerateRefusals && applied.status !== 0) { refused(entry, applied, applyCommand); onStep(entry); continue }
       assert.equal(applied.status, 0, `${next.last}: apply\n${applied.stdout}${applied.stderr}`)
       assert.match(applied.last, /^AUDIT: OK apply /)
     }
+    lastRefused = null
     onStep(entry)
   }
   return { RUN, vars, trace, agentsCalled, steps: trace.map(t => t.next) }
