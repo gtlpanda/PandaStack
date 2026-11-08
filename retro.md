@@ -1826,3 +1826,12 @@ path is resolved, and a write target the guard cannot resolve (an unknown `$VAR`
 reach `pass` on this branch by itself. The guard's text-matching class keeps producing new
 spellings. The owner merges by hand, with the residual risk stated in the README: writes outside
 the project have no backstop beyond the tripwire.
+
+**Docs follow-up (PR5).** The README's "What's installed and where" section was added after this
+merged: each piece, where it lives in the repo and on the machine, and the state it keeps, plus
+the path a change takes to `main`. On this machine after the merge:
+- `install.sh` linked `~/.local/bin/autobuild` and the `/autobuild` skill, backing up the old ones;
+- `autobuild selftest` passed 75/75 from the repo;
+- `autobuild status` read a real project correctly;
+- `~/.autobuild` moved to `~/.claude/backups/20261107-213504-autobuild-home`, with its history
+  already in PandaStack.

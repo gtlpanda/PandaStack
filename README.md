@@ -49,7 +49,7 @@
 | build | [`graphs/release/`](graphs/release/README.md) | `/release-pr [PR#]` | scribe (docs in the PR) → readiness on the exact head → merger, once → deploy-watcher, evidence for the merge commit | routing tested with mocked agents; run live once on a real PR (reported by the owner) |
 | build | [`graphs/hunt/`](graphs/hunt/README.md) | `/bughunt [PR# \| branch \| a..b]` | intake (exact commits, hunks, routing signals, a worktree at the head) → impact-mapper → one hunter per lens the change calls for (logic, contract, concurrency, security, errors, regression), in parallel → findings merged under stable ids in code → a blind skeptic per finding, the advisor refereeing the contested ones → a reproducer's failing test, run by `evidence.mjs` at the head and the merge-base in a sandbox, then re-run by the session → (`--propose`, `--fix`) a root-cause repair per reproduced bug in an isolated worktree, proven by the reproduction (passes with it, fails without it) and the suite, and in fix mode reviewed by an independent verifier with adversarial tests → a report with a computed disposition | live-run on a 10-case benchmark: 6 of 6 planted bugs found and reproduced, 0 false positives on bug-free changes, $9.64 for discovery |
 | build | [`graphs/build/`](graphs/build/README.md) | `/build-app` | the driver, detached: one fresh headless `/dev --slice` session per backlog slice, its own checks (commit prefix, clean tree, frozen tests, its own verify), fast-forward onto `integration/<app>`, usage-limit waits, the backlog brakes; then one QA pass over the whole branch, the push, and one PR for you | live-run once end to end: a 7-slice CLI in 1 h 40 min (retro 24) |
-| build | [`graphs/autobuild/`](graphs/autobuild/README.md) | `autobuild run` (`/autobuild` sets a project up) | one fresh headless session per feature from `features.json`, a Stop hook that holds it until the project's full gate passes, a guard around the frozen tests, independent checks after every session, usage-limit pauses, periodic and final drift-and-defect reviews; then `/bughunt --fix` over the whole branch, its verified fixes landed through the hunt's own checks (shared with `/build-app`) | used for real builds (the FieldPulse worked example); the hunt step tested with a fake `claude` |
+| build | [`graphs/autobuild/`](graphs/autobuild/README.md) | `autobuild run` (`/autobuild` sets a project up) | one fresh headless session per feature from `features.json`, a Stop hook that holds it until the project's full gate passes, a guard around the frozen tests, independent checks after every session, usage-limit pauses, periodic and final drift-and-defect reviews; then `/bughunt --fix` over the whole branch, its verified fixes landed through the hunt's own checks (shared with `/build-app`) | used for real builds (the FieldPulse worked example); moved in with 9 `/bughunt` rounds (29 bugs fixed, retro 33); the hunt step tested with a fake `claude` |
 | marketing | [`graphs/seo/`](graphs/seo/README.md) | `seo-check.mjs check <dir> --site <url>` | so far only the check: a built site's title, description, canonical, Open Graph, and JSON-LD tags, duplicates across pages, the sitemaps (which decide the strict pages), and robots.txt, `SEO-CHECK: PASS\|FAIL`; the audit graph not built yet | check tested offline |
 
 ## The build-app loop
@@ -130,6 +130,30 @@ or edits what other tools install. `scripts/check-refs.mjs` (run by
 this repo does not ship and Claude Code does not build in, so a tool that works
 only next to another toolkit cannot slip in. CI runs every check on a fresh
 machine with nothing else installed.
+
+## What's installed and where
+
+One repo, one install. Each piece, where it lives, and the state it keeps:
+
+| Piece | In this repo | On your machine | State it keeps |
+|---|---|---|---|
+| The graphs (blueprint, dev, qa, release, hunt, build, seo) | `graphs/<graph>/` | one link per skill, agent, and workflow in `~/.claude/` | in each target repo's git dir, never committed: `bughunt/<key>/` (the hunt ledger), `harness-build/<app>/`, `harness-dev/` |
+| autobuild | `graphs/autobuild/tool/` (its own history kept) | `~/.local/bin/autobuild`, plus the `/autobuild` skill | in each project: `autobuild.json`, `features.json`, `PROGRESS.md`, `.harness/`, `logs/`; the hunt's control files in the project's git dir |
+| The kit | `kit/` | one link per skill, agent, and command in `~/.claude/` | none |
+| The review gate | `graphs/hunt/skills/bughunt/gate.mjs` | a `PreToolUse` hook in `~/.claude/settings.json`, active in every repo | reads the hunt ledger; `PANDASTACK_REVIEW_GATE=0` at launch turns it off, for a person, never for Claude |
+| The rules | `CLAUDE.md` | `~/.claude/CLAUDE.md` (one link) | at most 200 lines; `validate.sh` pins its rails |
+| Settings | `settings.json` | merged into your own `~/.claude/settings.json` | your values win; `permissions` untouched |
+| Status line | `core/bin/statusline.sh` | `~/.claude/bin/statusline.sh` | none |
+| CI and branch protection | `.github/workflows/test.yml` | GitHub | `scripts/test.sh` on every PR and push to `main`; `main` requires the `test` check, admins included |
+
+How a change reaches `main`, for this repo and any repo you work in:
+1. `/bughunt` on the branch. Fix what it finds.
+2. `gh pr create`: the gate allows it once a finished hunt covers the head.
+   A change that touches only docs needs no hunt.
+3. CI runs on the exact head.
+4. `gh pr merge --match-head-commit <sha>`: the gate allows it only on a hunt
+   whose disposition is `pass`. Anything else is merged by a person, by
+   choice, after reading the hunt's report.
 
 ## Kit
 
