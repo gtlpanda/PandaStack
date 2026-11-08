@@ -23,7 +23,7 @@
 //   NEXT: <step> run=<workflow|helper> [kind=..] [wave=N] [reason=..]   |   NEXT: done status=..   |   NEXT: FAIL <why>
 //
 // stage-state.json is { version: 1, last: <STEPS entry>, wave: <int>, critic_kind: null | 'post-wave' |
-// 'final-clean', updated: <ISO time> }. `last` is the last step whose result is saved; the helper or the
+// 'final-clean', updated: <ISO time> } (and write_failed: true after a write-findings that could not write findings.json). `last` is the last step whose result is saved; the helper or the
 // session that saves a step's result calls advanceState. plan-wave sets wave to the wave it planned (a hunt saved
 // without it takes the next number); critic_kind is set when a critic result is saved and read by the step that
 // applies it. run_status leaves in_progress only through the complete-check of audit-findings.mjs (complete) or
@@ -521,8 +521,9 @@ export function nextStep({ meta, state, ledger, findings }) {
     case 'consolidate': return go('validate')
     case 'validate': return go('write-findings')
     case 'write-findings': {
-      // A first write that failed leaves no findings.json (the previous file is left alone, and there was none): the run is incomplete with its own reason, and the report says why.
-      if (findings === undefined && meta.run_status === 'incomplete' && meta.incomplete_reason === FINDINGS_FAILED) return toReport()
+      // A first write that failed leaves no findings.json (the previous file is left alone, and there was none) and says so in stage-state.json: the run is incomplete (with its own reason, or
+      // the one it already had, which stands), and the report says why. Only that explains a missing file.
+      if (findings === undefined && state.write_failed === true && meta.run_status === 'incomplete') return toReport()
       if (!Array.isArray(findings)) refuse('findings.json is missing or not an array after write-findings')
       return findings.some(r => r?.verdict === 'confirmed' || r?.verdict === 'needs_validation') ? go('verify') : toReport()
     }

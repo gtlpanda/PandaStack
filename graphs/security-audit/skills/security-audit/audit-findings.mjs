@@ -336,12 +336,12 @@ export function writeFindings(runDir) {
   } catch (e) {
     if (!e.problems) throw e
     // Terminal state (b): the run says why it stopped. findings.json is left as it was (none), `next` goes to the report, and the report discloses it.
-    markIncomplete(runDir, FINDINGS_FAILED)
-    advanceState(runDir, 'write-findings')
+    markIncomplete(runDir, FINDINGS_FAILED)   // the first reason stands when the run was incomplete already: write_failed is what lets `next` go on to the report either way
+    advanceState(runDir, 'write-findings', { write_failed: true })
     appendEvent(runDir, { cmd: 'write-findings', stage: 'write-findings', result: 'failed', reason: FINDINGS_FAILED, duration_ms: Date.now() - started, problems: e.problems.slice(0, 5) })
     throw Object.assign(new Error(`${e.message}; the run is marked incomplete (${FINDINGS_FAILED}) and \`next\` goes to the report`), { problems: e.problems })
   }
-  advanceState(runDir, 'write-findings')
+  advanceState(runDir, 'write-findings', { write_failed: false })
   const counts = Object.fromEntries(VERDICTS.map(v => [v, records.filter(r => r.verdict === v).length]))
   appendEvent(runDir, { cmd: 'write-findings', stage: 'write-findings', result: 'ok', duration_ms: Date.now() - started, counts })
   const notes = []
