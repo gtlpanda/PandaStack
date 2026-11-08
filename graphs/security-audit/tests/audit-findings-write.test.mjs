@@ -9,7 +9,7 @@ import { test } from '../../../scripts/workflow-harness.mjs'
 import { commitFindings, completeProblems, decisionsOf, ensureDecisions, evidenceLinks, finalRecords, finishRun, historyOf, linkCheck, needsPhase5, readPool, recordAgent, saveDecisions } from '../skills/security-audit/audit-findings.mjs'
 import { advanceState, loadRun, markComplete, markIncomplete, recordSpend } from '../skills/security-audit/audit-run.mjs'
 import { validateFindingsFile, validateLedgerFile } from '../skills/security-audit/upstream.mjs'
-import { audit, ENV, meta } from './audit-fixtures.mjs'
+import { audit, ENV, meta, newRun } from './audit-fixtures.mjs'
 import { confirmedRecord, needsValidationRecord, readJsonFile, readLedger } from './ledger-fixtures.mjs'
 import { atValidation, decisions, events, next, rejected, round, toValidate, unitByName, verified } from './verdict-fixtures.mjs'
 
@@ -30,7 +30,7 @@ async function validated(defs = [{ name: 'a', candidates: ['fp-a'] }, { name: 'b
   assert.equal(next(run.runDir), 'NEXT: write-findings run=helper')
   return run
 }
-// What verify will do (it comes in the next commits): every retained record verified by a Phase 5 verifier of its own.
+// What verify does when its last round is applied, minus the stage itself: every retained record verified by a Phase 5 verifier of its own, and the step saved.
 function markVerified(runDir) {
   const d = decisions(runDir)
   let h = historyOf(runDir)
@@ -42,6 +42,7 @@ function markVerified(runDir) {
   })
   saveDecisions(runDir, { ...d, entries })
   writeFileSync(join(runDir, 'agent-history.json'), JSON.stringify(h))
+  advanceState(runDir, 'verify')
 }
 
 console.log('== write: findings.json from the decided records')
@@ -301,6 +302,7 @@ await test('a run whose every candidate is decided and every retained record pas
 await test('a retained record no Phase 5 verifier passed fails complete-check: the run in progress is marked incomplete with complete_check_failed, and never complete', async () => {
   const run = await validated()
   assert.equal(cli('write', run.runDir).status, 0)
+  advanceState(run.runDir, 'verify')   // verify ended without verifying them (nothing here calls it)
   const r = cli('complete-check', run.runDir)
   assert.equal(r.status, 1)
   assert.match(r.stdout, /^findings: record "fp-a" did not pass Phase 5$/m)
@@ -365,6 +367,24 @@ await test('a confirmed record can never make a run complete: findings that hold
   assert.notEqual(meta(run.runDir).run_status, 'complete')
 })
 
+await test('complete-check is refused until the run has reached its end: it cannot be run after init or between write and verify and downgrade a run that has not been verified yet', async () => {
+  const fresh = newRun()
+  const early = cli('complete-check', fresh.runDir)
+  assert.equal(early.status, 1)
+  assert.match(early.last, /^AUDIT: FAIL complete-check runs at the end of a run, when `audit-run\.mjs next` says report or done: it is NEXT: seed run=helper now; nothing was changed$/)
+  assert.equal(meta(fresh.runDir).run_status, 'in_progress')
+  assert.equal(next(fresh.runDir), 'NEXT: seed run=helper', 'the run was not sent to the report')
+  const run = await validated()
+  assert.equal(cli('write', run.runDir).status, 0)
+  assert.equal(next(run.runDir), 'NEXT: verify run=workflow')
+  assert.match(cli('complete-check', run.runDir).last, /^AUDIT: FAIL complete-check runs at the end of a run/)
+  assert.deepEqual([meta(run.runDir).run_status, meta(run.runDir).incomplete_reason], ['in_progress', null], 'verify can still make it complete')
+  markVerified(run.runDir)
+  assert.equal(next(run.runDir), 'NEXT: report run=helper')
+  assert.equal(cli('complete-check', run.runDir).status, 0)
+  assert.equal(meta(run.runDir).run_status, 'complete')
+  assert.equal(cli('complete-check', run.runDir).status, 0, 'and again, once the run is done')
+})
 console.log('== markComplete and next')
 await test('markComplete clears the reason, is idempotent, refuses an incomplete run, and refuses a directory that is not a run', async () => {
   const run = await validated()

@@ -410,6 +410,10 @@ function runLinkCheck(runDir) {
   return { summary: `link-check records=${run.findings.length} unresolved=${out.unresolved.length}`, notes }
 }
 function runCompleteCheck(runDir) {
+  // A run that is not at its end is not judged: complete-check marks an unfinished run incomplete, for good, because it has not been verified yet. write and verify call finishRun
+  // themselves at the points a run ends; this command is for the session to ask once `next` says report (or done).
+  const next = nextStep(loadRun(runDir))
+  if (!['report', 'done'].includes(next.step)) refuse(`complete-check runs at the end of a run, when \`audit-run.mjs next\` says report or done: it is ${formatNext(next)} now; nothing was changed`)
   const out = finishRun(runDir)
   if (!out.ok) fail(out.message, out.problems)
   return { summary: `complete-check ${out.message}`, notes: [] }
