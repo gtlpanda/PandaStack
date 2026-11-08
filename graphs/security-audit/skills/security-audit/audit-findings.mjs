@@ -19,7 +19,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import { FINDINGS_FAILED, Usage, advanceState, appendEvent, formatNext, loadRun, markComplete, markIncomplete, nextStep, readJson, refuse, writeJson } from './audit-run.mjs'
-import { LEDGER_FILE } from './audit-ledger.mjs'
+import { LEDGER_FILE, MAX_CANDIDATE_BYTES } from './audit-ledger.mjs'
 import { refProblem } from './audit-facts.mjs'
 import { isSafeAgentId, validateFindingsDocument, validateFindingsFile, validateLedgerFile } from './upstream.mjs'
 
@@ -215,6 +215,10 @@ export function ensureDecisions(runDir, pool) {
 // `fingerprint` and `verdict` say what the record must be (a verifier returns the same fingerprint, and the verdict it decided).
 export function recordProblems(runDir, record, { fingerprint, verdict, cache = new Map() } = {}) {
   if (!isObj(record)) return [`the record is not an object (${show(record)})`]
+  // The schema bounds no text, and a verifier reads hostile source: a record is as large as a candidate may be and no larger (the findings validator refuses a file over 5 MiB, and
+  // one record of that size would cost every other finding in the run), checked before anything reads it.
+  const bytes = Buffer.byteLength(JSON.stringify(record))
+  if (bytes > MAX_CANDIDATE_BYTES) return [`the record is ${bytes} bytes, over the ${MAX_CANDIDATE_BYTES} a record may hold`]
   const problems = validateFindingsDocument([record]).map(m => m.replace(/^\$\[0\](?:\.|: )?/, '')).slice(0, 10)
   if (problems.length) return problems
   const wrong = []

@@ -12,7 +12,7 @@
 import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import { REASONS, advanceState, appendEvent, markIncomplete, recordSpend, refuse, writeJson } from './audit-run.mjs'
-import { architectureOf, baseInput, blockText } from './audit-inputs.mjs'
+import { architectureOf, baseInput, blockText, encodedSize } from './audit-inputs.mjs'
 import { FINDINGS_FAILED } from './audit-run.mjs'
 import { HISTORY_FILE, MAX_REPLACEMENT_ROUNDS, MAX_TRIES, RECORD_UNRESOLVED, agentId, commitFindings, decisionsOf, finalRecords, finishRun, historyOf, materialChanges, needsPhase5, recordAgent, recordProblems, retained, saveDecisions, transitionProblem } from './audit-findings.mjs'
 import { parts } from './blocks.mjs'
@@ -24,7 +24,9 @@ const show = v => String(JSON.stringify(v)).slice(0, 80)
 
 const PHASE5 = 'VALIDATION-AND-REPORTING.md#Phase 5: Verify the final records with fresh eyes'
 const LOCAL_BOUNDARIES = 'HUNTING.md#Local validation boundaries'
-// A verify input is small (a record and the shared text); still a round holds at most this many items, so no run script grows with the number of records.
+// What one verify input may be once written into a script (the ceiling is 524,288 bytes and the script itself is about 100 KB), and at most this many items: a record is up to 64 KiB, so
+// records go in rounds, the first of a round always fits, and the rest wait pending for the next.
+export const MAX_VERIFY_BYTES = 380_000
 export const MAX_VERIFY_ITEMS = 40
 const FRESH = () => ({ state: 'pending', verifier_id: null, attempts: [], replacement: null, rounds: 0, reason: null, last_stage: null })
 
@@ -62,20 +64,26 @@ export function verifyInput(runDir, run) {
     }
   }
   const p = parts()
-  let history = historyOf(runDir)
-  const items = funded.map(e => {
-    const slot = slotOf(e)
-    const id = idOf(e)
-    history = recordAgent(history, e.fingerprint, slot === 'phase5' ? 'verifier' : 'replacer', id)
-    // A replacement's verifier is given the replacement and nothing else: not the reason its proposer gave, not the record it replaces, not the Phase 3 decision.
-    const record = subjectOf(e)
-    return { agent_id: id, fingerprint: e.fingerprint, kind: slot, verdict: record.verdict, record: bounded(record) }
-  })
-  writeJson(join(runDir, HISTORY_FILE), history)
-  return {
-    ...baseInput(runDir, run.meta, 'verify'), round: decisions.rounds.verify + 1, architecture_md: architectureOf(runDir), items,
+  const shared = {
+    ...baseInput(runDir, run.meta, 'verify'), round: decisions.rounds.verify + 1, architecture_md: architectureOf(runDir),
     parts: { phase5: blockText(PHASE5), localBoundaries: blockText(LOCAL_BOUNDARIES), recordContract: p.recordContract.text, schema_confirmed: p.schema_confirmed.text, schema_needs_validation: p.schema_needs_validation.text, schema_rejected: p.schema_rejected.text },
   }
+  let history = historyOf(runDir)
+  const items = []
+  let size = encodedSize({ ...shared, items: [] })
+  for (const e of funded) {
+    const slot = slotOf(e)
+    const id = idOf(e)
+    // A replacement's verifier is given the replacement and nothing else: not the reason its proposer gave, not the record it replaces, not the Phase 3 decision.
+    const record = subjectOf(e)
+    const item = { agent_id: id, fingerprint: e.fingerprint, kind: slot, verdict: record.verdict, record: bounded(record) }
+    if (items.length && size + encodedSize(item) > MAX_VERIFY_BYTES) break   // the rest wait for the next round
+    size += encodedSize(item)
+    history = recordAgent(history, e.fingerprint, slot === 'phase5' ? 'verifier' : 'replacer', id)
+    items.push(item)
+  }
+  writeJson(join(runDir, HISTORY_FILE), history)
+  return { ...shared, items }
 }
 
 // What a Phase 5 verifier returned for the record it was given, judged: { verified: true }, { replace: record, material: [fields], reason }, or { kind, problems } to discard.

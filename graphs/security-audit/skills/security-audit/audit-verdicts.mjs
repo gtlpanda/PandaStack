@@ -10,7 +10,7 @@
 import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import { CARRIED, LEDGER_FAILED, REASONS, advanceState, appendEvent, markIncomplete, readJson, recordSpend, refuse, writeJson } from './audit-run.mjs'
-import { commitLedger, loadPriors } from './audit-ledger.mjs'
+import { MAX_CANDIDATE_BYTES, commitLedger, loadPriors } from './audit-ledger.mjs'
 import { CLIP, architectureOf, baseInput, blockText, clipText, clipValue, encodedSize } from './audit-inputs.mjs'
 import { CANDIDATES_FILE, CONFIRMED_WITHOUT_EVIDENCE, HISTORY_FILE, MAX_TRIES, VERDICTS, agentId, decisionsOf, ensureDecisions, entryOf, historyOf, readPool, recordAgent, recordProblems, saveDecisions, transitionProblem } from './audit-findings.mjs'
 import { companions, parts } from './blocks.mjs'
@@ -157,12 +157,13 @@ const LOCAL_BOUNDARIES = 'HUNTING.md#Local validation boundaries'
 // What one validate input may be once written into a script. The script itself (the workflow and the parts it carries) is about 80 KB of the 524,288 the Workflow tool allows,
 // so candidates go in batches: the rest stay pending and the next round runs them.
 export const MAX_VALIDATE_BYTES = 380_000
-const MAX_RECORD_BYTES = 64 * 1024   // one record in a verifier's input: a pool record is bounded already (merge-wave); a carried prior record is not
-const MAX_CHECKS = 20
+// What one candidate's input may hold, so that the first of a batch always fits one script (the ceiling is 524,288 bytes and the script itself is about 110 KB): the record is at most
+// MAX_CANDIDATE_BYTES (a pool record is bounded by merge-wave; a carried prior record is not), at most 10 checks of 10 paths and 600 characters each, at most 2 prior records of 32 KiB.
+const MAX_CHECKS = 10, MAX_PRIORS = 2, MAX_PRIOR_BYTES = 32 * 1024
 const clipTo = (v, n) => (typeof v === 'string' && v.length > n ? `${v.slice(0, n)}…` : v)
 
 // The value as it is when it fits `max` bytes, and else its clipped form marked truncated.
-export function bounded(value, max = MAX_RECORD_BYTES) {
+export function bounded(value, max = MAX_CANDIDATE_BYTES) {
   return Buffer.byteLength(JSON.stringify(value)) <= max ? value : { truncated: true, ...clipValue(value) }
 }
 
@@ -173,7 +174,7 @@ function checksOf(ledger, entry) {
   const checks = []
   for (const u of ledger.filter(x => mine.has(x.coverage_id))) {
     const evidence = [...(u.status === 'candidate' && u.result_fingerprints.includes(entry.fingerprint) ? u.local_checks : []), ...u.attempts.filter(a => a.result_fingerprints.includes(entry.fingerprint)).flatMap(a => a.local_checks)]
-    for (const c of evidence) checks.push({ reviewed_paths: (c.reviewed_paths ?? []).slice(0, CLIP.list).map(p => clipTo(p, 300)), invariant: clipTo(c.invariant, 1000), method: c.method, result: clipTo(c.result, 1000), artifact: c.artifact })
+    for (const c of evidence) checks.push({ reviewed_paths: (c.reviewed_paths ?? []).slice(0, 10).map(p => clipTo(p, 200)), invariant: clipTo(c.invariant, 600), method: c.method, result: clipTo(c.result, 600), artifact: c.artifact })
   }
   return checks.slice(0, MAX_CHECKS)
 }
@@ -292,7 +293,7 @@ export function validateInput(runDir, run) {
     const refs = validationRefsOf(run.ledger, c)
     const item = {
       agent_id: made.id, fingerprint: e.fingerprint, proposed_verdict: e.proposed_verdict, record: bounded(c.record), checks: checksOf(run.ledger, c), blocks: refs,
-      priors: priors.filter(pr => pr.records.has(e.fingerprint)).map(pr => ({ run_id: pr.run_id, record: bounded(pr.records.get(e.fingerprint)) })),
+      priors: priors.filter(pr => pr.records.has(e.fingerprint)).slice(0, MAX_PRIORS).map(pr => ({ run_id: pr.run_id, record: bounded(pr.records.get(e.fingerprint), MAX_PRIOR_BYTES) })),
       ...(e.attempts.at(-1)?.kind === 'confirmed' && { feedback: { attempt: e.attempts.length + 1, of: MAX_TRIES, problems: [`The previous verifier returned decision confirmed for this candidate. ${transitionProblem(e.proposed_verdict, 'confirmed')}.`] } }),
     }
     const cost = encodedSize(item) + refs.filter(r => !(r in blocks)).reduce((n, r) => n + blockText(r).length * 2, 0)

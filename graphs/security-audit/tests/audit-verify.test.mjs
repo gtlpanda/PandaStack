@@ -2,15 +2,16 @@
 // independent verifier, every result judged by the real vendored validator, a record that cannot be settled removed with the run incomplete, the budget, the crash window, and the
 // run ending complete only through complete-check. The workflow side is in security-audit-verdicts.test.mjs.
 import { join } from 'node:path'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, statSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
-import { judgeVerifier, verifyInput } from '../skills/security-audit/audit-verify.mjs'
+import { MAX_VERIFY_BYTES, judgeVerifier, verifyInput } from '../skills/security-audit/audit-verify.mjs'
 import { completeProblems, decisionsOf, linkCheck, readPool, writeFindings } from '../skills/security-audit/audit-findings.mjs'
 import { loadRun, markIncomplete, recordSpend } from '../skills/security-audit/audit-run.mjs'
 import { parts, resolve as block } from '../skills/security-audit/blocks.mjs'
 import { audit, meta } from './audit-fixtures.mjs'
 import { confirmedRecord, ledgerBytes, ledgerValid, readJsonFile, readLedger } from './ledger-fixtures.mjs'
+import { MAX_SCRIPT_BYTES } from '../skills/security-audit/audit-stage.mjs'
 import { fuzzApply, returnedFile, runScript, snapshot, stage, stageDirOf, stageDirs } from './stage-fixtures.mjs'
 import { FILES } from './stage-fixtures.mjs'
 import { validateFindingsFile, validateLedgerFile } from '../skills/security-audit/upstream.mjs'
@@ -250,6 +251,33 @@ await test('judgeVerifier: verified, a non-material and a material replacement a
   }
 })
 
+console.log('== the size of a round')
+await test('records go to Phase 5 in batches that fit one script: the first round takes what fits, the rest wait pending and run next round, and no script is over the ceiling', async () => {
+  const defs = Array.from({ length: 12 }, (_, i) => ({ name: `n${i}`, candidates: [`fp-${String(i).padStart(2, '0')}`] }))
+  const run = await atVerify(defs, undefined, (l, c) => verified(c.fingerprint, { description: 'd'.repeat(60_000) }))
+  const sizes = []
+  while (next(run.runDir) === 'NEXT: verify run=workflow') {
+    const res = await verifyRound(run.runDir, (l, item) => passed(item))
+    assert.equal(res.apply.status, 0, res.apply.stdout)
+    sizes.push([res.input.items.length, statSync(join(res.dir, 'run.js')).size])
+    assert.ok(sizes.length <= 6)
+  }
+  assert.ok(sizes.length >= 2, `more than one round: ${JSON.stringify(sizes)}`)
+  assert.equal(sizes.reduce((n, [c]) => n + c, 0), 12)
+  for (const [, bytes] of sizes) assert.ok(bytes < MAX_SCRIPT_BYTES, `${bytes} is under the guard`)
+  assert.ok(MAX_VERIFY_BYTES < MAX_SCRIPT_BYTES)
+  assert.deepEqual(decisions(run.runDir).entries.map(e => e.phase5.state), Array(12).fill('verified'))
+  assert.equal(meta(run.runDir).run_status, 'complete')
+  ok(run.runDir)
+})
+await test('a replacement of megabytes is discarded like any malformed result, so it is never applied and never written', async () => {
+  const run = await atVerify(TWO)
+  const r1 = await verifyRound(run.runDir, (l, item) => (item.fingerprint === 'fp-a' ? replaced(item, { description: 'd'.repeat(6_000_000) }) : passed(item)))
+  assert.equal(r1.apply.status, 0, r1.apply.stdout)
+  const e = entry(run.runDir, 'fp-a')
+  assert.deepEqual([e.phase5.state, e.phase5.attempts.map(a => a.kind), e.phase5.replacement], ['pending', ['malformed'], null])
+  assert.match(e.phase5.attempts[0].problems[0], /over the 65536 a record may hold/)
+})
 console.log('== the budget')
 await test('records the budget cannot fund a Phase 5 verifier for are removed in fingerprint order with upstream\'s reason, the run is incomplete, and findings.json says so', async () => {
   const run = await atVerify([...TWO, { name: 'c', candidates: ['fp-c'] }], { args: ['--budget', '40'] })

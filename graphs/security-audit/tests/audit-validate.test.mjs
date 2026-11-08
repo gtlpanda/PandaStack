@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import { readFileSync, statSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
+import { commitLedger } from '../skills/security-audit/audit-ledger.mjs'
+import { encodedSize } from '../skills/security-audit/audit-inputs.mjs'
 import { MAX_VALIDATE_BYTES, bounded, judgeValidator, validateInput } from '../skills/security-audit/audit-verdicts.mjs'
 import { agentId, writeFindings } from '../skills/security-audit/audit-findings.mjs'
 import { MAX_SCRIPT_BYTES } from '../skills/security-audit/audit-stage.mjs'
@@ -18,6 +20,7 @@ import { decisions, good, history, next, pool, rejected, round, toValidate, unit
 
 const AI = companions().find(c => c.file === 'AI-AND-LLM.md')
 const ok = runDir => { assert.ok(ledgerValid(runDir), 'upstream\'s validator passes the ledger'); assert.equal(audit(['check', runDir]).last, `AUDIT: OK ${runDir} passes check`) }
+const TWO_DEFS = () => [{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }]
 const entry = (runDir, fp) => decisions(runDir).entries.find(e => e.fingerprint === fp)
 
 console.log('== what a verifier is sent')
@@ -80,6 +83,18 @@ await test('a verifier never sees another verifier\'s result: the second candida
   const res = await round(run.runDir, (label, c) => verified(c.fingerprint, { title: `DECIDED-TITLE-${c.fingerprint}`, blockers: [`DECIDED-BLOCKER-${c.fingerprint}`] }))
   for (const [label, prompt] of Object.entries(res.prompts)) assert.ok(!/DECIDED-/.test(prompt), label)
   assert.equal(entry(run.runDir, 'fp-a').record.title, 'DECIDED-TITLE-fp-a')
+})
+await test('one candidate\'s input is bounded whatever a hunter wrote: at most 10 checks of 10 paths and 600 characters, at most 2 prior records, so the first of a batch always fits one script', () => {
+  const run = toValidate([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }])
+  const ledger = readLedger(run.runDir)
+  const a = ledger.find(u => u.result_fingerprints.includes('fp-a'))
+  a.local_checks = Array.from({ length: 30 }, (_, i) => ({ agent_id: a.agent_id, reviewed_paths: ['src/app.js'], invariant: `i${i} ${'i'.repeat(3000)}`, method: 'source', result: `r${i} ${'r'.repeat(3000)}`, artifact: null }))
+  commitLedger(run.runDir, ledger)
+  const input = validateInput(run.runDir, loadRun(run.runDir))
+  const [c] = input.candidates
+  assert.equal(c.checks.length, 10)
+  assert.ok(c.checks.every(k => k.invariant.length <= 601 && k.result.length <= 601))
+  assert.ok(encodedSize(c) < 150_000, `${encodedSize(c)} bytes`)
 })
 await test('a record in a prompt is bounded: one over 64 KiB is cut and says so, one under is sent whole; a prior record of the same fingerprint reaches the verifier', () => {
   assert.deepEqual(bounded({ a: 'x'.repeat(100) }, 1000), { a: 'x'.repeat(100) })
@@ -186,6 +201,15 @@ await test('every kind of bad result is discarded without repair, the candidate 
     assert.deepEqual(history(run.runDir).fingerprints['fp-a'].filter(h => h.role === 'validator').map(h => h.id), ['v01', 'v01-t2'], name)
     ok(run.runDir)
   }
+})
+await test('a verifier that returns a record of megabytes is discarded like any malformed result: it cannot sink findings.json for every other finding', async () => {
+  const run = toValidate(TWO_DEFS())
+  const res = await round(run.runDir, (l, c) => (c.fingerprint === 'fp-a' ? verified(c.fingerprint, { description: 'd'.repeat(6_000_000) }) : good(c)))
+  assert.equal(res.apply.status, 0, res.apply.stdout)
+  const e = entry(run.runDir, 'fp-a')
+  assert.deepEqual([e.state, e.attempts.map(a => a.kind)], ['pending', ['malformed']])
+  assert.match(e.attempts[0].problems[0], /^the record is \d+ bytes, over the 65536 a record may hold$/)
+  assert.ok(readFileSync(join(run.runDir, 'decisions.json')).length < 200_000, 'decisions.json holds none of it')
 })
 await test('a retry that succeeds is the candidate\'s decision, made by the fresh verifier; the first result is kept only as a discarded attempt; a refused confirmed is retried with the parent\'s note, a malformed one without', async () => {
   for (const [name, make, kind] of [BAD[3], BAD[17]].map(([n, m, k]) => [n, m, k])) {

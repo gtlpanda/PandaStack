@@ -216,6 +216,13 @@ await test('the fingerprint and the verdict the record must have are checked, an
   assert.deepEqual(recordProblems(runDir, confirmed), ['the record is confirmed, and no bounded observed local result can exist in this audit'])
   assert.deepEqual(recordProblems(runDir, rejectedRecord('fp-r'), { fingerprint: 'fp-r', verdict: 'rejected' }), [])
 })
+await test('a record is bounded to what a candidate may be: one over 64 KiB is refused before the validator reads it, so no verifier can write megabytes into decisions.json and findings.json', () => {
+  assert.deepEqual(recordProblems(runDir, nv({ description: 'd'.repeat(30_000) })), [], 'a large record under the bound is fine')
+  const huge = recordProblems(runDir, nv({ description: 'd'.repeat(6_000_000) }))
+  assert.match(huge[0], /^the record is \d+ bytes, over the 65536 a record may hold$/)
+  assert.equal(huge.length, 1)
+  assert.match(recordProblems(runDir, nv({ blockers: Array.from({ length: 2000 }, (_, i) => `blocker ${i} ${'b'.repeat(40)}`) }))[0], /over the 65536 a record may hold/)
+})
 await test('every trace and evidence file must be a regular file of the snapshot and every line within it; a directory, a missing file and a line past the end are named', () => {
   const at = (file, line) => nv({ trace: [{ kind: 'sink', file, line, scope: 'a', description: 'x' }], evidence: [{ file: 'src/app.js', line: 1, description: 'e' }] })
   assert.deepEqual(recordProblems(runDir, at('src/app.js', 1)), [])
