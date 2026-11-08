@@ -36,10 +36,12 @@ export const MAX_SCRIPT_BYTES = 500_000
 export const RECON_IDS = ['1a', '1b', '1c', '1d']
 // What one researcher may contribute. A hostile target can make an agent write without end; a stage input is a script, and a script
 // has a size (above). Over a limit, the item is dropped and logged, never truncated.
-// agentChars is the one that bounds the script: facts reach the run script through run-script.mjs, which encodes them twice, so a hostile
-// text of quotes costs up to four bytes a character. Measured: the largest synthesize script this allows (every researcher at the limit,
-// all quotes and backslashes) is 332,892 bytes; a real recon of a 9-file target was 67,259.
-export const FACT_LIMITS = { items: 200, itemChars: 2000, refs: 50, limits: 50, limitChars: 2000, agentChars: 20_000 }
+// agentBytes is the one that bounds the script, and it counts what the script holds: facts reach the run script through run-script.mjs,
+// which writes JSON.stringify(JSON.stringify(input)), so a control character costs seven bytes and a quote four. 4 researchers x 75,000
+// + the synthesizer's 67,000-byte base stays under MAX_SCRIPT_BYTES whatever the text (tested with quotes, backslashes, control
+// characters and lone surrogates; measured worst: 337,644 bytes for text of plain letters, 332,892 for quotes, 324,188 for control characters).
+export const FACT_LIMITS = { items: 200, itemChars: 2000, refs: 50, refChars: 300, limits: 50, limitChars: 2000, agentBytes: 75_000 }
+const encodedSize = v => JSON.stringify(JSON.stringify(v)).length
 const MAX_LINE_COUNT_BYTES = 16 * 1024 * 1024
 const MAX_DROPPED_LISTED = 200
 const isObj = v => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -74,6 +76,7 @@ function lineCount(tree, rel, cache) {
 // a range, both ends) the file has.
 export function refProblem(ref, tree, cache = new Map()) {
   if (typeof ref !== 'string') return `a reference must be a string, not ${show(ref)}`
+  if (ref.length > FACT_LIMITS.refChars) return `a reference is longer than ${FACT_LIMITS.refChars} characters (${ref.length})`   // before anything reads it
   const m = REF.exec(ref)
   if (!m) return `${show(ref)} is not path:line or path:first-last`
   const [, path, a, b] = m
@@ -81,8 +84,8 @@ export function refProblem(ref, tree, cache = new Map()) {
   if (!isSafeRelativePath(path)) return `${show(path)} is not a safe repository-relative path`
   if (last < first) return `${show(ref)} is a range that runs backwards`
   const c = lineCount(tree, path, cache)
-  if (c.error) return `${path} ${c.error}`
-  if (last > c.lines) return `${path} has ${c.lines} line(s); ${show(ref)} reaches line ${last}`
+  if (c.error) return `${show(path)} ${c.error}`
+  if (last > c.lines) return `${show(path)} has ${c.lines} line(s); ${show(ref)} reaches line ${last}`
   return null
 }
 
@@ -96,8 +99,8 @@ export function checkFacts(tree, facts) {
   const kept = facts.map(f => {
     if (!Array.isArray(f.items) || !Array.isArray(f.limits)) refuse(`results.facts[${f.agent}] needs items and limits arrays`)
     const items = [], limits = []
-    let used = 0   // characters this researcher has contributed so far, items and limits together
-    const over = chars => used + chars > FACT_LIMITS.agentChars
+    let used = 0   // encoded bytes this researcher has contributed so far, items and limits together
+    const over = bytes => used + bytes > FACT_LIMITS.agentBytes
     f.items.forEach(item => {
       if (!isObj(item) || typeof item.text !== 'string' || !Array.isArray(item.refs)) return drop(f.agent, 'item', 'is not {text, refs: [string]}', item)
       if (!isText(item.text)) return drop(f.agent, 'item', 'has no text', item.text)
@@ -107,15 +110,15 @@ export function checkFacts(tree, facts) {
       if (item.refs.length > FACT_LIMITS.refs) return drop(f.agent, 'item', `has more than ${FACT_LIMITS.refs} references`, item.text)
       const bad = item.refs.map(r => refProblem(r, tree, cache)).find(Boolean)
       if (bad) return drop(f.agent, 'item', `has a reference that does not hold: ${bad}`, item.text)
-      const chars = item.text.length + item.refs.reduce((n, r) => n + r.length, 0)
-      if (over(chars)) return drop(f.agent, 'item', `is past this researcher's ${FACT_LIMITS.agentChars}-character limit`, item.text)
-      used += chars
+      const bytes = encodedSize(item)
+      if (over(bytes)) return drop(f.agent, 'item', `is past this researcher's ${FACT_LIMITS.agentBytes}-byte limit`, item.text)
+      used += bytes
       items.push({ text: item.text, refs: item.refs })
     })
     for (const l of f.limits) {
       if (!isText(l) || l.length > FACT_LIMITS.limitChars || limits.length >= FACT_LIMITS.limits) drop(f.agent, 'limit', `is not text of 1 to ${FACT_LIMITS.limitChars} characters, or is over the ${FACT_LIMITS.limits}-limit cap`, l)
-      else if (over(l.length)) drop(f.agent, 'limit', `is past this researcher's ${FACT_LIMITS.agentChars}-character limit`, l)
-      else { used += l.length; limits.push(l) }
+      else if (over(encodedSize(l))) drop(f.agent, 'limit', `is past this researcher's ${FACT_LIMITS.agentBytes}-byte limit`, l)
+      else { used += encodedSize(l); limits.push(l) }
     }
     return { agent: f.agent, items, limits }
   })
@@ -203,7 +206,7 @@ export function planStage(runDir) {
   const bytes = statSync(script).size
   if (bytes > MAX_SCRIPT_BYTES) {
     rmSync(script)
-    refuse(`the run script would be ${bytes} bytes; the Workflow tool refuses a script file over 524288 bytes and this version stops at ${MAX_SCRIPT_BYTES} (input: ${statSync(input).size} bytes)`)
+    refuse(`the run script would be ${bytes} bytes; the Workflow tool refuses a script file over 524288 bytes and this version stops at ${MAX_SCRIPT_BYTES} (input: ${statSync(input).size} bytes). If the facts are the cause, delete recon-facts.json and plan again to run the facts part afresh`)
   }
   appendEvent(runDir, { cmd: 'plan', stage: 'recon', result: 'ok', duration_ms: Date.now() - started, part, stage_dir: stage.name, script_bytes: bytes })
   return { part, stage, script, bytes, returned: join(stage.dir, 'returned.json') }
