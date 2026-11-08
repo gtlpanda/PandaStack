@@ -7,7 +7,14 @@
   "pinnedOn": "2026-11-07",
   "skillsTree": "ccbc33ed119b28c3ef7b44a7e2081ab191ad63af",
   "license": { "spdx": "MIT", "file": "LICENSE", "copyright": "Copyright (c) 2025-2026 Cloudflare, Inc." },
-  "vendoredBy": "PandaStack security-audit PR 1: git archive of LICENSE, README.md and skills/security-audit at the commit above; no file edited. Hashes below come from git ls-tree at that commit, not from these copies.",
+  "vendored": {
+    "note": "Every file in the upstream repo at this commit: LICENSE, README.md, and the whole of skills/security-audit/.",
+    "totalFiles": 22,
+    "totalBytes": 322698,
+    "skillFiles": 20,
+    "skillBytes": 314670
+  },
+  "vendoredBy": "PandaStack security-audit PR 1: git archive of LICENSE, README.md and skills/security-audit at the commit above; no file edited. The hashes below come from git ls-tree at that commit, not from these copies.",
   "files": {
     "LICENSE": { "blob": "6dbc9ecb3a5b9080e95b962869e8c7ab16cfdc20", "size": 1078, "mode": "100644" },
     "README.md": { "blob": "c80305c88cd5087db37f76a0d230c1fc092c864c", "size": 6950, "mode": "100644" },

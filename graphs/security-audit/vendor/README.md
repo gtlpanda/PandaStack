@@ -5,6 +5,12 @@ copied byte for byte. Copyright (c) 2025-2026 Cloudflare, Inc., MIT licensed. Th
 in `cloudflare-security-audit/LICENSE` and the credit is repeated here, as the license requires.
 PandaStack wraps this work and does not claim it.
 
+## What is vendored, exactly
+
+22 files, 322,698 bytes: `LICENSE` (1,078), `README.md` (6,950), and the 20 files (314,670 bytes) of
+`skills/security-audit/`. That is every file the upstream repo has at the pinned commit. `UPSTREAM.json`
+is ours and is not counted: it sits in the same directory and holds the pin.
+
 ## The pin
 
 `cloudflare-security-audit/UPSTREAM.json` records the repo, the commit, the commit date, the day it
