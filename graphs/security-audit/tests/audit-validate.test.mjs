@@ -10,7 +10,7 @@ import { agentId, writeFindings } from '../skills/security-audit/audit-findings.
 import { MAX_SCRIPT_BYTES } from '../skills/security-audit/audit-stage.mjs'
 import { advanceState, loadRun, recordSpend } from '../skills/security-audit/audit-run.mjs'
 import { canonicalCoverageId } from '../skills/security-audit/upstream.mjs'
-import { companions, resolve as block } from '../skills/security-audit/blocks.mjs'
+import { companions, parts, resolve as block } from '../skills/security-audit/blocks.mjs'
 import { audit, meta } from './audit-fixtures.mjs'
 import { confirmedRecord, ledgerBytes, ledgerValid, needsValidationRecord, priorRun, priorUnit, readJsonFile, readLedger, refsOf, rejectedRecord, unitInput } from './ledger-fixtures.mjs'
 import { fuzzApply, returnedFile, runScript, snapshot, stage, stageDirOf, stageDirs } from './stage-fixtures.mjs'
@@ -37,7 +37,8 @@ await test('each candidate is one input entry: its record, its linked checks wit
   assert.deepEqual(Object.keys(input.blocks), [AI.validation])
   assert.equal(input.blocks[AI.validation], block(AI.validation).text)
   assert.ok(!JSON.stringify(input).includes('HARDENING-NOTE') && !JSON.stringify(input).includes(run.owners.a) && !JSON.stringify(input).includes(run.owners.b), 'no hardening note, no hunter ID')
-  for (const k of ['verifierPrompt', 'verifierPromotion', 'localBoundaries', 'schema_confirmed', 'schema_needs_validation', 'schema_rejected']) assert.equal(typeof input.parts[k], 'string', k)
+  for (const k of ['verifierPrompt', 'verifierPromotion', 'localBoundaries', 'recordContract', 'schema_confirmed', 'schema_needs_validation', 'schema_rejected']) assert.equal(typeof input.parts[k], 'string', k)
+  assert.equal(input.parts.recordContract, parts().recordContract.text)
   assert.deepEqual(validateInput(run.runDir, loadRun(run.runDir)), input, 'the same state gives the same input and IDs')
 })
 await test('planning numbers the candidates for life and records, for each, its hunters and its verifier in the independence history', () => {

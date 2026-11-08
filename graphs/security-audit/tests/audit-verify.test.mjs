@@ -42,7 +42,7 @@ await test('one item per retained confirmed or needs_validation record, with the
   assert.ok(!text.includes(run.owners.a), 'no hunter ID')
   assert.equal(input.parts.phase5, block('VALIDATION-AND-REPORTING.md#Phase 5: Verify the final records with fresh eyes').text)
   assert.equal(input.parts.localBoundaries, block('HUNTING.md#Local validation boundaries').text)
-  for (const k of ['schema_confirmed', 'schema_needs_validation', 'schema_rejected']) assert.equal(input.parts[k], P[k].text)
+  for (const k of ['recordContract', 'schema_confirmed', 'schema_needs_validation', 'schema_rejected']) assert.equal(input.parts[k], P[k].text)
   assert.deepEqual(entry(run.runDir, 'fp-a').phase5.state, 'pending')
   assert.deepEqual(roles(run.runDir, 'fp-a'), [`hunter:${run.owners.a}`, 'validator:v01', 'verifier:r01'])
   assert.deepEqual(verifyInput(run.runDir, loadRun(run.runDir)), input, 'the same state gives the same input and IDs')

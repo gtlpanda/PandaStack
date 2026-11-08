@@ -74,7 +74,7 @@ export function verifyInput(runDir, run) {
   writeJson(join(runDir, HISTORY_FILE), history)
   return {
     ...baseInput(runDir, run.meta, 'verify'), round: decisions.rounds.verify + 1, architecture_md: architectureOf(runDir), items,
-    parts: { phase5: blockText(PHASE5), localBoundaries: blockText(LOCAL_BOUNDARIES), schema_confirmed: p.schema_confirmed.text, schema_needs_validation: p.schema_needs_validation.text, schema_rejected: p.schema_rejected.text },
+    parts: { phase5: blockText(PHASE5), localBoundaries: blockText(LOCAL_BOUNDARIES), recordContract: p.recordContract.text, schema_confirmed: p.schema_confirmed.text, schema_needs_validation: p.schema_needs_validation.text, schema_rejected: p.schema_rejected.text },
   }
 }
 

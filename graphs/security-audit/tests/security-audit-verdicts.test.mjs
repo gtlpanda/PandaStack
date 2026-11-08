@@ -71,7 +71,7 @@ console.log('== verdicts: validate')
 const AI = companions().find(c => c.file === 'AI-AND-LLM.md')
 const REC = (fp, over = {}) => ({ fingerprint: fp, title: `Title ${fp}`, description: `Description ${fp}`, claimed_root_cause: `Root ${fp}`, trace: [{ kind: 'sink', file: 'src/app.js', line: 1, scope: 'a', description: 'x' }], evidence: [{ file: 'src/app.js', line: 1, description: 'e' }], blockers: ['no sandbox'], validation_plan: { local: 'l' }, ...over })
 const VCAND = (n, over = {}) => ({ agent_id: `v${String(n).padStart(2, '0')}`, fingerprint: `fp-${n}`, proposed_verdict: 'needs_validation', record: REC(`fp-${n}`), checks: [{ reviewed_paths: ['src/app.js'], invariant: `invariant ${n}`, method: 'source', result: `result ${n}`, artifact: null }], blocks: [], priors: [], ...over })
-const VAL_PARTS = () => ({ verifierPrompt: P.verifierPrompt.text, verifierPromotion: P.verifierPromotion.text, localBoundaries: block('HUNTING.md#Local validation boundaries').text, schema_confirmed: P.schema_confirmed.text, schema_needs_validation: P.schema_needs_validation.text, schema_rejected: P.schema_rejected.text })
+const VAL_PARTS = () => ({ verifierPrompt: P.verifierPrompt.text, verifierPromotion: P.verifierPromotion.text, localBoundaries: block('HUNTING.md#Local validation boundaries').text, recordContract: P.recordContract.text, schema_confirmed: P.schema_confirmed.text, schema_needs_validation: P.schema_needs_validation.text, schema_rejected: P.schema_rejected.text })
 const VAL_INPUT = (candidates = [VCAND(1), VCAND(2)], extra = {}) => ({ stage: 'validate', part: 'validate', round: 1, tree: TREE, maxParallel: 8, execution: EXEC, architecture_md: 'The fixture app.', blocks: {}, candidates, parts: VAL_PARTS(), ...extra })
 const VERDICT = c => ({ decision: 'needs_validation', record: { verdict: 'needs_validation', ...REC(c.fingerprint) } })
 // One answer per verifier, by the label of the call (the order a pool calls them in is not the contract).
@@ -91,7 +91,7 @@ await test('the verifier prompt has the method\'s verifier prompt, the promotion
   const c = VCAND(7, { blocks: [AI.validation], priors: [{ run_id: 'run-3', record: REC('fp-7', { title: 'Earlier title' }) }] })
   const { calls } = await go({ 'audit-analyst': verifiersBy([c]) }, VAL_INPUT([c], { blocks: { [AI.validation]: block(AI.validation).text } }))
   const prompt = calls[0].prompt
-  const heads = ['## 1. Your task', '## 2. What this audit can execute', '## 3. The promotion procedure', '## 4. The source/local execution boundary', '## 5. architecture.md', '## 6. The candidate', '## 7. The linked coverage-unit checks', '## 8. The companion validation rules', '## 9. Records of the same fingerprint', '## 10. The report schema']
+  const heads = ['## 1. Your task', '## 2. What this audit can execute', '## 3. The promotion procedure', '## 4. The source/local execution boundary', '## 5. architecture.md', '## 6. The candidate', '## 7. The linked coverage-unit checks', '## 8. The companion validation rules', '## 9. Records of the same fingerprint', '## 10. The record contracts and the report schema']
   const at = heads.map(h => prompt.indexOf(h))
   assert.ok(at.every(i => i >= 0), `every part is there: ${at}`)
   assert.deepEqual([...at].sort((a, b) => a - b), at, 'in order')
@@ -107,6 +107,8 @@ await test('the verifier prompt has the method\'s verifier prompt, the promotion
   assert.ok(part(7).includes('"invariant": "invariant 7"') && part(7).includes('"result": "result 7"'))
   assert.ok(part(8).includes(block(AI.validation).text), 'the validation block of the companion the unit selected, whole')
   assert.ok(part(9).includes('Earlier title') && part(9).includes('run-3'))
+  assert.ok(part(10).includes(P.recordContract.text) && part(10).indexOf(P.recordContract.text) < part(10).indexOf(P.schema_confirmed.text), 'the record contracts verbatim, before the schema')
+  assert.match(part(10), /A trace has one path: one entrypoint, the propagation steps, and one sink at its end/)
   assert.ok(part(10).includes(P.schema_confirmed.text) && part(10).includes(P.schema_needs_validation.text) && part(10).includes(P.schema_rejected.text))
   assert.ok(part(10).indexOf(P.schema_confirmed.text) < part(10).indexOf(P.schema_needs_validation.text) && part(10).indexOf(P.schema_needs_validation.text) < part(10).indexOf(P.schema_rejected.text))
   assert.ok(prompt.includes(JSON.stringify(TREE)) && prompt.includes('Execution capability for this run: none.'))
@@ -184,7 +186,7 @@ await test('a validate input that is not what audit-verdicts.mjs writes escalate
   const badId = id => VAL_INPUT([VCAND(1, { agent_id: id })])
   const cases = [
     [{ ...ok, round: 0 }, /args\.round must be the round number/], [{ ...ok, round: '1' }, /args\.round/], [{ ...ok, architecture_md: ' ' }, /args\.architecture_md/], [{ ...ok, blocks: null }, /args\.blocks must map/], [{ ...ok, blocks: { x: 5 } }, /args\.blocks must map/],
-    [noPart('verifierPrompt'), /parts\.verifierPrompt must be non-empty text/], [noPart('verifierPromotion'), /parts\.verifierPromotion/], [noPart('localBoundaries'), /parts\.localBoundaries/], [noPart('schema_confirmed'), /parts\.schema_confirmed/], [noPart('schema_needs_validation'), /parts\.schema_needs_validation/], [noPart('schema_rejected'), /parts\.schema_rejected/],
+    [noPart('verifierPrompt'), /parts\.verifierPrompt must be non-empty text/], [noPart('verifierPromotion'), /parts\.verifierPromotion/], [noPart('localBoundaries'), /parts\.localBoundaries/], [noPart('recordContract'), /parts\.recordContract/], [noPart('schema_confirmed'), /parts\.schema_confirmed/], [noPart('schema_needs_validation'), /parts\.schema_needs_validation/], [noPart('schema_rejected'), /parts\.schema_rejected/],
     [{ ...ok, candidates: [] }, /args\.candidates must be the verifiers/], [{ ...ok, candidates: null }, /args\.candidates/], [{ ...ok, candidates: ['v01'] }, /args\.candidates/],
     [withC({ fingerprint: '' }), /args\.candidates/], [withC({ proposed_verdict: 'rejected' }), /args\.candidates/], [withC({ proposed_verdict: 'confirmed-ish' }), /args\.candidates/], [withC({ record: [] }), /args\.candidates/], [withC({ record: null }), /args\.candidates/], [withC({ checks: null }), /args\.candidates/], [withC({ priors: {} }), /args\.candidates/],
     [withC({ blocks: [7] }), /args\.candidates/], [withC({ feedback: { attempt: 0 } }), /args\.candidates/], [withC({ feedback: { attempt: 2, of: 2, problems: [] } }), /args\.candidates/],
@@ -202,7 +204,7 @@ await test('a validate input that is not what audit-verdicts.mjs writes escalate
 
 console.log('== verdicts: verify')
 const ITEM = (id, over = {}) => ({ agent_id: id, fingerprint: `fp-${id.slice(1, 3)}`, kind: id.startsWith('r') ? 'phase5' : 'replacement', verdict: 'needs_validation', record: { verdict: 'needs_validation', ...REC(`fp-${id.slice(1, 3)}`) }, ...over })
-const VER_PARTS = () => ({ phase5: block('VALIDATION-AND-REPORTING.md#Phase 5: Verify the final records with fresh eyes').text, localBoundaries: block('HUNTING.md#Local validation boundaries').text, schema_confirmed: P.schema_confirmed.text, schema_needs_validation: P.schema_needs_validation.text, schema_rejected: P.schema_rejected.text })
+const VER_PARTS = () => ({ phase5: block('VALIDATION-AND-REPORTING.md#Phase 5: Verify the final records with fresh eyes').text, localBoundaries: block('HUNTING.md#Local validation boundaries').text, recordContract: P.recordContract.text, schema_confirmed: P.schema_confirmed.text, schema_needs_validation: P.schema_needs_validation.text, schema_rejected: P.schema_rejected.text })
 const VER_INPUT = (items = [ITEM('r01'), ITEM('r02')], extra = {}) => ({ stage: 'verify', part: 'verify', round: 1, tree: TREE, maxParallel: 8, execution: EXEC, architecture_md: 'The fixture app.', items, parts: VER_PARTS(), ...extra })
 const OK = it => ({ decision: 'verified', fingerprint: it.fingerprint })
 const researchersBy = (list, make = OK) => list.map(() => (p, opts) => make(list.find(i => i.agent_id === opts.label)))
@@ -222,11 +224,12 @@ await test('the Phase 5 prompt has the method\'s Phase 5 section, the execution 
   const prompt = id => calls.find(c => c.label === id).prompt
   for (const id of ['r01', 'x01']) {
     const text = prompt(id)
-    const heads = ['## 1. The method for this check', '## 2. What this audit can execute', '## 3. The source/local execution boundary', '## 4. architecture.md', '## 5. The record', '## 6. The report schema']
+    const heads = ['## 1. The method for this check', '## 2. What this audit can execute', '## 3. The source/local execution boundary', '## 4. architecture.md', '## 5. The record', '## 6. The record contracts and the report schema']
     const at = heads.map(h => text.indexOf(h))
     assert.ok(at.every(i => i >= 0) && [...at].sort((a, b) => a - b).join() === at.join(), `${id}: every part, in order`)
     assert.ok(text.includes(block('VALIDATION-AND-REPORTING.md#Phase 5: Verify the final records with fresh eyes').text), `${id}: the whole Phase 5 section`)
     assert.ok(text.includes(block('HUNTING.md#Local validation boundaries').text))
+    assert.ok(text.includes(P.recordContract.text), `${id}: the record contracts, verbatim`)
     assert.ok(text.includes(P.schema_confirmed.text) && text.includes(P.schema_needs_validation.text) && text.includes(P.schema_rejected.text))
     assert.ok(text.includes(JSON.stringify(TREE)) && text.includes('Execution capability for this run: none.'))
     assert.match(text, new RegExp(`\\{"decision": "verified", "fingerprint": "fp-0[12]"\\}`))
@@ -281,7 +284,7 @@ await test('a verify input that is not what audit-verify.mjs writes escalates an
   const withI = over => VER_INPUT([ITEM('r01', over)])
   const cases = [
     [{ ...ok, round: 0 }, /args\.round must be the round number/], [{ ...ok, architecture_md: '' }, /args\.architecture_md/],
-    [noPart('phase5'), /parts\.phase5 must be non-empty text/], [noPart('localBoundaries'), /parts\.localBoundaries/], [noPart('schema_confirmed'), /parts\.schema_confirmed/], [noPart('schema_needs_validation'), /parts\.schema_needs_validation/], [noPart('schema_rejected'), /parts\.schema_rejected/],
+    [noPart('phase5'), /parts\.phase5 must be non-empty text/], [noPart('localBoundaries'), /parts\.localBoundaries/], [noPart('recordContract'), /parts\.recordContract/], [noPart('schema_confirmed'), /parts\.schema_confirmed/], [noPart('schema_needs_validation'), /parts\.schema_needs_validation/], [noPart('schema_rejected'), /parts\.schema_rejected/],
     [{ ...ok, items: [] }, /args\.items must be the verifiers/], [{ ...ok, items: null }, /args\.items/], [{ ...ok, items: ['r01'] }, /args\.items/],
     [withI({ fingerprint: '' }), /args\.items/], [withI({ kind: 'both' }), /args\.items/], [withI({ verdict: 'maybe' }), /args\.items/], [withI({ record: [] }), /args\.items/], [withI({ record: null }), /args\.items/],
     [withI({ kind: 'replacement' }), /args\.items/], [VER_INPUT([ITEM('x01', { kind: 'phase5' })]), /args\.items/],

@@ -268,7 +268,7 @@ export function validateInput(runDir, run) {
   let history = before
   const shared = {
     ...baseInput(runDir, run.meta, 'validate'), round: decisions.rounds.validate + 1, architecture_md: architectureOf(runDir), blocks,
-    parts: { verifierPrompt: p.verifierPrompt.text, verifierPromotion: p.verifierPromotion.text, localBoundaries: blockText(LOCAL_BOUNDARIES), schema_confirmed: p.schema_confirmed.text, schema_needs_validation: p.schema_needs_validation.text, schema_rejected: p.schema_rejected.text },
+    parts: { verifierPrompt: p.verifierPrompt.text, verifierPromotion: p.verifierPromotion.text, localBoundaries: blockText(LOCAL_BOUNDARIES), recordContract: p.recordContract.text, schema_confirmed: p.schema_confirmed.text, schema_needs_validation: p.schema_needs_validation.text, schema_rejected: p.schema_rejected.text },
   }
   const priors = loadPriors(runDir)
   const candidates = []

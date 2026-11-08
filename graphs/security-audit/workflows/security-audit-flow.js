@@ -482,7 +482,10 @@ ${validationBlocks}
 ## 9. Records of the same fingerprint from earlier runs
 ${fenced('untrusted-prior-records', json(c.priors))}
 
-## 10. The report schema, verbatim
+## 10. The record contracts and the report schema, verbatim
+The parent holds your record to these, field by field, and discards a record that breaks one without repairing it. A trace has one path: one entrypoint, the propagation steps, and one sink at its end; a second path to the same root cause is another entry of evidence, never a second sink.
+${PARTS.recordContract}
+
 The confirmed branch of report-schema.json:
 ${PARTS.schema_confirmed}
 
@@ -527,7 +530,10 @@ ${fenced('untrusted-architecture', A.architecture_md)}
 ${what}
 ${fenced('untrusted-record', json(it.record))}
 
-## 6. The report schema, verbatim
+## 6. The record contracts and the report schema, verbatim
+The parent holds a replacement to these, field by field, and discards one that breaks one without repairing it. A trace has one path: one entrypoint, the propagation steps, and one sink at its end; a second path to the same root cause is another entry of evidence, never a second sink.
+${PARTS.recordContract}
+
 The confirmed branch of report-schema.json:
 ${PARTS.schema_confirmed}
 
@@ -672,7 +678,7 @@ async function consolidate() {
 }
 
 async function validate() {
-  const bad = requireParts(['verifierPrompt', 'verifierPromotion', 'localBoundaries', 'schema_confirmed', 'schema_needs_validation', 'schema_rejected'])
+  const bad = requireParts(['verifierPrompt', 'verifierPromotion', 'localBoundaries', 'recordContract', 'schema_confirmed', 'schema_needs_validation', 'schema_rejected'])
   if (bad) return finish('escalate', bad)
   if (!isInt1(A.round)) return finish('escalate', 'args.round must be the round number, an integer from 1')
   if (!isText(A.architecture_md)) return finish('escalate', 'args.architecture_md must be the text of architecture.md')
@@ -703,7 +709,7 @@ async function validate() {
 }
 
 async function verify() {
-  const bad = requireParts(['phase5', 'localBoundaries', 'schema_confirmed', 'schema_needs_validation', 'schema_rejected'])
+  const bad = requireParts(['phase5', 'localBoundaries', 'recordContract', 'schema_confirmed', 'schema_needs_validation', 'schema_rejected'])
   if (bad) return finish('escalate', bad)
   if (!isInt1(A.round)) return finish('escalate', 'args.round must be the round number, an integer from 1')
   if (!isText(A.architecture_md)) return finish('escalate', 'args.architecture_md must be the text of architecture.md')
