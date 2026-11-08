@@ -167,6 +167,24 @@ await test('the structured hunter result is the whole section, JSON and the rule
   assert.ok(r.text.includes('"disposition": "covered|candidate|blocked"'))
   assert.ok(r.text.split('\n').pop().startsWith('Every assigned coverage ID appears exactly once in `units`.'))
 })
+await test('the record contracts are lines 103 to 109 of the Phase 4 section, whole: from the sentence about the schema to the trace rule', () => {
+  const c = parts().recordContract
+  assert.deepEqual([c.startLine, c.endLine], [103, 109])
+  assertBytes('VALIDATION-AND-REPORTING.md', c)
+  assert.ok(c.text.startsWith('Read `report-schema.json` immediately before writing.'))
+  assert.ok(c.text.endsWith('Overall severity cannot exceed demonstrated impact.'))
+  assert.ok(c.text.includes('A multi-step trace begins with `entrypoint`, ends with `sink`, and uses `propagation` only between them. One-entry traces use `entrypoint` or `sink`.'))
+  assert.ok(c.text.includes('A `needs_validation` record uses `claimed_root_cause`') && !c.text.includes('Run:'), 'the contracts, not the commands after them')
+})
+await test('a drifted anchor of the record contracts fails by name, never as a shorter span', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'rc-'))
+  try {
+    cpSync(VENDOR_SKILL_DIR, dir, { recursive: true })
+    const file = join(dir, 'VALIDATION-AND-REPORTING.md')
+    writeFileSync(file, readFileSync(file, 'utf8').replace('Overall severity cannot exceed demonstrated impact.', 'Overall severity is capped.'))
+    assert.throws(() => parts(dir), /VALIDATION-AND-REPORTING\.md#Phase 4: Write and validate `findings\.json`: the span from "Read `report-schema\.json` immediately before writing\." to a line ending "Overall severity cannot exceed demonstrated impact\." is not there/)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
 await test('the promotion procedure is the same bytes in HUNTING.md and in the candidate-verifier section (upstream repeats it)', () => {
   const p = parts()
   assert.equal(p.promotion.text, p.verifierPromotion.text)

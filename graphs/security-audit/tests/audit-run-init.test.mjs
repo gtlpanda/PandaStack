@@ -9,6 +9,27 @@ import { appendEvent, advanceState, parseInitArgs, claimRunDir, nextRunNumber, S
 import { VENDOR_SKILL_DIR } from '../skills/security-audit/upstream.mjs'
 import { AUDIT_RUN, ENV, fresh, sh, put, FILES, mkRepo, init, runsOf, meta, listFiles } from './audit-fixtures.mjs'
 
+console.log('== init says what the audit is about to do')
+await test('init prints the three notes a session relays before any agent runs (what runs and its budget, that the agents only read a read-only snapshot, where the run lives and how it resumes), between the run directory and the AUDIT: OK line; a refused init prints none', () => {
+  const repo = mkRepo()
+  const r = init([repo, '--full'])
+  assert.equal(r.status, 0, r.stdout)
+  const lines = r.stdout.trim().split('\n')
+  assert.equal(lines[0], r.runDir)
+  const notes = lines.filter(l => l.startsWith('note: what runs') || l.startsWith('note: the agents can only') || l.startsWith('note: the run is '))
+  assert.equal(notes.length, 3, r.stdout)
+  assert.ok(lines.indexOf(notes[0]) < lines.indexOf(notes[1]) && lines.indexOf(notes[1]) < lines.indexOf(notes[2]) && lines.indexOf(notes[2]) === lines.length - 2, 'in order, the last just before AUDIT: OK')
+  assert.equal(notes[0], 'note: what runs: about one agent per coverage unit, then one or two verifiers per surviving lead; no budget is set, so nothing stops spend but you')
+  assert.equal(notes[1], `note: the agents can only read, search and list files in a read-only snapshot of the commit (${join(r.runDir, 'tree')}); no code of the target is executed and nothing in the repository is edited`)
+  assert.equal(notes[2], `note: the run is ${r.runDir}; it resumes from disk: audit-run.mjs next ${r.runDir}`)
+  assert.match(init([mkRepo(), '--full', '--budget', '40']).stdout, /^note: what runs: about one agent per coverage unit, then one or two verifiers per surviving lead; a budget of 40 agent invocations is set$/m)
+  const refused = init([mkRepo(), '--full', '--budget', '3'])
+  assert.equal(refused.status, 1)
+  assert.ok(!/note: what runs|note: the agents can only|note: the run is /.test(refused.stdout), 'a refused run launches nothing and says nothing of what it will do')
+  const notFull = init([mkRepo()])
+  assert.ok(!/note: what runs/.test(notFull.stdout + notFull.stderr))
+})
+
 console.log('== init: the gates')
 await test('init refuses without --full, says why, and creates nothing', () => {
   const repo = mkRepo()

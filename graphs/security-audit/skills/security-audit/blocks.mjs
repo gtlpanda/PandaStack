@@ -173,12 +173,27 @@ export function schemaBranch(verdict, dir = VENDOR_SKILL_DIR) {
   return { ref: `report-schema.json#${verdict}`, startLine: starts[i] + 1, endLine: ends[i] + 1, text: body }
 }
 
+// The record contracts of Phase 4: from "Read `report-schema.json` immediately before writing." to the line ending "Overall severity cannot exceed demonstrated impact."
+// What a record of each verdict may and must not carry, and the shape of a trace (it begins with an entrypoint, ends with a sink, and has a propagation only between). A
+// verifier is given these because the parent holds its record to them: the first live validate pass (retro entry 40) had a real verifier write two sinks in one trace,
+// twice, which the vendored validator refuses and the prompt had never said. Whole lines of the section found by their two anchors, so a drifted anchor fails by name.
+const CONTRACT = ['VALIDATION-AND-REPORTING.md#Phase 4: Write and validate `findings.json`', 'Read `report-schema.json` immediately before writing.', 'Overall severity cannot exceed demonstrated impact.']
+function span([ref, from, to], dir) {
+  const s = resolve(ref, dir)
+  const lines = s.text.split('\n')
+  const a = lines.findIndex(l => l.startsWith(from))
+  const b = lines.findIndex(l => l.endsWith(to))
+  if (a < 0 || b < a) fail(`${ref}: the span from ${JSON.stringify(from)} to a line ending ${JSON.stringify(to)} is not there`)
+  return { ref, startLine: s.startLine + a, endLine: s.startLine + b, text: lines.slice(a, b + 1).join('\n') }
+}
+
 // Every shared part by key, as blocks with line numbers. hunterResult is the whole "Structured hunter
 // result" section, not only its JSON: the rules after the JSON are part of the contract.
 export function parts(dir = VENDOR_SKILL_DIR) {
   const out = {}
   for (const [key, [ref, index]] of Object.entries(FENCED)) out[key] = fence(ref, index, dir)
   out.hunterResult = resolve('HUNTING.md#Structured hunter result', dir)
+  out.recordContract = span(CONTRACT, dir)
   for (const v of ['confirmed', 'needs_validation', 'rejected']) out[`schema_${v}`] = schemaBranch(v, dir)
   return out
 }

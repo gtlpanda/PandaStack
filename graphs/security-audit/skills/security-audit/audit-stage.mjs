@@ -4,9 +4,9 @@
 // (workflows/security-audit-flow.js) has no filesystem, so everything that reads or writes a run file happens here.
 //
 //   node audit-stage.mjs plan  <run dir>
-//   node audit-stage.mjs apply <run dir> <returned.json>     returned.json: what the Workflow tool returned, as JSON
+//   node audit-stage.mjs apply <run dir> <returned.json>     returned.json: what the Workflow tool returned, as JSON, or the Workflow task's own output file
 //
-// Both run only when `audit-run.mjs next` names a Workflow stage this version builds (recon, hunt, critic, mint), so a stage cannot be
+// Both run only when `audit-run.mjs next` names a Workflow stage (recon, hunt, critic, mint, consolidate, validate, verify), so a stage cannot be
 // planned or applied out of order. A command's last line is "AUDIT: OK <cmd> ..." (exit 0) or "AUDIT: FAIL <reason>" (exit 1); bad usage is
 // on stderr, exit 2.
 //
@@ -17,19 +17,27 @@
 //
 // hunt, critic and mint are one Workflow run each. hunt writes hunter-results.json, which `audit-ledger.mjs merge-wave` takes; critic writes
 // critic.json; mint writes mint.json, and critic.json and mint.json are what `audit-ledger.mjs apply-critic` takes. Each saves its step.
+// consolidate (audit-verdicts.mjs) groups the candidates of one root cause and rewrites candidates.json and the ledger only for a grouping that
+// covers every fingerprint exactly once. validate is Phase 3: one verifier per candidate, in rounds (a retry, or a batch the script cannot hold, is
+// another round), decisions.json holding where each candidate stands; the step is saved, and the ledger written, when none is pending. verify is Phase 5
+// (audit-verify.mjs), in rounds the same way, and ends the run: complete only if complete-check passes.
 //
 // A stage lives in stages/<NN>-<name>/: input.json and run.js (plan), result.json (apply, written last, so a stage without one
 // is planned and not applied). Every effect of apply is idempotent and the step is saved last, so a crash leaves the step behind its
 // effects, never ahead: applying the same result again finishes the stage, and changes nothing if it had finished.
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { isDeepStrictEqual } from 'node:util'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { REASONS, RUNNERS, Usage, advanceState, appendEvent, formatNext, loadRun, markIncomplete, nextStep, readJson, recordSpend, reconGate, refuse, waveAllowance, writeJson } from './audit-run.mjs'
+import { LEDGER_FAILED, REASONS, RUNNERS, Usage, advanceState, appendEvent, formatNext, loadRun, markIncomplete, nextStep, readJson, recordSpend, reconGate, refuse, waveAllowance, writeJson } from './audit-run.mjs'
 import { applyCriticProblems, criticBudgetExhausted, criticResultProblems, deferHunting, seedProblems, stopHunting } from './audit-ledger.mjs'
 import { RECON_IDS, checkFacts } from './audit-facts.mjs'
-import { BlockError, companions, ordinary, parts, resolve as resolveBlock } from './blocks.mjs'
+import { companions, ordinary, parts, resolve as resolveBlock } from './blocks.mjs'
+import { CLIP, architectureOf, baseInput, blockText, clipText, clipValue } from './audit-inputs.mjs'
+import { applyConsolidate, applyValidate, consolidateInput, validateInput } from './audit-verdicts.mjs'
+import { applyVerify, verifyInput } from './audit-verify.mjs'
 
 // Found from the real file, so the install symlink (~/.claude/skills/security-audit) does not matter, as in upstream.mjs.
 const REPO_ROOT = join(dirname(realpathSync(fileURLToPath(import.meta.url))), '..', '..', '..', '..')
@@ -42,8 +50,8 @@ export const MAX_SCRIPT_BYTES = 500_000
 // A synthesizer result seed would refuse is sent back once with the reasons (plan section 4.2: "bounded feedback retry"); a second refusal
 // ends the run. The reason string is PandaStack's own (the plan, 4.3), not one of upstream's five.
 export const MAX_SYNTH_ATTEMPTS = 2
-export const LEDGER_FAILED = 'ledger_validation_failed'
 export const STAGE_TOO_LARGE = 'stage_input_too_large'   // PandaStack's own reason: a wave stage whose input will not fit one run script ends the run
+const WAVE_STAGES = ['hunt', 'critic', 'mint']          // the stages that size is a reason to end the run for: they can neither be split nor skipped
 const SEED_FEEDBACK = 'seed-feedback.json'
 const MINT_FEEDBACK = 'mint-feedback.json'   // the same for a minter result apply-critic would refuse, kept per wave
 const MAX_DROPPED_LISTED = 200
@@ -131,17 +139,6 @@ export function reconInput(runDir, meta, part) {
 const CRITIC_SECTION = 'HUNTING.md#Coverage-critic waves'
 const HUNT_PARTS = ['hunterMethod', 'promotion', 'validationRules', 'hunterResult', 'schema_confirmed', 'schema_needs_validation']
 
-function baseInput(runDir, meta, stage) {
-  return { stage, part: stage, tree: join(runDir, 'tree'), maxParallel: meta.limits.max_parallel, execution: { capability: meta.execution_capability, blockers: meta.execution_blockers } }
-}
-function architectureOf(runDir) {
-  const file = join(runDir, 'architecture.md')
-  if (!existsSync(file)) refuse('architecture.md is missing: seed writes it')
-  return readFileSync(file, 'utf8')
-}
-const blockText = ref => {
-  try { return resolveBlock(ref).text } catch (e) { if (e instanceof BlockError) return refuse(`the ledger names a block that does not resolve: ${e.message}`); throw e }
-}
 // hunter IDs h<wave>-<NN>, in numeric order (so h1-100 follows h1-99)
 const hunterOrder = id => { const m = /^h(\d+)-(\d+)$/.exec(id); return m ? [Number(m[1]), Number(m[2])] : [Infinity, 0] }
 const byHunter = (a, b) => { const [x, y] = [hunterOrder(a.agent_id), hunterOrder(b.agent_id)]; return x[0] - y[0] || x[1] - y[1] || (a.agent_id < b.agent_id ? -1 : 1) }
@@ -173,17 +170,6 @@ export function huntInput(runDir, run, next) {
     ...baseInput(runDir, run.meta, 'hunt'), wave: next.wave, architecture_md: architectureOf(runDir), hunters,
     blocks: Object.fromEntries(refs.map(r => [r, blockText(r)])), parts: Object.fromEntries(HUNT_PARTS.map(k => [k, p[k].text])),
   }
-}
-
-// What the critic and the minter are sent of text that came from agents reading hostile source: a hunter may fill a unit with up to 64 KiB of evidence, so
-// long text and long lists are cut here, never passed whole. The cut is visible (a unit says `truncated`, a text ends in an ellipsis).
-const CLIP = { text: 300, list: 20, keys: 20, depth: 4 }
-const clipText = v => (typeof v === 'string' && v.length > CLIP.text ? `${v.slice(0, CLIP.text)}…` : v)
-function clipValue(v, depth = 0) {
-  if (typeof v === 'string') return clipText(v)
-  if (Array.isArray(v)) return depth >= CLIP.depth ? null : v.slice(0, CLIP.list).map(x => clipValue(x, depth + 1))
-  if (isObj(v)) return depth >= CLIP.depth ? null : Object.fromEntries(Object.entries(v).slice(0, CLIP.keys).map(([k, x]) => [clipText(k), clipValue(x, depth + 1)]))
-  return v
 }
 
 // A unit as the critic needs it: the semantic fields, the block map, the state and the evidence's shape (HUNTING.md: the critic checks units "closed without
@@ -248,12 +234,10 @@ export function mintInput(runDir, run, next) {
   }
 }
 
-// `step` may run only when `audit-run.mjs next` names it, and only a stage this version builds.
-const BUILT = ['recon', 'hunt', 'critic', 'mint']
+// `step` may run only when `audit-run.mjs next` names it: every Workflow step has a planner and an applier below.
 function expectStage(run) {
   const next = nextStep(run)
   if (RUNNERS[next.step] !== 'workflow') refuse(`the next step is not a Workflow stage: ${formatNext(next)}`)
-  if (!BUILT.includes(next.step)) refuse(`stage ${next.step} is not built in this version of audit-stage.mjs (it plans ${BUILT.join(', ')}): ${formatNext(next)}`)
   return next
 }
 
@@ -304,6 +288,17 @@ const PLANNERS = {
     if (input.proposals.length) stopOnCriticBudget(runDir, run, 'mint', 'the minter')   // with nothing to mint no agent is called, so nothing is gated
     return { label: `mint-${input.kind}-w${next.wave}`, part: 'mint', input }
   },
+  consolidate: (runDir, run) => ({ label: 'consolidate', part: 'consolidate', input: consolidateInput(runDir, run) }),   // skips itself (and says so) when there is nothing to group or no room
+  // A batch of the candidates still pending, as many as one script holds and the budget funds: `next` says validate again until none is.
+  validate(runDir, run) {
+    const input = validateInput(runDir, run)
+    return { label: `validate-r${input.round}`, part: 'validate', input }
+  },
+  // Phase 5, in rounds: a record's first verifier, then (for a material replacement) a new independent one, a retry after a discarded result.
+  verify(runDir, run) {
+    const input = verifyInput(runDir, run)
+    return { label: `verify-r${input.round}`, part: 'verify', input }
+  },
 }
 
 export function planStage(runDir) {
@@ -317,7 +312,7 @@ export function planStage(runDir) {
   const r = spawnSync(process.execPath, [RUN_SCRIPT, SEAM, input, WORKFLOW_FILE, script], { encoding: 'utf8' })
   if (r.status !== 0 || !r.stdout.startsWith('run-script: wrote')) refuse(`run-script.mjs did not write the run script: ${(r.stdout + r.stderr).trim().split('\n').at(-1)}`)
   const bytes = statSync(script).size
-  if (bytes > MAX_SCRIPT_BYTES && next.step !== 'recon') {
+  if (bytes > MAX_SCRIPT_BYTES && WAVE_STAGES.includes(next.step)) {
     // The Workflow tool would refuse this script and nothing here can split the input, so the stage can never run: the run ends, as upstream's early stop says
     // (mark every untouched unit deferred, disclose the gap), instead of staying at a step that cannot be planned.
     rmSync(stage.dir, { recursive: true, force: true })
@@ -327,7 +322,7 @@ export function planStage(runDir) {
   }
   if (bytes > MAX_SCRIPT_BYTES) {
     rmSync(script)
-    refuse(`the run script would be ${bytes} bytes; the Workflow tool refuses a script file over 524288 bytes and this version stops at ${MAX_SCRIPT_BYTES} (input: ${statSync(input).size} bytes).${' If the facts are the cause, delete recon-facts.json and plan again to run the facts part afresh'}`)
+    refuse(`the run script would be ${bytes} bytes; the Workflow tool refuses a script file over 524288 bytes and this version stops at ${MAX_SCRIPT_BYTES} (input: ${statSync(input).size} bytes).${next.step === 'recon' ? ' If the facts are the cause, delete recon-facts.json and plan again to run the facts part afresh' : ''}`)
   }
   appendEvent(runDir, { cmd: 'plan', stage: next.step, result: 'ok', duration_ms: Date.now() - started, part: planned.part, stage_dir: stage.name, script_bytes: bytes })
   return { step: next.step, part: planned.part, stage, script, bytes, returned: join(stage.dir, 'returned.json') }
@@ -337,6 +332,7 @@ export function planStage(runDir) {
 // What the workflow returns, as an untrusted value: the contract of security-audit-flow.js.
 function resultProblems(result, input) {
   if (!isObj(result)) return ['the result is not a JSON object']
+  if (!('status' in result) && typeof result.agentCount === 'number') return ['this is a Workflow output file with no `result`: the run did not return one (its summary and logs say why), so plan the stage again']
   const p = []
   if (result.status !== 'done' && result.status !== 'escalate') p.push(`status is ${show(result.status)}, not done or escalate`)
   if (typeof result.reason !== 'string') p.push('reason is not a string')
@@ -444,7 +440,26 @@ const APPLIERS = {
     event('ok', { counts: { proposals: input.proposals.length, units: units.length } })
     return { summary: `mint wave=${input.wave} proposals=${input.proposals.length} units=${units.length} agents=${result.budgetSpent}`, notes, then: `node audit-ledger.mjs apply-critic ${runDir} ${join(runDir, 'critic.json')} ${join(runDir, 'mint.json')}` }
   },
+
+  consolidate(ctx) {
+    if (!Array.isArray(ctx.result.results.groups)) refuse('the consolidate result needs a groups list; nothing was changed')
+    return applyConsolidate(ctx)
+  },
+
+  validate: applyValidate,
+  verify: applyVerify,
 }
+
+// The Workflow tool's own output file wraps what the script returned: { summary, agentCount, logs, result: { status, ... }, ... } (measured, claude 2.1.319).
+// It is taken as it is, so the session never has to copy a result by hand; a bare result is taken too. A wrapper with no `result` (a run that did not return)
+// is left as it is and refused by resultProblems, which names what is missing.
+export function unwrapOutput(value) {
+  return isObj(value) && !('status' in value) && !('stage' in value) && typeof value.agentCount === 'number' && isObj(value.result) ? value.result : value
+}
+
+// How many agents a Workflow output file with no result says ran: a run that was stopped or failed before it returned still spent them, and a strict budget is over what was spent.
+// A whole number from 0 to 1000 (a workflow runs at most 1000 agents, as resultProblems bounds budgetSpent), else null: not a count to trust.
+const lostAgents = value => (isObj(value) && !('status' in value) && Number.isSafeInteger(value.agentCount) && value.agentCount >= 0 ? Math.min(value.agentCount, 1000) : null)
 
 export function applyStage(runDir, returnedFile) {
   const started = Date.now()
@@ -457,11 +472,16 @@ export function applyStage(runDir, returnedFile) {
   const input = readJson(join(stage.dir, 'input.json'))
   if (!isObj(input)) refuse(`${stage.name} has no input.json: plan it again`)
   if (input.stage !== next.step) refuse(`${stage.name} was planned for ${show(input.stage)}, and the next step is ${next.step}: plan it again`)
-  const result = readJson(resolve(returnedFile))
+  const result = unwrapOutput(readJson(resolve(returnedFile)))
   if (result === undefined) refuse(`${returnedFile} does not exist`)
   if (stage.done && !isDeepStrictEqual(readJson(join(stage.dir, 'result.json')), result)) refuse(`${stage.name} was already applied with a different result: plan the stage again`)
   const problems = resultProblems(result, input)
-  if (problems.length) refuse(`the result is not the workflow's: ${problems.join('; ')}; nothing was changed`)
+  if (problems.length) {
+    // Charged once per file: the key carries a hash of what the file says, so the same file applied again is the same record, and another attempt is another.
+    const lost = lostAgents(result)
+    if (lost !== null) recordSpend(runDir, `${stage.name}-lost-${createHash('sha1').update(JSON.stringify(result)).digest('hex').slice(0, 8)}`, lost)
+    refuse(`the result is not the workflow's: ${problems.join('; ')}; ${lost === null ? 'nothing was changed' : `the ${lost} agent(s) it says ran are recorded as spent, and nothing else was changed`}`)
+  }
   const notes = []
   const event = (outcome, extra = {}, reason = null) => appendEvent(runDir, { cmd: 'apply', stage: next.step, result: outcome, reason, duration_ms: Date.now() - started, part: input.part, stage_dir: stage.name, agents: result.budgetSpent, ...extra })
   // The agents ran whatever they returned, so what they cost is recorded for an escalation too, and the result is kept.

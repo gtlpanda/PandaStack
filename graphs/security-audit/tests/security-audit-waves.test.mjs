@@ -49,7 +49,7 @@ const two = () => [hunter(1, [unit('cov-a')]), hunter(2, [unit('cov-b', { ordina
 console.log('== waves: the nodes')
 await test('every node in NODES names an agent file and equals its model and effort, and every phase it names is declared in meta', () => {
   const nodes = [...src.matchAll(/^ {2}(\w+):\s+\{ agentType: '([^']+)',\s+model: '([^']+)',\s+effort: '([^']+)',\s+phase: '([^']+)' \},?$/gm)]
-  assert.deepEqual(nodes.map(m => m[1]), ['researcher', 'synthesizer', 'analyst', 'critic', 'minter'])
+  assert.deepEqual(nodes.map(m => m[1]), ['researcher', 'synthesizer', 'analyst', 'critic', 'minter', 'consolidator', 'validator', 'verifier', 'reverifier'])
   const declared = new Set(wfMeta.phases.map(p => p.title))
   for (const [, name, agentType, model, effort, phase] of nodes) {
     const file = agentFile(agentType).fields

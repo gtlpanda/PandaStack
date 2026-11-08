@@ -23,7 +23,7 @@
 //   NEXT: <step> run=<workflow|helper> [kind=..] [wave=N] [reason=..]   |   NEXT: done status=..   |   NEXT: FAIL <why>
 //
 // stage-state.json is { version: 1, last: <STEPS entry>, wave: <int>, critic_kind: null | 'post-wave' |
-// 'final-clean', updated: <ISO time> }. `last` is the last step whose result is saved; the helper or the
+// 'final-clean', updated: <ISO time> } (and write_failed: true after a write-findings that could not write findings.json). `last` is the last step whose result is saved; the helper or the
 // session that saves a step's result calls advanceState. plan-wave sets wave to the wave it planned (a hunt saved
 // without it takes the next number); critic_kind is set when a critic result is saved and read by the step that
 // applies it. run_status leaves in_progress only through the complete-check of audit-findings.mjs (complete) or
@@ -144,15 +144,28 @@ export function recordSpend(runDir, key, invocations) {
 // Marks the run incomplete with the reason that stopped it (upstream's reason strings, REASONS, or a gate's own), which the report then
 // discloses: a run never ends complete by silence. The first reason stands, so a second gate cannot rewrite why the run stopped, and a
 // complete run is never marked down. Returns the standing reason. run-metadata.json has one writer: this module.
-export function markIncomplete(runDir, reason) {
+// `downgrade` is for one caller and one reason: the report finding that a file complete-check passed is now one a vendored validator rejects, so the run's claim of
+// completeness is false (the only way a complete run is ever marked down; every other caller refuses it).
+export function markIncomplete(runDir, reason, { downgrade = false } = {}) {
   if (typeof reason !== 'string' || reason.trim() === '') throw new TypeError(`an incomplete_reason is non-empty text, not ${JSON.stringify(reason)}`)
   const file = join(runDir, 'run-metadata.json')
   const meta = readJson(file)
   if (meta === undefined) refuse(`${runDir} has no run-metadata.json: it is not a run directory`)
-  if (meta.run_status === 'complete') refuse('a complete run cannot be marked incomplete')
+  if (meta.run_status === 'complete' && downgrade !== true) refuse('a complete run cannot be marked incomplete')
   if (meta.run_status === 'incomplete') return meta.incomplete_reason
   writeJson(file, { ...meta, run_status: 'incomplete', incomplete_reason: reason })
   return reason
+}
+
+// Marks the run complete: upstream's terminal state (a), only after audit-findings.mjs complete-check has found every candidate decided and every retained
+// record verified. Idempotent on a complete run; an incomplete run is never promoted. run-metadata.json has one writer: this module.
+export function markComplete(runDir) {
+  const file = join(runDir, 'run-metadata.json')
+  const meta = readJson(file)
+  if (meta === undefined) refuse(`${runDir} has no run-metadata.json: it is not a run directory`)
+  if (meta.run_status === 'incomplete') refuse(`an incomplete run (${meta.incomplete_reason}) is never marked complete`)
+  if (meta.run_status === 'complete') return
+  writeJson(file, { ...meta, run_status: 'complete', incomplete_reason: null })
 }
 
 // ---------- the target ----------
@@ -336,6 +349,12 @@ export const REASONS = Object.freeze({
   validation: 'validation_budget_exhausted',                 // candidates outnumber the validation reserve: run incomplete
   quick: 'quick_profile_final_critic',                       // quick's accepted discoveries and reassignments, deferred
 })
+// PandaStack's own reason strings, which are not upstream's five (so not in REASONS): a ledger or findings.json a vendored validator would not pass, ending the run.
+export const LEDGER_FAILED = 'ledger_validation_failed'
+export const FINDINGS_FAILED = 'findings_validation_failed'
+// The report found a file upstream's validator rejects: written by hand, or by a validator that changed under it (nothing this graph writes is unvalidated).
+export const FINDINGS_REJECTED = 'findings_rejected_by_validator'
+export const LEDGER_REJECTED = 'ledger_rejected_by_validator'
 export const RECON_CALLS = 4
 // PandaStack's own call: the synthesizer reads the four reports and writes the ledger units. Upstream's parent does that work, so SKILL.md's
 // "four baseline reconnaissance calls" leave it out; a gate without it passed budgets that were spent before the first hunter (found by the
@@ -344,7 +363,13 @@ export const SYNTHESIS_CALLS = 1
 // Critics the gate reserves: quick, its one final post-wave critic; standard and deep, a post-wave critic plus a
 // distinct final-clean critic.
 export const criticReserve = profile => { if (!KNOWN_PROFILES.includes(profile)) throw new TypeError(`unknown profile ${JSON.stringify(profile)}`); return profile === 'quick' ? 1 : 2 }
-export const minimumBudget = profile => RECON_CALLS + SYNTHESIS_CALLS + criticReserve(profile) + 1   // + at least one verifier call
+// PandaStack's own call, like the synthesizer: after each critic, one synthesizer mints units for what the critic and the hunters found missing (a critic with nothing to mint
+// calls nobody). Upstream's parent does that work, so SKILL.md's reserve for critics leaves it out; left out here it takes what the plan keeps for the verifiers (found by the
+// independent audit of the waves change, retro 39; reproduced in the budget tests). A reserve per critic is the worst case, an upper bound a run only meets when every critic finds a gap.
+export const MINT_CALLS = 1
+// Calls the profile keeps back for its critics and the minters that may follow them.
+const criticCalls = profile => criticReserve(profile) * (1 + MINT_CALLS)
+export const minimumBudget = profile => RECON_CALLS + SYNTHESIS_CALLS + criticCalls(profile) + 1   // + at least one verifier call
 const checkBudget = b => { if (b !== null && !(Number.isSafeInteger(b) && b >= 0)) throw new TypeError(`a budget is null or a non-negative integer, not ${JSON.stringify(b)}`); return b }
 
 // The strict gate, applied before any reconnaissance agent. An unset budget (null) is never gated.
@@ -359,7 +384,7 @@ export function budgetGate(profile, budget) {
 export function reconGate(profile, budget, spent, part) {
   if (part !== 'facts' && part !== 'synthesize') throw new TypeError(`a recon part is facts or synthesize, not ${JSON.stringify(part)}`)
   if (!isInt(spent)) throw new TypeError(`agents spent is a non-negative integer, not ${JSON.stringify(spent)}`)
-  const needed = part === 'facts' ? minimumBudget(profile) : SYNTHESIS_CALLS + criticReserve(profile) + 1
+  const needed = part === 'facts' ? minimumBudget(profile) : SYNTHESIS_CALLS + criticCalls(profile) + 1
   const ok = checkBudget(budget) === null || budget - spent >= needed
   return { ok, needed, reason: ok ? null : REASONS.fund }
 }
@@ -377,9 +402,10 @@ export function validationReserve(profile, balanceAfterCritics, expectedCandidat
 // themselves exactly fit.
 export function waveAllowance(profile, remaining, expectedCandidates = null) {
   const critics = criticReserve(profile)
-  const validation = validationReserve(profile, Math.max(0, remaining - critics), expectedCandidates)
-  const hunters = Math.max(0, remaining - critics - validation)
-  return { critics, validation, hunters, reason: hunters === 0 ? REASONS.reserve : null }
+  const minters = critics * MINT_CALLS
+  const validation = validationReserve(profile, Math.max(0, remaining - critics - minters), expectedCandidates)
+  const hunters = Math.max(0, remaining - critics - minters - validation)
+  return { critics, minters, validation, hunters, reason: hunters === 0 ? REASONS.reserve : null }
 }
 
 // ---------- earlier runs ----------
@@ -507,6 +533,9 @@ export function nextStep({ meta, state, ledger, findings }) {
     case 'consolidate': return go('validate')
     case 'validate': return go('write-findings')
     case 'write-findings': {
+      // A first write that failed leaves no findings.json (the previous file is left alone, and there was none) and says so in stage-state.json: the run is incomplete (with its own reason, or
+      // the one it already had, which stands), and the report says why. Only that explains a missing file.
+      if (findings === undefined && state.write_failed === true && meta.run_status === 'incomplete') return toReport()
       if (!Array.isArray(findings)) refuse('findings.json is missing or not an array after write-findings')
       return findings.some(r => r?.verdict === 'confirmed' || r?.verdict === 'needs_validation') ? go('verify') : toReport()
     }
@@ -685,6 +714,9 @@ const FLAGS = {
   '--max-units-per-hunter': ['maxUnitsPerHunter', int(1, Infinity)],
 }
 
+// Every flag `init` takes: SKILL.md may name these and no others (tests/audit-skill.test.mjs reads the list, so the skill cannot drift from the parser).
+export const INIT_FLAGS = ['--full', ...Object.keys(FLAGS)]
+
 export function parseInitArgs(argv) {
   const o = { target: null, full: false, out: null, profile: 'standard', scope: [], budget: null, prior: [], notes: [], ...DEFAULTS }
   const seen = new Set()
@@ -710,13 +742,17 @@ function runInit(argv) {
   const { source_ref: s, snapshot } = metadata
   if (!gate.ok) {
     const c = criticReserve(metadata.profile)
-    return refuse(`${gate.reason}: --budget ${metadata.budget} cannot fund the ${gate.minimum} calls profile ${metadata.profile} needs first (${RECON_CALLS} reconnaissance, ${SYNTHESIS_CALLS} synthesis, ${c} critic${c === 1 ? '' : 's'}, 1 verifier); no agent was launched. Give a larger budget, a narrower --scope or a different profile; as it stands ${runDir} is recorded incomplete`)
+    return refuse(`${gate.reason}: --budget ${metadata.budget} cannot fund the ${gate.minimum} calls profile ${metadata.profile} needs first (${RECON_CALLS} reconnaissance, ${SYNTHESIS_CALLS} synthesis, ${c} critic${c === 1 ? '' : 's'}, ${c * MINT_CALLS} minter${c * MINT_CALLS === 1 ? '' : 's'}, 1 verifier); no agent was launched. Give a larger budget, a narrower --scope or a different profile; as it stands ${runDir} is recorded incomplete`)
   }
   console.log(runDir)
   for (const note of opts.notes) console.log(`note: ${note}`)
   if (s.dirty) console.log(`note: the working tree has uncommitted changes (${s.uncommitted.tracked} tracked, ${s.uncommitted.untracked} untracked); only the committed snapshot ${s.commit.slice(0, 12)} is audited`)
   if (snapshot.skipped_total) console.log(`note: ${snapshot.skipped_total} symlink(s) and submodule(s) are not in tree/ (listed in run-metadata.json)`)
   for (const p of priors.filter(p => !p.compatible).slice(0, 5)) console.log(`note: earlier run ${p.run_id} is incompatible (${p.reasons[0]}); it is recorded in prior-runs.json, never treated as empty coverage`)
+  // What a session says to its user before any agent runs: printed here, because an instruction to "tell the user" was skipped by the session in two live runs, and a note it is told to relay is in the transcript either way.
+  console.log(`note: what runs: about one agent per coverage unit, then one or two verifiers per surviving lead; ${metadata.budget === null ? 'no budget is set, so nothing stops spend but you' : `a budget of ${metadata.budget} agent invocations is set`}`)
+  console.log(`note: the agents can only read, search and list files in a read-only snapshot of the commit (${join(runDir, 'tree')}); no code of the target is executed and nothing in the repository is edited`)
+  console.log(`note: the run is ${runDir}; it resumes from disk: audit-run.mjs next ${runDir}`)
   console.log(`AUDIT: OK run=${metadata.run_id} profile=${metadata.profile} commit=${s.commit.slice(0, 12)} files=${snapshot.files} earlier_runs=${priors.length} compatible=${priors.filter(p => p.compatible).length}`)
   return 0
 }

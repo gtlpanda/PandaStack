@@ -297,6 +297,25 @@ H17c="$TMP/home17c"; mkdir -p "$H17c/.claude"
 HOME="$H17c" PANDASTACK_BIN_DIR="$H17c/tools" "$REPO/install.sh" >/dev/null 2>&1
 check "PANDASTACK_BIN_DIR picks the dir"  '[ -L "$H17c/tools/autobuild" ] && [ ! -e "$H17c/.local/bin/autobuild" ]'
 
+echo "== 18. security-audit: the skill, the workflow and the three agents link; nothing under vendor/ does"
+H18="$TMP/home18"; mkdir -p "$H18/.claude"
+HOME="$H18" PATH="/usr/bin:/bin:$(dirname "$(command -v node)")" "$REPO/install.sh" >"$TMP/install18.log" 2>&1
+SA="graphs/security-audit"
+for pair in skills/security-audit=$SA/skills/security-audit workflows/security-audit-flow.js=$SA/workflows/security-audit-flow.js \
+            agents/audit-researcher.md=$SA/agents/audit-researcher.md agents/audit-analyst.md=$SA/agents/audit-analyst.md \
+            agents/audit-synthesizer.md=$SA/agents/audit-synthesizer.md; do
+  rel="${pair%%=*}"; src="${pair#*=}"
+  check "linked $rel -> $src" '[ -L "$H18/.claude/'"$rel"'" ] && [ "$(readlink "$H18/.claude/'"$rel"'")" = "$REPO/'"$src"'" ]'
+done
+check "the linked skill is PandaStack's, not upstream's" 'grep -q "^name: security-audit$" "$H18/.claude/skills/security-audit/SKILL.md" && grep -q "explicit-request audit" "$H18/.claude/skills/security-audit/SKILL.md" && [ "$(readlink -f "$H18/.claude/skills/security-audit/SKILL.md")" = "$REPO/$SA/skills/security-audit/SKILL.md" ]'
+check "no link points into vendor/"          '! find "$H18/.claude" -type l -lname "$REPO/$SA/vendor*" | grep -q .'
+check "nothing of upstream is reachable through a link" '[ -z "$(find -L "$H18/.claude" \( -name UPSTREAM.json -o -name "validate-*.cjs" -o -path "*cloudflare-security-audit*" \) 2>/dev/null)" ]'
+check "the three agents and only they are linked from the graph" '[ "$(find "$H18/.claude/agents" -type l -lname "$REPO/$SA/agents/*" | wc -l | tr -d " ")" = "3" ]'
+check "the installed helper runs through the link (next on a path that is no run: exit 1 and NEXT: FAIL)" 'out18="$(node "$H18/.claude/skills/security-audit/audit-run.mjs" next "$TMP/not-a-run" 2>&1)"; rc18=$?; [ "$rc18" = 1 ] && [ "${out18#NEXT: FAIL }" != "$out18" ]'
+check "the installed guidance helper runs through the link and writes nothing" 'n18="$(find "$H18" | wc -l)"; node "$H18/.claude/skills/security-audit/blocks.mjs" guidance "cors wildcard origin" | grep -q "^Guidance mode: this writes no files" && [ "$(find "$H18" | wc -l)" = "$n18" ]'
+HOME="$H18" "$REPO/install.sh" --uninstall >/dev/null 2>&1
+check "uninstall leaves no security-audit link" '! find "$H18/.claude" -type l -lname "$REPO/*" | grep -q .'
+
 echo
 echo "TEST-INSTALL: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

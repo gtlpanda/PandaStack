@@ -11,7 +11,7 @@ import { MAX_SCRIPT_BYTES } from '../skills/security-audit/audit-stage.mjs'
 import { FACT_LIMITS, RECON_IDS, checkFacts, refProblem } from '../skills/security-audit/audit-facts.mjs'
 import { advanceState, recordSpend, writeJson } from '../skills/security-audit/audit-run.mjs'
 import { audit, ENV, fresh, init, ledgerCli, meta, mkRepo, put } from './audit-fixtures.mjs'
-import { FILES, RESEARCH, STAGE, SYNTH, UNIT, files, fuzzApply, newInit, returnedFile, runScript, stage, stageDirs } from './stage-fixtures.mjs'
+import { FILES, RESEARCH, STAGE, SYNTH, UNIT, files, fuzzApply, newInit, returnedFile, runScript, runStage, stage, stageDirs } from './stage-fixtures.mjs'
 import { ledgerValid, readJsonFile, seeded, unitInput } from './ledger-fixtures.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -436,7 +436,7 @@ await test('a seed-feedback.json that is not what apply wrote stops the plan wit
 
 console.log('== the budget gate before each recon part')
 await test('a retry the budget cannot fund is refused before any agent runs and ends the run incomplete with upstream\'s reason, never over the budget', async () => {
-  const { runDir } = newInit(['--budget', '8'])   // exactly the minimum: four researchers, a synthesizer, two critics, a verifier
+  const { runDir } = newInit(['--budget', '10'])   // exactly the minimum: four researchers, a synthesizer, two critics and a minter after each, a verifier
   stage(['plan', runDir])
   const dir = join(runDir, 'stages', '01-recon-facts')
   const ran = await runScript(join(dir, 'run.js'), { 'audit-researcher': [RESEARCH('1a'), null, RESEARCH('1c'), RESEARCH('1d')] })
@@ -444,27 +444,27 @@ await test('a retry the budget cannot fund is refused before any agent runs and 
   assert.equal(meta(runDir).agents_spent, 4)
   const r = stage(['plan', runDir])
   assert.equal(r.status, 1)
-  assert.match(r.last, /^AUDIT: FAIL budget_cannot_fund_reconnaissance_and_reserves: the researchers need 8 more calls with the reserves and 4 are left \(--budget 8, 4 spent\); no agent was launched and the run is marked incomplete$/)
+  assert.match(r.last, /^AUDIT: FAIL budget_cannot_fund_reconnaissance_and_reserves: the researchers need 10 more calls with the reserves and 6 are left \(--budget 10, 4 spent\); no agent was launched and the run is marked incomplete$/)
   assert.deepEqual([meta(runDir).run_status, meta(runDir).incomplete_reason, meta(runDir).agents_spent], ['incomplete', 'budget_cannot_fund_reconnaissance_and_reserves', 4])
   assert.equal(audit(['check', runDir]).last, `AUDIT: OK ${runDir} passes check`)
   assert.equal(audit(['next', runDir]).last, 'NEXT: report run=helper reason=budget_cannot_fund_reconnaissance_and_reserves')
   assert.deepEqual(stageDirs(runDir), ['01-recon-facts'], 'no stage directory, no script for a stage that cannot run')
 })
 await test('the synthesizer is gated too: a run the researchers left with too little is refused before it spends the fifth call, and at the minimum a whole recon fits', async () => {
-  const { runDir } = newInit(['--budget', '8'])
+  const { runDir } = newInit(['--budget', '10'])
   stage(['plan', runDir])
   const dir1 = join(runDir, 'stages', '01-recon-facts')
   stage(['apply', runDir, returnedFile(dir1, (await runScript(join(dir1, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })).result)])
   const p = stage(['plan', runDir])
-  assert.equal(p.status, 0, `4 left is the synthesizer, two critics and a verifier: ${p.stdout}`)
-  const { runDir: tight } = newInit(['--budget', '8'])
+  assert.equal(p.status, 0, `6 left is the synthesizer, two critics, a minter after each, and a verifier: ${p.stdout}`)
+  const { runDir: tight } = newInit(['--budget', '10'])
   stage(['plan', tight])
   const dir = join(tight, 'stages', '01-recon-facts')
   stage(['apply', tight, returnedFile(dir, (await runScript(join(dir, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })).result)])
-  recordSpend(tight, 'something-else', 1)   // 3 left
+  recordSpend(tight, 'something-else', 1)   // 5 left
   const r = stage(['plan', tight])
   assert.equal(r.status, 1)
-  assert.match(r.last, /^AUDIT: FAIL budget_cannot_fund_reconnaissance_and_reserves: the synthesizer needs 4 more calls with the reserves and 3 are left \(--budget 8, 5 spent\)/)
+  assert.match(r.last, /^AUDIT: FAIL budget_cannot_fund_reconnaissance_and_reserves: the synthesizer needs 6 more calls with the reserves and 5 are left \(--budget 10, 5 spent\)/)
   assert.equal(meta(tight).run_status, 'incomplete')
   assert.equal(stage(['plan', newInit().runDir]).status, 0, 'no budget set: never gated')
 })
@@ -485,16 +485,6 @@ await test('plan and apply run only when `next` names recon: not after seed, not
   const empty = fresh('not-a-run')
   assert.match(stage(['plan', empty]).last, /^AUDIT: FAIL .* has no run-metadata\.json: it is not a run directory/)
   assert.match(stage(['apply', empty, 'x.json']).last, /^AUDIT: FAIL .* has no run-metadata\.json/)
-})
-await test('a later stage is named as not built yet, so a session cannot plan a validation this version cannot run', () => {
-  const { runDir } = seeded([unitInput('a')])
-  advanceState(runDir, 'consolidate')
-  assert.equal(audit(['next', runDir]).last, 'NEXT: validate run=workflow')
-  const r = stage(['plan', runDir])
-  assert.equal(r.status, 1)
-  assert.equal(r.last, 'AUDIT: FAIL stage validate is not built in this version of audit-stage.mjs (it plans recon, hunt, critic, mint): NEXT: validate run=workflow')
-  assert.match(stage(['apply', runDir, 'x.json']).last, /^AUDIT: FAIL stage validate is not built in this version/)
-  assert.ok(!existsSync(join(runDir, 'stages')))
 })
 await test('apply with nothing planned, with a missing file, a torn file, or a value that is not the workflow\'s result, refuses and writes nothing', async () => {
   const { runDir } = newInit()
@@ -526,6 +516,111 @@ await test('apply with nothing planned, with a missing file, a torn file, or a v
   assert.equal(meta(runDir).agents_spent, 0, 'a refused result costs nothing on record: its count is not trusted')
   assert.deepEqual(files(runDir).filter(f => !['stages/01-recon-facts/returned.json', 'stages/01-recon-facts/torn.json'].includes(f)), planned)
   assert.notDeepEqual(planned, none)
+})
+// What the Workflow tool writes for a finished run (measured on claude 2.1.319): the script's return value sits under `result`.
+const TASK_OUTPUT = result => ({ summary: 'Full security audit graph', agentCount: result?.budgetSpent ?? 0, logs: ['done'], result, workflowProgress: [], totalTokens: 1, totalToolCalls: 1 })
+await test('apply takes the Workflow task\'s own output file as it is, and the bare result: both save the same stage; the wrapper is unwrapped one level only, and only when it is one', async () => {
+  const wrapped = newInit(), bare = newInit()
+  const ran = await runStage(wrapped.runDir, { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })
+  assert.equal(ran.apply.status, 0, ran.apply.stdout)   // runStage hands apply the bare result
+  const dir = join(wrapped.runDir, 'stages', '01-recon-facts')
+  stage(['plan', bare.runDir])
+  const bareDir = join(bare.runDir, 'stages', '01-recon-facts')
+  const again = await runScript(join(bareDir, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })
+  const out = join(bareDir, 'output.json')
+  writeFileSync(out, JSON.stringify(TASK_OUTPUT(again.result), null, 2))
+  const r = stage(['apply', bare.runDir, out])
+  assert.equal(r.status, 0, r.stdout)
+  assert.equal(r.last, ran.apply.last, 'the same line for the wrapped output and the bare result')
+  assert.deepEqual(readJsonFile(bare.runDir, 'recon-facts.json').facts, readJsonFile(wrapped.runDir, 'recon-facts.json').facts)
+  assert.deepEqual(readJsonFile(bareDir, 'result.json'), again.result, 'what is saved is the result, not the wrapper')
+})
+await test('a wrapper that is not a Workflow output is not unwrapped: no agentCount, a result of the wrong type, a nested wrapper and a wrapper with no result are each refused and change nothing', async () => {
+  const { runDir } = newInit()
+  stage(['plan', runDir])
+  const dir = join(runDir, 'stages', '01-recon-facts')
+  const ran = await runScript(join(dir, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })
+  const good = ran.result
+  const before = files(runDir)
+  const cases = [
+    [{ result: good }, /status is undefined, not done or escalate/],
+    [{ ...TASK_OUTPUT(good), result: JSON.stringify(good) }, /Workflow output file with no `result`/],
+    [{ ...TASK_OUTPUT(good), result: null }, /Workflow output file with no `result`/],
+    [{ ...TASK_OUTPUT(good), result: [good] }, /Workflow output file with no `result`/],
+    [{ ...TASK_OUTPUT(good), result: TASK_OUTPUT(good) }, /Workflow output file with no `result`/],
+    [{ summary: 'x', agentCount: 4, logs: [], error: 'the run was killed' }, /Workflow output file with no `result`/],
+    [{ ...TASK_OUTPUT(good), agentCount: '4' }, /status is undefined, not done or escalate/],
+    [TASK_OUTPUT({ ...good, stage: 'hunt' }), /stage is "hunt", but the stage planned is recon/],
+  ]
+  for (const [bad, pattern] of cases) {
+    const r = stage(['apply', runDir, returnedFile(dir, bad)])
+    assert.equal(r.status, 1, JSON.stringify(bad).slice(0, 80))
+    assert.match(r.last, pattern, JSON.stringify(bad).slice(0, 80))
+  }
+  assert.deepEqual(files(runDir).filter(f => f !== 'stages/01-recon-facts/returned.json'), before, 'a refusal wrote no file (an output file that says agents ran is charged: next test)')
+})
+await test('a Workflow output file with no result is a run that ended without returning, and the agents it says ran are charged to the budget: once per file, bounded as budgetSpent is, and a retry cannot go past a strict budget', async () => {
+  const { runDir } = newInit(['--budget', '10'])   // the minimum
+  stage(['plan', runDir])
+  const dir = join(runDir, 'stages', '01-recon-facts')
+  const dead = n => ({ summary: 'Full security audit graph', agentCount: n, logs: ['stopped'], workflowProgress: [] })
+  const r = stage(['apply', runDir, returnedFile(dir, dead(4))])
+  assert.equal(r.status, 1)
+  assert.match(r.last, /Workflow output file with no `result`.*the 4 agent\(s\) it says ran are recorded as spent/)
+  assert.equal(meta(runDir).agents_spent, 4)
+  assert.deepEqual(Object.keys(meta(runDir).stage_spend).map(k => k.replace(/-lost-[0-9a-f]{8}$/, '-lost-H')), ['01-recon-facts-lost-H'])
+  assert.equal(stage(['apply', runDir, returnedFile(dir, dead(4))]).status, 1)
+  assert.equal(meta(runDir).agents_spent, 4, 'the same file again counts once')
+  assert.equal(stage(['apply', runDir, returnedFile(dir, dead(2))]).status, 1)
+  assert.equal(meta(runDir).agents_spent, 6, 'a different attempt is charged too')
+  assert.equal(audit(['check', runDir]).last, `AUDIT: OK ${runDir} passes check`)
+  const gate = stage(['plan', runDir])
+  assert.match(gate.last, /^AUDIT: FAIL budget_cannot_fund_reconnaissance_and_reserves: the researchers need 10 more calls with the reserves and 4 are left \(--budget 10, 6 spent\)/, 'the retry the skill says to make is gated by what the dead run spent')
+  for (const [n, spent] of [[1e9, 1000], [1000, 1000], [0, 0]]) {
+    const { runDir: d } = newInit()
+    stage(['plan', d])
+    stage(['apply', d, returnedFile(join(d, 'stages', '01-recon-facts'), dead(n))])
+    assert.equal(meta(d).agents_spent, spent, `agentCount ${n}`)
+  }
+  for (const bad of [-1, 1.5, '4', null, true, [4], {}, NaN]) {
+    const { runDir: d } = newInit()
+    stage(['plan', d])
+    const refused = stage(['apply', d, returnedFile(join(d, 'stages', '01-recon-facts'), { ...dead(4), agentCount: bad })])
+    assert.equal(refused.status, 1, `agentCount ${JSON.stringify(bad)}`)
+    assert.ok(refused.last.startsWith('AUDIT: FAIL the result is not the workflow\'s: '), `a refusal by name, not a crash: ${refused.last.slice(0, 120)}`)
+    assert.ok(refused.last.endsWith('nothing was changed'), refused.last)
+    assert.equal(meta(d).agents_spent, 0, `agentCount ${JSON.stringify(bad)} is not a count to trust`)
+  }
+  const { runDir: ok } = newInit()   // a file with a result is never a lost run: the guards of unwrapOutput keep an object that is a result itself as it is
+  stage(['plan', ok])
+  const okDir = join(ok, 'stages', '01-recon-facts')
+  const ran = await runScript(join(okDir, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })
+  assert.equal(stage(['apply', ok, returnedFile(okDir, ran.result)]).status, 0)
+  assert.equal(meta(ok).agents_spent, 4)
+  assert.ok(!Object.keys(meta(ok).stage_spend).some(k => k.includes('-lost-')))
+})
+await test('an object that is a result itself is taken as it is even when it also has an agentCount and a result key: neither the status nor the stage of a result is read from inside a wrapper that is not one', async () => {
+  const { runDir } = newInit()
+  stage(['plan', runDir])
+  const dir = join(runDir, 'stages', '01-recon-facts')
+  const ran = await runScript(join(dir, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })
+  const good = ran.result
+  // with a status of its own it is a result: its inner `result` (the wrong stage) is not read
+  const withStatus = { ...good, agentCount: 4, result: { ...good, stage: 'hunt' } }
+  // with a stage of its own and no status it is not a result and not a wrapper: refused as it is, never unwrapped to the good result inside
+  const withStage = { stage: 'recon', agentCount: 4, result: good }
+  const r2 = stage(['apply', runDir, returnedFile(dir, withStage)])
+  assert.equal(r2.status, 1)
+  assert.match(r2.last, /Workflow output file with no `result`|status is undefined/)
+  assert.equal(readJsonFile(dir, 'returned.json').stage, 'recon')
+  // with a status but no stage it is not a result either, and it is not unwrapped to the good result inside: the status of a result is read from the outside
+  const statusOnly = { status: 'done', reason: 'x', history: [], budgetSpent: 4, results: good.results, agentCount: 4, result: good }
+  const r3 = stage(['apply', runDir, returnedFile(dir, statusOnly)])
+  assert.equal(r3.status, 1)
+  assert.match(r3.last, /stage is undefined, but the stage planned is recon/)
+  const r1 = stage(['apply', runDir, returnedFile(dir, withStatus)])
+  assert.equal(r1.status, 0, r1.stdout)
+  assert.deepEqual(readJsonFile(dir, 'result.json').stage, 'recon', 'the outer object was taken, not the inner wrong-stage one')
 })
 await test('a result for the other part, and a hand-edited result of the synthesize part, are refused, and the facts part never moves the step', async () => {
   const { runDir } = newInit()
