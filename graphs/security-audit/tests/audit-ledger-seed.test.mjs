@@ -7,6 +7,7 @@ import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import { ARCHITECTURE_WORD_CAP, byId, commitLedger, seed } from '../skills/security-audit/audit-ledger.mjs'
 import { VENDOR_SKILL_DIR, validateLedgerFile } from '../skills/security-audit/upstream.mjs'
+import { companions, ordinary } from '../skills/security-audit/blocks.mjs'
 import { audit, newRun } from './audit-fixtures.mjs'
 import { ARCH, ledgerBytes, ledgerValid, readJsonFile, readLedger, reconInput, refsOf, seeded, unitInput, LEDGER_PATH } from './ledger-fixtures.mjs'
 
@@ -146,6 +147,56 @@ await test('seed runs only as the next step: twice, or before recon, is refused 
   writeFileSync(join(fresh.runDir, 'stage-state.json'), JSON.stringify({ version: 1, last: 'init', wave: 0, critic_kind: null, updated: 'x' }))
   assert.throws(() => seed(fresh.runDir, reconInput([unitInput('a')])), /seed is not the next step of this run: NEXT: recon/)
   assert.ok(!existsSync(LEDGER_PATH(fresh.runDir)))
+})
+
+console.log('== seed: every block a unit names resolves through blocks.mjs')
+const AI = companions().find(c => c.file === 'AI-AND-LLM.md')
+await test('a unit that selects real blocks (an ordinary class, a companion class with its three fixed sections) seeds, and a null ordinary block is allowed', () => {
+  const selected = [AI.core, AI.classes[1], AI.universal, AI.validation]
+  const { runDir } = seeded([
+    unitInput('real', { selected_companion_blocks: selected, excluded_blocks: [{ block: AI.classes[0], reason: 'no retrieval in this app' }, { block: AI.whenToUse, reason: 'the whole file was considered' }, { block: ordinary()[7], reason: 'no wildcard pass here' }] }),
+    unitInput('none', { ordinary_attack_class_block: null }),
+  ])
+  assert.deepEqual(readLedger(runDir).map(u => [u.canonical_refs.surface.split('#')[1], u.ordinary_attack_class_block, u.selected_companion_blocks.length]), [['none', null, 0], ['real', 'ATTACK-CLASSES.md#Access control', 4]])
+  assert.ok(ledgerValid(runDir))
+})
+await test('a block that does not resolve, or resolves but is the wrong kind of block, refuses the seed naming the field and the reference', () => {
+  const { runDir } = newRun()
+  const bad = (over, pattern) => seedRefused(runDir, reconInput([unitInput('a', over)]), pattern)
+  // the ordinary field
+  bad({ ordinary_attack_class_block: 'ATTACK-CLASSES.md#Chained vulnerabilities' }, /ordinary_attack_class_block: unknown block ATTACK-CLASSES\.md#Chained vulnerabilities/)   // the plan's short form
+  bad({ ordinary_attack_class_block: 'ATTACK-CLASSES.md#access control' }, /unknown block/)                                  // case matters
+  bad({ ordinary_attack_class_block: 'ACCESS' }, /ordinary_attack_class_block: malformed block reference/)
+  bad({ ordinary_attack_class_block: '' }, /malformed block reference/)
+  bad({ ordinary_attack_class_block: 'NOPE.md#Access control' }, /unknown block file NOPE\.md/)
+  bad({ ordinary_attack_class_block: AI.core }, /ordinary_attack_class_block AI-AND-LLM\.md#Core discipline resolves but is not an ordinary attack-class block/)
+  // the selected companion blocks
+  bad({ selected_companion_blocks: ['WEB-PROTOCOL-AND-AUTH.md#Cache behavior'] }, /selected_companion_blocks\[0\]: unknown block WEB-PROTOCOL-AND-AUTH\.md#Cache behavior/)   // upstream's own test fixture, which its validator accepts
+  bad({ selected_companion_blocks: [AI.core, 'AI-AND-LLM.md#Tool calls'] }, /selected_companion_blocks\[1\]: unknown block AI-AND-LLM\.md#Tool calls/)
+  bad({ selected_companion_blocks: [ordinary()[1]] }, /selected_companion_blocks\[0\] ATTACK-CLASSES\.md#Access control resolves but is not a companion block/)
+  bad({ selected_companion_blocks: [AI.whenToUse] }, /resolves but is not a companion block/)   // recon reads it to choose a file; a unit never selects it
+  // the excluded blocks
+  bad({ excluded_blocks: [{ block: 'AI-AND-LLM.md#Nope', reason: 'r' }] }, /excluded_blocks\[0\]\.block: unknown block AI-AND-LLM\.md#Nope/)
+  bad({ excluded_blocks: [{ block: 'RECONNAISSANCE.md#Phase 1: Map the source and plan coverage', reason: 'r' }] }, /excluded_blocks\[0\]\.block RECONNAISSANCE\.md#Phase 1: Map the source and plan coverage resolves but is not an attack-class block/)
+})
+await test('a block field of the wrong type is refused, never coerced: null or a number in a list, an object, a string where a list belongs', () => {
+  const { runDir } = newRun()
+  const bad = (over, pattern) => seedRefused(runDir, reconInput([unitInput('a', over)]), pattern)
+  bad({ ordinary_attack_class_block: 7 }, /ordinary_attack_class_block/)
+  bad({ ordinary_attack_class_block: { ref: 'ATTACK-CLASSES.md#Access control' } }, /ordinary_attack_class_block/)
+  bad({ ordinary_attack_class_block: ['ATTACK-CLASSES.md#Access control'] }, /ordinary_attack_class_block/)
+  bad({ selected_companion_blocks: [null] }, /selected_companion_blocks\[0\]/)
+  bad({ selected_companion_blocks: [7] }, /selected_companion_blocks\[0\]/)
+  bad({ selected_companion_blocks: [{ block: AI.core }] }, /selected_companion_blocks\[0\]/)
+  bad({ selected_companion_blocks: AI.core }, /selected_companion_blocks/)
+  bad({ excluded_blocks: [{ block: null, reason: 'r' }] }, /excluded_blocks\[0\]/)
+  bad({ excluded_blocks: [AI.core] }, /excluded_blocks\[0\]/)
+  bad({ excluded_blocks: 'AI-AND-LLM.md#Core discipline' }, /excluded_blocks/)
+})
+await test('every problem of every unit is reported in one refusal, and nothing is written', () => {
+  const { runDir } = newRun()
+  assert.throws(() => seed(runDir, reconInput([unitInput('a', { ordinary_attack_class_block: 'ATTACK-CLASSES.md#Nope' }), unitInput('b', { selected_companion_blocks: ['X.md#y'] })])), e => e.problems.length === 2 && /unit 0 /.test(e.problems[0]) && /unit 1 /.test(e.problems[1]))
+  assert.ok(!existsSync(LEDGER_PATH(runDir)))
 })
 
 console.log('== seed: scope, and every upstream state kept distinct')

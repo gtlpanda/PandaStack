@@ -20,6 +20,7 @@ import { existsSync, realpathSync, renameSync, rmSync, writeFileSync } from 'nod
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CARRIED, REASONS, Usage, advanceState, appendEvent, countStatuses, formatNext, git, isCommitId, loadRun, nextStep, readJson, refuse, waveAllowance, writeJson } from './audit-run.mjs'
+import { BlockError, companions, ordinary, resolve as resolveBlock } from './blocks.mjs'
 import { canonicalCoverageId, isSafeRelativePath, validateFindingsFile, validateLedgerDocument, validateLedgerFile } from './upstream.mjs'
 
 export const LEDGER_FILE = 'coverage-ledger.json'
@@ -94,6 +95,34 @@ function mintId(input) {
   }
 }
 
+// The blocks a unit may name, from the vendored headings (blocks.mjs), built once per process. Upstream's validator accepts a block
+// reference to a section that does not exist (its own fixtures name some), so this is the only place one is checked: a hunter prompt
+// carries the blocks a unit names verbatim, and a name that resolves to nothing would fail the wave that needs it.
+let blockSets
+const blockRegistry = () => {
+  if (!blockSets) {
+    const files = companions()
+    blockSets = { ordinary: new Set(ordinary()), companion: new Set(files.flatMap(c => c.blocks)), considered: new Set([...ordinary(), ...files.flatMap(c => [c.whenToUse, ...c.blocks])]) }
+  }
+  return blockSets
+}
+
+// Why the blocks a unit names cannot be used, as plain strings (empty when each is a block of the right kind). A reference
+// that is in the registry needs no further lookup; any other is resolved for the reason blocks.mjs gives. The field's shape
+// (a list, an object per exclusion) is the validator's to judge afterwards.
+function blockProblems(input) {
+  const reg = blockRegistry(), found = []
+  const check = (where, ref, allowed, kind) => {
+    if (typeof ref === 'string' && allowed.has(ref)) return
+    try { resolveBlock(ref) } catch (e) { if (e instanceof BlockError) return found.push(`${where}: ${e.message}`); throw e }
+    found.push(`${where} ${ref} resolves but is not ${kind}`)
+  }
+  if (input.ordinary_attack_class_block !== null && input.ordinary_attack_class_block !== undefined) check('ordinary_attack_class_block', input.ordinary_attack_class_block, reg.ordinary, 'an ordinary attack-class block')
+  if (Array.isArray(input.selected_companion_blocks)) input.selected_companion_blocks.forEach((ref, i) => check(`selected_companion_blocks[${i}]`, ref, reg.companion, 'a companion block'))
+  if (Array.isArray(input.excluded_blocks)) input.excluded_blocks.forEach((e, i) => { if (isObj(e)) check(`excluded_blocks[${i}].block`, e.block, reg.considered, 'an attack-class block') })
+  return found
+}
+
 // One ledger unit from a recon or mint entry: { unit } or { problems }. The entry names the work (labels, canonical_refs,
 // paths, blocks, priority); this adds the unit's start state. A planned unit outside the run's scope is recorded out_of_scope,
 // never planned (SKILL.md: "record everything else as out_of_scope"). Upstream's validator judges the finished unit.
@@ -107,6 +136,7 @@ export function unitFromInput(input, ctx) {
   if (!(Number.isInteger(priority) && priority >= 1 && priority <= 4)) problems.push('priority_class must be an integer from 1 to 4')
   const minted = mintId(input)
   if (minted.problems) problems.push(...minted.problems)
+  problems.push(...blockProblems(input))
   const paths = Array.isArray(input.starting_paths) ? input.starting_paths : []
   for (const p of paths) {
     if (!ctx.skipPathCheck && typeof p === 'string' && isSafeRelativePath(p) && !existsSync(join(ctx.runDir, 'tree', p))) problems.push(`starting path ${p} is not in tree/ (the audited snapshot)`)

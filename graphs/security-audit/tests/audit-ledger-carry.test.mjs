@@ -193,6 +193,14 @@ await test('a prior unit recon did not seed is added planned and ranked as a gap
   assert.deepEqual([u.vanished.status, u.vanished.agent_id, u.vanished.unresolved.length], ['not_applicable', null, 1])
   assert.ok(ledgerValid(runDir))
 })
+await test('a prior unit that names a block this pin does not have is not added (its block would fail the wave that hunts it), and the note says so', () => {
+  const ghost = priorUnit('ghost', 'blocked', { selected_companion_blocks: ['WEB-PROTOCOL-AND-AUTH.md#Cache behavior'] })   // upstream's validator accepts it, so the earlier run was compatible
+  const { runDir } = scenario({ units: [ghost, priorUnit('kept', 'blocked')], findings: [] })
+  const out = seed(runDir, reconInput([unitInput('fresh')]))
+  assert.deepEqual(Object.keys(names(runDir)).sort(), ['fresh', 'kept'])
+  assert.match(out.notes.join('\n'), /earlier run run-1: unit .*ghost.* could not be added to this run; it is not carried/)
+  assert.ok(ledgerValid(runDir))
+})
 await test('an out_of_scope or scoped run keeps its states: a carried record is not carried into a unit this run\'s scope excludes', () => {
   const { runDir } = scenario({ args: ['--scope', 'docs'] })
   seed(runDir, recon())

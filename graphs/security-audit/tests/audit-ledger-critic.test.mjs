@@ -85,6 +85,19 @@ await test('a minted unit that is not valid is rejected and named while the othe
   assert.match(out.notes.join('\n'), /minted unit 2: status "covered": a minted unit is planned work/)
   assert.ok(ledgerValid(runDir))
 })
+await test('a minted unit that names a block that does not exist is rejected and named; the units beside it are applied', () => {
+  const { runDir } = afterWave([named('a')])
+  const bad = [
+    minted('ghost', { selected_companion_blocks: ['WEB-PROTOCOL-AND-AUTH.md#Cache behavior'] }),
+    minted('short', { ordinary_attack_class_block: 'ATTACK-CLASSES.md#Chained vulnerabilities' }),
+    minted('good'),
+  ]
+  const out = applyCritic(runDir, critic({ missing_units: bad.map((_, i) => gap(`m${i}`)) }), { units: bad })
+  assert.deepEqual(Object.keys(byName(runDir)).sort(), ['a', 'good'])
+  assert.match(out.notes.join('\n'), /minted unit 0: selected_companion_blocks\[0\]: unknown block WEB-PROTOCOL-AND-AUTH\.md#Cache behavior.*; rejected/)
+  assert.match(out.notes.join('\n'), /minted unit 1: ordinary_attack_class_block: unknown block ATTACK-CLASSES\.md#Chained vulnerabilities:.*; rejected/)
+  assert.ok(ledgerValid(runDir))
+})
 await test('in a scoped run a gap outside the scope is recorded out_of_scope with the critic\'s reason, not assigned', () => {
   const files = { 'src/app.js': 'a\n', 'src/db.js': 'b\n', 'docs/guide.md': 'c\n' }
   const { runDir } = afterWave([named('a')], { opts: { files, args: ['--scope', 'src'] } })
