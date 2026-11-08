@@ -78,13 +78,16 @@ node "$AUDIT/audit-run.mjs" init "$REPO" --full
 Add the flags the user gave. `REPO` is the target. The last line must start
 `AUDIT: OK`; on `AUDIT: FAIL`, say why and stop. Relay every `note:` line
 (uncommitted changes, symlinks left out, an earlier run that cannot be carried).
-Tell the user once, before any agent runs:
+Before the first `plan` command, and so before any agent runs, write these in
+your reply as text (a live run skipped them when they were only an instruction
+to "tell the user"; they are not optional, `--unattended` or not):
 
 - what runs: about one agent per coverage unit, then one or two verifiers per
   surviving lead, with no budget unless `--budget` was given;
 - that the agents can only read, search and list files in a read-only snapshot
   of the commit (`$RUN/tree`), and that nothing in the target is executed;
-- where the run lives (`$RUN`), and that it resumes from disk if interrupted.
+- where the run lives (`$RUN`), which directory `$AUDIT` is, and that the run
+  resumes from disk if interrupted.
 
 ## 4. The loop
 
