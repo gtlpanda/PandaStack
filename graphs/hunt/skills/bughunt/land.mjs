@@ -9,10 +9,11 @@
 //   bughuntChecks the caller's own checks on the fix branch before it lands
 //   landHunt      the checks, then a fast-forward onto the branch, then cleanup
 //   bughuntLine   one paragraph on what was found, fixed, and left open
+import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, renameSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { git, run, tail } from '../../../build/skills/build-app/driver/proc.mjs'
+import { buildEnv, git, run, tail } from '../../../build/skills/build-app/driver/proc.mjs'
 import { readLedger, disposition } from '../../../../core/skills/findings/findings.mjs'
 
 const INTAKE = join(dirname(fileURLToPath(import.meta.url)), 'intake.mjs')
@@ -111,8 +112,10 @@ export function bughuntPrompt({ repo, stateDir, configDir, branch, label = 'an u
 // the branch, run in the repo itself (where the dependencies are installed),
 // with the branch checked out detached and `integration` checked out again after.
 // `frozen` lists exact paths; a file the fixes add is never in it.
+// The verify runs as an async child, so the caller's signal handlers keep running: when
+// `stopped()` turns true, the verify's whole process group is ended.
 // Returns {problems, commits}.
-export function bughuntChecks({ repo, integration, branch, worktree, frozen, verifyCommand, verified = [], verifyTimeoutMs = 40 * 60_000 }) {
+export async function bughuntChecks({ repo, integration, branch, worktree, frozen, verifyCommand, verified = [], verifyTimeoutMs = 40 * 60_000, stopped = () => false }) {
   const problems = []
   if (!git(repo, ['rev-parse', '--verify', '-q', `refs/heads/${branch}`]).ok) return { problems: [`no branch ${branch}`], commits: 0 }
   if (!git(repo, ['merge-base', '--is-ancestor', integration, branch]).ok) problems.push(`${branch} does not build on ${integration}, so it cannot be fast-forwarded`)
@@ -132,7 +135,7 @@ export function bughuntChecks({ repo, integration, branch, worktree, frozen, ver
   if (!problems.length && subjects.length) {
     if (!git(repo, [...SAFE, 'checkout', '-q', '--detach', branch]).ok) return { problems: [`could not check out ${branch} to verify it`], commits: subjects.length }
     try {
-      const v = run('bash', ['-c', verifyCommand], { cwd: repo, timeoutMs: verifyTimeoutMs })
+      const v = await verifyAsync(verifyCommand, { cwd: repo, timeoutMs: verifyTimeoutMs, stopped })
       const last = v.out.trimEnd().split('\n').pop() || ''
       if (last !== 'VERIFY: PASS') problems.push(`the driver's own verify did not pass on ${branch} (last line ${JSON.stringify(last)}):\n${tail(v.out, 30)}`)
       const left = git(repo, ['status', '--porcelain']).stdout.trim()
@@ -144,12 +147,33 @@ export function bughuntChecks({ repo, integration, branch, worktree, frozen, ver
   return { problems, commits: subjects.length }
 }
 
+// Runs `command` with bash in its own process group; resolves {out} when it ends. The group is
+// ended (SIGTERM, then SIGKILL after 10 s) on the timeout, or as soon as `stopped()` is true.
+function verifyAsync(command, { cwd, timeoutMs, stopped }) {
+  return new Promise(resolve => {
+    let out = ''
+    const child = spawn('bash', ['-c', command], { cwd, env: buildEnv(), detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    const end = () => {
+      try { process.kill(-child.pid, 'SIGTERM') } catch { /* already gone */ }
+      setTimeout(() => { try { process.kill(-child.pid, 'SIGKILL') } catch { /* already gone */ } }, 10_000).unref()
+    }
+    const timer = setTimeout(end, timeoutMs)
+    const watch = setInterval(() => { if (stopped()) end() }, 200)
+    child.stdout.on('data', d => { out += d })
+    child.stderr.on('data', d => { out += d })
+    const done = extra => { clearTimeout(timer); clearInterval(watch); resolve({ out: out + extra }) }
+    child.on('close', () => done(''))
+    child.on('error', e => done(`\n${e.message}`))
+  })
+}
+
 // Lands a finished hunt: bughuntChecks, then a fast-forward of `integration` to
 // the fix branch when it has commits, then the worktree and branch go. Returns
 // {problems} when the checks refuse it, {ffFailed: true} when git refuses the
-// fast-forward, else {commits}. `stopped()` is asked once the checks are done.
-export function landHunt({ repo, integration, prep, frozen, verifyCommand, ledger, stopped = () => false }) {
-  const checks = bughuntChecks({ repo, integration, branch: prep.branch, worktree: prep.fixDir, frozen, verifyCommand, verified: verifiedCommits(ledger) })
+// fast-forward, else {commits}, or {stopped: true} when `stopped()` is true once the checks
+// end (a stop during the verify ends it early). Nothing lands after a stop.
+export async function landHunt({ repo, integration, prep, frozen, verifyCommand, ledger, stopped = () => false }) {
+  const checks = await bughuntChecks({ repo, integration, branch: prep.branch, worktree: prep.fixDir, frozen, verifyCommand, verified: verifiedCommits(ledger), stopped })
   if (stopped()) return { stopped: true }
   if (checks.problems.length) return { problems: checks.problems }
   if (checks.commits && !(git(repo, ['checkout', '-q', integration]).ok && git(repo, [...SAFE, 'merge', '-q', '--ff-only', prep.branch]).ok)) return { ffFailed: true }

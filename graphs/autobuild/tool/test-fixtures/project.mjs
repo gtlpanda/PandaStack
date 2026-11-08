@@ -1,11 +1,18 @@
 // A throwaway git project for autobuild's end-to-end tests, and a loop run against the fake
 // `claude` (test-fixtures/fake-claude.mjs). Shared by test/loop.test.mjs and test/bughunt.test.mjs.
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 export const KIT = path.resolve(import.meta.dirname, "..");
+const REPO = path.resolve(KIT, "..", "..", "..");
+
+/** A copy of the PandaStack layout the kit imports from (core/ and graphs/) at `root`; returns the copied kit. */
+export function copyKit(root) {
+  for (const dir of ["core", "graphs"]) cpSync(path.join(REPO, dir), path.join(root, dir), { recursive: true });
+  return path.join(root, "graphs", "autobuild", "tool");
+}
 export const CLI = path.join(KIT, "lib", "cli.mjs");
 export const FAKE = path.join(KIT, "test-fixtures", "fake-claude.mjs");
 

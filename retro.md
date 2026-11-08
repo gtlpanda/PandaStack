@@ -1672,3 +1672,29 @@ disposition: pass` on the landed head.
   real gap. Sessions may write the temp dir, so a kit under `/tmp` was writable. The kit's own
   directory is now frozen before the temp-dir allowance. A regression test runs the guard from a
   copy of the kit under the temp dir; it failed before the fix and passes after.
+
+**/bughunt round 1 on this branch** (7.4 min, 25 agents, all six lenses; security and concurrency
+only partly covered): 6 findings, all reproduced by a failing test, and the recheck agreed with
+each. F2, F3 and F5 came in with the tool; they are PandaStack's to fix now.
+- F1 HIGH: `cli.mjs` compared `import.meta.url` with a raw argv path. From a checkout path with a
+  space, every command exited 0 having done nothing, and the hunt's landing verify passed with no
+  gate run. Fixed: compare real paths. The verify now also needs the gate's own `GATE: PASS`
+  line, not just exit 0.
+- F2: the guard's redirect check skipped `1>`, `&>` and `>|`. Fixed: every write redirect form is
+  checked; only fd duplication and /dev/null are skipped.
+- F3: `git -P push`, `git -ccore.x=y push` and `git -c alias.p=push p` got past the push
+  deny. Fixed: the guard now reads commands with PandaStack's shared shell reader
+  (`simpleCommands`, `gitSubcommand`, as the review gate does). A git alias set on the command
+  line is denied.
+- F4: with an unknown reset time, a probe that succeeded while the real session stayed limited
+  retried forever. Fixed: the wait cap covers every wait for the feature.
+- F5: frozen-path checks were lexical, so a symlink got past them. Fixed: the real path is
+  checked as well (`realish`, shared).
+- F6: a stop during the landing checks was ignored and the fixes landed anyway.
+  - The checks blocked the event loop.
+  - Yielding one turn after them was not always enough: it worked in an isolated experiment but
+    not in the loop, and why is untested.
+  - Fixed: the landing verify runs as an async child, ended on a stop. The loop's stop also waits
+    for an in-progress landing to restore the build branch; that bug surfaced once the stop
+    worked.
+  - `/build-app` gets the async verify too, through `land.mjs`.

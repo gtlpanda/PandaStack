@@ -238,7 +238,14 @@ export async function runLoop(config, options = {}) {
             limitWaitedMs += plan.waitMs;
             await sleepMs(plan.waitMs);
           } else {
-            const waited = await probeUntilAvailable(config, log, limits, sleepMs);
+            // The cap covers every wait for this feature, so a probe that succeeds while the real
+            // session stays limited cannot retry forever.
+            const leftHours = limits.maxLimitWaitHours - limitWaitedMs / 3_600_000;
+            if (leftHours <= 0) {
+              log(`usage limit: ${limits.maxLimitWaitHours} h of waiting spent on ${feature.id}. Stopping; rerun \`autobuild run\` later (finished work is committed).`);
+              return 8;
+            }
+            const waited = await probeUntilAvailable(config, log, limits, sleepMs, leftHours);
             limitWaitedMs += waited.ms;
             if (!waited.ok) {
               log(`usage still unavailable after ${limits.maxLimitWaitHours} h of probing. Stopping; rerun \`autobuild run\` later.`);
@@ -431,9 +438,9 @@ function stderrOf(file) {
 }
 
 /** Probes every probeEveryMinutes with a one-turn session until usage is available again. */
-async function probeUntilAvailable(config, log, limits, sleepMs) {
+async function probeUntilAvailable(config, log, limits, sleepMs, maxWaitHours = limits.maxLimitWaitHours) {
   const started = Date.now();
-  const deadline = started + limits.maxLimitWaitHours * 3_600_000;
+  const deadline = started + maxWaitHours * 3_600_000;
   while (Date.now() < deadline) {
     log(`usage limit: reset time unknown; probing again in ${limits.probeEveryMinutes} min`);
     await sleepMs(limits.probeEveryMinutes * 60_000);

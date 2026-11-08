@@ -28,8 +28,12 @@ export function huntEnabled(config, env = process.env) {
   return config.bughunt !== false && env.AUTOBUILD_BUGHUNT !== "0";
 }
 
-/** Ends a running hunt session (the loop's stop calls this beside its own). */
-export const stopHunt = () => stopSessions();
+// The landing in progress, if any. It checks a branch out detached and restores the build branch
+// when it ends, so a stop waits for it (it ends its verify early once stopped() is true).
+let landing = null;
+
+/** Ends a running hunt session and waits for a landing in progress to clean up (the loop's stop calls this). */
+export const stopHunt = () => Promise.all([stopSessions(), landing ?? Promise.resolve()]);
 
 /** Every tracked file under a frozen path, except the writable ones: what the fixes may not change. */
 export function frozenFiles(config) {
@@ -119,8 +123,12 @@ export async function runBughunt(config, { log, runId, stopped = () => false }) 
     return byKind[verdict.kind] ?? HUNT_EXIT;
   }
 
-  const verifyCommand = `${quote(process.execPath)} ${quote(CLI)} check --base HEAD && echo 'VERIFY: PASS'`;
-  const landed = landHunt({ repo, integration: target, prep, frozen, verifyCommand, ledger, stopped });
+  // Passes only on the gate's own last line, never on an exit code alone: a CLI that ran nothing exits 0 too.
+  const verifyCommand = `${quote(process.execPath)} ${quote(CLI)} check --base HEAD | awk '{ print } END { if ($0 == "GATE: PASS") print "VERIFY: PASS" }'`;
+  landing = landHunt({ repo, integration: target, prep, frozen, verifyCommand, ledger, stopped }).finally(() => {
+    landing = null;
+  });
+  const landed = await landing;
   if (landed.stopped) {
     log(keep("bug hunt: stopped by request during its checks"));
     return 130;

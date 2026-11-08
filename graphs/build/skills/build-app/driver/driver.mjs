@@ -237,7 +237,7 @@ export async function runDriver({ repo: given, app, noPr: noPrFlag = null }, cfg
       const byKind = { billing: EXIT.billing, auth: EXIT.auth, usage_limit: EXIT.limitTooFar, transient: EXIT.apiDown }
       return { ended: end(byKind[verdict.kind] || EXIT.brake, verdict.kind === 'normal' ? 'braked' : 'paused', keep(`the bug hunt did not finish (exit ${code}, ${huntCost}${lastRun ? `; its last run: ${lastRun.status}${lastRun.reason ? `: ${lastRun.reason}` : ''}` : '; it saved no run'}${verdict.message ? `, ${verdict.message}` : ''}); every slice and the final QA stay landed: run /build-app resume to retry it`)) }
     }
-    const landed = landHunt({ repo, integration, prep, frozen: frozenFiles(ledger), verifyCommand: cfg.verifyCommand, ledger: hl, stopped: () => stopping })
+    const landed = await landHunt({ repo, integration, prep, frozen: frozenFiles(ledger), verifyCommand: cfg.verifyCommand, ledger: hl, stopped: () => stopping })
     if (landed.stopped) return { ended: end(EXIT.stopped, 'stopped', keep(`stopped by request during the bug hunt's checks (${huntCost}); every slice and the final QA stay landed`)) }
     if (landed.problems) return { ended: end(EXIT.brake, 'braked', keep(`the bug hunt's fixes did not pass the driver's checks (${huntCost}): ${landed.problems.join('; ')}`)) }
     if (landed.ffFailed) return { ended: end(EXIT.gitState, 'failed', keep(`the bug hunt's fixes could not be fast-forwarded onto ${integration}`)) }

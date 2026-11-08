@@ -2,8 +2,9 @@
 // Usage: autobuild <command> [args]   (run from anywhere inside a project with autobuild.json)
 
 import { spawnSync } from "node:child_process";
-import { appendFileSync, copyFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { CONFIG_FILE, findProjectRoot, loadConfig, statePath } from "./config.mjs";
 import { blockedClosure, countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures } from "./features.mjs";
 import { runGate } from "./gate.mjs";
@@ -193,7 +194,15 @@ function init() {
   return 0;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Compare real paths: the URL form percent-encodes a space or non-ASCII character, the argv path does not.
+const isEntry = (() => {
+  try {
+    return Boolean(process.argv[1]) && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
+  }
+})();
+if (isEntry) {
   main()
     .then((code) => process.exit(code ?? 0))
     .catch((error) => {

@@ -1,7 +1,8 @@
 // The guard against a throwaway project: allowed and denied tool calls for each role.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { copyKit } from "../test-fixtures/project.mjs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -83,8 +84,7 @@ test("the guard is inert outside loop sessions", () => {
 });
 
 test("the kit itself stays frozen even when it lives under the temp dir sessions may write to", () => {
-  const kit = mkdtempSync(path.join(tmpdir(), "autobuild-kit-"));
-  for (const dir of ["hooks", "lib"]) cpSync(path.join(KIT, dir), path.join(kit, dir), { recursive: true });
+  const kit = copyKit(mkdtempSync(path.join(tmpdir(), "autobuild-kit-")));
   const guard = path.join(kit, "hooks", "guard.mjs");
   assert.equal(decide("Bash", { command: `echo x > ${path.join(kit, "lib", "cli.mjs")}` }, "builder", "1", guard), "deny");
   assert.equal(decide("Write", { file_path: path.join(kit, "hooks", "guard.mjs") }, "builder", "1", guard), "deny");

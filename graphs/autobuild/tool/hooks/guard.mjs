@@ -14,6 +14,9 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { findProjectRoot, loadConfig } from "../lib/config.mjs";
 import { isActive, projectRootFromHookEnv } from "../lib/session.mjs";
+// PandaStack's shell reader (heredocs, quoting, bash -c, eval) and path resolution, shared with
+// /build-app's guard and the review gate.
+import { gitSubcommand, realish, simpleCommands } from "../../../build/skills/build-app/driver/hooks/guard-rules.mjs";
 
 if (!isActive()) process.exit(0);
 
@@ -30,6 +33,7 @@ try {
   process.exit(0);
 }
 const ROOT = config.root;
+const REAL_ROOT = realish(ROOT);
 const role = process.env.AUTOBUILD_ROLE ?? process.env.HARNESS_ROLE ?? "builder";
 const tool = input.tool_name ?? "";
 const params = input.tool_input ?? {};
@@ -56,10 +60,15 @@ function expand(file) {
   return raw.replace(/^\$\{?HOME\}?(?=\/|$)/, homedir());
 }
 
-/** Whether writing `file` is forbidden for this role. */
+/** Whether writing `file` is forbidden for this role: through its path as written, or through
+ * symlinks to where it really lands (a link to a frozen dir, or out of the project). */
 function isFrozen(file) {
-  const absolute = path.resolve(ROOT, expand(file));
-  const rel = path.relative(ROOT, absolute).split(path.sep).join("/");
+  const lexical = path.resolve(ROOT, expand(file));
+  return isFrozenAt(lexical, ROOT) || isFrozenAt(realish(lexical), REAL_ROOT);
+}
+
+function isFrozenAt(absolute, root) {
+  const rel = path.relative(root, absolute).split(path.sep).join("/");
   if (absolute === KIT_HOME || absolute.startsWith(`${KIT_HOME}/`)) return true;
   if (rel.startsWith("..") || path.isAbsolute(rel)) return !TEMP_DIRS.some((dir) => absolute === dir || absolute.startsWith(`${dir}/`));
   if (role === "review") return rel !== config.progressFile;
@@ -85,9 +94,15 @@ if (tool === "Bash") {
 
   const GIT_DENIED = new Set(["push", "reset", "checkout", "restore", "clean", "stash", "rebase", "filter-branch", "filter-repo", "update-ref",
     "switch", "worktree", "rm", "mv", "config", "remote", "gc", "prune", "reflog", "am", "apply", "cherry-pick", "revert", "merge", "pull", "fetch", "clone", "submodule"]);
-  for (const match of command.matchAll(/\bgit\s+((?:(?:-C|-c|--git-dir|--work-tree)\s+\S+\s+|--[\w-]+(?:=\S+)?\s+)*)([a-z][a-z-]*)([^\n;&|]*)/g)) {
-    const sub = match[2];
-    const rest = match[3] ?? "";
+  for (const { word, args } of simpleCommands(command)) {
+    if (word !== "git") continue;
+    const { opts, sub: words } = gitSubcommand(args);
+    // An alias set on the command line can name any subcommand, or a shell command (!sh).
+    if (opts.some((opt, i) => /^-c\s*alias\./.test(opt) || (opt === "-c" && /^alias\./.test(opts[i + 1] ?? "")) || /^--config-env=alias\./.test(opt))) {
+      deny("git aliases set on the command line are not allowed.");
+    }
+    const sub = words[0] ?? "";
+    const rest = words.slice(1).join(" ");
     if (sub === "push") deny("git push is not allowed; the owner reviews and pushes.");
     if (GIT_DENIED.has(sub)) deny(`git ${sub} can discard, rewrite or fetch work. Allowed: git status/diff/log/show/add/commit.`);
     if ((sub === "branch" || sub === "tag") && /\s-[a-zA-Z]*[dDmM]/.test(rest)) deny(`git ${sub} -d/-m is not allowed.`);
@@ -101,9 +116,11 @@ if (tool === "Bash") {
   if (/(^|[\s;&|(])docker(\s|$)/.test(command) && !/\bdocker\s+(ps|compose\s+ps)\b/.test(command)) deny("docker is managed by the owner; only `docker ps` is allowed.");
 
   const frozenTarget = (token) => Boolean(token) && !/^-/.test(token) && /[/.~]/.test(token) && isFrozen(token);
-  for (const match of command.matchAll(/(?:^|[^0-9&>])>{1,2}\s*([^\s;&|<>]+)/g)) {
-    const target = match[1];
-    if (target.startsWith("&") || target === "/dev/null") continue;
+  // Every write redirect: >, >>, >|, with or without an fd (1>, 2>>) or & (&>, >&file). Only fd
+  // duplication (2>&1, >&2) and /dev/null are not a write to a file.
+  for (const match of command.matchAll(/(?:^|[^<>])(?:\d+|&)?(>>|>\||>)(&?)\s*([^\s;&|<>]+)/g)) {
+    const [, , dup, target] = match;
+    if ((dup && /^\d+$/.test(target)) || target === "/dev/null") continue;
     if (frozenTarget(target)) deny(`redirecting output into ${target} is not allowed (frozen or outside the project).`);
   }
   for (const match of command.matchAll(/\btee\s+(?:-a\s+)?([^\s;&|]+)/g)) {
