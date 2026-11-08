@@ -2,19 +2,19 @@
 // every result judged by the real vendored validator and the snapshot, a bad result discarded and retried once, the budget, batches, carried prior records, the ledger the
 // decisions write, the crash window. The workflow side is in security-audit-verdicts.test.mjs.
 import { join } from 'node:path'
-import { readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { readFileSync, statSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import { MAX_VALIDATE_BYTES, bounded, judgeValidator, validateInput } from '../skills/security-audit/audit-verdicts.mjs'
 import { agentId, writeFindings } from '../skills/security-audit/audit-findings.mjs'
 import { MAX_SCRIPT_BYTES } from '../skills/security-audit/audit-stage.mjs'
-import { advanceState, loadRun, recordSpend } from '../skills/security-audit/audit-run.mjs'
+import { loadRun, recordSpend } from '../skills/security-audit/audit-run.mjs'
 import { canonicalCoverageId } from '../skills/security-audit/upstream.mjs'
 import { companions, parts, resolve as block } from '../skills/security-audit/blocks.mjs'
 import { audit, meta } from './audit-fixtures.mjs'
-import { confirmedRecord, ledgerBytes, ledgerValid, needsValidationRecord, priorRun, priorUnit, readJsonFile, readLedger, refsOf, rejectedRecord, unitInput } from './ledger-fixtures.mjs'
+import { confirmedRecord, ledgerBytes, ledgerValid, needsValidationRecord, priorRun, priorUnit, readJsonFile, readLedger, refsOf, rejectedRecord } from './ledger-fixtures.mjs'
 import { fuzzApply, returnedFile, runScript, snapshot, stage, stageDirOf, stageDirs } from './stage-fixtures.mjs'
-import { atValidation, decisions, good, history, next, pool, rejected, round, toValidate, unitByName, verified } from './verdict-fixtures.mjs'
+import { decisions, good, history, next, pool, rejected, round, toValidate, unitByName, verified } from './verdict-fixtures.mjs'
 
 const AI = companions().find(c => c.file === 'AI-AND-LLM.md')
 const ok = runDir => { assert.ok(ledgerValid(runDir), 'upstream\'s validator passes the ledger'); assert.equal(audit(['check', runDir]).last, `AUDIT: OK ${runDir} passes check`) }
