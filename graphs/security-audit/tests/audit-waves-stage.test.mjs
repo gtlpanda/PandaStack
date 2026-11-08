@@ -540,17 +540,26 @@ await test('the critic input trims a check\'s result prose and nothing else, car
   assert.deepEqual(input.candidates, [{ fingerprint: fp, proposed_verdict: 'needs_validation', units: [readLedger(runDir).find(u => u.status === 'candidate').coverage_id], hunter_ids: ['h1-01'] }])
   assert.equal(input.parts.criticSection, block('HUNTING.md#Coverage-critic waves').text)
 })
-await test('mint needs the critic\'s result on disk: without critic.json, or with one that is not the critic JSON, the plan says to apply the critic again', async () => {
+await test('a critic.json that is missing or damaged after the critic step was saved is rebuilt from the applied critic stage\'s result, and when no such result survives the plan says what is true', async () => {
   const { runDir } = await reconToSeed(three())
   ledgerCli(['plan-wave', runDir])
   const asg = assignments(runDir)
   await runStage(runDir, { 'audit-analyst': Object.keys(asg).map(l => covered(l, asg[l])) })
   ledgerCli(['merge-wave', runDir, join(runDir, 'hunter-results.json')])
-  await runStage(runDir, { 'audit-researcher': [CRITIC()] })
-  for (const bad of [null, '{"stop":true}', '[]', 'not json']) {
+  const c = await runStage(runDir, { 'audit-researcher': [CRITIC({ stop: false, missing_units: [GAP('kept')] })] })
+  const good = readFileSync(join(runDir, 'critic.json'), 'utf8')
+  const stages = stageDirs(runDir)
+  for (const bad of [null, '{"stop":true}', '[]', 'not json', '"prose"']) {
     if (bad === null) rmSync(join(runDir, 'critic.json')); else writeFileSync(join(runDir, 'critic.json'), bad)
     const r = stage(['plan', runDir])
-    assert.equal(r.status, 1, String(bad))
-    assert.match(r.last, /^AUDIT: FAIL (critic\.json is missing or not what apply wrote|.*critic\.json is not valid JSON)/)
+    assert.equal(r.status, 0, `${bad}: ${r.stdout}`)
+    assert.equal(readFileSync(join(runDir, 'critic.json'), 'utf8'), good, `${bad}: rebuilt exactly as apply wrote it`)
+    assert.deepEqual(readJsonFile(join(runDir, 'stages', r.last.match(/stages\/([^/]+)\/run\.js/)[1]), 'input.json').proposals.map(p => p.surface), ['gap kept'])
   }
+  assert.deepEqual(stageDirs(runDir), [...stages, '05-mint-post-wave-w1'], 'the mint stage was planned once (the same stage is reused)')
+  rmSync(join(runDir, 'critic.json'))
+  rmSync(join(c.dir, 'result.json'))   // no applied critic stage is left to rebuild it from
+  const r = stage(['plan', runDir])
+  assert.equal(r.status, 1)
+  assert.equal(r.last, 'AUDIT: FAIL critic.json is missing or not what apply wrote, and no applied critic stage holds its result to rebuild it from: the critic step is saved, so the critic stage cannot be run again from here')
 })

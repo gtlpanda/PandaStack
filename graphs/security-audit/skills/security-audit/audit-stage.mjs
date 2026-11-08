@@ -194,16 +194,26 @@ export function criticInput(runDir, run, next) {
   }
 }
 
-// What the critic returned, as apply saved it.
-function readCritic(runDir) {
-  const critic = readJson(join(runDir, 'critic.json'))
-  if (critic === undefined || criticResultProblems(critic).length) refuse('critic.json is missing or not what apply wrote (the critic JSON); plan and apply the critic stage again')
-  return critic
+// What the critic returned, as apply saved it. When critic.json is missing or damaged after the critic step was saved, the critic stage cannot be run
+// again (`next` is past it), so it is rebuilt from the newest applied critic stage's result, which holds the same JSON; with none, the refusal says so.
+function readCritic(runDir, run) {
+  const valid = c => c !== undefined && criticResultProblems(c).length === 0
+  let critic
+  try { critic = readJson(join(runDir, 'critic.json')) } catch { critic = undefined }   // a file that is not JSON is as good as none
+  if (valid(critic)) return critic
+  const saved = listStages(runDir).filter(st => st.done && st.label.startsWith('critic-')).at(-1)
+  const result = saved && readJson(join(saved.dir, 'result.json'))
+  const input = saved && readJson(join(saved.dir, 'input.json'))
+  if (isObj(result) && result.status === 'done' && isObj(result.results) && valid(result.results.critic) && isObj(input) && input.kind === run.state.critic_kind) {
+    writeJson(join(runDir, 'critic.json'), result.results.critic)
+    return result.results.critic
+  }
+  return refuse('critic.json is missing or not what apply wrote, and no applied critic stage holds its result to rebuild it from: the critic step is saved, so the critic stage cannot be run again from here')
 }
 
 // The gaps to mint: the critic's missing_units and the hunters' queued `uncovered`, in that order (apply-critic counts them the same way), each tagged with where it came from.
 export function mintInput(runDir, run, next) {
-  const critic = readCritic(runDir)
+  const critic = readCritic(runDir, run)
   const kind = run.state.critic_kind   // the critic whose gaps these are: set when its result was saved
   const queue = readJson(join(runDir, 'uncovered.json')) ?? []
   const proposals = [
@@ -396,7 +406,7 @@ const APPLIERS = {
     if (!Array.isArray(units) || !units.every(isObj)) refuse('the minter result needs a units list of objects; nothing was changed')
     const mint = { units: units.map(u => (u.ordinary_attack_class_block === '' ? { ...u, ordinary_attack_class_block: null } : u)) }
     // What apply-critic would do with it, asked now: upstream says fail on a collision and the parent never mints more than it was given.
-    const problems = applyCriticProblems(runDir, readCritic(runDir), mint)
+    const problems = applyCriticProblems(runDir, readCritic(runDir, run), mint)
     if (problems.length) return refuseResult({ runDir, stage, result, event, file: MINT_FEEDBACK, scope: `${input.wave}:${input.kind}`, problems, what: "the minter's units would not apply", then: 'plan the stage again: it is sent these reasons', giveUp: () => stopHunting(runDir, LEDGER_FAILED, run) })
     writeJson(join(runDir, 'mint.json'), mint)
     recordSpend(runDir, stage.name, result.budgetSpent)
