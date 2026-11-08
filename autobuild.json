@@ -20,7 +20,7 @@
   },
   "env": {
     "pathPrepend": [
-      "/tmp/claude-1000/-mnt-c-Users-cfeli/55c22a53-a475-40a9-9dc0-bbcdd182b003/scratchpad/shellcheck-v0.10.0"
+      "~/.local/share/pandastack/shellcheck"
     ],
     "ldLibraryPath": [],
     "vars": {}
