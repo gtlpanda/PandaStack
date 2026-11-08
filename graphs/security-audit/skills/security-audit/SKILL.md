@@ -57,9 +57,12 @@ repository. It costs tens to hundreds of agent runs.
 - Variables name where things are. Every Bash call is a fresh shell, so write
   them literally at the head of each command (`AUDIT=<dir> REPO=<dir>
   RUN=<dir>; node ...`):
-  - `AUDIT` is the directory this skill was loaded from (the Skill tool prints
-    it as the base directory). With none given, it is
-    `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/security-audit`.
+  - `AUDIT` is the directory this skill was loaded from: the base directory
+    the Skill tool printed with it. With none printed, `./.claude/skills/security-audit`
+    when it exists (a project-local install of this skill), else
+    `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/security-audit`. Check that
+    `$AUDIT/audit-run.mjs` exists before the first command, and say which
+    directory it is.
   - `REPO` is the target's absolute path (`git rev-parse --show-toplevel` of the
     current directory when none was given).
   - `RUN` is the run directory `init` prints on its first line. Keep it.
@@ -115,11 +118,8 @@ Every other step says `run=workflow` (`recon`, `hunt`, `critic`, `mint`,
 2. Call the Workflow tool with `scriptPath` set to that path and no `args`.
    Everything the stage needs is inside the script. It runs in the background
    and notifies you when it completes; wait for that. Never use ScheduleWakeup
-   or sleep. If the Workflow tool reports a Run ID, save it in
-   `workflow-run-id` beside the script, so that an interrupted stage can be
-   continued with `resumeFromRunId` (an optimization: if the runtime refuses
-   it, run the stage again without it, which costs agent calls and corrupts
-   nothing).
+   or sleep. A stage that was interrupted is planned and run again: that costs
+   agent calls and corrupts nothing.
 3. Apply it, with the JSON the Workflow wrote. The completion notice names an
    output file: pass that file as it is, `OUT` below, never retyped or edited.
    `node "$AUDIT/audit-stage.mjs" apply "$RUN" "$OUT"`
@@ -160,8 +160,8 @@ node "$AUDIT/audit-run.mjs" next "$RUN"
 
 Take the run the user means (the highest number is the newest), and carry on
 with the loop. A stage that was planned and not applied is planned again and
-reuses its directory; pass the Run ID saved in `workflow-run-id` as
-`resumeFromRunId` when there is one. Re-running a stage never corrupts a run.
+reuses its directory. Running a stage again never corrupts a run; it costs the
+agent calls of that stage.
 `node "$AUDIT/audit-run.mjs" check "$RUN"` verifies a run's files.
 
 ## 6. Finish
@@ -210,7 +210,9 @@ repository.
   `$RUN/tree` to act on them. Only the helpers read it.
 - Never edit, delete, or hand-write a file in `$RUN`. Only the helpers write
   there (`audit-run.mjs`, `audit-ledger.mjs`, `audit-findings.mjs`,
-  `audit-stage.mjs`, `audit-report.mjs`); an edited run is not a run.
+  `audit-stage.mjs`, `audit-report.mjs`); an edited run is not a run. The one
+  exception is the `returned=` file of section 4, step 3, and only when the
+  Workflow's notice names no output file.
 - v1 is source-only: never say a finding is confirmed, reproduced or
   exploitable. Say `needs_validation`, and name its blocker.
 - Never launch an audit agent yourself, outside a planned stage, and never
