@@ -14,11 +14,14 @@
 // v1 is source-only (plan decision D1 A): no sandbox exists, so no record can be `confirmed`. That is enforced three times: the transition table
 // has no way in (transitionProblem), a record that says `confirmed` is refused wherever one arrives (recordProblems), and link-check requires
 // a `confirmed` record to be backed by a retained local artifact, which nothing can produce.
-import { join } from 'node:path'
+import { lstatSync, realpathSync, renameSync, rmSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
-import { readJson, refuse, writeJson } from './audit-run.mjs'
+import { FINDINGS_FAILED, Usage, advanceState, appendEvent, formatNext, loadRun, markComplete, markIncomplete, nextStep, readJson, refuse, writeJson } from './audit-run.mjs'
+import { LEDGER_FILE } from './audit-ledger.mjs'
 import { refProblem } from './audit-facts.mjs'
-import { isSafeAgentId, validateFindingsDocument } from './upstream.mjs'
+import { isSafeAgentId, validateFindingsDocument, validateFindingsFile, validateLedgerFile } from './upstream.mjs'
 
 export const CONFIRMED_REACHABLE = false   // plan D1 A: nothing in v1 can establish a bounded local observed result
 // PandaStack's own reason strings (upstream's five are in audit-run.mjs REASONS). validation_budget_exhausted is upstream's, and is used for
@@ -32,12 +35,29 @@ export const VERDICTS = ['confirmed', 'needs_validation', 'rejected']
 export const DECISIONS_FILE = 'decisions.json'
 export const HISTORY_FILE = 'agent-history.json'
 export const FINDINGS_FILE = 'findings.json'
+export const CANDIDATES_FILE = 'candidates.json'
+export const EVIDENCE_LINKS_FILE = 'evidence-links.json'
+const MAX_PROBLEMS = 40
 
 const isObj = v => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isText = v => typeof v === 'string' && v.trim() !== ''
 const show = v => String(JSON.stringify(v)).slice(0, 80)
 // Code-unit order, as the vendored validator compares fingerprints (never localeCompare).
 export const byFingerprint = (a, b) => (a.fingerprint < b.fingerprint ? -1 : a.fingerprint > b.fingerprint ? 1 : 0)
+const clone = v => JSON.parse(JSON.stringify(v))
+const fail = (summary, problems = []) => { throw Object.assign(new Error(summary), { problems: problems.slice(0, MAX_PROBLEMS) }) }
+
+// ---------- the pool of candidates ----------
+// candidates.json is what merge-wave wrote (audit-ledger.mjs mergeCandidates): { fingerprint, proposed_verdict, hunter_ids, units, record }, one entry per
+// fingerprint, sorted, plus what a carried prior record adds (carried_from) and what consolidation adds (merged). It is read as an untrusted file.
+export function readPool(runDir) {
+  const pool = readJson(join(runDir, CANDIDATES_FILE))
+  if (pool === undefined) return []
+  const ok = Array.isArray(pool) && pool.every(c => isObj(c) && isText(c.fingerprint) && ['confirmed', 'needs_validation'].includes(c.proposed_verdict) && Array.isArray(c.hunter_ids) && c.hunter_ids.every(isText) &&
+    Array.isArray(c.units) && c.units.every(isText) && isObj(c.record)) && new Set(pool.map(c => c.fingerprint)).size === pool.length
+  if (!ok) refuse(`${CANDIDATES_FILE} is not what merge-wave wrote (an array of { fingerprint, proposed_verdict, hunter_ids, units, record }, one entry per fingerprint)`)
+  return pool
+}
 
 // ---------- agent IDs, and who has seen which fingerprint ----------
 // The ID of a verifier, from the candidate's stable number (decisions.json): v Phase 3, r Phase 5, x a replacement's verifier. A retry appends
@@ -206,4 +226,207 @@ export function recordProblems(runDir, record, { fingerprint, verdict, cache = n
     if (bad) wrong.push(`trace or evidence ${bad}`)
   }
   return [...new Set([...wrong])].slice(0, 10)
+}
+
+// ---------- the final records ----------
+// A record is retained while it is decided and Phase 5 has not removed it. findings.json is exactly the retained records, sorted by fingerprint.
+export const retained = e => e.state === 'decided' && !(e.phase5 && e.phase5.state === 'removed')
+export const finalRecords = decisions => decisions.entries.filter(retained).map(e => e.record).sort(byFingerprint)
+// Phase 5 reads confirmed and needs_validation records; a rejected one is final as the verifier left it.
+export const needsPhase5 = record => record.verdict === 'confirmed' || record.verdict === 'needs_validation'
+
+// ---------- link-check ----------
+// What upstream's two validators cannot see, because each takes exactly one file (plan 1.4): the records against the ledger and the snapshot. It adds checks and relaxes none.
+//   1. every record is linked from at least one ledger unit (a live fingerprint, an archived attempt's, or the kept side of a consolidation alias)
+//   2. every candidate the ledger holds (live or archived, aliases resolved) and every candidate in the pool has a record in findings.json, or is listed as unresolved with a reason
+//      (an unvalidated candidate, a record Phase 5 removed), and then the run must say it is incomplete: nothing is dropped silently
+//   3. every confirmed record is backed by a unit check with method "local" whose artifact is a regular file that exists (v1: none can, which is the D1 rule enforced by construction)
+//   4. every trace and evidence file is in the snapshot and every line is within it
+// Returns { problems, unresolved } with unresolved = [{ fingerprint, reason, units }].
+export function linkCheck({ runDir, records, ledger, decisions, pool, meta }) {
+  const problems = []
+  const note = text => { if (problems.length < MAX_PROBLEMS) problems.push(text) }
+  const alias = new Map(ledger.flatMap(u => (Array.isArray(u.merged_fingerprints) ? u.merged_fingerprints : []).map(m => [m.fingerprint, m.into])))
+  const resolved = fp => alias.get(fp) ?? fp
+  const have = new Set(records.map(r => r.fingerprint))
+  const linked = new Set(ledger.flatMap(u => [...u.result_fingerprints, ...u.attempts.flatMap(a => a.result_fingerprints), ...(Array.isArray(u.merged_fingerprints) ? u.merged_fingerprints.map(m => m.into) : [])]))
+  for (const r of records) if (!linked.has(r.fingerprint)) note(`record ${show(r.fingerprint)} is linked from no coverage unit`)
+  const candidates = new Map()   // fingerprint -> units that hold it
+  const add = (fp, unit) => candidates.set(resolved(fp), [...(candidates.get(resolved(fp)) ?? []), ...(unit ? [unit] : [])])
+  for (const u of ledger) for (const fp of [...(u.status === 'candidate' ? u.result_fingerprints : []), ...u.attempts.flatMap(a => a.result_fingerprints)]) add(fp, u.coverage_id)
+  for (const c of pool) add(c.fingerprint, null)
+  const unresolved = []
+  for (const [fp, units] of [...candidates].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+    if (have.has(fp)) continue
+    const e = decisions?.entries.find(x => x.fingerprint === fp)
+    const reason = e?.state === 'unvalidated' ? e.unresolved : e?.phase5?.state === 'removed' ? e.phase5.reason : null   // anything else is a candidate that was never settled
+    if (reason === null) { note(`candidate ${show(fp)} has no record in findings.json and is not listed as unresolved: nothing may be dropped silently`); continue }
+    unresolved.push({ fingerprint: fp, reason, units: [...new Set(units)].sort() })
+    if (meta.run_status !== 'incomplete') note(`candidate ${show(fp)} is unresolved (${reason}) but the run is not marked incomplete`)
+  }
+  for (const r of records.filter(x => x.verdict === 'confirmed')) {
+    const backed = ledger.some(u => u.result_fingerprints.includes(r.fingerprint) && u.local_checks.some(c => c.method === 'local' && typeof c.artifact === 'string' && isRegularFile(join(runDir, c.artifact))))
+    if (!backed) note(`confirmed record ${show(r.fingerprint)} is backed by no unit check with method "local" whose artifact is a regular file that exists`)
+  }
+  const cache = new Map()
+  for (const r of records) for (const e of [...(Array.isArray(r.trace) ? r.trace : []), ...(Array.isArray(r.evidence) ? r.evidence : [])]) {
+    const bad = refProblem(`${e?.file}:${e?.line}`, join(runDir, 'tree'), cache)
+    if (bad) note(`record ${show(r.fingerprint)}: ${bad}`)
+  }
+  return { problems, unresolved }
+}
+function isRegularFile(path) { try { return lstatSync(path).isFile() } catch { return false } }
+
+// fingerprint -> the units that carry it and the checks on them (plan 4.3: evidence-links.json, generated, never edited)
+export function evidenceLinks(records, ledger) {
+  return records.map(r => ({
+    fingerprint: r.fingerprint, verdict: r.verdict,
+    units: ledger.filter(u => u.result_fingerprints.includes(r.fingerprint) || u.attempts.some(a => a.result_fingerprints.includes(r.fingerprint)) || (u.merged_fingerprints ?? []).some(m => m.into === r.fingerprint))
+      .map(u => ({ coverage_id: u.coverage_id, checks: u.local_checks.map(c => ({ agent_id: c.agent_id, method: c.method, artifact: c.artifact })) })),
+  }))
+}
+
+// ---------- findings.json: the one write path ----------
+// Writes `records`, sorted, to <runDir>/findings.json if, and only if, upstream's validators and the link-check pass: the file is written beside the real one, run through
+// validate-findings.cjs and validate-coverage-ledger.cjs (upstream's documented commands, exit 0 and a PASS line) and linkCheck, and only then renamed over it. A failure
+// leaves findings.json exactly as it was. Throws an Error with `problems` on failure.
+export function commitFindings(runDir, records) {
+  const file = join(runDir, FINDINGS_FILE), candidate = `${file}.candidate`
+  if (!Array.isArray(records)) fail(`findings are an array of records; ${FINDINGS_FILE} is unchanged`)
+  const sorted = clone([...records].sort(byFingerprint))
+  const errors = validateFindingsDocument(sorted)
+  if (errors.length) fail(`the findings would not pass upstream's validator (${errors.length} error(s)); ${FINDINGS_FILE} is unchanged`, errors)
+  const ledger = readJson(join(runDir, LEDGER_FILE))
+  if (!Array.isArray(ledger)) fail(`${LEDGER_FILE} is missing or not an array: findings are written against it; ${FINDINGS_FILE} is unchanged`)
+  const run = loadRun(runDir)
+  const link = linkCheck({ runDir, records: sorted, ledger, decisions: decisionsOf(runDir), pool: readPool(runDir), meta: run.meta })
+  if (link.problems.length) fail(`the link-check failed (${link.problems.length} problem(s)); ${FINDINGS_FILE} is unchanged`, link.problems)
+  writeJson(candidate, sorted)
+  try {
+    for (const [name, validate, path] of [['validate-findings.cjs', validateFindingsFile, candidate], ['validate-coverage-ledger.cjs', validateLedgerFile, join(runDir, LEDGER_FILE)]]) {
+      let r
+      try { r = validate(path) } catch (e) { fail(`upstream's ${name} gave no verdict (${e.message}); ${FINDINGS_FILE} is unchanged`) }
+      if (!r.valid) fail(`upstream's ${name} said "${r.lastLine}" (exit ${r.exitCode}); ${FINDINGS_FILE} is unchanged`)
+    }
+    renameSync(candidate, file)
+  } finally {
+    rmSync(candidate, { force: true })
+  }
+  writeJson(join(runDir, EVIDENCE_LINKS_FILE), evidenceLinks(sorted, ledger))
+}
+
+// ---------- write-findings ----------
+export function writeFindings(runDir) {
+  const started = Date.now()
+  const run = loadRun(runDir)
+  const next = nextStep(run)
+  if (next.step !== 'write-findings') refuse(`write-findings is not the next step of this run: ${formatNext(next)}`)
+  const pool = readPool(runDir)
+  const decisions = decisionsOf(runDir)
+  if (decisions === null && pool.length) refuse(`${pool.length} candidate(s) in ${CANDIDATES_FILE} were never validated (${DECISIONS_FILE} is missing): the validate stage has not run`)
+  const pending = (decisions?.entries ?? []).filter(e => e.state === 'pending').length + pool.filter(c => !entryOf(decisions ?? emptyDecisions(), c.fingerprint)).length
+  if (pending) refuse(`${pending} candidate(s) are still pending a verifier: validate is not over`)
+  const records = finalRecords(decisions ?? emptyDecisions())
+  try {
+    commitFindings(runDir, records)
+  } catch (e) {
+    if (!e.problems) throw e
+    // Terminal state (b): the run says why it stopped. findings.json is left as it was (none), `next` goes to the report, and the report discloses it.
+    markIncomplete(runDir, FINDINGS_FAILED)
+    advanceState(runDir, 'write-findings')
+    appendEvent(runDir, { cmd: 'write-findings', stage: 'write-findings', result: 'failed', reason: FINDINGS_FAILED, duration_ms: Date.now() - started, problems: e.problems.slice(0, 5) })
+    throw Object.assign(new Error(`${e.message}; the run is marked incomplete (${FINDINGS_FAILED}) and \`next\` goes to the report`), { problems: e.problems })
+  }
+  advanceState(runDir, 'write-findings')
+  const counts = Object.fromEntries(VERDICTS.map(v => [v, records.filter(r => r.verdict === v).length]))
+  appendEvent(runDir, { cmd: 'write-findings', stage: 'write-findings', result: 'ok', duration_ms: Date.now() - started, counts })
+  const notes = []
+  // Nothing for Phase 5 to read (no confirmed or needs_validation record): the run ends here, and complete-check says how.
+  if (!records.some(needsPhase5)) notes.push(`no record needs Phase 5; ${finishRun(runDir).message}`)
+  return { summary: `records=${records.length} confirmed=${counts.confirmed} needs_validation=${counts.needs_validation} rejected=${counts.rejected}`, notes }
+}
+
+// ---------- complete-check ----------
+// Upstream: "Set run_status: complete only when every ledger candidate has an independent final disposition and every retained record passes Phase 5." That is prose only in
+// upstream (neither validator reads run status). Here: both validators pass on the files on disk, the link-check is clean with nothing unresolved, every candidate is decided,
+// every retained confirmed or needs_validation record passed Phase 5, and the independence history has no reuse. A run that is incomplete stays so; a run that is in progress and
+// fails is marked incomplete with complete_check_failed; one that passes is marked complete.
+export function completeProblems(runDir) {
+  const run = loadRun(runDir)
+  const problems = []
+  const note = text => { if (problems.length < MAX_PROBLEMS) problems.push(text) }
+  if (!Array.isArray(run.ledger)) { note(`${LEDGER_FILE} is missing`); return { problems, unresolved: [] } }
+  if (!Array.isArray(run.findings)) { note(`${FINDINGS_FILE} is missing: nothing was written`); return { problems, unresolved: [] } }
+  for (const [name, validate, file] of [['validate-findings.cjs', validateFindingsFile, FINDINGS_FILE], ['validate-coverage-ledger.cjs', validateLedgerFile, LEDGER_FILE]]) {
+    try { const r = validate(join(runDir, file)); if (!r.valid) note(`${name} said "${r.lastLine}"`) } catch (e) { note(`${name} gave no verdict: ${e.message}`) }
+  }
+  const decisions = decisionsOf(runDir)
+  const pool = readPool(runDir)
+  const link = linkCheck({ runDir, records: run.findings, ledger: run.ledger, decisions, pool, meta: run.meta })
+  for (const p of link.problems) note(p)
+  for (const u of link.unresolved) note(`candidate ${show(u.fingerprint)} is unresolved: ${u.reason}`)
+  const history = historyOf(runDir)
+  for (const p of historyProblems(history)) note(p)
+  for (const e of decisions?.entries ?? []) if (e.state !== 'decided') note(`candidate ${show(e.fingerprint)} was never decided (${e.state})`)
+  for (const r of run.findings) {
+    const e = decisions && entryOf(decisions, r.fingerprint)
+    if (!e || e.state !== 'decided') { note(`record ${show(r.fingerprint)} has no decision`); continue }
+    const roles = (history.fingerprints[r.fingerprint] ?? []).filter(h => !['hunter'].includes(h.role))
+    if (!roles.some(h => h.role === 'validator')) note(`record ${show(r.fingerprint)} was verified by no Phase 3 verifier`)
+    if (needsPhase5(r) && !(e.phase5?.state === 'verified' && roles.some(h => h.role === 'verifier' && h.id === e.phase5.verifier_id))) note(`record ${show(r.fingerprint)} did not pass Phase 5`)
+    if (!isDeepStrictEqual(e.record, r)) note(`record ${show(r.fingerprint)} in findings.json is not the decided record`)
+  }
+  return { problems, unresolved: link.unresolved }
+}
+
+// Runs complete-check and moves run_status as it decides. Returns { ok, status, message, problems }.
+export function finishRun(runDir) {
+  const { meta } = loadRun(runDir)
+  if (meta.run_status === 'incomplete') return { ok: false, status: 'incomplete', problems: [], message: `the run is incomplete (${meta.incomplete_reason}): it stays so, and the report discloses why` }
+  const { problems } = completeProblems(runDir)
+  if (problems.length === 0) { markComplete(runDir); return { ok: true, status: 'complete', problems, message: 'every candidate has an independent final disposition and every retained record passed Phase 5: the run is complete' } }
+  if (meta.run_status === 'complete') return { ok: false, status: 'complete', problems, message: `the run is marked complete and ${problems.length} problem(s) were found: it is not downgraded` }
+  markIncomplete(runDir, COMPLETE_CHECK_FAILED)
+  return { ok: false, status: 'incomplete', problems, message: `${problems.length} problem(s): the run is marked incomplete (${COMPLETE_CHECK_FAILED})` }
+}
+
+// ---------- command line ----------
+const USAGE = `usage: audit-findings.mjs write <run dir>
+       audit-findings.mjs link-check <run dir>
+       audit-findings.mjs complete-check <run dir>`
+function runLinkCheck(runDir) {
+  const run = loadRun(runDir)
+  if (!Array.isArray(run.ledger)) refuse(`${LEDGER_FILE} is missing`)
+  if (!Array.isArray(run.findings)) refuse(`${FINDINGS_FILE} is missing`)
+  const out = linkCheck({ runDir, records: run.findings, ledger: run.ledger, decisions: decisionsOf(runDir), pool: readPool(runDir), meta: run.meta })
+  const notes = out.unresolved.map(u => `unresolved ${u.fingerprint} (${u.reason}) units=${u.units.join(',')}`)
+  if (out.problems.length) fail(`${runDir} has ${out.problems.length} link problem(s)`, out.problems)
+  return { summary: `link-check records=${run.findings.length} unresolved=${out.unresolved.length}`, notes }
+}
+function runCompleteCheck(runDir) {
+  const out = finishRun(runDir)
+  if (!out.ok) fail(out.message, out.problems)
+  return { summary: `complete-check ${out.message}`, notes: [] }
+}
+const COMMANDS = { write: writeFindings, 'link-check': runLinkCheck, 'complete-check': runCompleteCheck }
+
+export function main(argv) {
+  const [cmd, runArg, ...rest] = argv
+  try {
+    if (!Object.hasOwn(COMMANDS, cmd) || runArg === undefined || rest.length) throw new Usage()
+    const out = COMMANDS[cmd](resolve(runArg))
+    for (const n of out.notes) console.log(`note: ${n}`)
+    console.log(`AUDIT: OK ${out.summary.startsWith(cmd) ? out.summary : `${cmd} ${out.summary}`}`)
+    return 0
+  } catch (e) {
+    if (e instanceof Usage) { console.error(USAGE); return 2 }
+    for (const p of e.problems ?? []) console.log(`findings: ${p}`)
+    console.log(`AUDIT: FAIL ${e.message}`)
+    return 1
+  }
+}
+
+// Run as a command, also through the ~/.claude/skills symlink install.sh makes.
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+  process.exitCode = main(process.argv.slice(2))
 }

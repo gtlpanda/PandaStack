@@ -13,23 +13,11 @@ import { canonicalCoverageId } from '../skills/security-audit/upstream.mjs'
 import { companions, resolve as block } from '../skills/security-audit/blocks.mjs'
 import { audit, meta } from './audit-fixtures.mjs'
 import { confirmedRecord, ledgerBytes, ledgerValid, needsValidationRecord, priorRun, priorUnit, readJsonFile, readLedger, refsOf, rejectedRecord, unitInput } from './ledger-fixtures.mjs'
-import { fuzzApply, restore, returnedFile, runScript, snapshot, stage, stageDirOf, stageDirs } from './stage-fixtures.mjs'
-import { atValidation, decisions, events, history, next, pool, rejected, unitByName, verified } from './verdict-fixtures.mjs'
+import { fuzzApply, returnedFile, runScript, snapshot, stage, stageDirOf, stageDirs } from './stage-fixtures.mjs'
+import { atValidation, decisions, good, history, next, pool, rejected, round, toValidate, unitByName, verified } from './verdict-fixtures.mjs'
 
 const AI = companions().find(c => c.file === 'AI-AND-LLM.md')
 const ok = runDir => { assert.ok(ledgerValid(runDir), 'upstream\'s validator passes the ledger'); assert.equal(audit(['check', runDir]).last, `AUDIT: OK ${runDir} passes check`) }
-// Hunting over and consolidation skipped: the point validate starts from.
-const toValidate = (defs, opts) => { const run = atValidation(defs, opts); advanceState(run.runDir, 'consolidate'); return run }
-// plan, run the generated script against analysts that answer by label with answerFor(label, input), apply: { plan, dir, input, ran, apply, prompts }.
-async function round(runDir, answerFor) {
-  const plan = stage(['plan', runDir])
-  assert.equal(plan.status, 0, plan.stdout)
-  const dir = stageDirOf(plan, runDir)
-  const input = readJsonFile(dir, 'input.json')
-  const ran = await runScript(join(dir, 'run.js'), { 'audit-analyst': input.candidates.map(() => (prompt, opts) => answerFor(opts.label, input.candidates.find(c => c.agent_id === opts.label))) })
-  return { plan, dir, input, ran, apply: stage(['apply', runDir, returnedFile(dir, ran.result)]), prompts: Object.fromEntries(ran.calls.map(c => [c.label, c.prompt])) }
-}
-const good = c => verified(c.fingerprint)
 const entry = (runDir, fp) => decisions(runDir).entries.find(e => e.fingerprint === fp)
 
 console.log('== what a verifier is sent')

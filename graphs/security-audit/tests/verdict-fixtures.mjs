@@ -4,7 +4,9 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyCritic, mergeWave, planWave } from '../skills/security-audit/audit-ledger.mjs'
 import { advanceState } from '../skills/security-audit/audit-run.mjs'
+import assert from 'node:assert/strict'
 import { audit } from './audit-fixtures.mjs'
+import { returnedFile, runScript, stage, stageDirOf } from './stage-fixtures.mjs'
 import { candidateOf, checkOf, hunterResult, hunterUnit, needsValidationRecord, readJsonFile, readLedger, refsOf, rejectedRecord, seeded, unitInput } from './ledger-fixtures.mjs'
 
 export const nameOf = u => u.canonical_refs.surface.split('#')[1]
@@ -52,3 +54,16 @@ export const rejected = fingerprint => ({ decision: 'rejected', record: rejected
 export const pool = runDir => readJsonFile(runDir, 'candidates.json')
 export const decisions = runDir => readJsonFile(runDir, 'decisions.json')
 export const history = runDir => readJsonFile(runDir, 'agent-history.json')
+
+// Hunting over and consolidation skipped: the point validate starts from.
+export const toValidate = (defs, opts) => { const run = atValidation(defs, opts); advanceState(run.runDir, 'consolidate'); return run }
+// plan, run the generated script against analysts that answer by label with answerFor(label, input), apply: { plan, dir, input, ran, apply, prompts }.
+export async function round(runDir, answerFor) {
+  const plan = stage(['plan', runDir])
+  assert.equal(plan.status, 0, plan.stdout)
+  const dir = stageDirOf(plan, runDir)
+  const input = readJsonFile(dir, 'input.json')
+  const ran = await runScript(join(dir, 'run.js'), { 'audit-analyst': input.candidates.map(() => (prompt, opts) => answerFor(opts.label, input.candidates.find(c => c.agent_id === opts.label))) })
+  return { plan, dir, input, ran, apply: stage(['apply', runDir, returnedFile(dir, ran.result)]), prompts: Object.fromEntries(ran.calls.map(c => [c.label, c.prompt])) }
+}
+export const good = c => verified(c.fingerprint)

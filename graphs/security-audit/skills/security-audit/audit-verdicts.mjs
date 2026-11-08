@@ -12,7 +12,7 @@ import { isDeepStrictEqual } from 'node:util'
 import { CARRIED, LEDGER_FAILED, REASONS, advanceState, appendEvent, markIncomplete, readJson, recordSpend, refuse, writeJson } from './audit-run.mjs'
 import { commitLedger, loadPriors } from './audit-ledger.mjs'
 import { CLIP, architectureOf, baseInput, blockText, clipText, clipValue, encodedSize } from './audit-inputs.mjs'
-import { CONFIRMED_WITHOUT_EVIDENCE, HISTORY_FILE, MAX_TRIES, VERDICTS, agentId, decisionsOf, ensureDecisions, entryOf, historyOf, recordAgent, recordProblems, saveDecisions, transitionProblem } from './audit-findings.mjs'
+import { CANDIDATES_FILE, CONFIRMED_WITHOUT_EVIDENCE, HISTORY_FILE, MAX_TRIES, VERDICTS, agentId, decisionsOf, ensureDecisions, entryOf, historyOf, readPool, recordAgent, recordProblems, saveDecisions, transitionProblem } from './audit-findings.mjs'
 import { companions, parts } from './blocks.mjs'
 
 const isObj = v => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -21,20 +21,7 @@ const show = v => String(JSON.stringify(v)).slice(0, 80)
 const text = v => (typeof v === 'string' ? clipText(v) : null)
 const sortedUnique = list => [...new Set(list)].sort()
 
-export const CANDIDATES_FILE = 'candidates.json'
 export const CONSOLIDATION_FILE = 'consolidation.json'
-
-// ---------- the pool of candidates ----------
-// candidates.json is what merge-wave wrote (audit-ledger.mjs mergeCandidates): { fingerprint, proposed_verdict, hunter_ids, units, record }, one entry per
-// fingerprint, sorted, plus what a carried prior record adds (carried_from) and what consolidation adds (merged). It is read as an untrusted file.
-export function readPool(runDir) {
-  const pool = readJson(join(runDir, CANDIDATES_FILE))
-  if (pool === undefined) return []
-  const ok = Array.isArray(pool) && pool.every(c => isObj(c) && isText(c.fingerprint) && ['confirmed', 'needs_validation'].includes(c.proposed_verdict) && Array.isArray(c.hunter_ids) && c.hunter_ids.every(isText) &&
-    Array.isArray(c.units) && c.units.every(isText) && isObj(c.record)) && new Set(pool.map(c => c.fingerprint)).size === pool.length
-  if (!ok) refuse(`${CANDIDATES_FILE} is not what merge-wave wrote (an array of { fingerprint, proposed_verdict, hunter_ids, units, record }, one entry per fingerprint)`)
-  return pool
-}
 
 // ---------- consolidate ----------
 const CONSOLIDATION = 'HUNTING.md#Parent consolidation and ledger update'

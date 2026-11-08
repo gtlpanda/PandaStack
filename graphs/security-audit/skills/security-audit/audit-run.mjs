@@ -155,6 +155,17 @@ export function markIncomplete(runDir, reason) {
   return reason
 }
 
+// Marks the run complete: upstream's terminal state (a), only after audit-findings.mjs complete-check has found every candidate decided and every retained
+// record verified. Idempotent on a complete run; an incomplete run is never promoted. run-metadata.json has one writer: this module.
+export function markComplete(runDir) {
+  const file = join(runDir, 'run-metadata.json')
+  const meta = readJson(file)
+  if (meta === undefined) refuse(`${runDir} has no run-metadata.json: it is not a run directory`)
+  if (meta.run_status === 'incomplete') refuse(`an incomplete run (${meta.incomplete_reason}) is never marked complete`)
+  if (meta.run_status === 'complete') return
+  writeJson(file, { ...meta, run_status: 'complete', incomplete_reason: null })
+}
+
 // ---------- the target ----------
 const line = text => text.replace(/\n$/, '')   // not trim(): a path may end in a space
 
@@ -510,6 +521,8 @@ export function nextStep({ meta, state, ledger, findings }) {
     case 'consolidate': return go('validate')
     case 'validate': return go('write-findings')
     case 'write-findings': {
+      // A first write that failed leaves no findings.json (the previous file is left alone, and there was none): the run is incomplete with its own reason, and the report says why.
+      if (findings === undefined && meta.run_status === 'incomplete' && meta.incomplete_reason === FINDINGS_FAILED) return toReport()
       if (!Array.isArray(findings)) refuse('findings.json is missing or not an array after write-findings')
       return findings.some(r => r?.verdict === 'confirmed' || r?.verdict === 'needs_validation') ? go('verify') : toReport()
     }
