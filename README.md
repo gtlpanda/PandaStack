@@ -138,7 +138,7 @@ One repo, one install. Each piece, where it lives, and the state it keeps:
 
 | Piece | In this repo | On your machine | State it keeps |
 |---|---|---|---|
-| The graphs (blueprint, dev, qa, release, hunt, build, seo) | `graphs/<graph>/` | one link per skill, agent, and workflow in `~/.claude/` | in each target repo's git dir, never committed: `bughunt/<key>/` (the hunt ledger), `harness-build/<app>/`, `harness-dev/` |
+| The graphs (blueprint, dev, qa, release, hunt, build, seo, security-audit) | `graphs/<graph>/` | one link per skill, agent, and workflow in `~/.claude/` | in each target repo's git dir, never committed: `bughunt/<key>/` (the hunt ledger), `harness-build/<app>/`, `harness-dev/`, `security-audit/run-<N>/` (an audit run) |
 | autobuild | `graphs/autobuild/tool/` (its own history kept) | `~/.local/bin/autobuild`, plus the `/autobuild` skill | in each project: `autobuild.json`, `features.json`, `PROGRESS.md`, `.harness/`, `logs/`; the hunt's control files in the project's git dir |
 | The kit | `kit/` | one link per skill, agent, and command in `~/.claude/` | none |
 | The review gate | `graphs/hunt/skills/bughunt/gate.mjs` | a `PreToolUse` hook in `~/.claude/settings.json`, active in every repo | reads the hunt ledger; `PANDASTACK_REVIEW_GATE=0` at launch turns it off, for a person, never for Claude |

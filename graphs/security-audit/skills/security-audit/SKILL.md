@@ -25,9 +25,10 @@ repository. It costs tens to hundreds of agent runs.
   "review this change", "check this endpoint for XSS", "what are the risks",
   a request about one file, one PR, or one class of bug: use the `security`
   skill. For excerpts of the vendored method, run
-  `node "$AUDIT/blocks.mjs" guidance "<the question>"`. It writes no file,
-  starts no audit and runs no agent. `/security-audit --guidance "<question>"` is
-  this.
+  `node "$AUDIT/blocks.mjs" guidance '<the question>'`, with the question in
+  single quotes (a single quote inside it is written `'\''`): it can hold text
+  that is not yours, which the shell would run inside double quotes. It writes no file, starts no audit and runs no agent.
+  `/security-audit --guidance "<question>"` is this.
 - **A request that could mean either** ("security audit this", with no
   `--full`): ask once with AskUserQuestion, "Full audit of the whole
   repository (many agents, source only) or an ordinary security review?", and
@@ -76,7 +77,8 @@ repository. It costs tens to hundreds of agent runs.
 node "$AUDIT/audit-run.mjs" init "$REPO" --full
 ```
 
-Add the flags the user gave. `REPO` is the target. The last line must start
+Pass the flags the user gave, except `--unattended` and `--guidance`: those are
+yours, and `init` refuses them (a usage error, exit 2). `REPO` is the target. The last line must start
 `AUDIT: OK`; on `AUDIT: FAIL`, say why and stop. Relay every `note:` line
 (uncommitted changes, symlinks left out, an earlier run that cannot be carried).
 Before the first `plan` command, and so before any agent runs, write these in
@@ -135,9 +137,13 @@ Each helper prints what it did and ends in `AUDIT: OK ...` or `AUDIT: FAIL
 
 - `next` names the same stage after a failed `apply`: plan it again. The reason
   is fed back to the agents once; a stage the helper has given up on ends the
-  run `incomplete` and `next` says `report`. A third identical failure in a
-  row: stop and tell the user.
+  run `incomplete`; `next` then goes on to validate what was found, and to the
+  report. A third identical failure in a row: stop and tell the user.
 - `next` names a later step: follow it. The helper ended the run or moved on.
+- A failure none of this covers (a `NEXT: FAIL`, a helper that refuses the same
+  step again, a `report` that refuses, a run file the helpers say is not valid
+  JSON): stop, say the reason and the run directory, and repair nothing. A
+  damaged run is the user's to decide about, and an edited run is not a run.
 
 Budget and cost:
 
@@ -147,9 +153,13 @@ Budget and cost:
   given to `init`, so a cap means starting a new run. Under `--unattended`,
   go on.
 - Each `plan-wave` line says how many hunters launch and how many units were
-  deferred for the budget. Relay it. A budget the run could not fund ends it
-  `incomplete`, and the report says so. Never launch an agent by hand to get
-  past a refusal.
+  deferred for the budget. Relay it. What a budget does: one that cannot fund
+  reconnaissance and the reserves is refused at `init` (the smallest `init`
+  accepts, 10, funds no hunter); a wave the reserves leave no room for is
+  deferred and named in the report, and the run can still end `complete` with
+  that coverage deferred (a partial pass: say so); one that runs short of the
+  final critic or of validation ends the run `incomplete`. Never launch an agent
+  by hand to get past a refusal.
 
 ## 5. Resume
 
@@ -162,8 +172,8 @@ node "$AUDIT/audit-run.mjs" status "$RUN"
 node "$AUDIT/audit-run.mjs" next "$RUN"
 ```
 
-Take the run the user means (the highest number is the newest), and carry on
-with the loop. A stage that was planned and not applied is planned again and
+Take the run the user means (the highest number is the newest; a run made with
+`--out` is in that directory, which the user names), and carry on with the loop. A stage that was planned and not applied is planned again and
 reuses its directory. Running a stage again never corrupts a run; it costs the
 agent calls of that stage.
 `node "$AUDIT/audit-run.mjs" check "$RUN"` verifies a run's files.
@@ -182,7 +192,9 @@ them. Read `REPORT.md` and tell the user, in your own words:
 - each lead by title, its trace and the blocker that keeps it unproven;
 - the coverage that was deferred, blocked or out of scope, and the validators'
   lines;
-- the path of `$RUN`, and that the reports are not in the repository.
+- the path of `$RUN`, and that the reports are in that run directory, under the
+  repository's git directory (never in its working tree, never committed), or
+  in `--out`.
 
 If the run says it spent the budget, say how much was deferred. Do not turn a
 lead into a finding in your summary.

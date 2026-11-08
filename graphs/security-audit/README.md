@@ -74,7 +74,9 @@ discloses. Nothing ends by silence.
 The run directory is `<git common dir>/security-audit/run-<N>/` (never committed; `--out` overrides it
 when it is outside the target or wholly ignored). `tree/` is the read-only snapshot the agents read; the
 other files are listed in `skills/security-audit/audit-run.mjs`. The reports are in the run directory,
-not in the audited repository. Nothing in this graph ever writes into the target.
+under the repository's git directory (never in its working tree, never committed). The graph writes
+nothing into the audited working tree and edits no file of the repository; the run directory, a
+sibling of the repository's other git state, is the one place it writes.
 
 ## The skill, and driving it
 
@@ -132,8 +134,12 @@ Read these before trusting a report.
   `file:line` references are checked against `tree/`; whether a lead is right is the verifiers' judgment.
 - **Cost.** About one agent per coverage unit plus one or two verifiers per lead; a real repository may seed
   hundreds of units. Without `--budget`, nothing stops spend except the owner. `--budget N` caps agent
-  invocations and is given to `init` only; the reserves for critics and verification are computed, and a
-  run that cannot afford them is deferred and `incomplete`, never silently shorter.
+  invocations and is given to `init` only; the reserves for critics (and the minter after each) and for
+  verification are computed. A budget that cannot fund reconnaissance and the reserves is refused at `init`
+  (the smallest it accepts, 10, funds no hunter); a wave the reserves leave no room for is deferred and named
+  in the report, and the run can still end `complete` with that coverage deferred, which upstream's first
+  terminal state allows and the report calls a partial pass; a run that runs short of the final critic or of
+  validation ends `incomplete`. Nothing is shortened without the report saying so.
 - **The helpers are code, and a project can ship its own.** The session runs `audit-run.mjs` and the
   other helpers from the directory the skill was loaded from, and never falls back to a directory of the
   audited repository. But Claude Code itself loads a skill from a project's `.claude/skills/`: a
@@ -170,7 +176,7 @@ Leads: <n> needs_validation, <n> rejected, <n> unresolved candidates (not findin
   <title> (<fingerprint>): <first trace step> -> <last>; blocked by <blocker>.
 Coverage: <n> covered, <n> deferred (<why>), <n> blocked, <n> out of scope; final critic: <ran | did not run>.
 Agents: <spent> of <budget | no budget set>. Validators: findings <last line>; ledger <last line>.
-Reports (in the run directory, not in the repository): <run dir>/REPORT.md, NEEDS-VALIDATION.md, FINDINGS-DETAIL.md.
+Reports (in the run directory, under the repository's git directory, not in its working tree): <run dir>/REPORT.md, NEEDS-VALIDATION.md, FINDINGS-DETAIL.md.
 Next: validate the leads (audit-report.mjs task / export-remediation give /dev task text), or wait for the sandbox.
 ```
 

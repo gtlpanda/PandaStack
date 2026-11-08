@@ -1,6 +1,7 @@
 // audit-budget-minter.test.mjs - the per-wave minter is a call this graph adds (upstream's parent mints units itself), so the reserve the budget keeps for critics and
 // validation has to count it, as it counts the recon synthesizer (retro 38). Without it a minter takes what the plan holds for the verifiers: reproduced first, with a budget
 // where the wave's hunters fill exactly what waveAllowance gave them and the validation reserve holds one candidate's two agents (a verifier and its Phase 5 verifier).
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
@@ -65,4 +66,21 @@ await test('a budget that cannot fund the minters too is refused at init, with t
   assert.match(r.last, /^AUDIT: FAIL budget_cannot_fund_reconnaissance_and_reserves: --budget 9 cannot fund the 10 calls profile standard needs first \(4 reconnaissance, 1 synthesis, 2 critics, 2 minters, 1 verifier\); no agent was launched/)
   assert.equal(meta(join(repo, '.git', 'security-audit', 'run-1')).agents_spent, 0)
   assert.equal(init([mkRepo(TOY_FILES, 'toy'), '--full', '--budget', '10']).ok, true)
+})
+
+console.log('== what the smallest budget does (the README and the skill say it)')
+await test('the smallest budget init accepts launches no hunter: the run ends complete with every unit deferred and the report calls it a partial pass; one more agent launches a hunter', async () => {
+  const min = minimumBudget('standard')
+  const repo = mkRepo(TOY_FILES, 'toy')
+  const run = await driveAudit({ repo, answer, initArgs: ['--budget', String(min)], tolerateRefusals: true })
+  const labels = run.trace.flatMap(e => e.calls.map(c => c.label))
+  assert.deepEqual(labels.filter(l => /^h\d/.test(l)), [], 'no hunter at the minimum')
+  assert.deepEqual([meta(run.RUN).run_status, meta(run.RUN).incomplete_reason], ['complete', null])
+  const ledger = JSON.parse(readFileSync(join(run.RUN, 'coverage-ledger.json'), 'utf8'))
+  assert.deepEqual([...new Set(ledger.map(u => u.status))], ['deferred'])
+  assert.ok(ledger.every(u => u.unresolved.includes('budget_cannot_reserve_critics_and_validation')))
+  const report = readFileSync(join(run.RUN, 'REPORT.md'), 'utf8')
+  assert.ok(report.includes('This is a partial pass') && report.includes('some coverage was deferred'))
+  const more = await driveAudit({ repo: mkRepo(TOY_FILES, 'toy'), answer, initArgs: ['--budget', String(min + 1)], tolerateRefusals: true })
+  assert.ok(more.trace.flatMap(e => e.calls).some(c => /^h\d/.test(c.label)), 'one more than the minimum launches a hunter')
 })

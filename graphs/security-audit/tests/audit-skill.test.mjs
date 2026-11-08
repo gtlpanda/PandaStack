@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import assert from 'node:assert/strict'
 import { test, REPO } from '../../../scripts/workflow-harness.mjs'
 import { INIT_FLAGS, RUNNERS, STEPS } from '../skills/security-audit/audit-run.mjs'
-import { SKILL_DIR, commandProblem, frontmatter, skillCommands, skillText, stepCommands, usageFlags } from './skill-commands.mjs'
+import { SKILL_DIR, commandProblem, frontmatter, runCommand, skillCommands, skillText, stepCommands, usageFlags } from './skill-commands.mjs'
 
 const text = skillText()
 const fm = frontmatter(text)
@@ -103,6 +103,35 @@ await test('AUDIT is the directory the skill was loaded from or the config dir, 
   assert.ok(!/\.\/\.claude|\$PWD|\$REPO\/\.claude|project-local/.test(bullet), `no fallback inside the audited repository: ${bullet}`)
   assert.ok(/Never a directory of the audited repository/i.test(bullet) && /ship its own/.test(bullet), 'the rule and its reason are stated')
   assert.ok(!/\.\/\.claude\/skills/.test(text), 'no other place in the skill sends the session to ./.claude/skills')
+})
+
+console.log('== what the session passes where, and what it says it did')
+const flat = text.replace(/\s+/g, ' ')
+await test('the session\'s own flags (--unattended, --guidance) are never passed to init, which refuses them with a usage error; the skill says so, where it says what to pass', () => {
+  for (const f of SESSION_FLAGS) {
+    assert.ok(commandProblem(`node "$AUDIT/audit-run.mjs" init "$REPO" --full ${f}`, VARS, box)?.startsWith('usage error (exit 2)'), `init refuses ${f}`)
+    assert.ok(commandProblem(`node "$AUDIT/audit-run.mjs" init "$REPO" ${f} x --full`, VARS, box)?.startsWith('usage error (exit 2)'), `init refuses ${f} with a value`)
+  }
+  assert.ok(/Pass the flags the user gave, except `--unattended` and `--guidance`/.test(flat) && /`init` refuses them/.test(flat), 'section 3 names the exception')
+  assert.ok(!/Add the flags the user gave/.test(flat), 'the old unqualified sentence is gone')
+})
+await test('the guidance question is single-quoted in the command (it can hold text that is not the session\'s, which double quotes would let the shell run), and the skill says why', () => {
+  const g = skillCommands(text).filter(c => /blocks\.mjs" guidance/.test(c))
+  assert.ok(g.length >= 1)
+  for (const c of g) assert.match(c, /^node "\$AUDIT\/blocks\.mjs" guidance '[^'"`$]*'$/, c)
+  assert.ok(/single quotes/.test(flat) && /shell/.test(flat))
+  // and run through the shell, a question with command syntax in it is text, not a command
+  const marker = join(box, 'ran-by-question')
+  const r = runCommand(`node "$AUDIT/blocks.mjs" guidance 'what about $(touch ${marker}) and \`touch ${marker}\` in cors'`, VARS, box)
+  assert.equal(r.status, 0, r.stderr)
+  assert.ok(!existsSync(marker), 'the question was not run')
+})
+await test('the skill says what to do with a failure none of its recovery rules covers (stop, say the reason and the run directory, repair nothing), and that a deferred wave can still end complete', () => {
+  assert.ok(/`NEXT: FAIL`/.test(flat) && /stop, say the reason and the run directory, and repair nothing/.test(flat), 'a damaged run is the user\'s to decide')
+  assert.ok(!/A budget the run could not fund ends it/.test(flat), 'the old claim is gone')
+  assert.ok(/refused at `init`/.test(flat) && /can still end `complete`/.test(flat) && /partial pass/.test(flat), 'what a budget does: refused at init, deferred in a wave, complete with deferred coverage is a partial pass')
+  assert.ok(/ends the run `incomplete`; `next` then goes on to validate what was found/.test(flat), 'a given-up stage does not jump to the report')
+  assert.ok(!/and that the reports are not in the repository/.test(flat) && /under the repository's git directory/.test(flat), 'where the reports are, exactly')
 })
 
 console.log('== negative: a skill that drifted is caught')
