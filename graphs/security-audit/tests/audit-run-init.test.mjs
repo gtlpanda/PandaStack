@@ -1,49 +1,13 @@
 // audit-run-init.test.mjs - audit-run.mjs init, against throwaway git repos: every refusal, the read-only
 // hook-free snapshot, the run metadata, events.jsonl, and the drift check on the copied git flags.
 import { join, dirname, basename } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync, readdirSync, lstatSync, symlinkSync, chmodSync, rmSync, statSync, realpathSync, utimesSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { writeFileSync, readFileSync, mkdirSync, existsSync, readdirSync, lstatSync, symlinkSync, chmodSync, rmSync, statSync, utimesSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import { test, REPO } from '../../../scripts/workflow-harness.mjs'
-import { makeWritable, appendEvent, advanceState, parseInitArgs, claimRunDir, nextRunNumber, SAFE_GIT, EXECUTION_BLOCKERS, EXECUTION_POLICY, STEPS } from '../skills/security-audit/audit-run.mjs'
+import { appendEvent, advanceState, parseInitArgs, claimRunDir, nextRunNumber, SAFE_GIT, EXECUTION_BLOCKERS, EXECUTION_POLICY, STEPS } from '../skills/security-audit/audit-run.mjs'
 import { VENDOR_SKILL_DIR } from '../skills/security-audit/upstream.mjs'
-
-const here = dirname(fileURLToPath(import.meta.url))
-const AUDIT_RUN = join(here, '..', 'skills', 'security-audit', 'audit-run.mjs')
-const ENV = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' }
-
-// Fixtures live in one sandbox, removed at exit: a sealed tree/ needs its write bits back first.
-const sandbox = realpathSync(mkdtempSync(join(tmpdir(), 'audit-run-test-')))
-process.on('exit', () => { makeWritable(sandbox); rmSync(sandbox, { recursive: true, force: true }) })
-let counter = 0
-const fresh = name => { const d = join(sandbox, `${name}-${++counter}`); mkdirSync(d); return d }
-
-// The fixtures' own git calls run without hooks or fsmonitor, so only the code under test can trip a trap.
-const sh = (cwd, ...args) => {
-  const r = spawnSync('git', [...SAFE_GIT, ...args], { cwd, encoding: 'utf8', env: { ...process.env, ...ENV } })
-  if (r.status !== 0) throw new Error(`git ${args.join(' ')}: ${r.stderr}`)
-  return r.stdout.trim()
-}
-const put = (file, text, mode) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, text); if (mode) chmodSync(file, mode) }
-const FILES = { 'src/app.js': 'export const a = 1\n', 'src/db.js': 'export const q = s => s\n', 'README.md': '# fixture\n' }
-function mkRepo(files = FILES, name = 'repo') {
-  const dir = fresh(name)
-  sh(dir, 'init', '-q', '-b', 'main')
-  for (const [p, text] of Object.entries(files)) put(join(dir, p), text)
-  sh(dir, 'add', '-A')
-  sh(dir, 'commit', '-qm', 'base')
-  return dir
-}
-const init = (args, cwd = sandbox) => {
-  const r = spawnSync(process.execPath, [AUDIT_RUN, 'init', ...args], { cwd, encoding: 'utf8', env: { ...process.env, ...ENV } })
-  const lines = r.stdout.trim().split('\n')
-  return { status: r.status, stdout: r.stdout, stderr: r.stderr, last: lines.at(-1), runDir: lines[0], ok: r.status === 0 }
-}
-const runsOf = repo => { const d = join(repo, '.git', 'security-audit'); return existsSync(d) ? readdirSync(d) : [] }
-const meta = runDir => JSON.parse(readFileSync(join(runDir, 'run-metadata.json'), 'utf8'))
-const listFiles = (root, dir = root) => readdirSync(dir, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? listFiles(root, join(dir, e.name)) : [join(dir, e.name).slice(root.length + 1)]))
+import { AUDIT_RUN, ENV, fresh, sh, put, FILES, mkRepo, init, runsOf, meta, listFiles } from './audit-fixtures.mjs'
 
 console.log('== init: the gates')
 await test('init refuses without --full, says why, and creates nothing', () => {
@@ -129,6 +93,24 @@ await test('run directories are numbered from the highest existing run-<N>, and 
   assert.ok(existsSync(join(parent, 'run-2')) && existsSync(join(parent, 'run-5')))
   const repo = mkRepo()
   assert.deepEqual([1, 2, 3].map(() => init([repo, '--full']).runDir), [1, 2, 3].map(n => join(repo, '.git', 'security-audit', `run-${n}`)))
+})
+await test('a linked worktree target puts its runs under the main repository\'s git directory, outside the target', () => {
+  const main = mkRepo()
+  const linked = join(fresh('linked'), 'wt')
+  sh(main, 'worktree', 'add', '-q', '-b', 'side', linked)
+  const r = init([linked, '--full'])
+  assert.equal(r.status, 0, r.stdout)
+  assert.equal(r.runDir, join(main, '.git', 'security-audit', 'run-1'))
+  assert.equal(meta(r.runDir).target, linked)
+  assert.ok(existsSync(join(r.runDir, 'tree', 'src', 'app.js')))
+})
+await test('init runs through a symlinked skill directory, as install.sh links it into ~/.claude/skills', () => {
+  const link = join(fresh('home'), 'security-audit')
+  symlinkSync(dirname(AUDIT_RUN), link)
+  const repo = mkRepo()
+  const r = spawnSync(process.execPath, [join(link, 'audit-run.mjs'), 'init', repo, '--full'], { encoding: 'utf8', env: { ...process.env, ...ENV } })
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.match(r.stdout.trim().split('\n').at(-1), /^AUDIT: OK run=run-1 /)
 })
 await test('init rejects malformed command lines as usage (exit 2), including inherited property names', () => {
   const repo = mkRepo()
@@ -273,7 +255,7 @@ await test('run-metadata.json has every field upstream requires and the defaults
   assert.deepEqual(m.execution_blockers, EXECUTION_BLOCKERS)
   assert.equal(m.upstream_pin.commit, JSON.parse(readFileSync(join(VENDOR_SKILL_DIR, '..', '..', 'UPSTREAM.json'), 'utf8')).commit)
   assert.deepEqual(m.snapshot, { path: 'tree', files: 3, bytes: Object.values(FILES).reduce((n, t) => n + Buffer.byteLength(t), 0), skipped_total: 0, skipped: [] })
-  assert.deepEqual(readdirSync(r.runDir).sort(), ['events.jsonl', 'run-metadata.json', 'stage-state.json', 'tree'])
+  assert.deepEqual(readdirSync(r.runDir).sort(), ['events.jsonl', 'prior-runs.json', 'run-metadata.json', 'stage-state.json', 'tree'])
   assert.ok(!existsSync(join(r.runDir, 'agents')), 'v1 creates no agent directories')
   const { updated, ...state } = JSON.parse(readFileSync(join(r.runDir, 'stage-state.json'), 'utf8'))
   assert.deepEqual(state, { version: 1, last: 'init', wave: 0, critic_kind: null })
