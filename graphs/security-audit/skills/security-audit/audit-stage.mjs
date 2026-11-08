@@ -26,8 +26,8 @@ import { spawnSync } from 'node:child_process'
 import { isDeepStrictEqual } from 'node:util'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { REASONS, RUNNERS, Usage, advanceState, appendEvent, formatNext, loadRun, markIncomplete, nextStep, readJson, recordSpend, reconGate, refuse, writeJson } from './audit-run.mjs'
-import { applyCriticProblems, criticBudgetExhausted, criticResultProblems, seedProblems, stopHunting } from './audit-ledger.mjs'
+import { REASONS, RUNNERS, Usage, advanceState, appendEvent, formatNext, loadRun, markIncomplete, nextStep, readJson, recordSpend, reconGate, refuse, waveAllowance, writeJson } from './audit-run.mjs'
+import { applyCriticProblems, criticBudgetExhausted, criticResultProblems, deferHunting, seedProblems, stopHunting } from './audit-ledger.mjs'
 import { RECON_IDS, checkFacts } from './audit-facts.mjs'
 import { BlockError, companions, ordinary, parts, resolve as resolveBlock } from './blocks.mjs'
 
@@ -248,7 +248,22 @@ const PLANNERS = {
     }
     return { label: `recon-${part}`, part, input: reconInput(runDir, run.meta, part) }
   },
-  hunt: (runDir, run, next) => ({ label: `hunt-w${next.wave}`, part: 'hunt', input: huntInput(runDir, run, next) }),
+  hunt(runDir, run, next) {
+    const input = huntInput(runDir, run, next)
+    if (run.meta.budget !== null) {
+      // plan-wave sized this wave to the budget at the time. Gated again, so a re-plan (a crash left the step unsaved after the hunt was applied) cannot spend
+      // the hunters twice: with the final critic's reserve gone the run ends, and when the reserves no longer leave room for these hunters none launches.
+      stopOnCriticBudget(runDir, run, 'hunt', 'the hunters')
+      const left = run.meta.budget - run.meta.agents_spent
+      const allowance = waveAllowance(run.meta.profile, left)
+      if (allowance.hunters < input.hunters.length) {
+        const deferred = deferHunting(runDir, REASONS.reserve, run)
+        appendEvent(runDir, { cmd: 'plan', stage: 'hunt', result: 'refused', reason: REASONS.reserve, counts: { deferred } })
+        refuse(`${REASONS.reserve}: ${left} agent(s) are left (--budget ${run.meta.budget}, ${run.meta.agents_spent} spent) and this wave's ${input.hunters.length} hunter(s) would take what upstream reserves for the critics and the validation; no hunter was launched, ${deferred} unit(s) were deferred`)
+      }
+    }
+    return { label: `hunt-w${next.wave}`, part: 'hunt', input }
+  },
   critic(runDir, run, next) {
     stopOnCriticBudget(runDir, run, 'critic', 'the critic')
     return { label: `critic-${next.kind}-w${next.wave}`, part: 'critic', input: criticInput(runDir, run, next) }

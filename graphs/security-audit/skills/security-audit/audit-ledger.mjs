@@ -266,18 +266,24 @@ export function groupIntoHunters(ranked, perHunter) {
 export const FINAL_CRITIC_RESERVE = 1
 export const criticBudgetExhausted = meta => meta.budget !== null && meta.budget - meta.agents_spent < FINAL_CRITIC_RESERVE
 
-// Stops the hunt: defers every unit a hunter would take, with the reason, and marks the run incomplete. Not a step, so it also serves a gate
-// that finds the budget gone between stages, or a stage that cannot go on. Returns how many units it deferred (none when it already ran).
-// A unit a verifier owns is not hunter work.
-export function stopHunting(runDir, reason, run = loadRun(runDir)) {
+// Defers every unit a hunter would take or already has been given (a wave planned and not run), with the reason, without ending the run: upstream's
+// budget_cannot_reserve_critics_and_validation, after which the retained final-clean critic records the gap. Returns how many units it deferred (none
+// when it already ran). A unit assigned and not yet merged has no evidence, so it can be deferred; a unit a verifier owns is not hunter work.
+export function deferHunting(runDir, reason, run = loadRun(runDir)) {
   const ledger = ledgerOf(run)
-  const work = ledger.filter(isHunterWork)
+  const work = ledger.filter(u => isHunterWork(u) || u.status === 'in_progress')
   if (work.length) {
     const deferred = new Map(work.map(u => [u.coverage_id, { ...u, status: 'deferred', agent_id: null, unresolved: [reason] }]))
     commitLedger(runDir, ledger.map(u => deferred.get(u.coverage_id) ?? u))
   }
-  markIncomplete(runDir, reason)
   return work.length
+}
+// Stops the hunt: deferHunting, and the run is marked incomplete with the reason. Not a step, so it also serves a gate that finds the budget gone
+// between stages, or a stage that cannot go on.
+export function stopHunting(runDir, reason, run = loadRun(runDir)) {
+  const deferred = deferHunting(runDir, reason, run)
+  markIncomplete(runDir, reason)
+  return deferred
 }
 export const exhaustCriticBudget = (runDir, run) => stopHunting(runDir, REASONS.critic, run)
 

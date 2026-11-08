@@ -373,6 +373,30 @@ await test('when the budget no longer covers the critic, no agent is launched, t
   assert.equal(next(runDir), 'NEXT: write-findings run=helper')
   assert.match(stage(['plan', runDir]).last, /^AUDIT: FAIL the next step is not a Workflow stage: NEXT: write-findings/)
 })
+await test('the hunters are gated again at plan: a re-plan after a crash that left the step unsaved cannot spend the wave\'s hunters twice, and a wave the reserves no longer leave room for is deferred with upstream\'s reason', async () => {
+  const { runDir } = await reconToSeed(three(), ['--budget', '12'])   // 7 left after recon: two critics, two verifiers, three hunters
+  assert.match(ledgerCli(['plan-wave', runDir]).last, /hunters=3 assigned=3 deferred=0$/)
+  const asg = assignments(runDir)
+  const state = readFileSync(join(runDir, 'stage-state.json'), 'utf8')
+  const h = await runStage(runDir, { 'audit-analyst': Object.keys(asg).map(l => covered(l, asg[l])) })
+  assert.equal(h.apply.status, 0, h.apply.stdout)
+  assert.equal(meta(runDir).agents_spent, 8)
+  writeFileSync(join(runDir, 'stage-state.json'), state)   // the crash: the result was saved, the step was not
+  assert.equal(next(runDir), 'NEXT: hunt run=workflow wave=1')
+  const stages = stageDirs(runDir)
+  const r = stage(['plan', runDir])
+  assert.equal(r.status, 1)
+  assert.match(r.last, /^AUDIT: FAIL budget_cannot_reserve_critics_and_validation: 4 agent\(s\) are left \(--budget 12, 8 spent\) and this wave's 3 hunter\(s\) would take what upstream reserves for the critics and the validation; no hunter was launched, 3 unit\(s\) were deferred$/)
+  assert.deepEqual(stageDirs(runDir), stages, 'no new stage and no script')
+  assert.deepEqual(readLedger(runDir).map(u => [u.status, u.agent_id, u.unresolved]), Array(3).fill(['deferred', null, [REASONS.reserve]]))
+  assert.equal(meta(runDir).agents_spent, 8, 'nothing was spent')
+  assert.equal(meta(runDir).run_status, 'in_progress', 'the retained final-clean critic still runs, as upstream says')
+  ok(runDir)
+  assert.equal(next(runDir), 'NEXT: critic run=workflow kind=final-clean wave=1')
+  const none = await reconToSeed(three())
+  ledgerCli(['plan-wave', none.runDir])
+  assert.equal(stage(['plan', none.runDir]).status, 0, 'no budget set: never gated')
+})
 await test('the minter is gated only when there is something to mint: with the budget gone and proposals, the run ends incomplete; with none, the empty stage runs for free', async () => {
   const run = async () => {
     const { runDir } = await reconToSeed(three(), ['--budget', '40'])

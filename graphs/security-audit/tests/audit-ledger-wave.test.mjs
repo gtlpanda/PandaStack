@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
-import { FAILED_TWICE, FINAL_CRITIC_RESERVE, MAX_UNIT_ATTEMPTS, applyCritic, commitLedger, criticBudgetExhausted, exhaustCriticBudget, groupIntoHunters, hunterId, isHunterWork, mergeWave, planWave, rankUnits, stopHunting } from '../skills/security-audit/audit-ledger.mjs'
+import { FAILED_TWICE, FINAL_CRITIC_RESERVE, MAX_UNIT_ATTEMPTS, applyCritic, commitLedger, criticBudgetExhausted, exhaustCriticBudget, groupIntoHunters, hunterId, isHunterWork, deferHunting, mergeWave, planWave, rankUnits, stopHunting } from '../skills/security-audit/audit-ledger.mjs'
 import { REASONS, advanceState, recordSpend } from '../skills/security-audit/audit-run.mjs'
 import { isSafeAgentId } from '../skills/security-audit/upstream.mjs'
 import { audit, fresh, ledgerCli, newRun } from './audit-fixtures.mjs'
@@ -162,6 +162,21 @@ await test('stopHunting defers the planned units with any reason it is given and
   assert.equal(stopHunting(runDir, 'critic_budget_exhausted'), 0, 'nothing is left to defer, and the first reason stands')
   assert.equal(readJsonFile(runDir, 'run-metadata.json').incomplete_reason, 'ledger_validation_failed')
   assert.throws(() => stopHunting(runDir, ''), TypeError)
+})
+await test('deferHunting defers a wave that was planned and not run, in_progress units included, without ending the run; stopHunting does the same and marks the run incomplete', () => {
+  const { runDir } = seeded([named('a'), named('b', { subsystem: 'other' }), named('c', { subsystem: 'third' })], { args: ['--max-parallel', '2'] })
+  planWave(runDir)
+  assert.deepEqual(readLedger(runDir).map(u => u.status), ['in_progress', 'in_progress', 'in_progress'])
+  assert.equal(deferHunting(runDir, REASONS.reserve), 3)
+  assert.deepEqual(readLedger(runDir).map(u => [u.status, u.agent_id, u.unresolved, u.reviewed_paths]), Array(3).fill(['deferred', null, [REASONS.reserve], []]))
+  assert.equal(readJsonFile(runDir, 'run-metadata.json').run_status, 'in_progress')
+  assert.ok(ledgerValid(runDir))
+  assert.equal(audit(['next', runDir]).last, 'NEXT: critic run=workflow kind=final-clean wave=1', 'the retained final-clean critic records the gap')
+  assert.equal(deferHunting(runDir, REASONS.reserve), 0, 'again: nothing left')
+  const other = seeded([named('a')])
+  planWave(other.runDir)
+  assert.equal(stopHunting(other.runDir, REASONS.critic), 1)
+  assert.equal(readJsonFile(other.runDir, 'run-metadata.json').run_status, 'incomplete')
 })
 await test('no budget set means no cap: every planned unit gets a hunter in the first wave', () => {
   const { runDir } = seeded(Array.from({ length: 9 }, (_, i) => named(`u${i}`, { subsystem: `s${i}` })))
