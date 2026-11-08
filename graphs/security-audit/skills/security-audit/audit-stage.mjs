@@ -25,6 +25,7 @@
 // A stage lives in stages/<NN>-<name>/: input.json and run.js (plan), result.json (apply, written last, so a stage without one
 // is planned and not applied). Every effect of apply is idempotent and the step is saved last, so a crash leaves the step behind its
 // effects, never ahead: applying the same result again finishes the stage, and changes nothing if it had finished.
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { isDeepStrictEqual } from 'node:util'
@@ -456,6 +457,10 @@ export function unwrapOutput(value) {
   return isObj(value) && !('status' in value) && !('stage' in value) && typeof value.agentCount === 'number' && isObj(value.result) ? value.result : value
 }
 
+// How many agents a Workflow output file with no result says ran: a run that was stopped or failed before it returned still spent them, and a strict budget is over what was spent.
+// A whole number from 0 to 1000 (a workflow runs at most 1000 agents, as resultProblems bounds budgetSpent), else null: not a count to trust.
+const lostAgents = value => (isObj(value) && !('status' in value) && Number.isSafeInteger(value.agentCount) && value.agentCount >= 0 ? Math.min(value.agentCount, 1000) : null)
+
 export function applyStage(runDir, returnedFile) {
   const started = Date.now()
   const run = loadRun(runDir)
@@ -471,7 +476,12 @@ export function applyStage(runDir, returnedFile) {
   if (result === undefined) refuse(`${returnedFile} does not exist`)
   if (stage.done && !isDeepStrictEqual(readJson(join(stage.dir, 'result.json')), result)) refuse(`${stage.name} was already applied with a different result: plan the stage again`)
   const problems = resultProblems(result, input)
-  if (problems.length) refuse(`the result is not the workflow's: ${problems.join('; ')}; nothing was changed`)
+  if (problems.length) {
+    // Charged once per file: the key carries a hash of what the file says, so the same file applied again is the same record, and another attempt is another.
+    const lost = lostAgents(result)
+    if (lost !== null) recordSpend(runDir, `${stage.name}-lost-${createHash('sha1').update(JSON.stringify(result)).digest('hex').slice(0, 8)}`, lost)
+    refuse(`the result is not the workflow's: ${problems.join('; ')}; ${lost === null ? 'nothing was changed' : `the ${lost} agent(s) it says ran are recorded as spent, and nothing else was changed`}`)
+  }
   const notes = []
   const event = (outcome, extra = {}, reason = null) => appendEvent(runDir, { cmd: 'apply', stage: next.step, result: outcome, reason, duration_ms: Date.now() - started, part: input.part, stage_dir: stage.name, agents: result.budgetSpent, ...extra })
   // The agents ran whatever they returned, so what they cost is recorded for an escalation too, and the result is kept.

@@ -534,7 +534,6 @@ await test('apply takes the Workflow task\'s own output file as it is, and the b
   assert.equal(r.last, ran.apply.last, 'the same line for the wrapped output and the bare result')
   assert.deepEqual(readJsonFile(bare.runDir, 'recon-facts.json').facts, readJsonFile(wrapped.runDir, 'recon-facts.json').facts)
   assert.deepEqual(readJsonFile(bareDir, 'result.json'), again.result, 'what is saved is the result, not the wrapper')
-  assert.ok(dir)
 })
 await test('a wrapper that is not a Workflow output is not unwrapped: no agentCount, a result of the wrong type, a nested wrapper and a wrapper with no result are each refused and change nothing', async () => {
   const { runDir } = newInit()
@@ -558,8 +557,70 @@ await test('a wrapper that is not a Workflow output is not unwrapped: no agentCo
     assert.equal(r.status, 1, JSON.stringify(bad).slice(0, 80))
     assert.match(r.last, pattern, JSON.stringify(bad).slice(0, 80))
   }
-  assert.deepEqual(files(runDir).filter(f => f !== 'stages/01-recon-facts/returned.json'), before, 'a refusal wrote nothing')
-  assert.equal(meta(runDir).agents_spent, 0)
+  assert.deepEqual(files(runDir).filter(f => f !== 'stages/01-recon-facts/returned.json'), before, 'a refusal wrote no file (an output file that says agents ran is charged: next test)')
+})
+await test('a Workflow output file with no result is a run that ended without returning, and the agents it says ran are charged to the budget: once per file, bounded as budgetSpent is, and a retry cannot go past a strict budget', async () => {
+  const { runDir } = newInit(['--budget', '10'])   // the minimum
+  stage(['plan', runDir])
+  const dir = join(runDir, 'stages', '01-recon-facts')
+  const dead = n => ({ summary: 'Full security audit graph', agentCount: n, logs: ['stopped'], workflowProgress: [] })
+  const r = stage(['apply', runDir, returnedFile(dir, dead(4))])
+  assert.equal(r.status, 1)
+  assert.match(r.last, /Workflow output file with no `result`.*the 4 agent\(s\) it says ran are recorded as spent/)
+  assert.equal(meta(runDir).agents_spent, 4)
+  assert.deepEqual(Object.keys(meta(runDir).stage_spend).map(k => k.replace(/-lost-[0-9a-f]{8}$/, '-lost-H')), ['01-recon-facts-lost-H'])
+  assert.equal(stage(['apply', runDir, returnedFile(dir, dead(4))]).status, 1)
+  assert.equal(meta(runDir).agents_spent, 4, 'the same file again counts once')
+  assert.equal(stage(['apply', runDir, returnedFile(dir, dead(2))]).status, 1)
+  assert.equal(meta(runDir).agents_spent, 6, 'a different attempt is charged too')
+  assert.equal(audit(['check', runDir]).last, `AUDIT: OK ${runDir} passes check`)
+  const gate = stage(['plan', runDir])
+  assert.match(gate.last, /^AUDIT: FAIL budget_cannot_fund_reconnaissance_and_reserves: the researchers need 10 more calls with the reserves and 4 are left \(--budget 10, 6 spent\)/, 'the retry the skill says to make is gated by what the dead run spent')
+  for (const [n, spent] of [[1e9, 1000], [1000, 1000], [0, 0]]) {
+    const { runDir: d } = newInit()
+    stage(['plan', d])
+    stage(['apply', d, returnedFile(join(d, 'stages', '01-recon-facts'), dead(n))])
+    assert.equal(meta(d).agents_spent, spent, `agentCount ${n}`)
+  }
+  for (const bad of [-1, 1.5, '4', null, true, [4], {}, NaN]) {
+    const { runDir: d } = newInit()
+    stage(['plan', d])
+    const refused = stage(['apply', d, returnedFile(join(d, 'stages', '01-recon-facts'), { ...dead(4), agentCount: bad })])
+    assert.equal(refused.status, 1, `agentCount ${JSON.stringify(bad)}`)
+    assert.ok(refused.last.startsWith('AUDIT: FAIL the result is not the workflow\'s: '), `a refusal by name, not a crash: ${refused.last.slice(0, 120)}`)
+    assert.ok(refused.last.endsWith('nothing was changed'), refused.last)
+    assert.equal(meta(d).agents_spent, 0, `agentCount ${JSON.stringify(bad)} is not a count to trust`)
+  }
+  const { runDir: ok } = newInit()   // a file with a result is never a lost run: the guards of unwrapOutput keep an object that is a result itself as it is
+  stage(['plan', ok])
+  const okDir = join(ok, 'stages', '01-recon-facts')
+  const ran = await runScript(join(okDir, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })
+  assert.equal(stage(['apply', ok, returnedFile(okDir, ran.result)]).status, 0)
+  assert.equal(meta(ok).agents_spent, 4)
+  assert.ok(!Object.keys(meta(ok).stage_spend).some(k => k.includes('-lost-')))
+})
+await test('an object that is a result itself is taken as it is even when it also has an agentCount and a result key: neither the status nor the stage of a result is read from inside a wrapper that is not one', async () => {
+  const { runDir } = newInit()
+  stage(['plan', runDir])
+  const dir = join(runDir, 'stages', '01-recon-facts')
+  const ran = await runScript(join(dir, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })
+  const good = ran.result
+  // with a status of its own it is a result: its inner `result` (the wrong stage) is not read
+  const withStatus = { ...good, agentCount: 4, result: { ...good, stage: 'hunt' } }
+  // with a stage of its own and no status it is not a result and not a wrapper: refused as it is, never unwrapped to the good result inside
+  const withStage = { stage: 'recon', agentCount: 4, result: good }
+  const r2 = stage(['apply', runDir, returnedFile(dir, withStage)])
+  assert.equal(r2.status, 1)
+  assert.match(r2.last, /Workflow output file with no `result`|status is undefined/)
+  assert.equal(readJsonFile(dir, 'returned.json').stage, 'recon')
+  // with a status but no stage it is not a result either, and it is not unwrapped to the good result inside: the status of a result is read from the outside
+  const statusOnly = { status: 'done', reason: 'x', history: [], budgetSpent: 4, results: good.results, agentCount: 4, result: good }
+  const r3 = stage(['apply', runDir, returnedFile(dir, statusOnly)])
+  assert.equal(r3.status, 1)
+  assert.match(r3.last, /stage is undefined, but the stage planned is recon/)
+  const r1 = stage(['apply', runDir, returnedFile(dir, withStatus)])
+  assert.equal(r1.status, 0, r1.stdout)
+  assert.deepEqual(readJsonFile(dir, 'result.json').stage, 'recon', 'the outer object was taken, not the inner wrong-stage one')
 })
 await test('a result for the other part, and a hand-edited result of the synthesize part, are refused, and the facts part never moves the step', async () => {
   const { runDir } = newInit()
