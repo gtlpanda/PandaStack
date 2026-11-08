@@ -109,6 +109,23 @@ await test('items are capped per researcher, limits are checked and capped, and 
   assert.deepEqual(facts[2].limits.slice(0, 2), ['fine', 'limit 0'])
   assert.equal(dropped.filter(d => d.kind === 'limit').length, 5 + 3, 'the empty, blank, two non-strings and the oversized one, and the three past the cap ("fine" took one of the 50 places)')
 })
+await test('what a researcher may contribute is bounded in characters, so no hostile or verbose agent makes a script the Workflow tool refuses: quotes cost four bytes a character once encoded twice', () => {
+  const worst = id => ({ agent: id, items: Array.from({ length: 500 }, () => ({ text: '"'.repeat(FACT_LIMITS.itemChars), refs: ['src/app.js:1'] })), limits: Array.from({ length: 80 }, () => '\\'.repeat(FACT_LIMITS.limitChars)) })
+  const { facts, dropped } = checkFacts(treeDir, RECON_IDS.map(worst))
+  for (const f of facts) {
+    const chars = f.items.reduce((n, i) => n + i.text.length + i.refs.join('').length, 0) + f.limits.reduce((n, l) => n + l.length, 0)
+    assert.ok(chars <= FACT_LIMITS.agentChars, `${f.agent}: ${chars} characters`)
+    assert.ok(chars > FACT_LIMITS.agentChars - FACT_LIMITS.itemChars - 20, 'the budget is used, not undershot')
+  }
+  assert.ok(dropped.some(d => /past this researcher's 20000-character limit/.test(d.reason)))
+  const { runDir } = newInit()
+  writeJson(join(runDir, 'recon-facts.json'), { version: 1, facts, dropped: [], dropped_total: 0 })
+  const r = stage(['plan', runDir])
+  assert.equal(r.status, 0, r.stdout)
+  const bytes = statSync(join(runDir, 'stages', '01-recon-synthesize', 'run.js')).size
+  assert.ok(bytes < MAX_SCRIPT_BYTES, `${bytes} bytes against ${MAX_SCRIPT_BYTES}`)
+  assert.ok(bytes < 524288 * 0.8, 'with room under the Workflow tool\'s measured ceiling')
+})
 await test('a result whose facts are not one entry per researcher, in order, is refused outright, not repaired', () => {
   for (const bad of [null, 'x', {}, [], factsOf().slice(0, 3), [...factsOf(), RESEARCH('1e')], [...factsOf()].reverse(), factsOf().map(f => ({ ...f, agent: '1a' })), [null, null, null, null], factsOf().map(f => ({ ...f, items: 'x' })), factsOf().map(f => ({ ...f, limits: null }))]) {
     assert.throws(() => checkFacts(treeDir, bad), /results\.facts/, JSON.stringify(bad)?.slice(0, 60))

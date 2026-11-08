@@ -36,7 +36,10 @@ export const MAX_SCRIPT_BYTES = 500_000
 export const RECON_IDS = ['1a', '1b', '1c', '1d']
 // What one researcher may contribute. A hostile target can make an agent write without end; a stage input is a script, and a script
 // has a size (above). Over a limit, the item is dropped and logged, never truncated.
-export const FACT_LIMITS = { items: 200, itemChars: 2000, refs: 50, limits: 50, limitChars: 2000 }
+// agentChars is the one that bounds the script: facts reach the run script through run-script.mjs, which encodes them twice, so a hostile
+// text of quotes costs up to four bytes a character. Measured: the largest synthesize script this allows (every researcher at the limit,
+// all quotes and backslashes) is 332,892 bytes; a real recon of a 9-file target was 67,259.
+export const FACT_LIMITS = { items: 200, itemChars: 2000, refs: 50, limits: 50, limitChars: 2000, agentChars: 20_000 }
 const MAX_LINE_COUNT_BYTES = 16 * 1024 * 1024
 const MAX_DROPPED_LISTED = 200
 const isObj = v => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -92,8 +95,10 @@ export function checkFacts(tree, facts) {
   const drop = (agent, kind, reason, text) => dropped.push({ agent, kind, reason, text: (typeof text === 'string' ? text : JSON.stringify(text) ?? '').slice(0, 200) })
   const kept = facts.map(f => {
     if (!Array.isArray(f.items) || !Array.isArray(f.limits)) refuse(`results.facts[${f.agent}] needs items and limits arrays`)
-    const items = []
-    f.items.forEach((item, i) => {
+    const items = [], limits = []
+    let used = 0   // characters this researcher has contributed so far, items and limits together
+    const over = chars => used + chars > FACT_LIMITS.agentChars
+    f.items.forEach(item => {
       if (!isObj(item) || typeof item.text !== 'string' || !Array.isArray(item.refs)) return drop(f.agent, 'item', 'is not {text, refs: [string]}', item)
       if (!isText(item.text)) return drop(f.agent, 'item', 'has no text', item.text)
       if (items.length >= FACT_LIMITS.items) return drop(f.agent, 'item', `is over the ${FACT_LIMITS.items}-item limit`, item.text)
@@ -102,12 +107,15 @@ export function checkFacts(tree, facts) {
       if (item.refs.length > FACT_LIMITS.refs) return drop(f.agent, 'item', `has more than ${FACT_LIMITS.refs} references`, item.text)
       const bad = item.refs.map(r => refProblem(r, tree, cache)).find(Boolean)
       if (bad) return drop(f.agent, 'item', `has a reference that does not hold: ${bad}`, item.text)
+      const chars = item.text.length + item.refs.reduce((n, r) => n + r.length, 0)
+      if (over(chars)) return drop(f.agent, 'item', `is past this researcher's ${FACT_LIMITS.agentChars}-character limit`, item.text)
+      used += chars
       items.push({ text: item.text, refs: item.refs })
     })
-    const limits = []
     for (const l of f.limits) {
       if (!isText(l) || l.length > FACT_LIMITS.limitChars || limits.length >= FACT_LIMITS.limits) drop(f.agent, 'limit', `is not text of 1 to ${FACT_LIMITS.limitChars} characters, or is over the ${FACT_LIMITS.limits}-limit cap`, l)
-      else limits.push(l)
+      else if (over(l.length)) drop(f.agent, 'limit', `is past this researcher's ${FACT_LIMITS.agentChars}-character limit`, l)
+      else { used += l.length; limits.push(l) }
     }
     return { agent: f.agent, items, limits }
   })
