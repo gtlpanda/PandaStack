@@ -702,6 +702,9 @@ const FLAGS = {
   '--max-units-per-hunter': ['maxUnitsPerHunter', int(1, Infinity)],
 }
 
+// Every flag `init` takes: SKILL.md may name these and no others (tests/audit-skill.test.mjs reads the list, so the skill cannot drift from the parser).
+export const INIT_FLAGS = ['--full', ...Object.keys(FLAGS)]
+
 export function parseInitArgs(argv) {
   const o = { target: null, full: false, out: null, profile: 'standard', scope: [], budget: null, prior: [], notes: [], ...DEFAULTS }
   const seen = new Set()
