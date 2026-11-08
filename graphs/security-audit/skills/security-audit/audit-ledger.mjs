@@ -19,7 +19,7 @@
 import { existsSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CARRIED, REASONS, Usage, advanceState, appendEvent, countStatuses, formatNext, git, isCommitId, loadRun, nextStep, readJson, refuse, waveAllowance, writeJson } from './audit-run.mjs'
+import { CARRIED, REASONS, Usage, advanceState, appendEvent, countStatuses, formatNext, git, isCommitId, loadRun, markIncomplete, nextStep, readJson, refuse, waveAllowance, writeJson } from './audit-run.mjs'
 import { BlockError, companions, ordinary, resolve as resolveBlock } from './blocks.mjs'
 import { canonicalCoverageId, isSafeRelativePath, validateFindingsFile, validateLedgerDocument, validateLedgerFile } from './upstream.mjs'
 
@@ -236,6 +236,23 @@ export function groupIntoHunters(ranked, perHunter) {
   return groups.sort((a, b) => position.get(a[0].coverage_id) - position.get(b[0].coverage_id))
 }
 
+// The one agent a run keeps back for its distinct final-clean critic (quick: its single critic). Upstream (SKILL.md, "Cost budget"): when
+// later facts consume that reserve, launch no hunters, defer every planned unit, and set the run incomplete with critic_budget_exhausted.
+export const FINAL_CRITIC_RESERVE = 1
+export const criticBudgetExhausted = meta => meta.budget !== null && meta.budget - meta.agents_spent < FINAL_CRITIC_RESERVE
+
+// Defers every unit a hunter would take, with the reason, and marks the run incomplete; not a step, so it also serves a gate that finds
+// the budget gone mid-wave. Returns how many units it deferred (none when it already ran). A unit a verifier owns is not hunter work.
+export function exhaustCriticBudget(runDir, run = loadRun(runDir)) {
+  const work = run.ledger.filter(isHunterWork)
+  if (work.length) {
+    const deferred = new Map(work.map(u => [u.coverage_id, { ...u, status: 'deferred', agent_id: null, unresolved: [REASONS.critic] }]))
+    commitLedger(runDir, run.ledger.map(u => deferred.get(u.coverage_id) ?? u))
+  }
+  markIncomplete(runDir, REASONS.critic)
+  return work.length
+}
+
 export const hunterId = (wave, n) => `h${wave}-${String(n).padStart(2, '0')}`   // matches upstream's agent ID pattern; wave-unique, so fresh
 
 export function planWave(runDir) {
@@ -243,6 +260,11 @@ export function planWave(runDir) {
   const run = loadRun(runDir)
   const { wave } = expectStep(run, 'plan-wave')
   const { meta, ledger } = run
+  if (criticBudgetExhausted(meta)) {
+    const deferred = exhaustCriticBudget(runDir, run)
+    finish(runDir, 'plan-wave', started, { hunters: 0, assigned: 0, deferred, still_planned: 0 }, { wave }, { reason: REASONS.critic, wave, assignments: [] })
+    return { summary: `wave=${wave} hunters=0 assigned=0 deferred=${deferred} reason=${REASONS.critic}`, notes: [] }
+  }
   const work = rankUnits(ledger.filter(isHunterWork))
   const allowance = meta.budget === null ? { hunters: Infinity, reason: null } : waveAllowance(meta.profile, meta.budget - meta.agents_spent)
   const patched = new Map()

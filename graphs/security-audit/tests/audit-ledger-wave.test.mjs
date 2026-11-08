@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
-import { FAILED_TWICE, MAX_UNIT_ATTEMPTS, applyCritic, commitLedger, groupIntoHunters, hunterId, isHunterWork, mergeWave, planWave, rankUnits } from '../skills/security-audit/audit-ledger.mjs'
+import { FAILED_TWICE, FINAL_CRITIC_RESERVE, MAX_UNIT_ATTEMPTS, applyCritic, commitLedger, criticBudgetExhausted, exhaustCriticBudget, groupIntoHunters, hunterId, isHunterWork, mergeWave, planWave, rankUnits } from '../skills/security-audit/audit-ledger.mjs'
 import { REASONS, advanceState, recordSpend } from '../skills/security-audit/audit-run.mjs'
 import { isSafeAgentId } from '../skills/security-audit/upstream.mjs'
 import { audit, fresh, ledgerCli, newRun } from './audit-fixtures.mjs'
@@ -105,6 +105,53 @@ await test('a wave the budget only partly funds takes the best units first and l
   assert.match(units.a.last_assignment, /1 of 3 hunter\(s\) fit the budget/)
   assert.ok(ledgerValid(runDir))
   assert.equal(audit(['next', runDir]).last, 'NEXT: hunt run=workflow wave=1')
+})
+await test('when the budget no longer covers the final critic, no hunter launches, every planned unit is deferred with upstream\'s reason, and the run is marked incomplete', () => {
+  assert.equal(FINAL_CRITIC_RESERVE, 1)
+  const { runDir } = seeded([named('a'), named('b', { subsystem: 'other' })], { args: ['--budget', '10'] })
+  recordSpend(runDir, 'earlier-stages', 10)   // nothing left, not even the final-clean critic
+  const out = planWave(runDir)
+  assert.match(out.summary, /^wave=1 hunters=0 assigned=0 deferred=2 reason=critic_budget_exhausted$/)
+  assert.deepEqual(readLedger(runDir).map(u => [u.status, u.agent_id, u.unresolved, u.reviewed_paths]), Array(2).fill(['deferred', null, [REASONS.critic], []]))
+  assert.deepEqual([readJsonFile(runDir, 'run-metadata.json').run_status, readJsonFile(runDir, 'run-metadata.json').incomplete_reason], ['incomplete', 'critic_budget_exhausted'])
+  assert.ok(ledgerValid(runDir))
+  assert.equal(audit(['check', runDir]).last, `AUDIT: OK ${runDir} passes check`)
+  assert.equal(audit(['next', runDir]).last, 'NEXT: write-findings run=helper', 'an incomplete run that was hunting stops there and goes on to what it found')
+  const events = readFileSync(join(runDir, 'events.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l))
+  assert.deepEqual([events.at(-1).cmd, events.at(-1).reason], ['plan-wave', 'critic_budget_exhausted'])
+})
+await test('the final critic\'s reserve is the line: one agent left is the reserve reason, none left (or overspent) is the critic reason, and no budget is never either', () => {
+  const at = (budget, spent) => {
+    const { runDir } = seeded([named('a')], { args: budget === null ? [] : ['--budget', String(budget)] })
+    recordSpend(runDir, 'earlier-stages', spent)
+    return { runDir, out: planWave(runDir) }
+  }
+  const one = at(10, 9)
+  assert.match(one.out.summary, /reason=budget_cannot_reserve_critics_and_validation$/)
+  assert.equal(readJsonFile(one.runDir, 'run-metadata.json').run_status, 'in_progress', 'the final-clean critic still has its reserve: the run goes on to it')
+  assert.equal(audit(['next', one.runDir]).last, 'NEXT: critic run=workflow kind=final-clean wave=1')
+  assert.match(at(10, 10).out.summary, /reason=critic_budget_exhausted$/)
+  assert.match(at(10, 14).out.summary, /reason=critic_budget_exhausted$/)
+  assert.match(at(7, 7).out.summary, /reason=critic_budget_exhausted$/)
+  assert.match(at(null, 500).out.summary, /^wave=1 hunters=1 assigned=1 deferred=0$/)
+  assert.deepEqual([criticBudgetExhausted({ budget: null, agents_spent: 99 }), criticBudgetExhausted({ budget: 5, agents_spent: 4 }), criticBudgetExhausted({ budget: 5, agents_spent: 5 })], [false, false, true])
+})
+await test('exhaustCriticBudget outside plan-wave defers what is still planned, marks the run incomplete, saves no step, and is harmless twice; a unit a verifier owns is not deferred', () => {
+  const { runDir } = seeded([named('a'), named('b', { subsystem: 'other' })], { args: ['--budget', '12', '--max-units-per-hunter', '1'] })
+  recordSpend(runDir, 'earlier-stages', 8)   // 4 left: critics 2, validation 1, one hunter
+  assert.match(planWave(runDir).summary, /^wave=1 hunters=1 assigned=1 deferred=0$/)
+  advanceState(runDir, 'hunt')
+  mergeWave(runDir, coverAll(assignments(runDir)))
+  assert.deepEqual(readLedger(runDir).map(u => u.status).sort(), ['covered', 'planned'])
+  const state = readFileSync(join(runDir, 'stage-state.json'), 'utf8')
+  recordSpend(runDir, 'the-rest', 4)   // the hunter and the rest
+  assert.equal(exhaustCriticBudget(runDir), 1)
+  assert.deepEqual(readLedger(runDir).map(u => [u.status, u.unresolved]).sort((x, y) => (x[0] < y[0] ? -1 : 1)), [['covered', []], ['deferred', ['critic_budget_exhausted']]])
+  assert.equal(readFileSync(join(runDir, 'stage-state.json'), 'utf8'), state, 'no step was saved')
+  assert.equal(readJsonFile(runDir, 'run-metadata.json').incomplete_reason, 'critic_budget_exhausted')
+  assert.equal(exhaustCriticBudget(runDir), 0, 'again: nothing left to defer, the reason unchanged')
+  assert.ok(ledgerValid(runDir))
+  assert.equal(audit(['next', runDir]).last, 'NEXT: write-findings run=helper')
 })
 await test('no budget set means no cap: every planned unit gets a hunter in the first wave', () => {
   const { runDir } = seeded(Array.from({ length: 9 }, (_, i) => named(`u${i}`, { subsystem: `s${i}` })))
