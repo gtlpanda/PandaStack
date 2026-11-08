@@ -1996,3 +1996,111 @@ fence lines. The structured hunter result is the whole section, because the rule
 upstream's heading line for Core discipline, or only the fence: upstream says "copied verbatim", and a
 section copied whole has its heading. The `guidance` ranking is a keyword count, not a judgment; PR 8's
 skill decides when to call it.
+
+## 36. security-audit PR 3: audit-run.mjs, run state and gates (2026-11-07)
+
+PR 3 of the `security-audit` graph (plan: `tasks/plan-security-audit.md`, checked against
+`tasks/plan-security-audit-verify.md`). One file of real code, `graphs/security-audit/skills/security-audit/
+audit-run.mjs`, with `init`, `next`, `status` and `check`. No workflow, agent, or skill yet. Entry 35 is
+PR 2's, on its own branch.
+
+**What changed.**
+- `init <target> --full`: refuses without `--full`, outside a git working tree, with no commits, for a profile
+  other than `standard`, for a `--scope` path upstream's `isSafeRelativePath` rejects or the commit lacks, for a
+  `--prior` that is not a directory, and for an `--out` that exists or is inside the target without being wholly
+  ignored. A refusal creates nothing. Then it claims `<git common dir>/security-audit/run-<N>/` (`mkdir` is the
+  claim, so two inits cannot share a number), snapshots the committed HEAD into `tree/`, and writes
+  `run-metadata.json` (upstream's field list from SKILL.md, plus the pin, `execution_capability: none` and its
+  blockers, limits, budget, snapshot summary), `stage-state.json`, `prior-runs.json` and `events.jsonl`.
+- The snapshot: a private index, `read-tree`, then `checkout-index`, every git call through `SAFE_GIT` (a local
+  copy of evidence.mjs's flags, D8 B, drift-tested against evidence.mjs, gate.mjs, review-status.mjs and
+  intake.mjs). No symlink is kept (each is listed with its target), submodules are listed as not audited, and
+  everything else is `chmod a-w`. As root a write succeeds whatever the mode bits, so the tests assert the bits
+  everywhere and attempt the write only when not root.
+- The budget gate, as pure functions (`budgetGate`, `waveAllowance`, `validationReserve`, `minimumBudget`) and
+  upstream's five reason strings as `REASONS`. `init --budget` below 7 (standard) launches nothing, makes no
+  snapshot, records `run_status: incomplete` with `budget_cannot_fund_reconnaissance_and_reserves`, and exits 1.
+- Earlier runs: `run-<N>` beside the new one (numeric order, symlinks never followed) plus each `--prior`,
+  validated with both vendored validators, every one recorded in `prior-runs.json`.
+- `next`: one `NEXT: <step> run=<workflow|helper> ...` line from `stage-state.json`, the ledger and
+  `findings.json`, or `NEXT: FAIL <why>` and exit 1. `status` summarizes a run. `check` validates what upstream
+  does not (metadata, stage state, events, read-only tree) and runs both validators on ledger and findings.
+  `stage-state.json` is `{version: 1, last, wave, critic_kind, updated}`; `advanceState` is the writer.
+- `upstream.mjs` re-exports `isSafeRelativePath`.
+
+**Stage states and `next`.** `last` is the last saved step: init, recon, seed, plan-wave, hunt, merge-wave,
+critic, mint, apply-critic, consolidate, validate, write-findings, verify, report. The ledger breaks ties among
+all eight upstream statuses: `in_progress` means a wave is planned and unmerged (hunt), `planned` plans the next
+wave, and `not_applicable`, `out_of_scope`, `deferred`, `covered`, `blocked`, `candidate` are settled, never work.
+After a wave: post-wave critic, mint, apply-critic; nothing planned: the distinct final-clean critic; its
+accepted work loops back to plan-wave, its empty result goes on. Zero candidate fingerprints skip to
+write-findings, one skips consolidate (my reading: nothing to group), no needs_validation or confirmed record
+skips verify. An incomplete run goes to the report from any step, then done. Refused as inconsistent:
+`in_progress` after merge-wave; planned units left by a plan-wave that assigned none (it must defer what the
+budget cannot reach, or `next` would loop); a report with `run_status` still `in_progress`; an unknown status.
+
+**Numbers (measured).**
+- Non-test change: audit-run.mjs 609 lines (479 without comments and blanks) plus 3 in upstream.mjs, against the
+  plan's ~300. Two commits of about 300 each (init and snapshot; budget, earlier runs, next, status, check).
+- Tests: 715 workflow tests, +45 (26 init, 20 state, 1 upstream), the two new files run in 4.3 s; install and
+  secret checks unchanged; `TEST: PASS`.
+- Mutation check: 50 single-line breaks (gates, SAFE_GIT, each git flag, sealing, symlink handling, cleanup, run
+  numbering, each budget constant, prior compatibility rules, 13 `next` rules, check rules, flag parsing). 47 were
+  killed first time. Three survived and each got a test: `core.autocrlf=false` (no test set autocrlf), the EEXIST
+  bump in `claimRunDir` (extracted so a taken number can be tested), and following a symlinked run directory (the
+  link pointed at a run already found, so deduplication hid it).
+- Probes run before writing code (git 2.43.0): with `core.hooksPath` and `core.fsmonitor` pointing at committed
+  scripts, `git status` ran fsmonitor and post-index-change, `read-tree` ran post-index-change, and
+  `checkout-index` ran fsmonitor, so every call needs `SAFE_GIT`. A plain `git status` after a `touch` rewrote
+  `.git/index`; `--no-optional-locks` did not.
+
+**Plan and verify-file claims that were wrong or incomplete.**
+- plan:568, :318-320 (and evidence.mjs:163-166): the snapshot recipe "checkout-index with a private index" is not
+  "every file exactly as git stores it". `checkout-index` applies `.gitattributes` from the working tree, so
+  uncommitted files changed the bytes (measured: a worktree `.gitattributes` of `* -text` overrode the commit's
+  `eol=crlf`), and git config applies too (tested with `core.autocrlf=true` in the repo's config).
+  `--attr-source=<empty tree>` plus `core.autocrlf=false` gave the blob's bytes. The local export differs from evidence.mjs on purpose; hunt files untouched. The minimum
+  git version for `--attr-source` is unverified (this machine has 2.43.0; CI's ubuntu-24.04 not checked). A git
+  without it fails closed, not open: git exits 129 on an unknown global option (tested with a made-up one), and
+  `exportTree` throws on a non-zero `checkout-index`, so no working-tree bytes are exported.
+- plan:568: the same recipe materializes committed symlinks, including ones to `/etc/hostname` or a host file. An
+  agent with `Read` follows them out of the snapshot, and `chmod` follows them onto the target (measured with
+  node's `chmodSync`: a 0644 file became 0555 through a link). Symlinks are now dropped and listed.
+- plan:318-320 and verify:140, :190 (D8): not four copies. On this base `land.mjs` does not exist (it is only on
+  `feat/autobuild-home`); `gate.mjs:26`, `graphs/build/.../checks.mjs:48`, `driver.mjs:231, :246, :275` and
+  `graphs/hunt/tests/repair.test.mjs:21` carry it too. The verify file's "three graphs/build driver files" is two
+  files (checks.mjs, driver.mjs) with four sites, and `driver.mjs:246` and `:275` pass only `core.hooksPath`,
+  not `core.fsmonitor`. (Intake's copy is the inline array at intake.mjs:25.)
+- plan:560-562 (`--out`) and verify C5: confirmed that the default run directory is inside the target's `.git` and
+  §4.7 has no row for it. Also: `git check-ignore` answers "not ignored" (exit 1) for the two paths under `.git`
+  I tried, so the plan's rule alone would refuse the plan's own default; a directory must be asked about with a trailing slash
+  (`pat/*` ignores `pat/` but not `pat`); and outside the repository it is fatal (exit 128). For a linked worktree
+  the common dir is outside the target. The implemented rule: outside the target, or under
+  `<common>/security-audit`, or wholly ignored (asked with the slash). SKILL.md:51's "inside the target only when
+  the user selects it and version control ignores it" is met vacuously for `.git`; plan §4.7 still needs the row.
+- plan:543 and verify B20: confirmed, the table omits `not_applicable` and `in_progress`. Both are handled
+  (`STATUSES` is checked against the validator's own set and the state table in RECONNAISSANCE.md).
+- plan:119-120: the five reason strings are right, and are the only reason-like strings in the four vendored
+  markdown files (a test asserts the set, and the file each appears in).
+- plan:545-556: "compatible only if both upstream validators pass" is stricter than SKILL.md:96, which reads each
+  compatible ledger and findings file. A run that stopped before Phase 4 has a valid ledger and no findings.json;
+  here that is compatible, an invalid or missing ledger and an invalid findings file are not. My reading.
+- plan:578 (repo name "from the directory or local Git remote"): the name changes when an `origin` remote is added
+  later, so comparing it would mark every earlier run of the same repository "different" and drop its coverage
+  (found in review of my own first version, which did exactly that). Runs beside the new one live in this
+  repository's own git directory, so they are never compared by name; only a `--prior` is.
+- plan:395-401: `next` reads `stage-state.json`, but the plan never says what is in it. The shape above is mine and
+  is the contract PRs 4-8 write through `advanceState`.
+- plan:578-579 and intake.mjs:224-225: intake's `dirty` is tracked changes only. The audit counts untracked files
+  too (they are uncommitted source that was not audited) and records both counts.
+- plan §4.2 `init` says "budget gate" and not what happens on failure; upstream says ask, then record incomplete
+  if unchanged. A stateless command cannot see "unchanged", so it records at once and says to re-run with more.
+- plan:312, :749 (reuse `slug`/`nameKey`): not needed, so not imported (verify I15).
+- Not in the plan: the `tree/` is not deletable with `rm -rf` (no write bit). `makeWritable` is exported; there is
+  no command that removes a run.
+
+**Unchecked on purpose.** `waveAllowance` treats "no room for even one hunter" as "the reserves do not fit"
+(HUNTING.md says the latter; the exact-fit case is my reading), and rounds 30% up. Neither is used until PR 4. A
+`--prior` with a different `repo` name is incompatible; one with no name (a Cloudflare-style directory) is not. Quick and deep are refused, so
+`next` has no quick or deep branch (PR 9). Targets on `/mnt/c` (DrvFS) were not tried. A very large prior history
+is validated serially (two node starts per run).
