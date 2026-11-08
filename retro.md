@@ -1868,7 +1868,7 @@ or workflow: only the vendored upstream, the pin, and the checks that keep the c
 - `check-refs` on origin/main: 223 references, all resolve. With the vendored markdown and no skip:
   13 of 237 do not resolve. With the skip: 223.
 - Mutation check: with check-vendor's hash comparison disabled, `one flipped byte ... names that
-  file` fails (the size comparison still catches the other edits); restored, 13 of 13 pass.
+  file` fails (the size comparison still catches the other edits); restored, all pass.
 - `--online` run by hand against GitHub: "the pin c1c8a8c14710 is current" in 0.6 s. The behind and
   diverged paths, run against the real remote with an older and a made-up pin: 6 commits ahead, and
   "not in the history". The suite itself never uses the network (a local repo stands in).
@@ -1877,7 +1877,7 @@ or workflow: only the vendored upstream, the pin, and the checks that keep the c
   which 206 are code (upstream.mjs 62, check-vendor.mjs 136, check-refs 6, .gitattributes 2).
 
 **Plan claims that were wrong or unverifiable.**
-- Validator output (plan:204, :539, :639): only `PASS: N ... valid` goes to stdout. `ERROR:` lines
+- Validator output (plan:204, :540, :639): only `PASS: N ... valid` goes to stdout. `ERROR:` lines
   and `FAIL: N validation error(s)` go to stderr, and a read or parse failure prints one message on
   stderr and no `FAIL:` line (up:validate-findings.cjs:719-755, up:validate-coverage-ledger.cjs:814-851).
   `upstream.mjs` merges both streams for `lastLine` and calls a run valid only on exit 0 plus a PASS
@@ -1899,7 +1899,7 @@ or workflow: only the vendored upstream, the pin, and the checks that keep the c
   plan's own file table (plan:631) is right, and `UPSTREAM.json` and the vendor README now say so.
 - Not in the plan: `install.sh` will link `~/.claude/skills/security-audit` to a directory with only
   `upstream.mjs` (no SKILL.md until PR 8). Verified on a copy with a temporary HOME. It also moves
-  aside an upstream copy someone installed with `npx skills add`, as plan:1.5 expects.
+  aside an upstream copy someone installed with `npx skills add`, as plan section 1.5 expects.
 - `tasks/` is git-ignored here, so the plan is not in this worktree.
 
 **Unchecked on purpose.** File modes (recorded, not enforced: the validators are always run as
