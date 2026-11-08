@@ -1667,5 +1667,8 @@ disposition: pass` on the landed head.
 - Mutations caught:
   - dropping the PATH link fails 2 install checks;
   - accepting unverified fix commits fails one test in each caller (autobuild and /build-app).
-- Not proven: the guard's new kit-path pattern. Every case I wrote is already denied by the
-  "outside the project" rule, so that line is a backstop, as `.autobuild` was before it.
+- The guard's kit protection first looked untestable: every case was already denied by the
+  "outside the project" rule. A run of the middle commit from a worktree under `/tmp` found the
+  real gap. Sessions may write the temp dir, so a kit under `/tmp` was writable. The kit's own
+  directory is now frozen before the temp-dir allowance. A regression test runs the guard from a
+  copy of the kit under the temp dir; it failed before the fix and passes after.

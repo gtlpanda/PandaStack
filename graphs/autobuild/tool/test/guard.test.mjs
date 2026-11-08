@@ -1,7 +1,7 @@
 // The guard against a throwaway project: allowed and denied tool calls for each role.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -11,8 +11,8 @@ const GUARD = path.join(KIT, "hooks", "guard.mjs");
 const root = mkdtempSync(path.join(tmpdir(), "autobuild-guard-"));
 writeFileSync(path.join(root, "autobuild.json"), JSON.stringify({ frozen: ["tests", "spec", "SPEC.md", "CLAUDE.md", ".claude", ".env*", "scripts/harness"], writable: ["PROGRESS.md", "DECISIONS.md"] }));
 
-function decide(tool, input, role = "builder", active = "1") {
-  const result = spawnSync(process.execPath, [GUARD], {
+function decide(tool, input, role = "builder", active = "1", guard = GUARD) {
+  const result = spawnSync(process.execPath, [guard], {
     input: JSON.stringify({ tool_name: tool, tool_input: input }),
     encoding: "utf8",
     env: { ...process.env, AUTOBUILD_ACTIVE: active, HARNESS_ACTIVE: "", AUTOBUILD_ROLE: role, CLAUDE_PROJECT_DIR: root },
@@ -80,4 +80,13 @@ test("review sessions may only write the progress log", () => {
 
 test("the guard is inert outside loop sessions", () => {
   assert.equal(decide("Bash", { command: "git push" }, "builder", ""), "allow");
+});
+
+test("the kit itself stays frozen even when it lives under the temp dir sessions may write to", () => {
+  const kit = mkdtempSync(path.join(tmpdir(), "autobuild-kit-"));
+  for (const dir of ["hooks", "lib"]) cpSync(path.join(KIT, dir), path.join(kit, dir), { recursive: true });
+  const guard = path.join(kit, "hooks", "guard.mjs");
+  assert.equal(decide("Bash", { command: `echo x > ${path.join(kit, "lib", "cli.mjs")}` }, "builder", "1", guard), "deny");
+  assert.equal(decide("Write", { file_path: path.join(kit, "hooks", "guard.mjs") }, "builder", "1", guard), "deny");
+  assert.equal(decide("Write", { file_path: path.join(tmpdir(), "scratch.txt") }, "builder", "1", guard), "allow", "the rest of the temp dir stays writable");
 });

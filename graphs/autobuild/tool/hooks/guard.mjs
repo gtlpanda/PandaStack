@@ -60,6 +60,7 @@ function expand(file) {
 function isFrozen(file) {
   const absolute = path.resolve(ROOT, expand(file));
   const rel = path.relative(ROOT, absolute).split(path.sep).join("/");
+  if (absolute === KIT_HOME || absolute.startsWith(`${KIT_HOME}/`)) return true;
   if (rel.startsWith("..") || path.isAbsolute(rel)) return !TEMP_DIRS.some((dir) => absolute === dir || absolute.startsWith(`${dir}/`));
   if (role === "review") return rel !== config.progressFile;
   if (WRITABLE.some((pattern) => pattern.test(rel))) return false;
