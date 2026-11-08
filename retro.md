@@ -1749,3 +1749,13 @@ to be a reproduction at all.
   failed with its marker, so evidence.mjs and the recheck both counted it as reproduced. With the
   import fixed, it fails on the old lock for the real reason and passes on the new one. Logged as
   a /bughunt follow-up.
+
+**/bughunt round 5** (8.3 min, 16 agents; security and contract partial). 3 findings, all
+reproduced; each test was checked against the unfixed head.
+- F2 (id reused) HIGH: `git send-pack origin …` pushes without the word push. Fixed: it is denied,
+  as /build-app's guard already does.
+- F16 HIGH: only the first `tee` operand was checked, and `--output=<file>` (git log, git diff)
+  writes anywhere. Fixed: every tee operand and every `--output` value is checked.
+- F17: a restart before the first review started the review range at the restart, so features
+  passed before it were never reviewed. Fixed: with no review yet, the range starts at the
+  commit that added the feature list.

@@ -59,6 +59,13 @@ function lastReviewCommit(config) {
   return found.ok && found.output.trim() ? found.output.trim() : null;
 }
 
+/** The commit that added `file`, or null. */
+function firstCommitOf(config, file) {
+  const found = git(config, ["log", "--diff-filter=A", "--format=%H", "--", file]);
+  const oldest = found.ok ? found.output.trim().split("\n").filter(Boolean).pop() : null;
+  return oldest || null;
+}
+
 /** How many features pass now but did not at `sha`: the work no review has seen yet. */
 function passedSince(config, sha) {
   const then = git(config, ["show", `${sha}:${config.featuresFile}`]);
@@ -172,7 +179,9 @@ export async function runLoop(config, options = {}) {
     let limitWaitedMs = 0;
 
     // Reviews start from the last review commit, so neither a failed review nor a restart skips work.
-    let lastReviewSha = lastReviewCommit(config) ?? git(config, ["rev-parse", "HEAD"]).output.trim();
+    // With no review yet, the build starts where the feature list was added, so features a run
+    // passed before a restart are still reviewed.
+    let lastReviewSha = lastReviewCommit(config) ?? firstCommitOf(config, config.featuresFile) ?? git(config, ["rev-parse", "HEAD"]).output.trim();
     let completedSinceReview = passedSince(config, lastReviewSha);
     // `final`: the last features of a run are reviewed even when fewer than reviewEvery passed since the last review.
     const reviewIfDue = async ({ final = false } = {}) => {

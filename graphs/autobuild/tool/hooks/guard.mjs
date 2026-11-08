@@ -117,7 +117,8 @@ if (tool === "Bash") {
     }
     const sub = words[0] ?? "";
     const rest = words.slice(1).join(" ");
-    if (sub === "push") deny("git push is not allowed; the owner reviews and pushes.");
+    // send-pack is push without the word (/build-app's guard denies it too).
+    if (sub === "push" || sub === "send-pack") deny("git push is not allowed; the owner reviews and pushes.");
     if (GIT_DENIED.has(sub)) deny(`git ${sub} can discard, rewrite or fetch work. Allowed: git status/diff/log/show/add/commit.`);
     if ((sub === "branch" || sub === "tag") && /(^|\s)(-[a-zA-Z]*[dDmM]|--delete|--move)(\s|$)/.test(rest)) deny(`git ${sub} -d/-m is not allowed.`);
   }
@@ -152,8 +153,15 @@ if (tool === "Bash") {
     if ((dup && /^\d+$/.test(target)) || target === "/dev/null") continue;
     if (frozenTarget(target)) deny(`redirecting output into ${target} is not allowed (frozen or outside the project).`);
   }
-  for (const match of command.matchAll(/\btee\s+(?:-a\s+)?([^\s;&|]+)/g)) {
-    if (frozenTarget(match[1])) deny(`tee into ${match[1]} is not allowed (frozen or outside the project).`);
+  // Files a command writes through its arguments: every tee operand, and --output (git log,
+  // diff, format-patch, and others take it).
+  for (const { word, args } of simpleCommands(command)) {
+    const targets = word === "tee" ? args.filter((arg) => !arg.startsWith("-")) : [];
+    args.forEach((arg, i) => {
+      if (arg.startsWith("--output=")) targets.push(arg.slice("--output=".length));
+      else if (arg === "--output" && args[i + 1]) targets.push(args[i + 1]);
+    });
+    for (const target of targets) if (frozenTarget(target)) deny(`${word} writing ${target} is not allowed (frozen or outside the project).`);
   }
   const mutating = /(^|[\s;&|(])(sed\s+-[^\s]*i|perl\s+-[^\s]*i|mv|cp|rm|unlink|truncate|chmod|chown|ln|touch|dd|install|patch|rsync)(\s|$)/;
   const scripting = /(^|[\s;&|(])(node\s+(-e|--eval|-p|--print)|python3?|ruby|perl\s+-e)(\s|$)/;
