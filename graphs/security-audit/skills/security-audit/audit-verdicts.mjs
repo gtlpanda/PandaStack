@@ -294,7 +294,9 @@ export function validateInput(runDir, run) {
     const item = {
       agent_id: made.id, fingerprint: e.fingerprint, proposed_verdict: e.proposed_verdict, record: bounded(c.record), checks: checksOf(run.ledger, c), blocks: refs,
       priors: priors.filter(pr => pr.records.has(e.fingerprint)).slice(0, MAX_PRIORS).map(pr => ({ run_id: pr.run_id, record: bounded(pr.records.get(e.fingerprint), MAX_PRIOR_BYTES) })),
-      ...(e.attempts.at(-1)?.kind === 'confirmed' && { feedback: { attempt: e.attempts.length + 1, of: MAX_TRIES, problems: [`The previous verifier returned decision confirmed for this candidate. ${transitionProblem(e.proposed_verdict, 'confirmed')}.`] } }),
+      // Every retry says an earlier attempt was refused, in words that say nothing of what it decided or why: a verifier never sees another verifier's conclusion, and the rules the
+      // retry must meet are the ones already in its prompt.
+      ...(e.attempts.length > 0 && { feedback: { attempt: e.attempts.length + 1, of: MAX_TRIES, problems: ['An earlier attempt at this candidate was refused by the parent and discarded. Return a result that satisfies every rule above: the record contracts, the schema branch of the record you return, and the statement of what this audit can execute.'] } }),
     }
     const cost = encodedSize(item) + refs.filter(r => !(r in blocks)).reduce((n, r) => n + blockText(r).length * 2, 0)
     if (candidates.length && size + cost > MAX_VALIDATE_BYTES) break   // the rest wait for the next round

@@ -211,7 +211,8 @@ await test('a verifier that returns a record of megabytes is discarded like any 
   assert.match(e.attempts[0].problems[0], /^the record is \d+ bytes, over the 65536 a record may hold$/)
   assert.ok(readFileSync(join(run.runDir, 'decisions.json')).length < 200_000, 'decisions.json holds none of it')
 })
-await test('a retry that succeeds is the candidate\'s decision, made by the fresh verifier; the first result is kept only as a discarded attempt; a refused confirmed is retried with the parent\'s note, a malformed one without', async () => {
+await test('a retry that succeeds is the candidate\'s decision, made by the fresh verifier; the first result is kept only as a discarded attempt; every retry carries the same note from the parent, which says nothing of what the earlier verifier decided', async () => {
+  const notes = []
   for (const [name, make, kind] of [BAD[3], BAD[17]].map(([n, m, k]) => [n, m, k])) {
     const run = toValidate([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }])
     await round(run.runDir, (label, c) => (c.fingerprint === 'fp-a' ? make(c) : good(c)))
@@ -219,8 +220,10 @@ await test('a retry that succeeds is the candidate\'s decision, made by the fres
     assert.equal(r2.apply.status, 0, r2.apply.stdout)
     const e = entry(run.runDir, 'fp-a')
     assert.deepEqual([e.state, e.decision, e.verifier_id, e.record.title, e.attempts.map(a => [a.id, a.kind])], ['decided', 'needs_validation', 'v01-t2', 'Second try', [['v01', kind]]], name)
-    assert.equal(r2.prompts['v01-t2'].includes('## 11. A previous verifier\'s result for this candidate was refused'), kind === 'confirmed', name)
-    if (kind === 'confirmed') assert.match(r2.prompts['v01-t2'], /<parent-note>\nThe previous verifier returned decision confirmed for this candidate\. needs_validation to confirmed is not possible here/)
+    const note = r2.prompts['v01-t2'].slice(r2.prompts['v01-t2'].indexOf('## 11. '), r2.prompts['v01-t2'].lastIndexOf('Return exactly one JSON object'))
+    assert.match(note, /^## 11\. A note from the parent \(attempt 2 of 2\)\n<parent-note>\nAn earlier attempt at this candidate was refused by the parent and discarded\. Return a result that satisfies every rule above/, `${name}: every retry is told an earlier attempt was refused`)
+    assert.ok(!/confirmed|decision|returned|verifier/i.test(note.replace('## 11. A note from the parent', '')), `${name}: the note says nothing of what the earlier verifier decided or returned: ${note}`)
+    notes.push(note)
     assert.ok(!r2.prompts['v01-t2'].includes('I also checked X') && !r2.prompts['v01-t2'].includes('Confirmed fp-a'), 'nothing of the discarded result reaches the fresh verifier')
     assert.equal(meta(run.runDir).run_status, 'in_progress')
     assert.equal(next(run.runDir), 'NEXT: write-findings run=helper')
@@ -228,6 +231,8 @@ await test('a retry that succeeds is the candidate\'s decision, made by the fres
     assert.equal(meta(run.runDir).agents_spent, 3)
     ok(run.runDir)
   }
+  assert.equal(notes.length, 2)
+  assert.equal(notes[0], notes[1], 'a refused confirmed and a malformed result get the same note: which one it was is not told')
 })
 await test('a first confirmed and a second malformed result is validation_budget_exhausted: confirmed_without_local_evidence names only a verifier that insisted', async () => {
   const run = toValidate([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }])

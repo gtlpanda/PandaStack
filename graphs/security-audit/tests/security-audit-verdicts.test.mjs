@@ -140,10 +140,10 @@ await test('what came from the audited source cannot close its fence: the archit
   assert.equal(priors.split('<untrusted-prior-records>').length - 1, 1)
   assert.equal(priors.split('</untrusted-prior-records>').length - 1, 1)
 })
-await test('a retry after a refused confirmed carries the parent\'s note, fenced and from code; a first attempt carries none', async () => {
-  const c = VCAND(1, { agent_id: 'v01-t2', feedback: { attempt: 2, of: 2, problems: ['The previous verifier returned decision confirmed for this candidate. needs_validation to confirmed is not possible here.'] } })
+await test('a retry carries a note from the parent, fenced and from code, that says an earlier attempt was refused and nothing of what it said; a first attempt carries none', async () => {
+  const c = VCAND(1, { agent_id: 'v01-t2', feedback: { attempt: 2, of: 2, problems: ['An earlier attempt at this candidate was refused by the parent and discarded. Return a result that satisfies every rule above.'] } })
   const { calls } = await go({ 'audit-analyst': verifiersBy([c]) }, VAL_INPUT([c]))
-  assert.match(calls[0].prompt, /## 11\. A previous verifier's result for this candidate was refused \(attempt 2 of 2\)\n<parent-note>\nThe previous verifier returned decision confirmed/)
+  assert.match(calls[0].prompt, /## 11\. A note from the parent \(attempt 2 of 2\)\n<parent-note>\nAn earlier attempt at this candidate was refused by the parent and discarded\./)
   assert.equal(calls[0].label, 'v01-t2')
 })
 await test('one verifier failing leaves only its own key null, and so does every verifier failing, each named with its own error: the parent counts the tries, the workflow does not escalate', async () => {

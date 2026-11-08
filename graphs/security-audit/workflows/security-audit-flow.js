@@ -495,7 +495,7 @@ ${PARTS.schema_needs_validation}
 The rejected branch:
 ${PARTS.schema_rejected}
 ${c.feedback ? `
-## 11. A previous verifier's result for this candidate was refused (attempt ${c.feedback.attempt} of ${c.feedback.of})
+## 11. A note from the parent (attempt ${c.feedback.attempt} of ${c.feedback.of})
 ${fenced('parent-note', c.feedback.problems.join('\n'))}
 ` : ''}
 Return exactly one JSON object and no surrounding prose: {"decision": "needs_validation|rejected", "record": {...}}, where record carries every field of that decision's branch above, its verdict, and the fingerprint ${json(c.fingerprint)} (the same source-derived root cause keeps its fingerprint). Every path is repository-relative, every line one you read in the file.`
