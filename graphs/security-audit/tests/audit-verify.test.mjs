@@ -124,6 +124,21 @@ await test('a replacement that changes the root cause waits: findings.json keeps
   assert.deepEqual(completeProblems(run.runDir).problems, [])
   ok(run.runDir)
 })
+await test('a replacement that moves the evidence to another file, adds a blocker or changes the plan\'s contexts is not applied on one verifier\'s word, whatever else it rewords', async () => {
+  for (const [name, over, field] of [
+    ['an evidence file', { title: 'Reworded', description: 'Reworded.', evidence: [{ file: 'src/db.js', line: 1, description: 'elsewhere' }] }, 'evidence'],
+    ['a blocker added', { blockers: ['The generated parser is absent.', 'A second unknown.'] }, 'blockers'],
+    ['a plan context added', { validation_plan: { local: 'Generate it and submit an oversized input.', deployment: 'Ask the owner.' } }, 'validation_plan'],
+  ]) {
+    const run = await atVerify(TWO)
+    const before = found(run.runDir).find(r => r.fingerprint === 'fp-a')
+    const r1 = await verifyRound(run.runDir, (l, item) => (item.fingerprint === 'fp-a' ? replaced(item, over) : passed(item)))
+    assert.equal(r1.apply.status, 0, `${name}: ${r1.apply.stdout}`)
+    assert.match(r1.apply.last, /replaced=0 queued=1 /, name)
+    assert.match(r1.apply.stdout, new RegExp(`a material replacement \\(${field}\\) goes to a new independent verifier`), name)
+    assert.deepEqual(found(run.runDir).find(r => r.fingerprint === 'fp-a'), before, `${name}: not applied before a new verifier agrees`)
+  }
+})
 await test('a replacement that changes the verdict is material in either direction, and a rejected one is applied after its verification: the record leaves the leads', async () => {
   const run = await atVerify(TWO)
   const reject = item => ({ decision: 'replace', reason: 'the source refutes it', record: { verdict: 'rejected', fingerprint: item.fingerprint, title: item.record.title, description: item.record.description, claimed_root_cause: item.record.claimed_root_cause, trace: item.record.trace, evidence: item.record.evidence, reason: 'Every route passes the wrapper first.' } })

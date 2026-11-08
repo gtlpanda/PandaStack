@@ -140,18 +140,22 @@ export function transitionProblem(from, to) {
 }
 
 // ---------- materiality ----------
-// VALIDATION-AND-REPORTING.md, Phase 5: a replacement is not applied as final when it "promotes a record to a stronger verdict ... or
-// materially changes the root cause, trace, execution input or observed result, demonstrated impact, or severity"; "non-material wording or
-// repository-line corrections may be applied directly". Where "material" starts is my reading (plan 4.3 node E), kept in this one table:
-// a field is material when its value differs. Anything not listed (title, description, evidence, conditions, remediation, confidence, a trace
-// step's line or description, blockers, the validation plan) is wording or a line. Broader than the plan on one point: severity.likelihood.score
-// also counts, because upstream says "severity" and likelihood is half of it (its reason text stays wording).
+// VALIDATION-AND-REPORTING.md, Phase 5: a replacement is not applied as final when it "promotes a record to a stronger verdict ... or materially changes the root cause, trace,
+// execution input or observed result, demonstrated impact, or severity"; "non-material wording or repository-line corrections may be applied directly when they do not change
+// meaning or evidence". Where "material" starts is my reading (plan 4.3 node E), kept in this one table: a field is material when its value differs, and the value is what the
+// record means, not how it is worded. Listed beyond the plan's reading (the independent audit of this branch showed one verifier replacing a record's evidence file, blockers and plan
+// with no second look): severity.likelihood.score (upstream says "severity"), the files the evidence rests on (not its lines or descriptions), how many blockers there are and which
+// contexts the validation plan has (not their wording). Anything else (title, description, conditions, remediation, confidence, a trace step's line or description, an evidence
+// entry's line or description, the wording of a blocker or a plan) is wording or a line.
 const traceShape = r => (Array.isArray(r.trace) ? r.trace.map(t => (isObj(t) ? [t.file, t.kind, t.scope] : t)) : r.trace)
 export const MATERIAL_FIELDS = {
   verdict: r => r.verdict,
   root_cause: r => r.root_cause,
   claimed_root_cause: r => r.claimed_root_cause,
   trace: traceShape,   // the steps' (file, kind, scope) in order; not their lines or descriptions
+  evidence: r => (Array.isArray(r.evidence) ? r.evidence.map(e => (isObj(e) ? e.file : e)) : r.evidence),
+  blockers: r => (Array.isArray(r.blockers) ? r.blockers.length : r.blockers),
+  validation_plan: r => (isObj(r.validation_plan) ? Object.keys(r.validation_plan).sort() : r.validation_plan),
   'execution.payloads': r => r.execution?.payloads,
   'execution.instructions': r => r.execution?.instructions,
   'execution.observed_result': r => r.execution?.observed_result,

@@ -126,13 +126,13 @@ await test('wording and line edits are not material: title, descriptions, eviden
     ['title', r => { r.title = 'A different title' }],
     ['description', r => { r.description = 'Entirely new wording of the same thing.' }],
     ['evidence description', r => { r.evidence[0].description = 'worded again' }],
-    ['evidence line and file', r => { r.evidence[0].line = 9; r.evidence[0].file = 'src/db.js' }],
+    ['evidence line', r => { r.evidence[0].line = 9 }],
     ['a trace step line', r => { r.trace[0].line = 77 }],
     ['a trace step description', r => { r.trace[0].description = 'worded again' }],
     ['both at once', r => { r.trace[0].line = 5; r.trace[0].description = 'x'; r.title = 'y' }],
   ]
   for (const make of [NV, CF]) for (const [name, f] of nonMaterial) assert.deepEqual(materialChanges(make(), edit(make(), f)), [], `${make().verdict}: ${name}`)
-  const nvOnly = [['blockers', r => { r.blockers = ['another blocker'] }], ['validation_plan', r => { r.validation_plan = { local: 'a different fixture', deployment: 'ask the owner' } }]]
+  const nvOnly = [['blockers (same count, reworded)', r => { r.blockers = ['another blocker'] }], ['validation_plan (same contexts, reworded)', r => { r.validation_plan = { local: 'a different fixture' } }]]
   for (const [name, f] of nvOnly) assert.equal(isMaterial(NV(), edit(NV(), f)), false, name)
   const cfOnly = [['conditions', r => { r.conditions = [{ kind: 'data_state', description: 'x' }] }], ['remediation', r => { r.remediation = { strategy: 'check ownership differently', code_changes: [{ file_name: 'src/app.js', fixed_code: 'x' }] } }],
     ['confidence', r => { r.confidence = { score: 'low', reason: 'less sure' } }], ['intended_behavior', r => { r.intended_behavior = 'worded again' }], ['likelihood reason', r => { r.severity.likelihood.reason = 'worded again' }],
@@ -163,13 +163,20 @@ await test('a changed root cause, trace shape, execution input or result, impact
     ['severity.impact (the reason)', CF, r => { r.severity.impact.reason = 'a different reason' }],
     ['severity.overall_severity', CF, r => { r.severity.overall_severity = 'low' }],
     ['severity.likelihood.score', CF, r => { r.severity.likelihood.score = 'high' }],
+    ['evidence (a file)', NV, r => { r.evidence[0].file = 'src/db.js' }],
+    ['evidence (an entry added)', NV, r => { r.evidence.push({ file: 'src/app.js', line: 1, description: 'more' }) }],
+    ['evidence (an entry removed)', NV, r => { r.evidence = [] }],
+    ['blockers (a blocker added)', NV, r => { r.blockers.push('another unknown') }],
+    ['blockers (a blocker removed)', NV, r => { r.blockers = [] }],
+    ['validation_plan (a deployment context added)', NV, r => { r.validation_plan.deployment = 'ask the owner' }],
+    ['validation_plan (the local context removed)', NV, r => { r.validation_plan = { deployment: 'ask the owner' } }],
   ]
-  assert.deepEqual(material.map(m => m[0].replace(/ \(.*\)/, '')).filter((v, i, a) => a.indexOf(v) === i).sort(), ['claimed_root_cause', 'execution.instructions', 'execution.observed_result', 'execution.payloads', 'root_cause', 'severity.impact', 'severity.likelihood.score', 'severity.overall_severity', 'trace'])
+  assert.deepEqual(material.map(m => m[0].replace(/ \(.*\)/, '')).filter((v, i, a) => a.indexOf(v) === i).sort(), ['blockers', 'claimed_root_cause', 'evidence', 'execution.instructions', 'execution.observed_result', 'execution.payloads', 'root_cause', 'severity.impact', 'severity.likelihood.score', 'severity.overall_severity', 'trace', 'validation_plan'])
   for (const [name, make, f] of material) {
     const changes = materialChanges(make(), edit(make(), f))
     assert.deepEqual(changes, [name.replace(/ \(.*\)/, '')], name)
   }
-  assert.deepEqual(Object.keys(MATERIAL_FIELDS), ['verdict', 'root_cause', 'claimed_root_cause', 'trace', 'execution.payloads', 'execution.instructions', 'execution.observed_result', 'severity.impact', 'severity.overall_severity', 'severity.likelihood.score'], 'the one table, in this order')
+  assert.deepEqual(Object.keys(MATERIAL_FIELDS), ['verdict', 'root_cause', 'claimed_root_cause', 'trace', 'evidence', 'blockers', 'validation_plan', 'execution.payloads', 'execution.instructions', 'execution.observed_result', 'severity.impact', 'severity.overall_severity', 'severity.likelihood.score'], 'the one table, in this order')
 })
 await test('anything that is not a record is material, and a missing field on both sides is not a difference', () => {
   for (const bad of [null, undefined, 0, 7, 'x', [], [NV()], true]) { assert.deepEqual(materialChanges(bad, NV()), ['record']); assert.deepEqual(materialChanges(NV(), bad), ['record']); assert.ok(isMaterial(bad, bad)) }
