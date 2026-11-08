@@ -337,10 +337,14 @@ export const REASONS = Object.freeze({
   quick: 'quick_profile_final_critic',                       // quick's accepted discoveries and reassignments, deferred
 })
 export const RECON_CALLS = 4
+// PandaStack's own call: the synthesizer reads the four reports and writes the ledger units. Upstream's parent does that work, so SKILL.md's
+// "four baseline reconnaissance calls" leave it out; a gate without it passed budgets that were spent before the first hunter (found by the
+// independent audit of the recon change, retro entry 38).
+export const SYNTHESIS_CALLS = 1
 // Critics the gate reserves: quick, its one final post-wave critic; standard and deep, a post-wave critic plus a
 // distinct final-clean critic.
 export const criticReserve = profile => { if (!KNOWN_PROFILES.includes(profile)) throw new TypeError(`unknown profile ${JSON.stringify(profile)}`); return profile === 'quick' ? 1 : 2 }
-export const minimumBudget = profile => RECON_CALLS + criticReserve(profile) + 1   // + at least one verifier call
+export const minimumBudget = profile => RECON_CALLS + SYNTHESIS_CALLS + criticReserve(profile) + 1   // + at least one verifier call
 const checkBudget = b => { if (b !== null && !(Number.isSafeInteger(b) && b >= 0)) throw new TypeError(`a budget is null or a non-negative integer, not ${JSON.stringify(b)}`); return b }
 
 // The strict gate, applied before any reconnaissance agent. An unset budget (null) is never gated.
@@ -348,6 +352,16 @@ export function budgetGate(profile, budget) {
   const minimum = minimumBudget(profile)
   const ok = checkBudget(budget) === null || budget >= minimum
   return { ok, minimum, reason: ok ? null : REASONS.fund }
+}
+
+// The same gate for one recon part about to run (SKILL.md: "repeating this gate for each extra call"), so a retry cannot spend past the budget:
+// the researchers need the whole minimum again, the synthesizer needs itself and the reserves. `spent` is agents_spent.
+export function reconGate(profile, budget, spent, part) {
+  if (part !== 'facts' && part !== 'synthesize') throw new TypeError(`a recon part is facts or synthesize, not ${JSON.stringify(part)}`)
+  if (!isInt(spent)) throw new TypeError(`agents spent is a non-negative integer, not ${JSON.stringify(spent)}`)
+  const needed = part === 'facts' ? minimumBudget(profile) : SYNTHESIS_CALLS + criticReserve(profile) + 1
+  const ok = checkBudget(budget) === null || budget - spent >= needed
+  return { ok, needed, reason: ok ? null : REASONS.fund }
 }
 
 // Verifier cost to hold back: about 1 or 2 agents per expected candidate (quick: 1, one verifier does both
@@ -694,7 +708,7 @@ function runInit(argv) {
   const { source_ref: s, snapshot } = metadata
   if (!gate.ok) {
     const c = criticReserve(metadata.profile)
-    return refuse(`${gate.reason}: --budget ${metadata.budget} cannot fund the ${gate.minimum} calls profile ${metadata.profile} needs first (${RECON_CALLS} reconnaissance, ${c} critic${c === 1 ? '' : 's'}, 1 verifier); no agent was launched. Give a larger budget, a narrower --scope or a different profile; as it stands ${runDir} is recorded incomplete`)
+    return refuse(`${gate.reason}: --budget ${metadata.budget} cannot fund the ${gate.minimum} calls profile ${metadata.profile} needs first (${RECON_CALLS} reconnaissance, ${SYNTHESIS_CALLS} synthesis, ${c} critic${c === 1 ? '' : 's'}, 1 verifier); no agent was launched. Give a larger budget, a narrower --scope or a different profile; as it stands ${runDir} is recorded incomplete`)
   }
   console.log(runDir)
   for (const note of opts.notes) console.log(`note: ${note}`)

@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import { test, load, run } from '../../../scripts/workflow-harness.mjs'
 import { FACT_LIMITS, MAX_SCRIPT_BYTES, RECON_IDS, checkFacts, refProblem } from '../skills/security-audit/audit-stage.mjs'
-import { writeJson } from '../skills/security-audit/audit-run.mjs'
+import { recordSpend, writeJson } from '../skills/security-audit/audit-run.mjs'
 import { audit, ENV, fresh, init, ledgerCli, listFiles, meta, mkRepo, put } from './audit-fixtures.mjs'
 import { planWave } from '../skills/security-audit/audit-ledger.mjs'
 import { ledgerValid, readJsonFile, seeded, unitInput } from './ledger-fixtures.mjs'
@@ -439,6 +439,41 @@ await test('a seed-feedback.json that is not what apply wrote stops the plan wit
     assert.equal(r.status, 1, bad)
     assert.match(r.last, /^AUDIT: FAIL (seed-feedback\.json is not what apply wrote|.*seed-feedback\.json is not valid JSON)/, bad)
   }
+})
+
+console.log('== the budget gate before each recon part')
+await test('a retry the budget cannot fund is refused before any agent runs and ends the run incomplete with upstream\'s reason, never over the budget', async () => {
+  const { runDir } = newInit(['--budget', '8'])   // exactly the minimum: four researchers, a synthesizer, two critics, a verifier
+  stage(['plan', runDir])
+  const dir = join(runDir, 'stages', '01-recon-facts')
+  const ran = await runScript(join(dir, 'run.js'), { 'audit-researcher': [RESEARCH('1a'), null, RESEARCH('1c'), RESEARCH('1d')] })
+  assert.match(stage(['apply', runDir, returnedFile(dir, ran.result)]).last, /recon facts escalated/)
+  assert.equal(meta(runDir).agents_spent, 4)
+  const r = stage(['plan', runDir])
+  assert.equal(r.status, 1)
+  assert.match(r.last, /^AUDIT: FAIL budget_cannot_fund_reconnaissance_and_reserves: the researchers need 8 more calls with the reserves and 4 are left \(--budget 8, 4 spent\); no agent was launched and the run is marked incomplete$/)
+  assert.deepEqual([meta(runDir).run_status, meta(runDir).incomplete_reason, meta(runDir).agents_spent], ['incomplete', 'budget_cannot_fund_reconnaissance_and_reserves', 4])
+  assert.equal(audit(['check', runDir]).last, `AUDIT: OK ${runDir} passes check`)
+  assert.equal(audit(['next', runDir]).last, 'NEXT: report run=helper reason=budget_cannot_fund_reconnaissance_and_reserves')
+  assert.deepEqual(stageDirs(runDir), ['01-recon-facts'], 'no stage directory, no script for a stage that cannot run')
+})
+await test('the synthesizer is gated too: a run the researchers left with too little is refused before it spends the fifth call, and at the minimum a whole recon fits', async () => {
+  const { runDir } = newInit(['--budget', '8'])
+  stage(['plan', runDir])
+  const dir1 = join(runDir, 'stages', '01-recon-facts')
+  stage(['apply', runDir, returnedFile(dir1, (await runScript(join(dir1, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })).result)])
+  const p = stage(['plan', runDir])
+  assert.equal(p.status, 0, `4 left is the synthesizer, two critics and a verifier: ${p.stdout}`)
+  const { runDir: tight } = newInit(['--budget', '8'])
+  stage(['plan', tight])
+  const dir = join(tight, 'stages', '01-recon-facts')
+  stage(['apply', tight, returnedFile(dir, (await runScript(join(dir, 'run.js'), { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })).result)])
+  recordSpend(tight, 'something-else', 1)   // 3 left
+  const r = stage(['plan', tight])
+  assert.equal(r.status, 1)
+  assert.match(r.last, /^AUDIT: FAIL budget_cannot_fund_reconnaissance_and_reserves: the synthesizer needs 4 more calls with the reserves and 3 are left \(--budget 8, 5 spent\)/)
+  assert.equal(meta(tight).run_status, 'incomplete')
+  assert.equal(stage(['plan', newInit().runDir]).status, 0, 'no budget set: never gated')
 })
 
 console.log('== plan and apply refuse what they must, and change nothing')

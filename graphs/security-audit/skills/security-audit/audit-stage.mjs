@@ -23,7 +23,7 @@ import { spawnSync } from 'node:child_process'
 import { isDeepStrictEqual } from 'node:util'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { RUNNERS, Usage, advanceState, appendEvent, formatNext, loadRun, markIncomplete, nextStep, readJson, recordSpend, refuse, writeJson } from './audit-run.mjs'
+import { RUNNERS, Usage, advanceState, appendEvent, formatNext, loadRun, markIncomplete, nextStep, readJson, recordSpend, reconGate, refuse, writeJson } from './audit-run.mjs'
 import { seedProblems } from './audit-ledger.mjs'
 import { companions, ordinary, parts, resolve as resolveBlock } from './blocks.mjs'
 import { isSafeRelativePath } from './upstream.mjs'
@@ -217,6 +217,13 @@ export function planStage(runDir) {
   const run = loadRun(runDir)
   expectStage(run)
   const part = existsSync(join(runDir, 'recon-facts.json')) ? 'synthesize' : 'facts'
+  // The strict gate before any agent runs, again for this part: a retry must not spend past a budget the run was given (SKILL.md: never exceed it silently).
+  const gate = reconGate(run.meta.profile, run.meta.budget, run.meta.agents_spent, part)
+  if (!gate.ok) {
+    markIncomplete(runDir, gate.reason)
+    appendEvent(runDir, { cmd: 'plan', stage: 'recon', result: 'refused', reason: gate.reason, part })
+    refuse(`${gate.reason}: the ${part === 'facts' ? 'researchers need' : 'synthesizer needs'} ${gate.needed} more calls with the reserves and ${run.meta.budget - run.meta.agents_spent} are left (--budget ${run.meta.budget}, ${run.meta.agents_spent} spent); no agent was launched and the run is marked incomplete`)
+  }
   const stage = openStage(runDir, `recon-${part}`)
   const input = join(stage.dir, 'input.json'), script = join(stage.dir, 'run.js')
   writeJson(input, reconInput(runDir, run.meta, part))
