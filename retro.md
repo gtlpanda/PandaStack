@@ -1896,7 +1896,7 @@ or workflow: only the vendored upstream, the pin, and the checks that keep the c
 - plan:241, :681: the upstream tests' runtime was "unverified"; measured above. Their `mkfifo` and
   O_NOFOLLOW paths ran, with nothing skipped, on this Linux.
 - "22 files" (plan:58) is the whole repo, not the skill directory (20 files, 314,670 bytes); the
-  plan's own file table (plan:631) is right, and `UPSTREAM.json` and the vendor README now say so.
+  plan's own file table (plan:635) is right, and `UPSTREAM.json` and the vendor README now say so.
 - Not in the plan: `install.sh` will link `~/.claude/skills/security-audit` to a directory with only
   `upstream.mjs` (no SKILL.md until PR 8). Verified on a copy with a temporary HOME. It also moves
   aside an upstream copy someone installed with `npx skills add`, as plan section 1.5 expects.
