@@ -34,3 +34,11 @@ await test('what the docs say about the smallest budget is the code\'s number, a
   assert.ok(top.includes('](graphs/security-audit/README.md) | `/security-audit --full`'), 'the table row')
   assert.ok(top.includes('(blueprint, dev, qa, release, hunt, build, seo, security-audit)') && top.includes('`security-audit/run-<N>/` (an audit run)'), 'the pieces table lists the graph and its state')
 })
+await test('the retro entry the READMEs cite for the live audits exists, and names the command, the cost and the agents', () => {
+  const retro = readFileSync(join(REPO, 'retro.md'), 'utf8')
+  const at = retro.indexOf('## 42. security-audit PR 8')
+  assert.ok(at > 0, 'retro.md has entry 42')
+  const entry = retro.slice(at)
+  for (const need of ['claude -p', '--max-budget-usd 8', 'session-reported', 'agents', 'NEXT: done status=complete', 'planted']) assert.ok(entry.includes(need), `entry 42 says: ${need}`)
+  assert.ok(README.includes('retro.md` (entry 42)'), 'the graph README cites it')
+})
