@@ -6,6 +6,7 @@
 //   node audit-ledger.mjs seed       <run dir> <recon.json>            recon.json: { architecture_md, units: [...] }
 //   node audit-ledger.mjs plan-wave  <run dir>
 //   node audit-ledger.mjs merge-wave <run dir> <hunter-results.json>   { "<hunter agent id>": <result object | null>, ... }
+//   node audit-ledger.mjs apply-critic <run dir> <critic.json> <mint.json>   critic.json: HUNTING.md's critic JSON; mint.json: { units: [...] }
 //
 // Every operation runs only when `audit-run.mjs next` says it is the next step, writes the ledger through one gate, and
 // then saves its step with advanceState (audit-run.mjs's stage-state.json contract) and one line in events.jsonl.
@@ -332,12 +333,91 @@ function mergeCandidates(existing, found) {
   return [...byFingerprint.values()].sort((a, b) => (a.fingerprint < b.fingerprint ? -1 : 1))
 }
 
+// ---------- apply-critic ----------
+const ARCHIVABLE = ['blocked', 'covered', 'candidate']   // RECONNAISSANCE.md: only these states can be archived in attempts
+const LIVE_EVIDENCE = { agent_id: null, reviewed_paths: [], local_checks: [], result_fingerprints: [], unresolved: [] }
+const semanticOf = u => JSON.stringify([u.surface, u.boundary, u.subsystem, u.attack_class, u.lifecycle ?? null])
+
+function criticProblems(critic, mint) {
+  const p = []
+  if (!isObj(critic)) return ['the critic result is not a JSON object (a critic result wrapped in prose is not one)']
+  for (const k of ['missing_units', 'reassign_ids', 'resolved_prior_leads']) if (!Array.isArray(critic[k])) p.push(`critic.${k} must be an array`)
+  if (typeof critic.stop !== 'boolean') p.push('critic.stop must be true or false')
+  for (const k of ['reassign_ids', 'resolved_prior_leads']) if (Array.isArray(critic[k]) && !critic[k].every(isText)) p.push(`critic.${k} must hold non-empty strings`)
+  if (!isObj(mint) || !Array.isArray(mint.units)) p.push('mint.json must be an object { units: [...] }')
+  return p
+}
+
+// The unit after the critic reopened it: its terminal state archived exactly as upstream lists the fields, the live state
+// empty and unassigned, the wave one higher (RECONNAISSANCE.md "attempts"). The next owner is fresh because plan-wave names
+// hunters by wave. A unit's failure count starts over with its new assignment.
+function reassign(unit, reason) {
+  const { failed_attempts, last_failure, ...rest } = unit
+  const { wave, status, agent_id, reviewed_paths, local_checks, result_fingerprints, unresolved } = unit
+  const attempt = clone({ wave, status, agent_id, reviewed_paths, local_checks, result_fingerprints, unresolved, reassignment_reason: reason })
+  return { ...rest, ...LIVE_EVIDENCE, attempts: [...unit.attempts, attempt], wave: wave + 1, status: 'planned' }
+}
+
+// The critic's `reassign_ids` carry no per-unit reason (HUNTING.md's JSON, which a critic must return exactly), though
+// RECONNAISSANCE.md asks for "the critic's source-backed reassignment_reason": the archive says so instead of inventing one.
+export function applyCritic(runDir, critic, mint) {
+  const started = Date.now()
+  const run = loadRun(runDir)
+  expectStep(run, 'apply-critic')
+  const { meta, state, ledger } = run
+  if (state.critic_kind === null) refuse('a critic result is being applied but stage-state.json has no critic_kind')
+  const problems = criticProblems(critic, mint)
+  const queue = readQueue(runDir)
+  const proposals = isObj(critic) && Array.isArray(critic.missing_units) ? critic.missing_units.length + queue.length : 0
+  if (!problems.length && mint.units.length > proposals) problems.push(`mint returned ${mint.units.length} unit(s) for ${proposals} proposal(s): a unit comes from a proposal`)
+  if (problems.length) fail(`apply-critic refused: ${problems.length} problem(s); nothing was changed`, problems)
+
+  const by = `${state.critic_kind} critic of wave ${state.wave}`
+  const notes = [], patched = new Map(), fresh = []
+  const tally = { reassigned: 0, reassign_rejected: 0, units_added: 0, out_of_scope: 0, duplicates: 0, minted_rejected: 0, resolved: 0, resolved_unknown: 0, dropped_proposals: proposals - mint.units.length }
+  if (tally.dropped_proposals) notes.push(`${tally.dropped_proposals} proposal(s) (critic missing_units and queued uncovered) were not minted into a unit; they are dropped`)
+  const current = new Map(ledger.map(u => [u.coverage_id, u]))
+  for (const id of new Set(critic.reassign_ids)) {
+    const unit = current.get(id)
+    if (!unit || !ARCHIVABLE.includes(unit.status)) {
+      notes.push(`reassign ${id}: ${unit ? `status ${unit.status} has no live evidence to archive` : 'no such unit'}; not applied`)
+      tally.reassign_rejected += 1
+      continue
+    }
+    patched.set(id, reassign(unit, `the ${by} listed this unit in reassign_ids; the critic result gives no per-unit reason`))
+    tally.reassigned += 1
+  }
+  const ctx = { runDir, scope: meta.scope_paths, priorStatus: 'none' }
+  mint.units.forEach((entry, i) => {
+    const built = isObj(entry) && entry.status !== undefined && entry.status !== 'planned' ? { problems: [`status ${JSON.stringify(entry.status)}: a minted unit is planned work; scope and budget decide anything else`] } : unitFromInput(entry, ctx)
+    if (built.problems) { tally.minted_rejected += 1; return notes.push(`minted unit ${i}: ${built.problems.join('; ')}; rejected`) }
+    const have = current.get(built.unit.coverage_id) ?? fresh.find(u => u.coverage_id === built.unit.coverage_id)
+    if (have && semanticOf(have) !== semanticOf(built.unit)) fail(`coverage ID collision: minted unit ${i} has the ID of a unit with different semantic fields; upstream never merges them (${LEDGER_FILE} is unchanged)`, [built.unit.coverage_id])
+    if (have) { tally.duplicates += 1; return notes.push(`minted unit ${i}: ${built.unit.coverage_id} is already in the ledger; not added again`) }
+    fresh.push(built.unit)
+    tally[built.unit.status === 'out_of_scope' ? 'out_of_scope' : 'units_added'] += 1
+  })
+  for (const fingerprint of new Set(critic.resolved_prior_leads)) {
+    const linked = ledger.filter(u => (u.prior_leads ?? []).some(l => l.fingerprint === fingerprint))
+    if (!linked.length) { tally.resolved_unknown += 1; notes.push(`resolved_prior_leads ${fingerprint}: not a prior lead of any unit; not applied`); continue }
+    for (const u of linked) {
+      const base = patched.get(u.coverage_id) ?? u
+      patched.set(u.coverage_id, { ...base, prior_leads: base.prior_leads.map(l => (l.fingerprint === fingerprint ? { ...l, resolved: { by, wave: state.wave } } : l)) })
+    }
+    tally.resolved += 1
+  }
+  commitLedger(runDir, [...ledger.map(u => patched.get(u.coverage_id) ?? u), ...fresh], () => writeJson(join(runDir, 'uncovered.json'), []))
+  finish(runDir, 'apply-critic', started, tally, {}, { wave: state.wave, critic_kind: state.critic_kind, critic_stop: critic.stop })
+  return { summary: `wave=${state.wave} kind=${state.critic_kind} units_added=${tally.units_added} out_of_scope=${tally.out_of_scope} reassigned=${tally.reassigned} resolved=${tally.resolved} rejected=${tally.reassign_rejected + tally.minted_rejected}`, notes }
+}
+
 // ---------- command line ----------
 const USAGE = `usage: audit-ledger.mjs seed <run dir> <recon.json>
        audit-ledger.mjs plan-wave <run dir>
-       audit-ledger.mjs merge-wave <run dir> <hunter-results.json>`
+       audit-ledger.mjs merge-wave <run dir> <hunter-results.json>
+       audit-ledger.mjs apply-critic <run dir> <critic.json> <mint.json>`
 const COMMANDS = {
-  seed: [1, seed], 'plan-wave': [0, planWave], 'merge-wave': [1, mergeWave],
+  seed: [1, seed], 'plan-wave': [0, planWave], 'merge-wave': [1, mergeWave], 'apply-critic': [2, applyCritic],
 }
 
 function inputFile(path) {
