@@ -37,7 +37,7 @@
       ],
       "test": "graphs/security-audit/tests/profile-init.test.mjs",
       "testKind": "profile",
-      "passes": false
+      "passes": true
     },
     {
       "id": "P-03",

@@ -22,6 +22,8 @@ Index first, then the entries. Keep this file's formats exact: it is read by peo
 | S11 | Quick funds validation at one agent per candidate (`validateInput` assumed a Phase 5 verifier each) | P-05 |
 | S12 | Quick falls through to its one `post-wave` critic wherever standard asks `final-clean` | P-04 |
 | S13 | The deep report line says deep "asked for" units split by lifecycle mode (nothing checks that recon produced any) | P-07 |
+| D1 | `init()` keeps a profile guard for direct callers, worded `profile must be one of quick, standard, deep, not <JSON>` | P-02 |
+| D2 | P-02 leaves SKILL.md and the graph README untouched; their "init refuses quick/deep" sentences are P-08's | P-02 |
 
 ## Entries
 
@@ -42,3 +44,5 @@ Index first, then the entries. Keep this file's formats exact: it is read by peo
 - **S11** One agent per quick candidate — measured: quick budgets 13, 14 and 16 ended `incomplete` after 11 or 12 agents although the run spends 13, because `validateInput` kept an agent per candidate for a Phase 5 verifier quick does not have.
 - **S12** `post-wave`, never `final-clean`, in quick — the rule key `finalCleanCritic: false`; the report sentence about quick's critic keys on it.
 - **S13** "asked for" — the profile directs recon (prompt text) and code accepts lifecycle units; no code can require a target to have lifecycle modes.
+- **D1** Guard kept in `init()` — the contract deletes the "not available yet" refusal and the CLI parser already stops unknown names (exit 2), but `init()` is exported; without a guard a direct caller with a bad profile would claim a run directory, then throw a TypeError from `criticReserve` and delete it. Refusing first keeps "a refusal creates nothing"; the new wording matches `check`'s and no longer says "not available yet" (tested in `audit-init-profiles.test.mjs`).
+- **D2** Docs wait for P-08 — one feature per session, and `features.json` gives the SKILL.md/README sentences to P-08 (its test pins them). Until P-08 lands, those two docs still say init refuses quick and deep; `audit-readme.test.mjs`'s `other than \`standard\`` phrase is dropped there too.

@@ -34,3 +34,9 @@ REVIEW <YYYY-MM-DD>: DEFECT <file:line> <title> — <failure scenario; suggested
 - Tests: graphs/security-audit/tests/profile-rules.test.mjs passing (6/6); new audit-profile.test.mjs (3); regression suite green (`node scripts/test-workflow.mjs`: 1254 passed, 0 failed)
 - Decisions: none
 - Notes: `audit-report.mjs` WHY still has the literal key `quick_profile_final_critic`; P-07 can key it `[QUICK_DEFERRED]` when it imports audit-profile.mjs. `criticReserve`/`validationReserve` untouched, as the contract asks.
+
+## P-02 — init takes quick and deep (2026-11-08)
+- What: `audit-run.mjs`: `SUPPORTED_PROFILES = KNOWN_PROFILES`; the "not available yet" refusal is gone (a neutral guard for direct `init()` callers stays); usage and header say `[--profile quick|standard|deep]`; the what-runs note reads `rulesOf(metadata).verifiersPerCandidate`. Existing tests edited per SPEC §7 (audit-run-init, audit-run-state).
+- Tests: graphs/security-audit/tests/profile-init.test.mjs passing (11/11); new audit-init-profiles.test.mjs (3); regression suite green (`node scripts/test-workflow.mjs`: 1263 passed, 0 failed); `check-existing-tests.mjs` PASS
+- Decisions: D1, D2
+- Notes: SKILL.md and graph README still say init refuses quick/deep (D2): P-08 fixes them and drops `other than \`standard\`` from audit-readme.test.mjs. `budgetGate`/refusal text needed no change (already per profile).

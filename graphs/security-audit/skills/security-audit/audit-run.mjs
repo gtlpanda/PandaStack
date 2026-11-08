@@ -3,14 +3,14 @@
 // (vendor/cloudflare-security-audit/skills/security-audit/SKILL.md) is the authority for names and
 // reason strings; nothing here paraphrases it.
 //
-//   node audit-run.mjs init [<target>] --full [--out <dir>] [--profile standard] [--scope <path,...>]
+//   node audit-run.mjs init [<target>] --full [--out <dir>] [--profile quick|standard|deep] [--scope <path,...>]
 //                           [--budget N] [--prior <run dir>]... [--max-parallel N] [--max-units-per-hunter N]
 //   node audit-run.mjs next|status|check <run dir>
 //
 // init gates, then claims a new run directory (default <git common dir>/security-audit/run-<N>/, decision
 // D4 A) and writes into it: tree/ (a read-only snapshot of the committed HEAD), run-metadata.json,
 // stage-state.json, events.jsonl. Gates: --full given; target is a git working tree with a commit;
-// profile supported; --scope paths safe, committed, and held by tree/; --prior is a directory; --out new and
+// profile one of quick, standard, deep; --scope paths safe, committed, and held by tree/; --prior is a directory; --out new and
 // either outside the target, under <git dir>/security-audit, or wholly ignored by version control. A refusal
 // creates nothing, except the budget refusal: it runs after the directory is claimed, launches nothing, and
 // records the run as incomplete so the refusal is disclosed rather than lost (SKILL.md, "Cost budget").
@@ -36,7 +36,7 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildEnv, git as rawGit, tail } from '../../../build/skills/build-app/driver/proc.mjs'
 import { VENDOR_DIR, isSafeRelativePath, validateFindingsFile, validateLedgerFile } from './upstream.mjs'
-import { PROFILES, QUICK_DEFERRED } from './audit-profile.mjs'
+import { PROFILES, QUICK_DEFERRED, rulesOf } from './audit-profile.mjs'
 
 // Every git call here runs without the target's hooks or fsmonitor: both are config a repo may set with a
 // relative path, which resolves inside the checkout, the code under audit. A local copy of the flags in
@@ -47,7 +47,7 @@ export const SAFE_GIT = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor
 export const git = (dir, args, opts) => rawGit(dir, [...SAFE_GIT, ...args], opts)
 
 export const KNOWN_PROFILES = PROFILES                                  // audit-profile.mjs: the one table of what each profile does
-export const SUPPORTED_PROFILES = ['standard']                          // plan section 0: the others wait for PR 9
+export const SUPPORTED_PROFILES = KNOWN_PROFILES                        // init runs every profile it knows; none is run as another
 export const DEFAULTS = { maxParallel: 8, maxUnitsPerHunter: 4 }        // decision D9
 export const EXECUTION_POLICY = 'sandboxed-source-and-local-only'       // SKILL.md, "run-metadata.json" paragraph
 // The controls upstream requires before any target code runs (SKILL.md, "Universal execution safety").
@@ -661,7 +661,7 @@ export function checkRun(runDir) {
 export function init(opts) {
   const started = Date.now()
   if (!opts.full) refuse('a full audit needs --full: it is the explicit request upstream requires, and guidance mode creates no run')
-  if (!SUPPORTED_PROFILES.includes(opts.profile)) refuse(`profile ${opts.profile} is not available yet (only ${SUPPORTED_PROFILES.join(', ')}); it is never run as a different profile`)
+  if (!SUPPORTED_PROFILES.includes(opts.profile)) refuse(`profile must be one of ${SUPPORTED_PROFILES.join(', ')}, not ${JSON.stringify(opts.profile)}`)   // the parser already stops this; a direct caller is refused before anything is created
   const f = repoFacts(opts.target)
   const scope_paths = scopePaths(f, opts.scope)
   for (const dir of opts.prior) if (!isDirectory(dir)) refuse(`--prior ${dir} is not a directory`)
@@ -701,7 +701,7 @@ const isDirectory = p => { try { return statSync(p).isDirectory() } catch { retu
 
 // ---------- command line ----------
 const INT = /^(0|[1-9][0-9]*)$/
-const USAGE = `usage: audit-run.mjs init [<target>] --full [--out <dir>] [--profile standard] [--scope <path,...>] [--budget N] [--prior <run dir>]... [--max-parallel N] [--max-units-per-hunter N]
+const USAGE = `usage: audit-run.mjs init [<target>] --full [--out <dir>] [--profile quick|standard|deep] [--scope <path,...>] [--budget N] [--prior <run dir>]... [--max-parallel N] [--max-units-per-hunter N]
        audit-run.mjs next|status|check <run dir>`
 // flag -> [option, parse(value, options), repeatable]; a parse error is a Usage error.
 const int = (min, max) => v => { if (!INT.test(v) || !Number.isSafeInteger(Number(v)) || Number(v) < min) throw new Usage(); return Math.min(Number(v), max) }
@@ -751,7 +751,8 @@ function runInit(argv) {
   if (snapshot.skipped_total) console.log(`note: ${snapshot.skipped_total} symlink(s) and submodule(s) are not in tree/ (listed in run-metadata.json)`)
   for (const p of priors.filter(p => !p.compatible).slice(0, 5)) console.log(`note: earlier run ${p.run_id} is incompatible (${p.reasons[0]}); it is recorded in prior-runs.json, never treated as empty coverage`)
   // What a session says to its user before any agent runs: printed here, because an instruction to "tell the user" was skipped by the session in two live runs, and a note it is told to relay is in the transcript either way.
-  console.log(`note: what runs: about one agent per coverage unit, then one or two verifiers per surviving lead; ${metadata.budget === null ? 'no budget is set, so nothing stops spend but you' : `a budget of ${metadata.budget} agent invocations is set`}`)
+  const verifiers = rulesOf(metadata).verifiersPerCandidate === 1 ? 'one verifier' : 'one or two verifiers'   // quick's one verifier does Phase 3 and Phase 5
+  console.log(`note: what runs: about one agent per coverage unit, then ${verifiers} per surviving lead; ${metadata.budget === null ? 'no budget is set, so nothing stops spend but you' : `a budget of ${metadata.budget} agent invocations is set`}`)
   console.log(`note: the agents can only read, search and list files in a read-only snapshot of the commit (${join(runDir, 'tree')}); no code of the target is executed and nothing in the repository is edited`)
   console.log(`note: the run is ${runDir}; it resumes from disk: audit-run.mjs next ${runDir}`)
   console.log(`AUDIT: OK run=${metadata.run_id} profile=${metadata.profile} commit=${s.commit.slice(0, 12)} files=${snapshot.files} earlier_runs=${priors.length} compatible=${priors.filter(p => p.compatible).length}`)
