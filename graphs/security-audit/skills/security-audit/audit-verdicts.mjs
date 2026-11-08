@@ -75,13 +75,18 @@ export function groupingProblems(pool, groups) {
   return problems
 }
 
-// The pool after a valid grouping: a merged-away entry is gone, its hunters and units belong to the entry that was kept (a hunter of either
-// fingerprint may not verify the root cause), and the kept entry records what it absorbed.
-function consolidatedPool(pool, groups) {
+// What a valid grouping merges away: fingerprint -> the one it goes into, and why.
+const intoOf = groups => {
   const into = new Map()
   for (const g of groups) for (const fp of g.merge) into.set(fp, { keep: g.keep, reason: g.reason.trim().slice(0, 400) })
+  return into
+}
+
+// The pool after a valid grouping: a merged-away entry is gone, its hunters and units belong to the entry that was kept (a hunter of either
+// fingerprint may not verify the root cause), and the kept entry records what it absorbed.
+function consolidatedPool(pool, groups, into) {
   const byFp = new Map(pool.map(c => [c.fingerprint, c]))
-  const kept = pool.filter(c => !into.has(c.fingerprint)).map(c => {
+  return pool.filter(c => !into.has(c.fingerprint)).map(c => {
     const group = groups.find(g => g.keep === c.fingerprint && g.merge.length)
     if (!group) return c
     const gone = group.merge.map(fp => byFp.get(fp))
@@ -90,7 +95,6 @@ function consolidatedPool(pool, groups) {
       merged: [...(c.merged ?? []), ...gone.map(m => ({ fingerprint: m.fingerprint, proposed_verdict: m.proposed_verdict, reason: into.get(m.fingerprint).reason }))],
     }
   })
-  return { pool: kept, into }
 }
 
 // The ledger after it: a unit that held a merged-away fingerprint holds the kept one (deduplicated: the validator rejects a repeat), and keeps the alias as
@@ -109,29 +113,38 @@ function consolidatedLedger(ledger, into) {
 export function applyConsolidate({ runDir, run, stage, input, result, event, notes }) {
   const pool = readPool(runDir)
   const earlier = readJson(join(runDir, CONSOLIDATION_FILE))
-  const finished = isObj(earlier) && earlier.stage === stage.name   // the effects landed and the step was not saved: applying the same result again finishes it
-  if (!finished && !isDeepStrictEqual(input.candidates.map(c => c.fingerprint), pool.map(c => c.fingerprint))) refuse('candidates.json is not the pool this stage was planned for: plan the stage again')
+  const finished = isObj(earlier) && earlier.stage === stage.name   // the marker is written last: every effect landed, only the step was not saved
   const groups = result.results.groups
-  let problems = finished ? earlier.problems : groupingProblems(pool, groups)
+  const planned = input.candidates.map(c => c.fingerprint)
+  const poolFps = pool.map(c => c.fingerprint)
+  // A crash can leave the pool merged and the ledger not (commitLedger writes the pool before it renames the ledger), and no marker. That state is recognised by what it is: the pool
+  // is the planned one without exactly what the grouping merges away. Applying the same result again then writes the ledger and the marker.
+  const gone = new Set(groups.flatMap(g => (isObj(g) && Array.isArray(g.merge) ? g.merge.filter(x => typeof x === 'string') : [])))
+  const resumed = !finished && gone.size > 0 && !isDeepStrictEqual(poolFps, planned) && isDeepStrictEqual(poolFps, planned.filter(f => !gone.has(f)))
+  if (!finished && !resumed && !isDeepStrictEqual(poolFps, planned)) refuse('candidates.json is not the pool this stage was planned for: plan the stage again')
+  let problems = finished ? earlier.problems : groupingProblems(resumed ? planned.map(fingerprint => ({ fingerprint })) : pool, groups)
   recordSpend(runDir, stage.name, result.budgetSpent)
   writeJson(join(stage.dir, 'result.json'), result)
   if (!finished) {
     const record = problems => ({ version: 1, stage: stage.name, applied: problems.length === 0, problems: problems.slice(0, 20).map(p => p.slice(0, 300)), groups: clipValue(groups) })
     if (problems.length === 0) {
-      const merged = consolidatedPool(pool, groups)
-      try { commitLedger(runDir, consolidatedLedger(run.ledger, merged.into), () => { writeJson(join(runDir, CANDIDATES_FILE), merged.pool); writeJson(join(runDir, CONSOLIDATION_FILE), record([])) }) } catch (e) {
-        if (!e.problems) throw e
+      const into = intoOf(groups)
+      const ledger = consolidatedLedger(run.ledger, into)
+      try {
+        if (resumed) { if (!isDeepStrictEqual(ledger, run.ledger)) commitLedger(runDir, ledger) } else commitLedger(runDir, ledger, () => writeJson(join(runDir, CANDIDATES_FILE), consolidatedPool(pool, groups, into)))
+        writeJson(join(runDir, CONSOLIDATION_FILE), record([]))
+      } catch (e) {
+        if (!e.problems || resumed) throw e   // a merge already in the pool cannot be discarded
         problems = [`the ledger would not accept the merge: ${e.message}`, ...e.problems.slice(0, 3)]   // the grouping is optional work, so it is discarded like an invalid one
       }
     }
     if (problems.length) writeJson(join(runDir, CONSOLIDATION_FILE), record(problems))
   }
   advanceState(runDir, 'consolidate')
-  const now = readPool(runDir)
-  const merged = pool.length - now.length
-  if (problems.length) notes.push(`the grouping was discarded (${problems.length} problem(s), first: ${problems[0].slice(0, 200)}); the ${pool.length} candidate(s) are validated as they stand`)
-  event('ok', { counts: { candidates: pool.length, groups: groups.length, merged } }, problems.length ? 'grouping discarded' : null)
-  return { summary: `consolidate candidates=${pool.length} groups=${groups.length} merged=${problems.length ? 0 : merged} applied=${problems.length === 0} agents=${result.budgetSpent}`, notes, then: `node audit-stage.mjs plan ${runDir}` }
+  const merged = planned.length - readPool(runDir).length
+  if (problems.length) notes.push(`the grouping was discarded (${problems.length} problem(s), first: ${problems[0].slice(0, 200)}); the ${planned.length} candidate(s) are validated as they stand`)
+  event('ok', { counts: { candidates: planned.length, groups: groups.length, merged } }, problems.length ? 'grouping discarded' : null)
+  return { summary: `consolidate candidates=${planned.length} groups=${groups.length} merged=${problems.length ? 0 : merged} applied=${problems.length === 0} agents=${result.budgetSpent}`, notes, then: `node audit-stage.mjs plan ${runDir}` }
 }
 
 // ---------- validate (Phase 3) ----------

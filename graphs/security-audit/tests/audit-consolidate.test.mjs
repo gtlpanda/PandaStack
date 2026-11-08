@@ -236,6 +236,30 @@ await test('a crash after the effects landed and before the step was saved is fi
   assert.equal(meta(runDir).agents_spent, 1, 'recorded once')
   ok(runDir)
 })
+await test('a crash between the pool and the ledger of a merge is finished by applying the same result again: the ledger gets its aliases whichever of the files landed, and the run can go on to write findings.json', async () => {
+  for (const crash of ['the pool was written and the ledger was not', 'the pool and the ledger were written and the marker was not']) {
+    const run = atValidation([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }, { name: 'c', candidates: ['fp-c'] }])
+    const { runDir } = run
+    const snap = snapshot(runDir)
+    const plan = stage(['plan', runDir])
+    const dir = join(runDir, 'stages', plan.last.match(/stages\/([^/]+)\/run\.js/)[1])
+    const ran = await runScript(join(dir, 'run.js'), { 'audit-synthesizer': [{ groups: [{ keep: 'fp-a', merge: ['fp-b'], reason: 'one cause' }, { keep: 'fp-c', merge: [], reason: '' }] }] })
+    const file = returnedFile(dir, ran.result)
+    assert.equal(stage(['apply', runDir, file]).status, 0)
+    const merged = ledgerBytes(runDir)
+    writeFileSync(join(runDir, 'stage-state.json'), snap.get('stage-state.json'))   // the step was not saved
+    rmSync(join(runDir, 'consolidation.json'))   // the marker is written last
+    if (crash.startsWith('the pool was written and')) writeFileSync(join(runDir, 'coverage-ledger.json'), snap.get('coverage-ledger.json'))
+    const again = stage(['apply', runDir, file])
+    assert.equal(again.status, 0, `${crash}: ${again.stdout}`)
+    assert.equal(ledgerBytes(runDir), merged, `${crash}: the ledger is the merged ledger, aliases and all`)
+    assert.deepEqual(pool(runDir).map(c => c.fingerprint), ['fp-a', 'fp-c'], crash)
+    assert.equal(readJsonFile(runDir, 'consolidation.json').applied, true, crash)
+    assert.equal(next(runDir), 'NEXT: validate run=workflow', crash)
+    assert.equal(meta(runDir).agents_spent, 1, crash)
+    ok(runDir)
+  }
+})
 await test('applying a result to a pool that is not the one planned is refused, and a result of the wrong shape is refused, changing nothing', async () => {
   const run = atValidation([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }])
   const plan = stage(['plan', run.runDir])
