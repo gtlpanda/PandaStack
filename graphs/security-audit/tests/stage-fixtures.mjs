@@ -47,8 +47,13 @@ export async function runStage(runDir, script) {
 }
 
 // A run taken from init through recon (both parts) to a seeded ledger, with `units` as the synthesizer's answer: { repo, runDir }.
-export async function reconToSeed(units, args = []) {
-  const { repo, runDir } = newInit(args)
+// `before(repo)` runs between the repo and `init`: where an earlier run is made, so this run finds it.
+export async function reconToSeed(units, args = [], before = () => {}) {
+  const repo = mkRepo(FILES)
+  before(repo)
+  const r = init([repo, '--full', ...args])
+  assert.ok(r.ok, r.stdout + r.stderr)
+  const runDir = r.runDir
   const facts = await runStage(runDir, { 'audit-researcher': RECON_IDS.map(id => RESEARCH(id)) })
   assert.equal(facts.apply.status, 0, facts.apply.stdout)
   const synth = await runStage(runDir, { 'audit-synthesizer': [SYNTH({ units })] })

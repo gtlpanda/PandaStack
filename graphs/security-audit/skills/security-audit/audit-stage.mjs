@@ -149,7 +149,7 @@ const assignmentOf = u => ({
   starting_paths: u.starting_paths, ordinary_attack_class_block: u.ordinary_attack_class_block, selected_companion_blocks: u.selected_companion_blocks, excluded_blocks: u.excluded_blocks, prior_status: u.prior_status,
 })
 
-// The hunt stage: one hunter per agent_id plan-wave assigned, each with its units, the carried exclusions of those units (fingerprint, title and root
+// The hunt stage: one hunter per agent_id plan-wave assigned, each with its units, the ledger's carried exclusions (fingerprint, title and root
 // cause only: HUNTING.md part 8) and the coverage IDs its peers own. The shared upstream parts go in once, and each distinct block once, by reference:
 // the script is the size of the blocks the wave names, not of the hunters times the blocks (retro entry 38 records why not files the agent reads).
 export function huntInput(runDir, run, next) {
@@ -157,9 +157,12 @@ export function huntInput(runDir, run, next) {
   if (!assigned.length) refuse('no unit is in_progress: plan-wave assigns the units a wave hunts')
   const owners = new Map()
   for (const u of assigned) owners.set(u.agent_id, [...(owners.get(u.agent_id) ?? []), u])
+  // Part 8: the root causes of same-source prior confirmed findings, for every hunter. The unit that carries such a record is its verifier's, not a
+  // hunter's (it stays planned), so the list is the whole ledger's: a hunter must not report what an earlier run confirmed on source that has not changed.
+  const exclusions = [...new Map(run.ledger.flatMap(u => u.carried_exclusions ?? []).map(e => [e.fingerprint, { fingerprint: e.fingerprint, title: e.title, root_cause: e.root_cause }])).values()]
+    .sort((a, b) => (a.fingerprint < b.fingerprint ? -1 : a.fingerprint > b.fingerprint ? 1 : 0))
   const hunters = [...owners].map(([agent_id, units]) => ({
-    agent_id, units: units.map(assignmentOf),
-    exclusions: [...new Map(units.flatMap(u => u.carried_exclusions ?? []).map(e => [e.fingerprint, { fingerprint: e.fingerprint, title: e.title, root_cause: e.root_cause }])).values()],
+    agent_id, units: units.map(assignmentOf), exclusions,
     peers: assigned.filter(u => u.agent_id !== agent_id).map(u => u.coverage_id).sort(),
   })).sort(byHunter)
   const refs = [...new Set(assigned.flatMap(u => [u.ordinary_attack_class_block, ...u.selected_companion_blocks]).filter(r => typeof r === 'string'))].sort()

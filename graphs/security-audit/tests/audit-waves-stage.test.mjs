@@ -10,7 +10,7 @@ import { criticInput, huntInput, mintInput } from '../skills/security-audit/audi
 import { loadRun, nextStep, recordSpend, REASONS } from '../skills/security-audit/audit-run.mjs'
 import { parts, resolve as block } from '../skills/security-audit/blocks.mjs'
 import { audit, ledgerCli, meta } from './audit-fixtures.mjs'
-import { assignments, candidateOf, ledgerValid, readJsonFile, readLedger } from './ledger-fixtures.mjs'
+import { assignments, candidateOf, confirmedRecord, ledgerValid, priorRun, priorUnit, readJsonFile, readLedger } from './ledger-fixtures.mjs'
 import { UNIT, files, fuzzApply, reconToSeed, restore, returnedFile, runScript, runStage, snapshot, stage, stageDirs } from './stage-fixtures.mjs'
 
 const P = parts()
@@ -47,6 +47,19 @@ await test('the hunt input has one hunter per assigned owner in numeric order, e
   assert.equal(input.architecture_md, readFileSync(join(runDir, 'architecture.md'), 'utf8'))
   assert.deepEqual(huntInput(runDir, run, n), input, 'the same ledger gives the same input')
 })
+await test('same-source prior confirmed findings reach every hunter as exclusions (fingerprint, title, root cause), though the unit that carries the record belongs to its verifier and is not hunted', async () => {
+  const before = repo => priorRun(repo, [priorUnit('conf', 'candidate', { result_fingerprints: ['fp-conf'] })], [confirmedRecord('fp-conf')])
+  const { runDir } = await reconToSeed([UNIT('conf'), UNIT('b', { subsystemRef: 'two' }), UNIT('c', { subsystemRef: 'three' })], [], before)
+  const carrier = readLedger(runDir).find(u => u.carried_exclusions)
+  assert.equal(carrier.prior_status, 'prior_confirmed_same_source')
+  assert.equal(carrier.status, 'planned')
+  assert.match(ledgerCli(['plan-wave', runDir]).last, /hunters=2 assigned=2/, 'the carried unit is the verifier\'s, not hunted')
+  const run = loadRun(runDir)
+  const input = huntInput(runDir, run, nextStep(run))
+  assert.equal(input.hunters.length, 2)
+  for (const h of input.hunters) assert.deepEqual(h.exclusions, [{ fingerprint: 'fp-conf', title: 'Confirmed fp-conf', root_cause: 'fp-conf omits the ownership check.' }], h.agent_id)
+  assert.ok(!input.hunters.flatMap(h => h.units).some(u => u.coverage_id === carrier.coverage_id))
+})
 await test('hunters sort numerically (h1-100 follows h1-99), a carried exclusion is cut to three fields and deduplicated, a unit no hunter owns is refused, and a block that does not resolve is named', async () => {
   const { runDir } = await reconToSeed(three())
   ledgerCli(['plan-wave', runDir])
@@ -56,8 +69,8 @@ await test('hunters sort numerically (h1-100 follows h1-99), a carried exclusion
   const ledger = [...[1, 2, 99, 100, 101].map(n => unit(`u${n}`, `h1-${String(n).padStart(2, '0')}`)), unit('v', 'h1-02', { carried_exclusions: [ex] }), unit('w', 'h1-02', { carried_exclusions: [ex, { ...ex, fingerprint: 'fp-2' }] }), unit('done', null, { status: 'covered' })]
   const input = huntInput(runDir, { ...run, ledger }, { wave: 1 })
   assert.deepEqual(input.hunters.map(h => h.agent_id), ['h1-01', 'h1-02', 'h1-99', 'h1-100', 'h1-101'])
-  assert.deepEqual(input.hunters[1].exclusions, [{ fingerprint: 'fp-1', title: 'T', root_cause: 'R' }, { fingerprint: 'fp-2', title: 'T', root_cause: 'R' }])
-  assert.deepEqual(input.hunters[0].exclusions, [])
+  const both = [{ fingerprint: 'fp-1', title: 'T', root_cause: 'R' }, { fingerprint: 'fp-2', title: 'T', root_cause: 'R' }]
+  assert.deepEqual(input.hunters.map(h => h.exclusions), Array(5).fill(both), 'run-wide: every hunter is told, whichever unit carries the record')
   assert.ok(!input.hunters.flatMap(h => h.units).some(u => u.coverage_id === 'done'), 'a unit that is not in_progress is not assigned')
   assert.throws(() => huntInput(runDir, { ...run, ledger: [unit('x', null, { status: 'covered' })] }, { wave: 1 }), /no unit is in_progress/)
   assert.throws(() => huntInput(runDir, { ...run, ledger: [unit('x', 'h1-01', { ordinary_attack_class_block: 'ATTACK-CLASSES.md#Made up' })] }, { wave: 1 }), /the ledger names a block that does not resolve: unknown block ATTACK-CLASSES\.md#Made up/)
