@@ -132,7 +132,7 @@ await test('the final critic\'s reserve is the line: one agent left is the reser
   assert.equal(audit(['next', one.runDir]).last, 'NEXT: critic run=workflow kind=final-clean wave=1')
   assert.match(at(10, 10).out.summary, /reason=critic_budget_exhausted$/)
   assert.match(at(10, 14).out.summary, /reason=critic_budget_exhausted$/)
-  assert.match(at(7, 7).out.summary, /reason=critic_budget_exhausted$/)
+  assert.match(at(8, 8).out.summary, /reason=critic_budget_exhausted$/)
   assert.match(at(null, 500).out.summary, /^wave=1 hunters=1 assigned=1 deferred=0$/)
   assert.deepEqual([criticBudgetExhausted({ budget: null, agents_spent: 99 }), criticBudgetExhausted({ budget: 5, agents_spent: 4 }), criticBudgetExhausted({ budget: 5, agents_spent: 5 })], [false, false, true])
 })
