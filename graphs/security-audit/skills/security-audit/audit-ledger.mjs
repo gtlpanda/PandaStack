@@ -471,7 +471,7 @@ function buildCritic(runDir, run, critic, mint) {
   if (problems.length) fail(`apply-critic refused: ${problems.length} problem(s); nothing was changed`, problems)
 
   const by = `${state.critic_kind} critic of wave ${state.wave}`
-  const notes = [], patched = new Map(), fresh = []
+  const notes = [], rejections = [], patched = new Map(), fresh = []
   const tally = { reassigned: 0, reassign_rejected: 0, units_added: 0, out_of_scope: 0, duplicates: 0, minted_rejected: 0, resolved: 0, resolved_unknown: 0, dropped_proposals: Math.max(0, proposals - mint.units.length) }
   if (tally.dropped_proposals) notes.push(`${tally.dropped_proposals} proposal(s) (critic missing_units and queued uncovered) were not minted into a unit; they are dropped`)
   const current = new Map(ledger.map(u => [u.coverage_id, u]))
@@ -488,7 +488,7 @@ function buildCritic(runDir, run, critic, mint) {
   const ctx = { runDir, scope: meta.scope_paths, priorStatus: ledger.some(u => u.prior_status !== 'none') ? 'new' : 'none' }   // seed decided whether earlier runs exist
   mint.units.forEach((entry, i) => {
     const built = isObj(entry) && entry.status !== undefined && entry.status !== 'planned' ? { problems: [`status ${JSON.stringify(entry.status)}: a minted unit is planned work; scope and budget decide anything else`] } : unitFromInput(entry, ctx)
-    if (built.problems) { tally.minted_rejected += 1; return notes.push(`minted unit ${i}: ${built.problems.join('; ')}; rejected`) }
+    if (built.problems) { tally.minted_rejected += 1; rejections.push(`minted unit ${i}: ${built.problems.join('; ')}; rejected`); return notes.push(rejections.at(-1)) }
     const have = current.get(built.unit.coverage_id) ?? fresh.find(u => u.coverage_id === built.unit.coverage_id)
     if (have && semanticOf(have) !== semanticOf(built.unit)) fail(`coverage ID collision: minted unit ${i} has the ID of a unit with different semantic fields; upstream never merges them (${LEDGER_FILE} is unchanged)`, [built.unit.coverage_id])
     if (have) { tally.duplicates += 1; return notes.push(`minted unit ${i}: ${built.unit.coverage_id} is already in the ledger; not added again`) }
@@ -508,17 +508,18 @@ function buildCritic(runDir, run, critic, mint) {
     }
     tally.resolved += 1
   }
-  return { next: [...ledger.map(u => patched.get(u.coverage_id) ?? u), ...fresh], tally, notes }
+  return { next: [...ledger.map(u => patched.get(u.coverage_id) ?? u), ...fresh], tally, notes, rejections }
 }
 
-// What apply-critic would refuse this critic result and mint for as a whole, as plain strings (empty when it would write), without writing: the
-// same computation, then the in-memory pass of upstream's validator. A check, not a step: audit-stage.mjs asks it before saving a minter's result,
+// What apply-critic would refuse this critic result and mint for, as plain strings (empty when it would write), without writing: the whole-apply
+// refusals, each minted unit it would reject, then the in-memory pass of upstream's validator. A check, not a step: audit-stage.mjs asks it before saving a minter's result,
 // so a result apply-critic would refuse (a unit count above the proposals, an ID collision: upstream says fail, never merge) never reaches it.
 export function applyCriticProblems(runDir, critic, mint) {
   const run = loadRun(runDir)
   try {
-    const { next } = buildCritic(runDir, run, critic, mint)
-    return validateLedgerDocument(clone([...next].sort(byId))).slice(0, MAX_PROBLEMS)
+    const { next, rejections } = buildCritic(runDir, run, critic, mint)
+    // A minted unit apply-critic rejects one by one is a gap the critic found and the ledger would not get: it goes back as a problem, not into a note.
+    return [...rejections, ...validateLedgerDocument(clone([...next].sort(byId)))].slice(0, MAX_PROBLEMS)
   } catch (e) {
     if (Array.isArray(e.problems)) return [e.message, ...e.problems]
     throw e

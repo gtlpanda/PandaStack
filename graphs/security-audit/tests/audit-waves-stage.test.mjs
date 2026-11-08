@@ -407,6 +407,20 @@ await test('more units than proposals is refused by apply with the reason, the c
   assert.equal(second.apply.status, 0, second.apply.stdout)
   assert.match(ledgerCli(['apply-critic', runDir, join(runDir, 'critic.json'), join(runDir, 'mint.json')]).last, /^AUDIT: OK apply-critic wave=1 kind=post-wave units_added=1/); ok(runDir)
 })
+await test('a minted unit apply-critic would reject (a path outside tree/) is sent back like a refusal, not applied as units_added=0 with the gap lost', async () => {
+  const { runDir } = await reconToSeed(three())
+  ledgerCli(['plan-wave', runDir])
+  const asg = assignments(runDir)
+  await runStage(runDir, { 'audit-analyst': Object.keys(asg).map(l => covered(l, asg[l])) })
+  ledgerCli(['merge-wave', runDir, join(runDir, 'hunter-results.json')])
+  await runStage(runDir, { 'audit-researcher': [CRITIC({ stop: false, missing_units: [GAP()] })] })
+  const bad = { units: [UNIT('m1', { subsystemRef: 'm-m1', starting_paths: ['src/gone.js'] })] }
+  const first = await runStage(runDir, { 'audit-synthesizer': [bad] })
+  assert.equal(first.apply.status, 1, first.apply.stdout)
+  assert.match(first.apply.last, /^AUDIT: FAIL the minter's units would not apply \(1 problem\(s\)\): minted unit 0: starting path src\/gone\.js is not in tree\/ \(the audited snapshot\); rejected \(attempt 1 of 2; plan the stage again/)
+  assert.ok(!existsSync(join(runDir, 'mint.json')))
+  assert.equal(next(runDir), 'NEXT: mint run=workflow wave=1')
+})
 await test('a second refused minter result ends the run incomplete with ledger_validation_failed and defers the planned units; the attempts of one wave do not count against the next', async () => {
   const { runDir } = await reconToSeed(three())
   ledgerCli(['plan-wave', runDir])

@@ -70,6 +70,23 @@ await test('applyCriticProblems lists each reason apply-critic would refuse the 
   applyCritic(runDir, critic({ missing_units: [gap('g')] }), ok)
   assert.ok(ledgerValid(runDir))
 })
+await test('applyCriticProblems also reports a minted unit apply-critic would reject one by one, so a gap the critic found is sent back instead of dropped; a duplicate or an out-of-scope unit is not a problem', () => {
+  const { runDir } = afterWave([named('a')])
+  const c = critic({ missing_units: [gap('g')] })
+  for (const [what, unit, pattern] of [
+    ['a starting path outside tree/', minted('x', { starting_paths: ['src/gone.js'] }), /minted unit 0: starting path src\/gone\.js is not in tree\/.*rejected/],
+    ['a block that does not resolve', minted('x', { ordinary_attack_class_block: 'ATTACK-CLASSES.md#Made up' }), /minted unit 0: ordinary_attack_class_block: unknown block ATTACK-CLASSES\.md#Made up.*rejected/],
+    ['a status a minted unit may not carry', minted('x', { status: 'covered' }), /minted unit 0: status "covered": a minted unit is planned work.*rejected/],
+    ['canonical refs upstream refuses', minted('x', { canonical_refs: refsOf('x', { subsystem: 'e\u0301' }) }), /minted unit 0: .*canonical_refs\.subsystem: invalid canonical reference.*rejected/],
+  ]) {
+    const problems = applyCriticProblems(runDir, c, { units: [unit] })
+    assert.ok(problems.some(p => pattern.test(p)), `${what}: ${JSON.stringify(problems).slice(0, 240)}`)
+  }
+  const existing = readLedger(runDir)[0]
+  assert.deepEqual(applyCriticProblems(runDir, c, { units: [named('a', { reason: 'r' })] }), [], 'a unit already in the ledger is a note, not a problem')
+  assert.deepEqual(applyCriticProblems(runDir, c, { units: [] }), [], 'a minter that returns nothing for a proposal is not a problem here')
+  assert.ok(existing)
+})
 await test('applyCriticProblems also runs upstream\'s validator on the ledger apply-critic would write, and does not need apply-critic to be next', () => {
   const { runDir } = afterWave([named('a')])
   advanceState(runDir, 'critic', { critic_kind: 'post-wave' })   // as when the critic result is saved and mint has not run
