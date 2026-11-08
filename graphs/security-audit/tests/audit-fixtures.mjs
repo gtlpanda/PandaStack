@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync, readdirSync, chmodSync, rmSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
-import { makeWritable, SAFE_GIT } from '../skills/security-audit/audit-run.mjs'
+import { makeWritable, SAFE_GIT, advanceState } from '../skills/security-audit/audit-run.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 export const AUDIT_RUN = join(here, '..', 'skills', 'security-audit', 'audit-run.mjs')
@@ -46,6 +46,23 @@ export const listFiles = (root, dir = root) => readdirSync(dir, { withFileTypes:
 // Any audit-run.mjs command: { status, stdout, stderr, last, lines }.
 export const audit = (args, cwd = sandbox) => {
   const r = spawnSync(process.execPath, [AUDIT_RUN, ...args], { cwd, encoding: 'utf8', env: { ...process.env, ...ENV } })
+  const lines = r.stdout.trim().split('\n')
+  return { status: r.status, stdout: r.stdout, stderr: r.stderr, last: lines.at(-1), lines }
+}
+
+// A run directory at the point audit-ledger.mjs starts: init done, recon saved (so `next` says seed). { repo, runDir }.
+export function newRun({ files = FILES, args = [] } = {}) {
+  const repo = mkRepo(files)
+  const r = init([repo, '--full', ...args])
+  if (!r.ok) throw new Error(`init failed: ${r.stdout}${r.stderr}`)
+  advanceState(r.runDir, 'recon')
+  return { repo, runDir: r.runDir }
+}
+
+// audit-ledger.mjs on the command line: { status, stdout, stderr, last, lines }.
+export const AUDIT_LEDGER = join(here, '..', 'skills', 'security-audit', 'audit-ledger.mjs')
+export const ledgerCli = (args, cwd = sandbox) => {
+  const r = spawnSync(process.execPath, [AUDIT_LEDGER, ...args], { cwd, encoding: 'utf8', env: { ...process.env, ...ENV } })
   const lines = r.stdout.trim().split('\n')
   return { status: r.status, stdout: r.stdout, stderr: r.stderr, last: lines.at(-1), lines }
 }
