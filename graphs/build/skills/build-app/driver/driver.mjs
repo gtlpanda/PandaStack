@@ -21,21 +21,20 @@
 //   8 a usage limit resets too far away (run again later)
 //   9 billing or spend limit   10 auth problem   11 another driver runs for this app
 //   12 the repo is in a state the driver will not touch   13 the push or the PR failed   130 stopped
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, realpathSync, renameSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, realpathSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   validateBacklog, ledgerPath, readLedger, writeLedger, nextSlice, frozenFiles, recordOutcome, brake, sliceState, resume, unblock,
 } from '../../../../../core/skills/backlog/backlog.mjs'
-import { defaultBase, finalQaPrompt, qaReport, prBody, pushAndOpenPr, bughuntPrompt, bughuntLine } from './finish.mjs'
-import { readLedger as readFindings } from '../../../../../core/skills/findings/findings.mjs'
+import { defaultBase, finalQaPrompt, qaReport, prBody, pushAndOpenPr } from './finish.mjs'
+import { prepareHunt, readHunt, landHunt, keepAttempt, bughuntPrompt, bughuntLine } from '../../../../hunt/skills/bughunt/land.mjs'
 import { parseResetTime, planLimitWait } from './limits.mjs'
 import { buildEnv, git, run } from './proc.mjs'
 import { sessionSettings, sliceArgs, runClaude, sessionVerdict, probeUntilAvailable, stopSessions, writeJson, readResult, NO_BG_CEILING } from './session.mjs'
-import { sliceChecks, devReport, outcomeOf, TEST_FILE, bughuntChecks } from './checks.mjs'
+import { sliceChecks, devReport, outcomeOf, TEST_FILE } from './checks.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const INTAKE = join(HERE, '..', '..', '..', '..', 'hunt', 'skills', 'bughunt', 'intake.mjs')
 const CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || join(process.env.HOME || '', '.claude')
 export const EXIT = { done: 0, brake: 3, preflight: 6, apiDown: 7, limitTooFar: 8, billing: 9, auth: 10, locked: 11, gitState: 12, pr: 13, stopped: 130 }
 
@@ -204,46 +203,21 @@ export async function runDriver({ repo: given, app, noPr: noPrFlag = null }, cfg
     const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')
     // A hunt already landed at this head (a resume after a failed push) is not repeated.
     const head0 = git(repo, ['rev-parse', integration]).stdout.trim()
-    let landed = null
-    try { landed = JSON.parse(readFileSync(files.hunt, 'utf8')) } catch { landed = null }
-    if (landed && landed.head === head0 && typeof landed.line === 'string') {
+    let previous = null
+    try { previous = JSON.parse(readFileSync(files.hunt, 'utf8')) } catch { previous = null }
+    if (previous && previous.head === head0 && typeof previous.line === 'string') {
       log(`bug hunt: already landed at ${head0.slice(0, 7)}; not repeated`)
-      return { line: landed.line }
+      return { line: previous.line }
     }
-    const intake = run(process.execPath, [INTAKE, repo, '--branch', integration, '--base', base], { cwd: repo })
-    const last = intake.out.trim().split('\n').pop() || ''
-    if (/nothing to review/.test(last)) {
-      log(`bug hunt skipped: ${last.replace(/^INTAKE: FAIL /, '')}`)
-      return { line: `The bug hunt did not run: ${last.replace(/^INTAKE: FAIL /, '')}.` }
+    const prep = prepareHunt({ repo, target: integration, base, stamp, log })
+    if (prep.skip) {
+      log(`bug hunt skipped: ${prep.skip}`)
+      return { line: `The bug hunt did not run: ${prep.skip}.` }
     }
-    if (!last.startsWith('INTAKE: OK')) return { ended: end(EXIT.brake, 'braked', `the bug hunt's intake failed (${last}); every slice and the final QA stay landed: run /build-app resume to retry it`) }
-    const stateDir = dirname(intake.stdout.split('\n')[0].trim())
-    let key
-    try { key = JSON.parse(readFileSync(join(stateDir, 'intake.json'), 'utf8')).key } catch (e) { return { ended: end(EXIT.brake, 'braked', `the bug hunt's intake wrote no readable intake.json: ${e.message}`) } }
-    const branch = `bughunt/${key}`
-    const fixDir = join(stateDir, 'fix')
-    const head = git(repo, ['rev-parse', integration]).stdout.trim()
-    // What an earlier hunt left is set aside, never lost: its worktree goes, its
-    // branch is kept as attempt/bughunt-<stamp>, and its ledger is archived (its
-    // fixes are not on the new branch, so it starts over).
-    // Uncommitted work an earlier hunt left is committed onto its branch first,
-    // so the branch kept below keeps it too.
-    const nohooks = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false']
-    if (existsSync(fixDir) && git(fixDir, [...nohooks, 'status', '--porcelain']).stdout.trim()) {
-      git(fixDir, [...nohooks, 'add', '-A'])
-      git(fixDir, [...nohooks, '-c', 'user.name=build-app', '-c', 'user.email=build-app@localhost', 'commit', '-q', '--no-verify', '-m', 'bughunt: uncommitted work an earlier hunt left'])
-    }
-    if (existsSync(fixDir)) git(repo, ['worktree', 'remove', '--force', fixDir])
-    git(repo, ['worktree', 'prune'])
-    if (git(repo, ['rev-parse', '--verify', '-q', `refs/heads/${branch}`]).ok) {
-      if (git(repo, ['rev-list', '--count', `${integration}..${branch}`]).stdout.trim() !== '0') {
-        git(repo, ['branch', '-q', '-f', `attempt/bughunt-${stamp}`, branch])
-        log(`bughunt: kept what an earlier hunt left on ${branch} as attempt/bughunt-${stamp}`)
-      }
-      git(repo, ['branch', '-q', '-D', branch])
-    }
-    if (existsSync(join(stateDir, 'ledger.json'))) renameSync(join(stateDir, 'ledger.json'), join(stateDir, `ledger-${stamp}.json`))
-    if (!git(repo, ['-c', 'core.hooksPath=/dev/null', 'worktree', 'add', '-q', '-b', branch, fixDir, head]).ok) return { ended: end(EXIT.gitState, 'failed', `could not create the bug hunt's fix worktree on ${branch}`) }
+    if (prep.error === 'intake') return { ended: end(EXIT.brake, 'braked', `the bug hunt's intake failed (${prep.detail}); every slice and the final QA stay landed: run /build-app resume to retry it`) }
+    if (prep.error === 'intake-json') return { ended: end(EXIT.brake, 'braked', `the bug hunt's intake wrote no readable intake.json: ${prep.detail}`) }
+    if (prep.error === 'worktree') return { ended: end(EXIT.gitState, 'failed', `could not create the bug hunt's fix worktree on ${prep.branch}`) }
+    const { stateDir, key, branch, head } = prep
     rmSync(files.stopFailure, { force: true })
     writeJson(files.guard, { repo, frozen: frozenFiles(ledger), writable: [], writableDirs: [stateDir] })
     const logFile = join(logs, `bughunt-${stamp}.jsonl`)
@@ -255,29 +229,21 @@ export async function runDriver({ repo: given, app, noPr: noPrFlag = null }, cfg
       env: buildEnv({ ...NO_BG_CEILING, HARNESS_BUILD_ACTIVE: '1', HARNESS_BUILD_GUARD: files.guard, HARNESS_BUILD_STOP_FAILURE: files.stopFailure }),
     })
     const huntCost = charge(logFile)
-    const keep = why => {
-      git(repo, ['branch', '-q', '-f', `attempt/bughunt-${stamp}`, branch])
-      return `${why}; its branch is kept as attempt/bughunt-${stamp}`
-    }
+    const keep = why => `${why}; its branch is kept as ${keepAttempt(repo, branch, stamp)}`
     if (stopping) return { ended: end(EXIT.stopped, 'stopped', keep(`stopped by request during the bug hunt (${huntCost}); every slice and the final QA stay landed`)) }
-    let hl = null
-    try { hl = readFindings(join(stateDir, 'ledger.json'), key) } catch { hl = null }
-    const lastRun = hl && hl.runs.length ? hl.runs[hl.runs.length - 1] : null
-    if (!lastRun || lastRun.status !== 'done' || lastRun.head !== head) {
+    const { ledger: hl, lastRun, finished } = readHunt({ stateDir, key, head })
+    if (!finished) {
       const verdict = sessionVerdict(logFile, files.stopFailure)
       const byKind = { billing: EXIT.billing, auth: EXIT.auth, usage_limit: EXIT.limitTooFar, transient: EXIT.apiDown }
       return { ended: end(byKind[verdict.kind] || EXIT.brake, verdict.kind === 'normal' ? 'braked' : 'paused', keep(`the bug hunt did not finish (exit ${code}, ${huntCost}${lastRun ? `; its last run: ${lastRun.status}${lastRun.reason ? `: ${lastRun.reason}` : ''}` : '; it saved no run'}${verdict.message ? `, ${verdict.message}` : ''}); every slice and the final QA stay landed: run /build-app resume to retry it`)) }
     }
-    const verified = hl.findings.filter(f => !f.stale && f.fix_status === 'verified' && f.fix_artifact && f.fix_artifact.commit).map(f => f.fix_artifact.commit)
-    const checks = bughuntChecks({ repo, integration, branch, worktree: fixDir, frozen: frozenFiles(ledger), verifyCommand: cfg.verifyCommand, verified })
-    if (stopping) return { ended: end(EXIT.stopped, 'stopped', keep(`stopped by request during the bug hunt's checks (${huntCost}); every slice and the final QA stay landed`)) }
-    if (checks.problems.length) return { ended: end(EXIT.brake, 'braked', keep(`the bug hunt's fixes did not pass the driver's checks (${huntCost}): ${checks.problems.join('; ')}`)) }
-    if (checks.commits && !(git(repo, ['checkout', '-q', integration]).ok && git(repo, ['-c', 'core.hooksPath=/dev/null', 'merge', '-q', '--ff-only', branch]).ok)) return { ended: end(EXIT.gitState, 'failed', keep(`the bug hunt's fixes could not be fast-forwarded onto ${integration}`)) }
-    git(repo, ['worktree', 'remove', '--force', fixDir])
-    git(repo, ['branch', '-q', '-D', branch])
-    const line = bughuntLine(hl, checks.commits > 0)
+    const landed = landHunt({ repo, integration, prep, frozen: frozenFiles(ledger), verifyCommand: cfg.verifyCommand, ledger: hl, stopped: () => stopping })
+    if (landed.stopped) return { ended: end(EXIT.stopped, 'stopped', keep(`stopped by request during the bug hunt's checks (${huntCost}); every slice and the final QA stay landed`)) }
+    if (landed.problems) return { ended: end(EXIT.brake, 'braked', keep(`the bug hunt's fixes did not pass the driver's checks (${huntCost}): ${landed.problems.join('; ')}`)) }
+    if (landed.ffFailed) return { ended: end(EXIT.gitState, 'failed', keep(`the bug hunt's fixes could not be fast-forwarded onto ${integration}`)) }
+    const line = bughuntLine(hl, landed.commits > 0)
     writeJson(files.hunt, { head: git(repo, ['rev-parse', integration]).stdout.trim(), line })
-    log(`bug hunt: ${checks.commits} verified fix(es) landed on ${integration} (${huntCost})`)
+    log(`bug hunt: ${landed.commits} verified fix(es) landed on ${integration} (${huntCost})`)
     return { line }
   }
 

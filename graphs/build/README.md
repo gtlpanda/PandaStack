@@ -99,6 +99,7 @@ app; 12 a git state the driver will not touch; 13 the push or the PR failed;
 - `skills/build-app/driver/driver.mjs`: the loop, preflight, landing, the finish, and the CLI.
 - `skills/build-app/driver/finish.mjs`: the final QA prompt, the PR body, the push and the PR.
 - `skills/build-app/driver/checks.mjs`: the independent checks and the outcome.
+- `graphs/hunt/skills/bughunt/land.mjs`: the bug hunt's landing (intake, the fix worktree, its prompt, its checks, the fast-forward, the PR paragraph), shared with autobuild; `checks.mjs` and `finish.mjs` re-export what they used to define.
 - `skills/build-app/driver/session.mjs`: settings, starting a session, reading its result, the probe.
 - `skills/build-app/driver/limits.mjs`: usage-limit classification and reset times, ported verbatim.
 - `skills/build-app/driver/proc.mjs`: the session env and process helpers.
