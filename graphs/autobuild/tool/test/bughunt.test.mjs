@@ -45,7 +45,7 @@ test("a verified fix lands on the build branch (a new regression test under a fr
   const arg = (name) => args[args.indexOf(name) + 1];
   assert.match(arg("-p"), /"mode": "fix", "fixBranch": "bughunt\/autobuild-[0-9a-f]{6}"/);
   assert.equal(arg("--permission-mode"), "bypassPermissions", "the hunt runs with /build-app's session settings, not the review's");
-  assert.equal(arg("--max-budget-usd"), "30");
+  assert.equal(arg("--max-budget-usd"), "100");
   assert.equal(calls[0].env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS, "0", "a headless hunt keeps its background Workflow alive");
   assert.equal(calls[0].guard.writableDirs.length, 1);
   assert.match(calls[0].guard.writableDirs[0], /\/\.git\/bughunt\/autobuild-[0-9a-f]{6}$/, "the guard opens only the hunt's state dir");
