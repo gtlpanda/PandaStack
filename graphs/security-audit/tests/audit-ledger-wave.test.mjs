@@ -388,6 +388,33 @@ await test('one unit\'s evidence is bounded, so no hunter result can fill the le
   applyCritic(runDir, { missing_units: [], reassign_ids: [fine.coverage_id], resolved_prior_leads: [], stop: false }, { units: [] })
   assert.ok(ledgerValid(runDir))
 })
+await test('one candidate record is bounded, so a hunter cannot put megabytes into candidates.json and every verifier prompt: the unit that links it returns to planned', () => {
+  const { runDir, assigned } = hunting([named('a'), named('b', { subsystem: 'b' })])
+  const [[agent, [id]], [other, [idB]]] = Object.entries(assigned)
+  const huge = candidateOf('fp-huge', { description: 'd'.repeat(2_000_000) })
+  const out = mergeWave(runDir, {
+    [agent]: hunterResult([hunterUnit(id, agent, { disposition: 'candidate', candidate_fingerprints: ['fp-huge'] })], { candidates: [huge] }),
+    [other]: hunterResult([hunterUnit(idB, other, { disposition: 'candidate', candidate_fingerprints: ['fp-fine'] })], { candidates: [candidateOf('fp-fine')] }),
+  })
+  assert.match(out.summary, /merged=1 failed=1 /)
+  const pool = readJsonFile(runDir, 'candidates.json')
+  assert.deepEqual(pool.map(c => c.fingerprint), ['fp-fine'], 'the huge record never reached candidates.json')
+  assert.ok(readFileSync(join(runDir, 'candidates.json')).length < 100_000)
+  const bloated = readLedger(runDir).find(u => u.coverage_id === id)
+  assert.equal(bloated.status, 'planned')
+  assert.match(bloated.last_failure, /linked fingerprint has no valid entry/)
+  assert.ok(ledgerValid(runDir))
+})
+await test('one hunter result admits at most 1 MiB of candidates in all: a unit linking the one that did not fit fails, and the ones before it are kept', () => {
+  const { runDir, assigned } = hunting([named('a'), named('b', { subsystem: 'b' })])
+  const [[agent, [id]], [other, [idB]]] = Object.entries(assigned)
+  const fps = Array.from({ length: 20 }, (_, i) => `fp-${String(i).padStart(2, '0')}`)
+  const records = fps.map(fp => candidateOf(fp, { description: 'd'.repeat(60_000) }))   // 20 x ~60 KB: the 18th crosses 1 MiB
+  const out = mergeWave(runDir, { [agent]: hunterResult([hunterUnit(id, agent, { disposition: 'candidate', candidate_fingerprints: ['fp-00'] })], { candidates: records }), [other]: hunterResult([hunterUnit(idB, other, { disposition: 'candidate', candidate_fingerprints: ['fp-19'] })], { candidates: records }) })
+  assert.match(out.summary, /merged=1 failed=1 /, 'fp-00 was admitted first, fp-19 did not fit')
+  assert.deepEqual(readJsonFile(runDir, 'candidates.json').map(c => c.fingerprint), ['fp-00'])
+  assert.ok(ledgerValid(runDir))
+})
 await test('a merge that saved the ledger and died before saving its step is finished by running it again; nothing is applied twice', () => {
   const { runDir, assigned } = hunting([named('a')])
   const [[agent, [id]]] = Object.entries(assigned)

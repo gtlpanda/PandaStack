@@ -355,11 +355,21 @@ function applyUnitResult(unit, entry, candidates, runDir) {
   return errors.length ? { reason: `upstream's validator: ${errors.slice(0, 2).join('; ')}` } : { unit: merged }
 }
 
-// A hunter's candidates by fingerprint: only schema-shaped-enough entries (the validate stage checks the record against its branch).
+// A hunter's candidates by fingerprint: only schema-shaped-enough entries (the validate stage checks the record against its branch), and only
+// as many bytes as a candidate may be: a record goes into candidates.json and into the prompt of the verifier that checks it, and the schema
+// bounds no text, so a hunter reading hostile source could otherwise write megabytes there. One record is MAX_CANDIDATE_BYTES at most and one
+// hunter result MAX_CANDIDATES_BYTES in all; what does not fit is not admitted, so the unit that links it fails like any unit with a bad result.
+export const MAX_CANDIDATE_BYTES = 64 * 1024
+export const MAX_CANDIDATES_BYTES = 1024 * 1024
 function candidateIndex(result) {
   const index = new Map()
+  let used = 0
   for (const c of result.candidates) {
-    if (isObj(c) && typeof c.fingerprint === 'string' && PROPOSABLE.includes(c.proposed_verdict) && !Object.hasOwn(c, 'verdict') && !index.has(c.fingerprint)) index.set(c.fingerprint, c)
+    if (!(isObj(c) && typeof c.fingerprint === 'string' && PROPOSABLE.includes(c.proposed_verdict) && !Object.hasOwn(c, 'verdict') && !index.has(c.fingerprint))) continue
+    const bytes = Buffer.byteLength(JSON.stringify(c))
+    if (bytes > MAX_CANDIDATE_BYTES || used + bytes > MAX_CANDIDATES_BYTES) continue
+    used += bytes
+    index.set(c.fingerprint, c)
   }
   return index
 }
