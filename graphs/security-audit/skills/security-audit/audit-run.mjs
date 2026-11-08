@@ -141,6 +141,20 @@ export function recordSpend(runDir, key, invocations) {
   writeJson(file, { ...meta, stage_spend, agents_spent: Object.values(stage_spend).reduce((a, b) => a + b, 0) })
 }
 
+// Marks the run incomplete with the reason that stopped it (upstream's reason strings, REASONS, or a gate's own), which the report then
+// discloses: a run never ends complete by silence. The first reason stands, so a second gate cannot rewrite why the run stopped, and a
+// complete run is never marked down. Returns the standing reason. run-metadata.json has one writer: this module.
+export function markIncomplete(runDir, reason) {
+  if (typeof reason !== 'string' || reason.trim() === '') throw new TypeError(`an incomplete_reason is non-empty text, not ${JSON.stringify(reason)}`)
+  const file = join(runDir, 'run-metadata.json')
+  const meta = readJson(file)
+  if (meta === undefined) refuse(`${runDir} has no run-metadata.json: it is not a run directory`)
+  if (meta.run_status === 'complete') refuse('a complete run cannot be marked incomplete')
+  if (meta.run_status === 'incomplete') return meta.incomplete_reason
+  writeJson(file, { ...meta, run_status: 'incomplete', incomplete_reason: reason })
+  return reason
+}
+
 // ---------- the target ----------
 const line = text => text.replace(/\n$/, '')   // not trim(): a path may end in a space
 

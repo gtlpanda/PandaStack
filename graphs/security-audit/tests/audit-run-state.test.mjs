@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import {
   REASONS, RECON_CALLS, STATUSES, STEPS, RUNNERS, EXECUTION_BLOCKERS, EXECUTION_POLICY, SUPPORTED_PROFILES,
-  budgetGate, minimumBudget, criticReserve, validationReserve, waveAllowance, countStatuses, nextStep, formatNext, advanceState, writeJson, makeWritable, recordSpend,
+  budgetGate, minimumBudget, criticReserve, validationReserve, waveAllowance, countStatuses, nextStep, formatNext, advanceState, writeJson, makeWritable, recordSpend, markIncomplete,
 } from '../skills/security-audit/audit-run.mjs'
 import { VENDOR_SKILL_DIR, canonicalCoverageId } from '../skills/security-audit/upstream.mjs'
 import { fresh, put, mkRepo, init, audit, meta } from './audit-fixtures.mjs'
@@ -491,6 +491,29 @@ await test('check names a stage_spend that is not a map of counts, or an agents_
   assert.deepEqual(problems(d => edit(d, m => ({ ...m, stage_spend: null, agents_spent: 0 }))), [shape])
   assert.deepEqual(problems(d => edit(d, m => ({ ...m, stage_spend: { a: 1.5 }, agents_spent: 1.5 }))), ['run-metadata.json: agents_spent must be a non-negative integer', shape])
   assert.deepEqual(problems(d => edit(d, m => { const { stage_spend, ...rest } = m; return { ...rest, agents_spent: 9 } })), [], 'a run from before stage_spend: agents_spent alone is accepted')
+})
+
+await test('markIncomplete sets run_status and the reason once, keeps the first reason, refuses a complete run, and `next` then goes on to the report or the validation of what was found', () => {
+  const runDir = init([mkRepo(), '--full']).runDir
+  assert.equal(markIncomplete(runDir, REASONS.critic), REASONS.critic)
+  assert.deepEqual([meta(runDir).run_status, meta(runDir).incomplete_reason], ['incomplete', 'critic_budget_exhausted'])
+  assert.equal(markIncomplete(runDir, REASONS.validation), REASONS.critic, 'the first reason stands: a later one does not rewrite why the run stopped')
+  assert.equal(meta(runDir).incomplete_reason, 'critic_budget_exhausted')
+  assert.equal(markIncomplete(runDir, REASONS.critic), REASONS.critic, 'again is harmless')
+  assert.equal(audit(['check', runDir]).last, `AUDIT: OK ${runDir} passes check`)
+  assert.equal(audit(['next', runDir]).last, 'NEXT: report run=helper reason=critic_budget_exhausted')
+  const done = init([mkRepo(), '--full']).runDir
+  writeJson(join(done, 'run-metadata.json'), { ...meta(done), run_status: 'complete' })
+  const before = readFileSync(join(done, 'run-metadata.json'), 'utf8')
+  assert.throws(() => markIncomplete(done, REASONS.critic), /a complete run cannot be marked incomplete/)
+  assert.equal(readFileSync(join(done, 'run-metadata.json'), 'utf8'), before)
+})
+await test('markIncomplete refuses a reason that is not text and a directory that is not a run, and changes nothing', () => {
+  const runDir = init([mkRepo(), '--full']).runDir
+  const before = readFileSync(join(runDir, 'run-metadata.json'), 'utf8')
+  for (const reason of ['', '   ', null, undefined, 5, {}, ['critic_budget_exhausted'], true]) assert.throws(() => markIncomplete(runDir, reason), TypeError, String(reason))
+  assert.equal(readFileSync(join(runDir, 'run-metadata.json'), 'utf8'), before)
+  assert.throws(() => markIncomplete(fresh('not-a-run'), 'x'), /has no run-metadata\.json: it is not a run directory/)
 })
 
 console.log('== review findings')
