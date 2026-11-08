@@ -1,0 +1,4 @@
+# The loop's state and logs (autobuild.json: stateDir, logsDir). A nested ignore file, so neither the repository's own
+# .gitignore nor the git dir's info/exclude (shared with the main checkout) is touched. Removed with .autobuild/.
+/state/
+/logs/

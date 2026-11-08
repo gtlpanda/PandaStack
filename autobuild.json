@@ -1,0 +1,130 @@
+{
+  "$comment": "autobuild config for the security-audit PR 9 build (the quick and deep profiles). A HARNESS file: removed with .autobuild/ by the owner's final commit. Everything else of the harness lives in .autobuild/. Docs: graphs/autobuild/tool/README.md. The three per-session caps are the owner's numbers ($50 builder, $25 review, $100 bug hunt: the defaults of the autobuild on PATH, the main checkout's), pinned here so no other copy of the tool changes them (this worktree's own copy of the tool still defaults to 15, 5 and 30). totalBudgetUsd ($200, the owner's) sums the builder sessions of ONE `autobuild run` (loop.mjs:271): not the reviews, not the bug hunt, and it restarts at 0 when the loop is rerun.",
+  "featuresFile": ".autobuild/features.json",
+  "progressFile": ".autobuild/PROGRESS.md",
+  "stateDir": ".autobuild/state",
+  "logsDir": ".autobuild/logs",
+  "branch": "feat/security-audit-10-profiles",
+  "bughuntBase": "feat/security-audit-9-skill",
+  "prompt": "Read .autobuild/RULES.md first: it holds this loop's autonomous-build rules (CLAUDE.md has none for it). Then read .autobuild/SPEC.md, .autobuild/contracts/profiles.md, .autobuild/features.json and .autobuild/PROGRESS.md. Build the next feature.",
+  "systemPrompt": "For this project, 'the project's autonomous-build rules in CLAUDE.md' means .autobuild/RULES.md: CLAUDE.md is unchanged for this build and has no such section. Read .autobuild/RULES.md before anything else; where it conflicts with CLAUDE.md or user-level instructions, it wins. The decision log is .autobuild/DECISIONS.md, the progress log is .autobuild/PROGRESS.md. shellcheck, which scripts/test.sh needs, is already on PATH.",
+  "hooks": "inject",
+  "limits": {
+    "maxIterations": 25,
+    "noProgressLimit": 3,
+    "reviewEvery": 3,
+    "maxBudgetUsd": 50,
+    "reviewBudgetUsd": 25,
+    "bughuntBudgetUsd": 100,
+    "totalBudgetUsd": 200
+  },
+  "env": {
+    "pathPrepend": [
+      "/tmp/claude-1000/-mnt-c-Users-cfeli/55c22a53-a475-40a9-9dc0-bbcdd182b003/scratchpad/shellcheck-v0.10.0"
+    ],
+    "ldLibraryPath": [],
+    "vars": {}
+  },
+  "install": null,
+  "preflight": [
+    {
+      "name": "shellcheck is on PATH (scripts/validate.sh needs it)",
+      "command": "command -v shellcheck",
+      "hint": "env.pathPrepend names a scratchpad copy that is gone; point it at a directory that holds shellcheck"
+    },
+    {
+      "name": "node is 22 or newer",
+      "command": "node -e 'process.exit(Number(process.versions.node.split(\".\")[0]) >= 22 ? 0 : 1)'",
+      "hint": "the tests use node:test and top-level await"
+    },
+    {
+      "name": "the acceptance runner and the features file exist",
+      "command": "test -f .autobuild/run-acceptance.mjs && test -f .autobuild/features.json",
+      "hint": "restore .autobuild/ from the setup commit"
+    }
+  ],
+  "runners": {
+    "profile": {
+      "group": "profile",
+      "command": "node .autobuild/run-acceptance.mjs"
+    }
+  },
+  "gate": [
+    {
+      "name": "existing security-audit tests only grow",
+      "command": "node .autobuild/check-existing-tests.mjs"
+    },
+    {
+      "name": "scripts/test.sh (validate, install, secrets, workflow, autobuild)",
+      "command": "bash scripts/test.sh"
+    }
+  ],
+  "browser": null,
+  "frozen": [
+    ".autobuild/SPEC.md",
+    ".autobuild/RULES.md",
+    ".autobuild/contracts",
+    ".autobuild/run-acceptance.mjs",
+    ".autobuild/check-existing-tests.mjs",
+    ".autobuild/make-features.mjs",
+    ".autobuild/.gitignore",
+    "graphs/security-audit/tests/profile-*",
+    "scripts",
+    "graphs/autobuild",
+    "graphs/security-audit/vendor",
+    "CLAUDE.md",
+    ".claude",
+    "retro.md",
+    "README.md"
+  ],
+  "writable": [
+    ".autobuild/PROGRESS.md",
+    ".autobuild/DECISIONS.md"
+  ],
+  "review": {
+    "prompt": "Review session for the autonomous build of the security-audit quick and deep profiles. Review everything committed in {since}..HEAD (git log, git diff) in two passes. (1) Drift: compare it against .autobuild/SPEC.md, .autobuild/contracts/profiles.md and upstream's text (graphs/security-audit/vendor/cloudflare-security-audit/skills/security-audit/SKILL.md lines 107-134, HUNTING.md 'Coverage-critic waves', VALIDATION-AND-REPORTING.md 'Phase 5'): behavior the contract names that the code does not do, a standard run that now behaves differently, anything that makes confirmed reachable or relaxes a vendored validator, the link-check, the independence history or a check of audit-run.mjs check, shortcuts that only satisfy the frozen tests, decisions not logged in .autobuild/DECISIONS.md. (2) Defects: read the changed code as a hostile reviewer and look for real bugs the frozen tests would not catch: a quick or deep run that ends in a state no step can leave (a unit left planned, a next that names a step a helper refuses, a run marked complete with a record no verifier checked), a crash or restart between two writes (every effect idempotent, the step saved last), a value from the audited repository reaching a prompt or a file unfenced, errors swallowed or turned into a false success, a profile gate that a seed or mint path skips. Report a defect only with a concrete failure scenario and file:line, and say when it is reasoned from the code rather than reproduced. Run `autobuild check --skip-browser` and include its result. Append each finding as one line to .autobuild/PROGRESS.md: 'REVIEW {date}: DEFECT <file:line> <title> — <scenario; suggested fix>' for a bug in built code, 'REVIEW {date}: PROPOSED-FEATURE <title> — <why>' for missing work, or 'BLOCKER <ID>: <why>' only for a pending feature whose test or contract is wrong. If there are no findings, append 'REVIEW {date}: no drift or defects found'. Do not change code, tests or the feature list. Commit only .autobuild/PROGRESS.md with message 'chore(review): drift review after {iteration} iterations'. Then stop."
+  },
+  "allowedTools": [
+    "Read",
+    "Edit",
+    "Write",
+    "Glob",
+    "Grep",
+    "TodoWrite",
+    "Agent",
+    "Task",
+    "Bash(autobuild *)",
+    "Bash(git add *)",
+    "Bash(git commit *)",
+    "Bash(git status*)",
+    "Bash(git diff*)",
+    "Bash(git log*)",
+    "Bash(git show*)",
+    "Bash(ls*)",
+    "Bash(cat *)",
+    "Bash(head *)",
+    "Bash(tail *)",
+    "Bash(grep *)",
+    "Bash(rg *)",
+    "Bash(find *)",
+    "Bash(wc *)",
+    "Bash(jq *)",
+    "Bash(diff *)",
+    "Bash(sort *)",
+    "Bash(uniq *)",
+    "Bash(echo *)",
+    "Bash(printf *)",
+    "Bash(mkdir *)",
+    "Bash(touch *)",
+    "Bash(cp *)",
+    "Bash(mv *)",
+    "Bash(rm *)",
+    "Bash(sed *)",
+    "Bash(cd *)",
+    "Bash(timeout *)",
+    "Bash(node *)",
+    "Bash(bash *)",
+    "Bash(scripts/*)",
+    "Bash(shellcheck *)"
+  ]
+}

@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "features": [
+    {
+      "id": "P-01",
+      "title": "The profile rules table",
+      "description": "audit-profile.mjs: PROFILES, QUICK_SUBSYSTEM_REF, QUICK_DEFERRED, profileRules(profile) and the tolerant rulesOf(meta); audit-run.mjs takes KNOWN_PROFILES and REASONS.quick from it. The dry run: pure code, read against upstream.",
+      "contract": ".autobuild/contracts/profiles.md (section P-01)",
+      "dependencies": [],
+      "acceptance": [
+        "audit-profile.mjs exports PROFILES (quick, standard, deep, frozen), QUICK_SUBSYSTEM_REF and QUICK_DEFERRED with upstream's exact strings",
+        "profileRules returns the frozen row of the contract table for each profile and throws a TypeError naming the value for anything that is not exactly a profile name",
+        "rulesOf(meta) returns the run's rules, and standard for a meta with no profile, an unknown one, null or undefined; profileRules's TypeError says exactly `unknown profile <value as JSON>`",
+        "the table agrees with criticReserve, validationReserve, KNOWN_PROFILES and REASONS.quick, which already exist",
+        "every rule is backed by upstream's vendored text, read by the test"
+      ],
+      "test": "graphs/security-audit/tests/profile-rules.test.mjs",
+      "testKind": "profile",
+      "passes": false
+    },
+    {
+      "id": "P-02",
+      "title": "init takes quick and deep",
+      "description": "audit-run.mjs init --profile quick|deep starts a run behind the existing gates; SUPPORTED_PROFILES is all three; check, status and next work on them; usage text, comments and the what-runs note say so.",
+      "contract": ".autobuild/contracts/profiles.md (section P-02)",
+      "dependencies": [
+        "P-01"
+      ],
+      "acceptance": [
+        "SUPPORTED_PROFILES equals KNOWN_PROFILES: quick, standard, deep",
+        "init --profile quick and --profile deep print AUDIT: OK with the profile, record it, and the run passes check, status and next (NEXT: recon)",
+        "init with no profile is standard; a name that is not exactly one of the three is a usage error (exit 2) that creates nothing",
+        "the usage text names [--profile quick|standard|deep]",
+        "--budget 7 (quick) and 9 (deep and standard) are refused with upstream's reason and the calls the profile needs first, the run recorded incomplete; 8, 10 and 10 are accepted",
+        "the what-runs note says one verifier per surviving lead for quick, one or two for the others",
+        "check names the three profiles when a run's metadata holds anything else"
+      ],
+      "test": "graphs/security-audit/tests/profile-init.test.mjs",
+      "testKind": "profile",
+      "passes": false
+    },
+    {
+      "id": "P-03",
+      "title": "The units a profile asks for",
+      "description": "Quick seed and mint refuse any unit whose subsystem reference is not the fixed one or that carries a lifecycle (an earlier run's units are exempt); quick and deep stage inputs and prompts carry upstream's \"Run profiles and scope\" section verbatim; standard is untouched.",
+      "contract": ".autobuild/contracts/profiles.md (section P-03)",
+      "dependencies": [
+        "P-01"
+      ],
+      "acceptance": [
+        "a quick seed accepts units with subsystem reference profile/quick/all-in-scope-subsystems (labels free) and the ledger passes the vendored validator",
+        "a quick seed refuses any other subsystem reference and any lifecycle (label, reference or both), with the contract's messages, writing nothing and saving no step; seedProblems says the same",
+        "unitFromInput judges by ctx.profile, and a ctx with no profile is judged as before",
+        "standard and deep accept any subsystem reference and lifecycle units (an ID ends in the mode)",
+        "a unit an earlier run held is still force-added to a quick ledger with its own references",
+        "for quick and deep, parts.profile of the synthesizer, critic and minter inputs is the vendored section byte for byte and each prompt carries it verbatim under its heading; for standard there is no such key and no such text"
+      ],
+      "test": "graphs/security-audit/tests/profile-granularity.test.mjs",
+      "testKind": "profile",
+      "passes": false
+    },
+    {
+      "id": "P-04",
+      "title": "Quick's one wave and one critic",
+      "description": "nextStep sends a quick run from apply-critic to validation (no second wave, no final-clean critic); apply-critic defers what the critic found, what it reopened and every unit no hunter reached, with quick_profile_final_critic.",
+      "contract": ".autobuild/contracts/profiles.md (section P-04)",
+      "dependencies": [
+        "P-01",
+        "P-03"
+      ],
+      "acceptance": [
+        "nextStep: quick goes from apply-critic to validation whatever planned units remain; standard, deep and a meta with no profile go on hunting or to the final-clean critic as before",
+        "a quick run with nothing huntable, or whose wave the budget deferred whole, still gets its one critic, kind post-wave; standard asks the final-clean critic",
+        "apply-critic in quick: reopened units are archived and deferred (wave + 1, no owner, no evidence, reason quick_profile_final_critic), minted units and units no hunter reached are deferred with the same reason, candidates stay, nothing is left planned; the ledger passes the validator and next says validate",
+        "apply-critic in quick ends with deferred=<count> in its summary; standard and deep have no such field",
+        "a unit a verifier owns (a carried prior record) stays planned in quick and the run goes to validation",
+        "in a scoped quick run a minted unit outside the scope is out_of_scope, not deferred",
+        "a quick minted unit must be coarsened too: refused with the seed's message and counted as rejected",
+        "plan-wave is refused after a quick critic result is applied; standard and deep are unchanged"
+      ],
+      "test": "graphs/security-audit/tests/profile-quick-waves.test.mjs",
+      "testKind": "profile",
+      "passes": false
+    },
+    {
+      "id": "P-05",
+      "title": "Quick merges Phase 3 and Phase 5",
+      "description": "The validate stage of a quick run carries upstream's Phase 5 checks and marks each decided lead merged; next skips verify; write-findings ends the run; complete-check accepts the marker in quick only, for the entry's own Phase 3 verifier only.",
+      "contract": ".autobuild/contracts/profiles.md (section P-05)",
+      "dependencies": [
+        "P-01"
+      ],
+      "acceptance": [
+        "for quick, the validate input has parts.phase5 (the vendored Phase 5 section, byte for byte) and each verifier prompt carries it, says it is merged into this pass and that there is no later Phase 5 pass; standard and deep have neither",
+        "each decided needs_validation entry of a quick run gets phase5 { state: merged, verifier_id: its own v verifier }; a rejected entry stays null",
+        "nextStep after write-findings is report for quick and verify (when a record needs it) for standard and deep",
+        "write-findings in a quick run ends the run complete; complete-check finds nothing; check passes",
+        "a quick record with a wrong, missing or verified-state marker makes the run incomplete (complete_check_failed) without a throw",
+        "a retried candidate is marked with the verifier whose result was kept; the marker naming the discarded attempt fails complete-check",
+        "the validate stage funds floor(left / verifiersPerCandidate) candidates: quick two with two agents left, standard and deep one and incomplete (validation_budget_exhausted)",
+        "in standard and deep a merged marker does not satisfy complete-check, and verify is still its own stage"
+      ],
+      "test": "graphs/security-audit/tests/profile-quick-verify.test.mjs",
+      "testKind": "profile",
+      "passes": false
+    },
+    {
+      "id": "P-06",
+      "title": "Deep's second pass",
+      "description": "apply-critic in a deep run archives a prior_covered_same_source unit this run covered and plans it again for a fresh owner, once, with the contract's reason; everything else of deep is standard's.",
+      "contract": ".autobuild/contracts/profiles.md (section P-06)",
+      "dependencies": [
+        "P-01"
+      ],
+      "acceptance": [
+        "in deep, the first critic application after a prior_covered_same_source unit is covered archives its pass in attempts with the exact reassignment_reason, sets it planned at wave + 1 with no owner and no evidence, and next says plan-wave",
+        "a unit an earlier run did not cover is left alone; the ledger passes the validator",
+        "the next wave hunts only that unit, with a fresh owner (h2-01); a second critic application leaves it alone (second_pass=0) and the run goes to the final-clean critic",
+        "a unit the critic itself reopens in the same application is not archived twice; a prior same-source unit that came back a candidate or blocked gets no second pass",
+        "standard and quick do no second pass and have no second_pass field; deep's summary ends with second_pass=<count>",
+        "nextStep is the same line for deep as for standard in every stage-state fixture, and after write-findings deep goes to verify"
+      ],
+      "test": "graphs/security-audit/tests/profile-deep.test.mjs",
+      "testKind": "profile",
+      "passes": false
+    },
+    {
+      "id": "P-07",
+      "title": "What the report says about the profile",
+      "description": "REPORT.md: a Profile rules line for quick and deep; partial pass for quick only (deep is not partial because of its profile); the one-critic sentence; a count of units deferred as quick_profile_final_critic.",
+      "contract": ".autobuild/contracts/profiles.md (section P-07)",
+      "dependencies": [
+        "P-01"
+      ],
+      "acceptance": [
+        "the Run section has the contract's exact Profile rules line for quick and for deep and none for standard",
+        "a complete quick run is a partial pass with the existing sentence; a complete deep or standard run under no scope or budget is not",
+        "scope, strict budget, deferred coverage and incompleteness are partial-pass reasons for every profile, in the existing order, and never a profile reason for deep",
+        "the Status of a complete quick run says its records passed the quick profile's merged Phase 3 and Phase 5 verification; standard and deep keep their sentence",
+        "a quick run's final critic section says its one critic was final by design; standard and deep keep their sentences",
+        "units deferred as quick_profile_final_critic are listed and counted in the contract's one sentence (deferred units whose reason is exactly that string, nothing a hunter wrote), placed after the gap list, and no such sentence appears without any"
+      ],
+      "test": "graphs/security-audit/tests/profile-report.test.mjs",
+      "testKind": "profile",
+      "passes": false
+    },
+    {
+      "id": "P-08",
+      "title": "The docs",
+      "description": "SKILL.md, the graph README and audit-run.mjs's own text name the three profiles, their rules and their minimum budgets (the code's numbers), and nothing says init refuses quick or deep.",
+      "contract": ".autobuild/contracts/profiles.md (section P-08)",
+      "dependencies": [
+        "P-02",
+        "P-04",
+        "P-05",
+        "P-06",
+        "P-07"
+      ],
+      "acceptance": [
+        "SKILL.md usage block is [--profile quick|standard|deep] and its flags still equal INIT_FLAGS plus --unattended and --guidance",
+        "SKILL.md and the README each list quick, standard and deep with the contract's phrases and the budget sentence with minimumBudget(profile), and say each profile keeps the same evidence bar",
+        "the skill's not-supported bullet and closing rule, the README status paragraph and audit-run.mjs's comments, usage and refusal no longer say quick or deep are refused or later",
+        "SKILL.md tells the session that a quick run is a partial pass",
+        "the existing tests (audit-skill, audit-readme as edited, validate.sh pins) still pass"
+      ],
+      "test": "graphs/security-audit/tests/profile-docs.test.mjs",
+      "testKind": "profile",
+      "passes": false
+    },
+    {
+      "id": "P-09",
+      "title": "End to end, quick",
+      "description": "A whole offline quick audit of the toy repository from init --profile quick to the reports, driven by the skill's own commands: one wave, one critic, one verifier per lead, deferred gaps, a partial-pass report.",
+      "contract": ".autobuild/contracts/profiles.md (section P-09)",
+      "dependencies": [
+        "P-02",
+        "P-03",
+        "P-04",
+        "P-05",
+        "P-07",
+        "P-08"
+      ],
+      "acceptance": [
+        "the run is quick, complete, and its path is recon, seed, one wave, one critic and minter, apply-critic, consolidate, validate, write-findings, report with no verify and no final-clean critic",
+        "13 agents: one hunter for the four coarse units, one critic, one minter, one grouping, one v verifier per candidate",
+        "six units: four candidates, two deferred as quick_profile_final_critic, all under the fixed subsystem reference; both validators and check pass",
+        "three needs_validation leads and one rejected claim, each lead marked merged by its own v verifier, nothing confirmed",
+        "REPORT.md says quick: the rules line, a partial pass, the deferred count, the one critic by design, the merged verification; the audited repository is untouched",
+        "under --budget 13 (exactly what it spends) the quick run completes with 13 agents; under 12 it ends incomplete with validation_budget_exhausted and never spends past 12"
+      ],
+      "test": "graphs/security-audit/tests/profile-e2e-quick.test.mjs",
+      "testKind": "profile",
+      "passes": false
+    },
+    {
+      "id": "P-10",
+      "title": "End to end, deep",
+      "description": "A whole offline deep audit of the toy repository from init --profile deep to the reports: standard's machine and agent count, a lifecycle unit, Phase 5 by separate verifiers, no partial pass.",
+      "contract": ".autobuild/contracts/profiles.md (section P-10)",
+      "dependencies": [
+        "P-02",
+        "P-03",
+        "P-06",
+        "P-07",
+        "P-08"
+      ],
+      "acceptance": [
+        "the run is deep, complete, and its path and its 22 agents are standard's",
+        "seven units including one lifecycle: delete unit with its own coverage ID, hunted with its subsystem; nothing deferred; both validators and check pass",
+        "each lead has a Phase 5 verifier (r) different from its Phase 3 verifier (v); nothing is marked merged",
+        "REPORT.md says deep, is not a partial pass, and still says complete, source only and not clean",
+        "a second deep audit of the same commit archives one second pass on each unit the first run covered (src/server.js#server, src/auth.js#currentUser): wave 2, an h2 owner, the contract's reason; nothing else is reopened"
+      ],
+      "test": "graphs/security-audit/tests/profile-e2e-deep.test.mjs",
+      "testKind": "profile",
+      "passes": false
+    }
+  ]
+}
