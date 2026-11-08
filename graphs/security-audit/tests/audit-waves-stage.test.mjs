@@ -374,7 +374,7 @@ await test('when the budget no longer covers the critic, no agent is launched, t
   assert.match(stage(['plan', runDir]).last, /^AUDIT: FAIL the next step is not a Workflow stage: NEXT: write-findings/)
 })
 await test('the hunters are gated again at plan: a re-plan after a crash that left the step unsaved cannot spend the wave\'s hunters twice, and a wave the reserves no longer leave room for is deferred with upstream\'s reason', async () => {
-  const { runDir } = await reconToSeed(three(), ['--budget', '12'])   // 7 left after recon: two critics, two verifiers, three hunters
+  const { runDir } = await reconToSeed(three(), ['--budget', '14'])   // 9 left after recon: two critics, a minter after each, two verifiers, three hunters
   assert.match(ledgerCli(['plan-wave', runDir]).last, /hunters=3 assigned=3 deferred=0$/)
   const asg = assignments(runDir)
   const state = readFileSync(join(runDir, 'stage-state.json'), 'utf8')
@@ -386,7 +386,7 @@ await test('the hunters are gated again at plan: a re-plan after a crash that le
   const stages = stageDirs(runDir)
   const r = stage(['plan', runDir])
   assert.equal(r.status, 1)
-  assert.match(r.last, /^AUDIT: FAIL budget_cannot_reserve_critics_and_validation: 4 agent\(s\) are left \(--budget 12, 8 spent\) and this wave's 3 hunter\(s\) would take what upstream reserves for the critics and the validation; no hunter was launched, 3 unit\(s\) were deferred$/)
+  assert.match(r.last, /^AUDIT: FAIL budget_cannot_reserve_critics_and_validation: 6 agent\(s\) are left \(--budget 14, 8 spent\) and this wave's 3 hunter\(s\) would take what upstream reserves for the critics and the validation; no hunter was launched, 3 unit\(s\) were deferred$/)
   assert.deepEqual(stageDirs(runDir), stages, 'no new stage and no script')
   assert.deepEqual(readLedger(runDir).map(u => [u.status, u.agent_id, u.unresolved]), Array(3).fill(['deferred', null, [REASONS.reserve]]))
   assert.equal(meta(runDir).agents_spent, 8, 'nothing was spent')

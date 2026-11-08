@@ -5,7 +5,7 @@ import { writeFileSync, readFileSync, mkdirSync, existsSync, chmodSync, symlinkS
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import {
-  REASONS, RECON_CALLS, SYNTHESIS_CALLS, STATUSES, STEPS, RUNNERS, EXECUTION_BLOCKERS, EXECUTION_POLICY, SUPPORTED_PROFILES,
+  REASONS, MINT_CALLS, RECON_CALLS, SYNTHESIS_CALLS, STATUSES, STEPS, RUNNERS, EXECUTION_BLOCKERS, EXECUTION_POLICY, SUPPORTED_PROFILES,
   budgetGate, reconGate, minimumBudget, criticReserve, validationReserve, waveAllowance, countStatuses, nextStep, formatNext, advanceState, writeJson, makeWritable, recordSpend, markIncomplete,
 } from '../skills/security-audit/audit-run.mjs'
 import { VENDOR_SKILL_DIR, canonicalCoverageId } from '../skills/security-audit/upstream.mjs'
@@ -68,21 +68,22 @@ await test('RUNNERS names every step but init, and STEPS has no duplicates', () 
 })
 
 console.log('== the budget gate')
-await test('the minimum is the four recon calls and the synthesizer\'s, the critics, and one verifier: 8 for standard and deep, 7 for quick', () => {
+await test('the minimum is the four recon calls and the synthesizer\'s, the critics and the minter after each, and one verifier: 10 for standard and deep, 8 for quick', () => {
   assert.equal(RECON_CALLS, 4, 'upstream\'s four baseline reconnaissance calls')
   assert.equal(SYNTHESIS_CALLS, 1, 'PandaStack\'s own call: upstream\'s parent does that work, so SKILL.md\'s four leave it out')
   assert.deepEqual([criticReserve('quick'), criticReserve('standard'), criticReserve('deep')], [1, 2, 2])
-  assert.deepEqual([minimumBudget('quick'), minimumBudget('standard'), minimumBudget('deep')], [7, 8, 8])
+  assert.deepEqual([minimumBudget('quick'), minimumBudget('standard'), minimumBudget('deep')], [8, 10, 10])
+  assert.equal(MINT_CALLS, 1, 'PandaStack\'s own call: upstream\'s parent mints the units itself, so SKILL.md\'s reserve for critics leaves it out')
 })
 await test('budgetGate refuses below the minimum with upstream\'s reason, passes at it, and never gates an unset budget', () => {
-  for (const [profile, budget, ok] of [['standard', null, true], ['standard', 8, true], ['standard', 7, false], ['standard', 0, false], ['standard', 1000, true],
-    ['deep', 7, false], ['deep', 8, true], ['quick', 6, false], ['quick', 7, true]]) {
+  for (const [profile, budget, ok] of [['standard', null, true], ['standard', 10, true], ['standard', 9, false], ['standard', 0, false], ['standard', 1000, true],
+    ['deep', 9, false], ['deep', 10, true], ['quick', 7, false], ['quick', 8, true]]) {
     const g = budgetGate(profile, budget)
     assert.equal(g.ok, ok, `${profile} ${budget}`)
     assert.equal(g.reason, ok ? null : 'budget_cannot_fund_reconnaissance_and_reserves', `${profile} ${budget}`)
     assert.equal(g.minimum, minimumBudget(profile))
   }
-  for (const bad of [-1, 1.5, NaN, Infinity, '7', undefined, {}, [], true]) assert.throws(() => budgetGate('standard', bad), TypeError, String(bad))
+  for (const bad of [-1, 1.5, NaN, Infinity, '10', undefined, {}, [], true]) assert.throws(() => budgetGate('standard', bad), TypeError, String(bad))
   for (const bad of ['fast', null, undefined, 'Standard', 5]) assert.throws(() => budgetGate(bad, 10), TypeError, String(bad))
 })
 await test('reconGate applies the same gate to each recon part as it is about to run: the whole minimum for the researchers, the rest for the synthesizer, and an unset budget is never gated', () => {
@@ -107,27 +108,28 @@ await test('waveAllowance never puts a hunter into a reserve, and zero room carr
         const w = waveAllowance(profile, remaining, candidates)
         const label = `${profile} remaining=${remaining} candidates=${candidates}`
         assert.ok(Number.isInteger(w.hunters) && w.hunters >= 0, label)
-        assert.ok(w.hunters === 0 || w.hunters + w.critics + w.validation === remaining, `${label}: hunters plus reserves must be the whole balance`)
+        assert.ok(w.hunters === 0 || w.hunters + w.critics + w.minters + w.validation === remaining, `${label}: hunters plus reserves must be the whole balance`)
+        assert.equal(w.minters, criticReserve(profile) * MINT_CALLS, label)
         assert.equal(w.reason, w.hunters === 0 ? 'budget_cannot_reserve_critics_and_validation' : null, label)
         assert.equal(w.critics, criticReserve(profile), label)
         assert.ok(w.validation >= 1, `${label}: at least one verifier call`)
       }
     }
   }
-  assert.deepEqual(waveAllowance('standard', 20), { critics: 2, validation: 6, hunters: 12, reason: null })     // 30% of the 18 left after the critics, rounded up
-  assert.deepEqual(waveAllowance('standard', 10, 3), { critics: 2, validation: 6, hunters: 2, reason: null })   // two verifiers per expected candidate
-  assert.deepEqual(waveAllowance('quick', 10, 3), { critics: 1, validation: 3, hunters: 6, reason: null })      // one verifier does both phases
-  assert.deepEqual(waveAllowance('standard', 8, 3), { critics: 2, validation: 6, hunters: 0, reason: 'budget_cannot_reserve_critics_and_validation' })
+  assert.deepEqual(waveAllowance('standard', 20), { critics: 2, minters: 2, validation: 5, hunters: 11, reason: null })     // 30% of the 16 left after the critics and their minters, rounded up
+  assert.deepEqual(waveAllowance('standard', 14, 3), { critics: 2, minters: 2, validation: 6, hunters: 4, reason: null })   // two verifiers per expected candidate
+  assert.deepEqual(waveAllowance('quick', 10, 3), { critics: 1, minters: 1, validation: 3, hunters: 5, reason: null })      // one verifier does both phases
+  assert.deepEqual(waveAllowance('standard', 10, 3), { critics: 2, minters: 2, validation: 6, hunters: 0, reason: 'budget_cannot_reserve_critics_and_validation' })
   assert.equal(validationReserve('standard', 0), 1)
 })
 await test('init with a budget below the minimum launches nothing and records the run incomplete with upstream\'s reason', () => {
   const repo = mkRepo()
-  const r = init([repo, '--full', '--budget', '7'])
+  const r = init([repo, '--full', '--budget', '9'])
   assert.equal(r.status, 1)
-  assert.match(r.last, /^AUDIT: FAIL budget_cannot_fund_reconnaissance_and_reserves: --budget 7 cannot fund the 8 calls profile standard needs first \(4 reconnaissance, 1 synthesis, 2 critics, 1 verifier\); no agent was launched\./)
+  assert.match(r.last, /^AUDIT: FAIL budget_cannot_fund_reconnaissance_and_reserves: --budget 9 cannot fund the 10 calls profile standard needs first \(4 reconnaissance, 1 synthesis, 2 critics, 2 minters, 1 verifier\); no agent was launched\./)
   const runDir = join(repo, '.git', 'security-audit', 'run-1')
   const m = meta(runDir)
-  assert.deepEqual([m.budget, m.run_status, m.incomplete_reason, m.agents_spent], [7, 'incomplete', 'budget_cannot_fund_reconnaissance_and_reserves', 0])
+  assert.deepEqual([m.budget, m.run_status, m.incomplete_reason, m.agents_spent], [9, 'incomplete', 'budget_cannot_fund_reconnaissance_and_reserves', 0])
   assert.equal(m.snapshot, null)
   assert.ok(!existsSync(join(runDir, 'tree')), 'no snapshot is made for a run that cannot be funded')
   const e = JSON.parse(readFileSync(join(runDir, 'events.jsonl'), 'utf8'))
@@ -135,9 +137,9 @@ await test('init with a budget below the minimum launches nothing and records th
   assert.equal(audit(['check', runDir]).last, `AUDIT: OK ${runDir} passes check`)
   assert.equal(audit(['next', runDir]).last, 'NEXT: report run=helper reason=budget_cannot_fund_reconnaissance_and_reserves')
   assert.equal(init([repo, '--full', '--budget', '0']).status, 1)
-  const ok = init([repo, '--full', '--budget', '8'])
+  const ok = init([repo, '--full', '--budget', '10'])
   assert.equal(ok.status, 0, ok.stdout)
-  assert.equal(meta(ok.runDir).budget, 8)
+  assert.equal(meta(ok.runDir).budget, 10)
   assert.equal(ok.runDir, join(repo, '.git', 'security-audit', 'run-3'), 'each refused attempt keeps its number')
   assert.equal(meta(init([repo, '--full']).runDir).budget, null)
 })

@@ -363,7 +363,13 @@ export const SYNTHESIS_CALLS = 1
 // Critics the gate reserves: quick, its one final post-wave critic; standard and deep, a post-wave critic plus a
 // distinct final-clean critic.
 export const criticReserve = profile => { if (!KNOWN_PROFILES.includes(profile)) throw new TypeError(`unknown profile ${JSON.stringify(profile)}`); return profile === 'quick' ? 1 : 2 }
-export const minimumBudget = profile => RECON_CALLS + SYNTHESIS_CALLS + criticReserve(profile) + 1   // + at least one verifier call
+// PandaStack's own call, like the synthesizer: after each critic, one synthesizer mints units for what the critic and the hunters found missing (a critic with nothing to mint
+// calls nobody). Upstream's parent does that work, so SKILL.md's reserve for critics leaves it out; left out here it takes what the plan keeps for the verifiers (found by the
+// independent audit of the waves change, retro 39; reproduced in the budget tests). A reserve per critic is the worst case, an upper bound a run only meets when every critic finds a gap.
+export const MINT_CALLS = 1
+// Calls the profile keeps back for its critics and the minters that may follow them.
+const criticCalls = profile => criticReserve(profile) * (1 + MINT_CALLS)
+export const minimumBudget = profile => RECON_CALLS + SYNTHESIS_CALLS + criticCalls(profile) + 1   // + at least one verifier call
 const checkBudget = b => { if (b !== null && !(Number.isSafeInteger(b) && b >= 0)) throw new TypeError(`a budget is null or a non-negative integer, not ${JSON.stringify(b)}`); return b }
 
 // The strict gate, applied before any reconnaissance agent. An unset budget (null) is never gated.
@@ -378,7 +384,7 @@ export function budgetGate(profile, budget) {
 export function reconGate(profile, budget, spent, part) {
   if (part !== 'facts' && part !== 'synthesize') throw new TypeError(`a recon part is facts or synthesize, not ${JSON.stringify(part)}`)
   if (!isInt(spent)) throw new TypeError(`agents spent is a non-negative integer, not ${JSON.stringify(spent)}`)
-  const needed = part === 'facts' ? minimumBudget(profile) : SYNTHESIS_CALLS + criticReserve(profile) + 1
+  const needed = part === 'facts' ? minimumBudget(profile) : SYNTHESIS_CALLS + criticCalls(profile) + 1
   const ok = checkBudget(budget) === null || budget - spent >= needed
   return { ok, needed, reason: ok ? null : REASONS.fund }
 }
@@ -396,9 +402,10 @@ export function validationReserve(profile, balanceAfterCritics, expectedCandidat
 // themselves exactly fit.
 export function waveAllowance(profile, remaining, expectedCandidates = null) {
   const critics = criticReserve(profile)
-  const validation = validationReserve(profile, Math.max(0, remaining - critics), expectedCandidates)
-  const hunters = Math.max(0, remaining - critics - validation)
-  return { critics, validation, hunters, reason: hunters === 0 ? REASONS.reserve : null }
+  const minters = critics * MINT_CALLS
+  const validation = validationReserve(profile, Math.max(0, remaining - critics - minters), expectedCandidates)
+  const hunters = Math.max(0, remaining - critics - minters - validation)
+  return { critics, minters, validation, hunters, reason: hunters === 0 ? REASONS.reserve : null }
 }
 
 // ---------- earlier runs ----------
@@ -735,7 +742,7 @@ function runInit(argv) {
   const { source_ref: s, snapshot } = metadata
   if (!gate.ok) {
     const c = criticReserve(metadata.profile)
-    return refuse(`${gate.reason}: --budget ${metadata.budget} cannot fund the ${gate.minimum} calls profile ${metadata.profile} needs first (${RECON_CALLS} reconnaissance, ${SYNTHESIS_CALLS} synthesis, ${c} critic${c === 1 ? '' : 's'}, 1 verifier); no agent was launched. Give a larger budget, a narrower --scope or a different profile; as it stands ${runDir} is recorded incomplete`)
+    return refuse(`${gate.reason}: --budget ${metadata.budget} cannot fund the ${gate.minimum} calls profile ${metadata.profile} needs first (${RECON_CALLS} reconnaissance, ${SYNTHESIS_CALLS} synthesis, ${c} critic${c === 1 ? '' : 's'}, ${c * MINT_CALLS} minter${c * MINT_CALLS === 1 ? '' : 's'}, 1 verifier); no agent was launched. Give a larger budget, a narrower --scope or a different profile; as it stands ${runDir} is recorded incomplete`)
   }
   console.log(runDir)
   for (const note of opts.notes) console.log(`note: ${note}`)
