@@ -2744,3 +2744,102 @@ first; a test that plants a hunter ID between plan and apply was added, the muta
 `confirmed` branches (a replacement's materiality for severity, `execution`) are exercised by tests on synthetic records only. The live pass used the entry 39 run with hunting closed by
 hand: no real final-clean critic fed it. `report`, `task` and `export-remediation` are PR 7 (`feat/security-audit-8-report`); the entry skill, the graph README, `validate.sh` pins, the
 README row and the install test are PR 8. Not measured: how many candidates a validate or verify round holds in practice (it depends on record size; the guard is 380,000 encoded bytes).
+
+## 41. security-audit PR 7: the report, the /dev task and the remediation export (2026-11-08)
+
+PR 7 of the `security-audit` graph (`feat/security-audit-8-report`, from `feat/security-audit-7-findings` at its final commit `22d0414`, entry 40). Phase 6 and what an owner does with a
+finding afterwards. Plan: `tasks/plan-security-audit.md` 4.3 F, 4.7, 7.2, 8 ("Report generation"), 9 (row 7), decisions D6 A (a deterministic report, positives omitted and the omission
+stated), D10 A (`/dev` consumes remediation through generated task text).
+
+**What changed.**
+- `audit-report.mjs` (new, 376 lines): `report <run dir>`, `task <run dir> <fingerprint>`, `export-remediation <run dir>`. Everything in the three Markdown files is made by code from
+  `findings.json`, the ledger, `run-metadata.json`, `decisions.json`, `prior-runs.json` and `critic.json`: no model writes a word of it, so the prose cannot disagree with the JSON.
+  `report` is a pure `buildReports(ctx, validators)` over a context read once (`reportContext`), and a thin command around it.
+- `REPORT.md`, in upstream's order (VALIDATION-AND-REPORTING.md:155-167): status (complete, or INCOMPLETE with the reason in words and, before anything else, the unresolved candidates as
+  a table: fingerprint, why, the units that carry it, and "none is a finding under any verdict and none is in findings.json"), the run (profile, scope, source commit and a dirty tree
+  named, the execution statement with the missing controls, agents spent against the budget, earlier runs and each lead taken from one by fingerprint and treatment, the validators' last
+  lines, and a "partial pass" line when the run is incomplete, scoped, not the standard profile, under a strict budget or has deferred coverage), the posture (templated from counts),
+  the confirmed table and each finding, the NEEDS VALIDATION table (title, trace, blocker, local next step, deployment check, no severity, ordered by the priority of the coverage that found
+  it), hardening notes and the statement that positives are not reported, and the coverage summary (all eight ledger statuses, each counted on its own, the units that are deferred,
+  blocked, out of scope or not applicable with their reasons, and the final critic).
+- `FINDINGS-DETAIL.md`: exactly the confirmed medium, high and critical records, in severity order: source path, evidence, reproduction (dummy principal, input, instructions, observed
+  result in fences), the invariant, conditions, the remediation strategy and the audit's `code_changes` marked as suggestions, and the regression case. With none it says so. `NEEDS-VALIDATION.md`:
+  the unresolved candidates first, then every lead with trace, evidence, blockers and both plans. Both are written whatever the run found (the three are upstream's Phase 6 artifacts).
+- `task <run dir> <fingerprint>`, at the end of a run only: a confirmed finding becomes "Fix the confirmed security finding ..., test first": the finding inside one `<untrusted-audit-finding>` fence the text cannot
+  close, stated to be data and never instructions; its strategy, its `code_changes` under "suggestions from the audit: not applied and not reviewed", a regression seed restated from the
+  `execution` block (the schema has no regression-test field, so it is derived, not written by the audit), then three steps (the test first, fails before and passes after; the smallest
+  change at the last trusted decision point; the whole suite). A lead becomes "INVESTIGATION ONLY: the security lead ... is unproven. Do not change source to 'fix' it before it is validated",
+  with its blockers and plans and no severity, seed or fix. A rejected record is not a task. Only from a `findings.json` the vendored validator passes.
+- `export-remediation <run dir>`: `remediation/index.json` (fingerprint, kind, verdict, severity, locations, root cause, minimal fix, regression seed, file) and one `.md` per confirmed finding
+  or lead, in the run directory only. A file name is `finding-<percent-encoded fingerprint, cut at 80>-<8 hex of the whole fingerprint's SHA-1>.md`: never a path, a dotfile or a Windows device
+  name whatever the fingerprint (the pattern allows `/`, `..`, `:` and `con`), and two fingerprints never share one. A second export removes the `finding-*.md` of what is no longer a finding
+  and leaves any other file; a `remediation` that is a symlink or a file is refused.
+- `audit-md.mjs` (new, 44): `inline` and `cell` (one line, every markup character escaped, bounded), `fence` (a code fence longer than any run of backticks inside), `fenceTag` (the
+  workflow's own `fenced`, copied), `code` (a code span, nothing escaped), `plain`, `where`, `plural`.
+- `report` runs only as the next step (`audit-run.mjs next` says report), decides a run still in progress first by complete-check (so it is complete only if that passes, and otherwise
+  incomplete with `complete_check_failed`), refuses when `findings.json` or the ledger exists and a vendored validator rejects it (prose is never derived from records upstream's validator
+  rejects), writes each file atomically, and saves the last step, so `next` says `done status=<s>`; a crash between the files and the step is finished by running it again.
+
+**Decisions.**
+- "FINDINGS-DETAIL.md only for confirmed medium+": the file's content is only those records; the file itself is always written, with a line that says there are none, because the three
+  files are upstream's terminal state (a) and `SHARED_FILE_OWNERS` names all three.
+- The unresolved candidates come from the same function the link-check uses (`linkCheck`), so the report and `complete-check` agree about what is unresolved.
+- The "final critic" line is from `stage-state.json` and `critic.json`, which holds the critic's own proposal before `apply-critic` filters it: the report says "proposed", not "accepted". With
+  `critic_budget_exhausted` it says the final-clean critic did not run and no clean-coverage claim is made.
+- Affected boundary is the `boundary` label of the ledger units that carry the finding; the lower-trust principal is `execution.attacker_perspective`; the priority rationale is the likelihood
+  reason. Upstream names these without a field for them.
+- Carried confirmations and changed-source revalidations are named by fingerprint from the units' `prior_leads` bookkeeping (upstream: "Name carried same-source confirmations ...").
+
+**A live pass (no `claude -p`; $0).** `report` is code, so there is no agent to spend on. It was run on a copy of the real run directory of entry 40's live pass (the PR 5 fixture: 21 units,
+5 leads verified by real agents, complete): `AUDIT: OK report status=complete confirmed=0 needs_validation=5 rejected=0 unresolved=0`, `next` says `done status=complete`, REPORT.md 16,681
+bytes, NEEDS-VALIDATION.md 15,255, FINDINGS-DETAIL.md 345 (run again after the audit's fixes, below; the first run gave 16,650 and 14,907); both validators' lines in the report; the leads' real titles,
+traces and blockers in the table with underscores escaped. `export-remediation` on it: `tasks=0 investigations=5`, and `task notes-byid-no-owner-check` printed "INVESTIGATION ONLY: the security lead ...
+is unproven" with the finding fenced. Read, not rendered: the Markdown was not opened in a renderer, so "renders as intended" is unverified.
+
+**Found in earlier PRs (each a test result).** None: the earlier modules this branch reads (`audit-run.mjs`, `audit-findings.mjs`, the ledger) behaved as their own tests say. The one change to an earlier
+module's behaviour is not a defect fix: `task` and `export-remediation` now ask `nextStep`, below.
+
+**Found by an independent audit (qa-auditor, read-only, no knowledge of my reasoning; its probes are scripts outside the repo, `scratchpad/audit-qa8/p1`-`p4`), each reproduced by a failing test
+before its fix.** Six defects (file:line as it cited them, on `9c172ec`): two high, two medium, two low; categories: security (hostile text) FAIL, data flow FAIL, edge cases FAIL, consistency
+PARTIAL, missing pieces FAIL.
+1. High, `audit-md.mjs:32` (`where`) and `audit-report.mjs:62,148`: upstream's path rule allows `|`, `<`, `>` and a backtick in a file name, and a trace file only has to exist in `tree/`. A name
+   `src/a|<img src=x onerror=alert(1)>|b.js` made the NEEDS VALIDATION row six cells and left the tag outside any code span (a table row is split before inline text is read); a name with a
+   backtick was shown as a file that does not exist, because `where` deleted the backtick. A code span takes a delimiter longer than any backtick run inside (padded at an edge), and a pipe is
+   escaped in a table cell, which a code span renders as a pipe. The comment that said no backtick can be in a path was false.
+2. High, `audit-report.mjs:55-56`: a run whose findings could not be written (`write_failed`) reported `unresolved=0` and named no candidate, because the link-check flags a decided
+   candidate with no record as a problem instead of listing it, and the report kept only what it lists. Those candidates are now unresolved, with the run's reason, and the report says what went wrong:
+   the problems complete-check found, or the validator errors the failed write recorded in `events.jsonl`. Reproduced on a fixture that mirrors the on-disk state, not by driving a real failing write.
+3. Medium, `audit-report.mjs:76,193`: only 40 unresolved fingerprints were listed; upstream says "list every unvalidated fingerprint and linked unit". No cap.
+4. Medium, `audit-report.mjs:211` and the table: the files meant to "copy the source trace, verified evidence, exact blocker" cut a 593-character blocker at 400. Only a table cell is short now.
+5. Low, `audit-report.mjs:84-87`: prior leads were labelled with their unit's `prior_status`, so a rejected or changed lead on a same-source unit read as a carried confirmation. Named by the
+   lead's own verdict and carried flag; the counts are of leads.
+6. Low, `audit-report.mjs:105`: "agents spent against planned" could never show a plan, since nothing computes one (`agents_planned` is null from `init` on). The line says so.
+Not counted by the audit, fixed anyway (its own commit): `task` and `export-remediation` would make a task from a run that has not passed Phase 5; they refuse unless `next` says report or done.
+Tried with nothing found: `remediationName` for `constructor`, `a/../../x`, `con`, `CON`, `a:b`, 200 characters and two names that differ only in case; `fenceTag` with spaces, an upper-case
+close and a close without `>`; a symlink or a file named `remediation`; a rejected record and an unknown fingerprint; `file_name` with a newline (upstream's validator refuses it); `report` run twice
+after rewinding `stage-state.json` (same files, `next` says done); a sample FINDINGS-DETAIL.md has exactly the confirmed medium and above and no `needs_validation` row has a severity; all eight
+statuses counted on their own.
+
+**Numbers.**
+4 commits on the branch (head `ea57a3c`, before this entry), 18 files, +1,689 / -0: non-test +420 (`audit-report.mjs` 376, `audit-md.mjs` 44), tests +735 (`audit-report.test.mjs` 353,
+`audit-remediation.test.mjs` 214, `audit-md.test.mjs` 119, `report-fixtures.mjs` 49) and 534 lines of golden files (4 scenarios x 3 files in `tests/golden/`). `scripts/test.sh` on the head, from a
+clean `git archive` of it (so no file of another branch is in the run): `TEST-WORKFLOW: 1192 passed, 0 failed` (1137 at entry 40: +55), `TEST-INSTALL: 126`, `TEST-SECRETS: 22`,
+`TEST-AUTOBUILD: 75`, `VALIDATE: PASS`, `TEST: PASS`, exit 0; `scripts/check-secrets.sh` clean. Mutation check: 35 single-line breaks of `audit-report.mjs` and `audit-md.mjs` (the severity
+threshold of FINDINGS-DETAIL, the confirmed table's order, the unresolved list and its cap, the status rows, the partial-pass causes, the budget line, the in-progress decision, the validator refusal,
+the lead order, the critic lines, the fence, the stale file, the symlink refusal, the file name's hash and cut, the investigation line, the suggestions note, the code span's delimiter and escape, the
+prior lead labels, the end-of-run guard), 34 killed and 1 survived at the first try (the partial-pass line for a profile other than standard, unreachable until PR 9: a test with a `quick` profile was
+added and the mutant killed), and 2 patterns that did not match the source were redone and killed.
+
+**Plan and upstream mismatches.**
+- plan 7.2 `audit-report.mjs task <findings.json> <fingerprint>`: it takes the run directory (it reads `findings.json` in it), like the other commands.
+- plan 4.3 F and D6: positives are omitted and the omission is stated, as D6 A says; the "posture summary" is a template over the counts, never a model's sentence.
+- plan 8 "FINDINGS-DETAIL.md only for confirmed medium+": read as content (above).
+- upstream Phase 6 item 7 "the final critic result": the ledger does not keep it; the report derives it (above).
+- the plan's "report is generated only after `complete-check` passes, or in an `incomplete` run": `report` itself calls complete-check for a run in progress, since `next` says `report` after verify
+  whether or not anything called it, and the report must never describe an unfinished run as finished.
+
+**Left undone.** PR 8: the entry skill, the graph README, the `validate.sh` pins, the README row and the install test. A bare URL in hostile text is escaped only where Markdown would link it
+(`[` and `<`), not where a renderer autolinks it (`http://...` written plain): a reader sees a clickable link to text a hostile repository chose. The report lists at most 40 unresolved candidates, hardening
+notes and gap units (it says how many more are in the ledger), but every unresolved candidate and every lead. `task` and `export-remediation` make no use of the ledger, so a task carries no unit labels. A `findings.json` that a vendored validator rejects leaves `next` at `report` with
+no command that finishes it (the report refuses by rule: it never derives prose from records upstream rejects; the file is never edited by hand). Not rendered, above. A live agent pass was
+not made for this branch (nothing in it calls an agent).
