@@ -43,7 +43,7 @@ import { VENDOR_DIR, isSafeRelativePath, validateFindingsFile, validateLedgerFil
 // A filter driver is the third way a repo's config runs a command; filterEnv blanks those, and exportTree never
 // asks the target's own repository to check anything out.
 export const SAFE_GIT = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false']
-const git = (dir, args, opts) => rawGit(dir, [...SAFE_GIT, ...args], opts)
+export const git = (dir, args, opts) => rawGit(dir, [...SAFE_GIT, ...args], opts)
 
 export const KNOWN_PROFILES = ['quick', 'standard', 'deep']
 export const SUPPORTED_PROFILES = ['standard']                          // plan section 0: the others wait for PR 9
@@ -67,9 +67,9 @@ export const RUN_STATUSES = ['in_progress', 'complete', 'incomplete']
 export const STEPS = ['init', 'recon', 'seed', 'plan-wave', 'hunt', 'merge-wave', 'critic', 'mint', 'apply-critic', 'consolidate', 'validate', 'write-findings', 'verify', 'report']
 const MAX_SKIPPED_LISTED = 200
 
-class Usage extends Error {}
+export class Usage extends Error {}
 class Refusal extends Error {}
-const refuse = message => { throw new Refusal(message) }
+export const refuse = message => { throw new Refusal(message) }
 
 // ---------- files ----------
 export function writeJson(file, value) {
@@ -109,7 +109,7 @@ function readText(file) {
 
 // A JSON file's value, or undefined when there is no such file. One that is there but unreadable or malformed is
 // a refusal, never "empty".
-function readJson(file) {
+export function readJson(file) {
   const text = readText(file)
   if (text === undefined) return undefined
   try { return JSON.parse(text) } catch (e) { return refuse(`${file} is not valid JSON: ${e.message}`) }
@@ -401,7 +401,7 @@ export function countStatuses(ledger) {
 }
 // A prior confirmed or still-blocked needs_validation record is carried into a planned unit its Phase 3 verifier owns
 // (RECONNAISSANCE.md, "Prior-run input"): the unit stays planned through hunting and is not hunter work.
-const CARRIED = ['prior_confirmed_same_source', 'prior_needs_validation']
+export const CARRIED = ['prior_confirmed_same_source', 'prior_needs_validation']
 const awaitingVerifier = ledger => ledger.filter(u => u.status === 'planned' && CARRIED.includes(u.prior_status)).length
 const HUNTING = ['plan-wave', 'hunt', 'merge-wave', 'critic', 'mint', 'apply-critic']
 const candidateFingerprints = ledger => new Set(ledger.filter(u => u.status === 'candidate').flatMap(u => (Array.isArray(u.result_fingerprints) ? u.result_fingerprints.filter(isStr) : [])))
