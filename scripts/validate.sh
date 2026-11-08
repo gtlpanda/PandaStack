@@ -127,6 +127,12 @@ for f in "${agents[@]}"; do
   done < <(fm_list "$f" skills)
 done
 
+# The audit agents read hostile source: Read, Grep and Glob and nothing else (no Bash, Write, Edit, network or MCP tool).
+for f in graphs/security-audit/agents/*.md; do
+  if [ "$(fm_get "$f" tools)" = "Read, Grep, Glob" ]; then ok "agent $(basename "$f" .md) has only Read, Grep, Glob"
+  else bad "$f: tools must be exactly 'Read, Grep, Glob' (the audit reads hostile source)"; fi
+done
+
 # ---- Commands: a markdown prompt each, no frontmatter required ----
 for f in core/commands/* kit/commands/* graphs/*/commands/*; do
   case "$f" in *.md) [ -s "$f" ] && ok "command $(basename "$f" .md)" || bad "$f is empty" ;; *) bad "$f: a command is a .md file" ;; esac
