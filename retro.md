@@ -2171,8 +2171,9 @@ PR 4 of the `security-audit` graph (plan: `tasks/plan-security-audit.md`, checke
   `budget_cannot_reserve_critics_and_validation`; a unit a verifier owns (a carried prior record) is not hunter work.
   `merge-wave <run> <results>`: results keyed by hunter ID; `disposition` becomes `status`, `checks` become
   `local_checks`, `candidate_fingerprints` become `result_fingerprints`; the vendored validator judges each updated
-  unit alone, so a failed or malformed result returns only that unit to `planned` (owner and evidence cleared, failure
-  counted, `deferred` with PandaStack's own `hunter_result_invalid_twice` after two). Candidates are pooled by
+  unit alone, so a failed or malformed result returns only that unit to `planned` (owner cleared, failure counted,
+  `deferred` with PandaStack's own `hunter_result_invalid_twice` after two); a reviewed path that is not in `tree/`, and
+  a unit whose evidence is over 64 KiB, fail the same way. Candidates are pooled by
   fingerprint, hardening notes kept once per hunter, hunter gaps queued for mint. `apply-critic <run> <critic> <mint>`:
   a reopened `covered`, `candidate` or `blocked` unit has its terminal state archived into `attempts` exactly as
   upstream lists the fields, then goes back to `planned` one wave higher with no live evidence; any other state is named
@@ -2180,17 +2181,20 @@ PR 4 of the `security-audit` graph (plan: `tasks/plan-security-audit.md`, checke
   the whole apply. Carry-forward: `seed` folds in every earlier run `prior-runs.json` calls compatible (validated
   again): evidence and records are kept only while `git diff --quiet <prior commit> <this commit>` says the unit's
   reviewed and starting paths, its boundary file and the record's trace and evidence files are unchanged; changed
-  evidence is dropped and recorded as invalidated; a prior unit recon did not seed is added back.
+  evidence is dropped and recorded as invalidated; a prior unit recon did not seed is added back, and one that only
+  differs from a seeded unit in its refs is that unit. A record is carried only into a planned unit whose prior_status is
+  a verifier's (`CARRIED`); any unit with changed or unvalidated work is hunted instead.
 - `audit-run.mjs`: five helpers exported (`git`, `Usage`, `refuse`, `readJson`, `CARRIED`), and one behavior fix, below.
 - Tests: `audit-ledger-{seed,wave,critic,carry,cli}.test.mjs` and `ledger-fixtures.mjs`; `audit-fixtures.mjs` gained
   `newRun` and `ledgerCli`.
 
 **Numbers (measured).**
-- Non-test change: audit-ledger.mjs 590 lines (473 without comments and blank lines) against the plan's ~350, plus
+- Non-test change: audit-ledger.mjs 631 lines (503 without comments and blank lines) against the plan's ~350, plus
   14 changed lines in audit-run.mjs. Split in commits as the task asked: exports (5 lines), seed + plan-wave + merge-wave
-  + write path (368 lines), apply-critic (+80), carry-forward (+142, with review fixes).
-- Tests: 732 workflow tests before, 818 after (+86: 17 seed, 26 wave, 19 critic, 21 carry, 3 cli), 117 install and 22
-  secret checks unchanged, `TEST: PASS`. The five files take about 11 s in parallel (23 s one after another).
+  + write path (368 lines), apply-critic (+80), carry-forward (+142), then the fixes from the audit below.
+- Tests: 732 workflow tests before, 826 after (+94: 17 seed, 26 wave, 21 critic, 27 carry, 3 cli), 117 install and 22
+  secret checks unchanged, `TEST: PASS`. The five files take 11 s with all five running at once (measured) and about
+  24 s one after another.
 - Mutation check: 49 single-line breaks (the write gate and each of its two halves, step order, scope, the status and
   architecture gates, ranking, grouping, hunter IDs, the budget deferral, each merge-wave rule, the failure count, the
   archive fields, reassignment states, collision handling, queue draining, each git flag and guard in `sourceUnchanged`,
@@ -2199,7 +2203,9 @@ PR 4 of the `security-audit` graph (plan: `tasks/plan-security-audit.md`, checke
   clearing evidence from a unit that has none yet), now deleted; one was a missing test (a unit carries the wave it was
   hunted in, which matters for the archive after a failed first wave) and one was a missing case (an earlier run's
   ledger, not its findings, damaged after init), both added and killed. Restored by script after each; the final
-  suite is the one above.
+  suite is the one above. After the audit's fixes, 14 more single-line breaks of the new code: 12 killed first time, 2
+  survived (a note counted a negative number of dropped proposals; a carried record named the wrong run), both got an
+  assertion and are killed.
 
 **Found while building (each one a test result, not an inference).**
 1. `next` skipped validation of a lead (PR 3, audit-run.mjs:407 and :420 on the base, a bug reachable by this PR).
@@ -2212,18 +2218,19 @@ PR 4 of the `security-audit` graph (plan: `tasks/plan-security-audit.md`, checke
    `--prior` directory can therefore name a file for git to create or empty. `sourceUnchanged` accepts only a 40 or 64
    hex commit ID (tested with `--output=...`, `-p`, `main`, short and uppercase values); the value stays unchecked in
    `prior-runs.json` (not fixed there: PR 3).
-3. `waveAllowance('standard', Infinity)` returns `hunters: null` (`Infinity - 2 - Infinity` is NaN), so an unset budget
-   cannot be passed to it. `plan-wave` treats `budget: null` as no cap itself.
+3. `waveAllowance('standard', Infinity)` returns `NaN` for `validation` and `hunters` (`Infinity - 2 - Infinity`; run by
+   hand, JSON prints them as null), so an unset budget cannot be passed to it. `plan-wave` treats `budget: null` as no cap
+   itself.
 4. Nothing writes `agents_spent` or `agents_planned`, and nothing can mark a run `incomplete` (audit-run.mjs owns
    run-metadata.json and has no command for it). `plan-wave` reads `agents_spent`, so its budget math is only as good as
    whoever saves it (PR 5 or 6). Left undone, with their consumers: the seed retry that ends `incomplete:
    ledger_validation_failed` (plan:427-429), `critic_budget_exhausted` and `validation_budget_exhausted`
    (SKILL.md, "Cost budget"). Not added as an `updateMetadata` here: it would move a shared file's ownership (SHARED_FILE_OWNERS).
 5. Per-unit validity is not whole-ledger validity: the validator checks nested arrays (1,000) and text (4,096) per field, and the
-   CLI adds a 5 MiB read limit, so one unit with 900 valid checks yields a ledger the CLI rejects (measured). A hunter
-   result like that makes `merge-wave` refuse the whole wave and leave every file as it was; the session can pass that
-   hunter's result as null and merge again (not run). Hardening notes are capped at 20 entries of 1,000 characters
-   because they are the one field this module adds from hunter text.
+   CLI adds a 5 MiB read limit, so one unit with 900 valid checks yields a ledger the CLI rejects (measured), and one just
+   under the limit freezes every later write (the audit, below). A unit's evidence is now capped at 64 KiB (a bigger
+   result returns that unit to `planned`), and hardening notes at 20 entries of 1,000 characters. The file can still
+   reach 5 MiB the honest way, with thousands of units (upstream's own figure: 2,000 to 5,000).
 
 **Plan and verify-file claims that were wrong, imprecise, or needed an interpretation.**
 - plan:459 and RECONNAISSANCE.md:139 ask for "the critic's source-backed `reassignment_reason`", but the critic JSON a
@@ -2233,8 +2240,10 @@ PR 4 of the `security-audit` graph (plan: `tasks/plan-security-audit.md`, checke
 - plan:457-460 against HUNTING.md:247 ("receives an `in_progress` unit with empty live evidence"): both hold.
   `apply-critic` returns the unit to `planned` (the table requires null owner and empty evidence there) and `plan-wave`
   makes it `in_progress` with a fresh owner. Tested end to end, three waves.
-- plan:447 names `hunter_result_invalid_twice` among reason strings; it is not upstream's (no such text in the vendored
-  files), and PR 3's test pins `REASONS` to exactly upstream's five, so it is a separate PandaStack constant.
+- plan:447's reason string, `hunter_result_invalid_twice`, is PandaStack's, not upstream's (no such text in the vendored
+  files), and PR 3's test pins `REASONS` to exactly upstream's five, so it is a separate PandaStack constant. Upstream
+  says only that a failed result leaves the unit `planned`; deferring after two is this graph's guard against a unit no
+  hunter can answer.
 - verify:193 (change 12) and plan:446: no unit-level pre-check list is needed. The vendored `validateDocument` accepts a
   one-unit ledger, so `merge-wave` and minting run each updated unit through it alone and fail that unit (not the wave)
   on any error: text limits, canonical refs, owned paths, the state table, fresh owners, all upstream's own. Verify's
@@ -2250,8 +2259,9 @@ PR 4 of the `security-audit` graph (plan: `tasks/plan-security-audit.md`, checke
   repository, and a guard for an empty path list (git reads it as the whole tree, and `git diff --quiet X X` with none
   exits 0: "same").
 - plan:553-555 says the cases follow RECONNAISSANCE.md:59-71 exactly, but upstream's `prior_status` list has no value for a
-  needs_validation lead whose source changed or for a unit a stopped run never reached. They are `prior_blocked` and
-  `prior_deferred` (the nearest), with the real reason in `prior_invalidated`; a same-source prior-covered unit is
+  needs_validation lead whose source changed, for a unit a stopped run never reached, or for a unit whose only record was
+  rejected. They are `prior_blocked`, `prior_deferred` and (rejected, source unchanged) `prior_covered_same_source` with
+  the claim in `suppressed_claims`, the nearest in each case, with the real reason in `prior_invalidated`; a same-source prior-covered unit is
   `planned`, ranked last, because the state table has no "covered, awaiting the critic" and PR 3's `next` treats every other
   planned unit as hunter work. Upstream leaves that choice to the critic (SKILL.md, "Coverage and prior runs", 5).
 - plan:419-421 does not give the recon or mint contract. This PR defines it: units with `canonical_refs`, labels, paths,
@@ -2265,9 +2275,50 @@ PR 4 of the `security-audit` graph (plan: `tasks/plan-security-audit.md`, checke
   command saves the `recon`, `hunt`, `critic` or `mint` steps or sets `critic_kind` (`advanceState` is a function). The tests
   call it; the session needs one (PR 5).
 
+**Found by an independent audit (qa-auditor, read-only; its probes are scripts outside the repo), each reproduced by a
+failing test before its fix.**
+1. High: a later run that never closed a unit (scoped, stopped, `out_of_scope`) won its `coverage_id` and hid an earlier run's
+   confirmed record, so run 3 carried nothing. Leads are now the union over every earlier run holding the unit; the
+   unit's state is the newest run's, a later record replaces an earlier one for a fingerprint.
+2. High: a hunter result of 1,000 checks (each field within upstream's limits) left the ledger at 5,242,277 of 5,242,880
+   bytes, after which every `apply-critic` was refused. Fixed with the 64 KiB cap above; my first draft's claim that a
+   refused merge was the only outcome was wrong.
+3. Medium: `apply-critic` emptied the gap queue before the ledger rename, and counted proposals from the queue, so a
+   crash left a rerun refused ("mint returned 1 unit for 0 proposals") and, before the rename, lost the gaps. The queue is
+   cleared after the rename, and units already in the ledger no longer count against the proposals. The retro's earlier
+   sentence that the apply is idempotent after a crash did not hold for this window; it does now (tested).
+4. Medium: a prior unit with the labels of a seeded unit under a different ref (a renamed file) was force-added and the
+   validator refused the seed on every retry. An earlier unit belongs to the unit with its ID or, failing that, its
+   labels; the note says which.
+5. Medium: a unit with a carried confirmed record and a changed needs_validation lead was labelled `prior_blocked`
+   (hunter work) while its record sat in `candidates.json` with no verifier-owned unit, so `next` skipped validating it.
+   A record is carried only into a unit whose label is a verifier's; a changed rejected claim is current work too.
+6. Medium: `git replace` refs made edited source look unchanged to `sourceUnchanged` (a hostile repository can name
+   one). It runs `--no-replace-objects` now. Not fixed in PR 3 (found while checking): `init` records `source_ref.tree` from
+   `git rev-parse HEAD^{tree}` in the target, so with `refs/replace/<head>` it holds the replacement's tree (measured:
+   `20e50a07feff` against the real `313eba2d168c`) while `tree/` holds the real files. Only that metadata field is wrong;
+   `SAFE_GIT` is drift-tested against hunt files, so it was left.
+7. Low: a prior unit whose lead had no record in findings.json (the run stopped before validation) was labelled
+   `prior_covered_same_source` and the lead dropped. It is `prior_blocked` with the lead kept in `prior_leads` (verdict
+   null), so a critic can resolve it.
+8. Low: `merge-wave` accepted `reviewed_paths` that are not in the snapshot, and `sourceUnchanged` then calls a path in
+   neither commit "same". The unit now returns to `planned`.
+Tried with nothing found (the audit's own probes): about 2,000 field and type mutations of hunter results, critic and
+mint inputs and recon input (no `in_progress` left, no refusal that changed a file, `next` and `check` sane), five waves of
+failed, deferred and reopened units (the archive strictly increasing, no repeated owner), budget arithmetic with
+`agents_spent` above the budget.
+
+**For PR 6 and the skill.** `plan-wave` always uses upstream's "when in doubt" validation reserve (30% of the balance after
+the critics): the candidates a run will end with are not known while it is hunting, and a count of those found so far
+would shrink the reserve exactly when more are likely. A critic that resolves a carried prior lead marks it resolved on
+its unit but leaves the carried record in `candidates.json`, so it is still validated (conservative). Recon (or a mint) that repeats
+one semantic tuple under two canonical IDs fails upstream's validator ("semantic tuple already uses coverage ID") and
+refuses the whole seed or apply with that message; the recovery is to change recon's labels or refs, never to merge.
+
 **Unchecked on purpose.** Block-reference existence (above). `agents_spent` accounting (item 4). A `local` check is
-refused outright until PR 10 can prove an artifact was promoted. Several earlier runs name one coverage_id: the later
-run wins (order in `prior-runs.json`), not tested against a clock. A very large earlier ledger runs two validators and
+refused outright until PR 10 can prove an artifact was promoted. Several earlier runs holding one unit: the newest run
+(order in `prior-runs.json`: a repository's own runs by number, then `--prior`) gives its state; a clock is not consulted. A very large earlier ledger runs two validators and
 one `git diff` per unit and per record (cached by path set); not timed. `candidates.json`, `uncovered.json` and the
-ledger are three files with one rename between them: a crash between leaves a state a rerun repairs (the merge and the
-apply are idempotent, tested), never a corrupt ledger.
+ledger are three files with one rename between them: nothing is written before upstream's validator passes the new ledger,
+and a merge or an apply that died after writing the ledger and before saving its step is finished by running it again
+(tested for both); a crash before the rename leaves the old files. Never a corrupt ledger.
