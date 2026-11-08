@@ -1616,3 +1616,56 @@ tuned status line survives uninstall, and a linked settings.json with `--skip=bi
 - 6 check-refs tests, 26 hunt-derived and edge tests, and 17 install checks (section 16).
 - 6 CLAUDE.md validate rules, plus the cap.
 - The suite is 646 workflow tests, 117 install checks, and 22 secret checks, 0 failed.
+
+## 33. autobuild moves in and runs /bughunt before it reports done (2026-11-07)
+
+**What changed.**
+- **The move.** `~/.autobuild` (its own repo, no remote) came in with history: a `git subtree add` to
+  `graphs/autobuild/tool/`, so all 9 of its commits are kept.
+  - The `/autobuild` skill moved to `graphs/autobuild/skills/autobuild/`.
+  - `install.sh` links `bin/autobuild` into `~/.local/bin`. The new `PATH_TOOLS` list and
+    `dest_of` give backups, the manifest and `--skip` one name for it: `local-bin/autobuild`.
+    A link already in the way is backed up and restored on uninstall.
+  - `scripts/test-autobuild.sh` runs its node:test suite inside `scripts/test.sh`, so CI runs it too.
+  - validate shellchecks `graphs/*/tool/bin/*`.
+- **One landing for unattended hunts.** `graphs/hunt/skills/bughunt/land.mjs` holds everything
+  around a fix-mode hunt session except running it:
+  - intake and the fix worktree;
+  - the prompt;
+  - reading what the session saved;
+  - the landing checks;
+  - the fast-forward;
+  - the summary line.
+
+  `/build-app`'s driver switched to it as a pure refactor, and its 646 workflow tests pass
+  unchanged. `checks.mjs` and `finish.mjs` re-export what they used to define.
+- **autobuild hunts before done.** Once every feature passes and the final review has run,
+  `lib/bughunt.mjs` runs `/bughunt --fix` over the whole branch against its base, in one headless
+  session.
+  - That session uses /build-app's settings: its guard opens only the hunt's state dir, and there is
+    no 10-minute background ceiling. The loop's review settings would have blocked the Workflow tool.
+  - The loop lands the hunt through `land.mjs`. Its frozen list is every existing file under
+    autobuild's frozen paths, so new regression tests may be added but no existing test may change.
+  - The result goes into one `BUGHUNT` line in PROGRESS.md.
+  - Exit 0 only on `pass`; exit 12 for a human otherwise.
+  - Off switches: `"bughunt": false` or `AUTOBUILD_BUGHUNT=0`. `bughuntBase` sets the base, and its
+    budget and timeout are in `limits`.
+
+**Why the whole branch.** A hunt over the whole branch is what a PR from it would merge, so the
+review gate accepts that PR. Tested: the gate's own `review-status` reports `hunted: true,
+disposition: pass` on the landed head.
+
+**Found along the way.**
+- The test projects had no base branch, so intake failed with "resolving master failed". A real
+  project can be in the same state. The loop now says how to fix it (`bughuntBase`).
+- The fake `claude`'s `build` step ran `git add -A`, which committed the fake's own script files.
+  The hunt's verify then saw them change. The test project now ignores them, which replaced a
+  per-test helper (14 call sites) that did the same.
+
+**Measured.**
+- Tests: autobuild 31 → 36 (5 hunt scenarios); install 117 → 126.
+- Mutations caught:
+  - dropping the PATH link fails 2 install checks;
+  - accepting unverified fix commits fails one test in each caller (autobuild and /build-app).
+- Not proven: the guard's new kit-path pattern. Every case I wrote is already denied by the
+  "outside the project" rule, so that line is a backstop, as `.autobuild` was before it.

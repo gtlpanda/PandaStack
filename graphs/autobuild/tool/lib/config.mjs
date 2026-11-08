@@ -22,6 +22,8 @@ export const DEFAULTS = {
   probeModel: "claude-haiku-5-5",
   claudeBin: "claude",
   hooks: "inject",
+  bughunt: true,
+  bughuntBase: null,
   limits: {
     maxIterations: 40,
     maxTurns: 200,
@@ -30,6 +32,8 @@ export const DEFAULTS = {
     noProgressLimit: 3,
     reviewEvery: 5,
     finalReview: true,
+    bughuntBudgetUsd: 30,
+    bughuntTimeoutMinutes: 360,
     reviewMaxTurns: 80,
     reviewBudgetUsd: 5,
     maxStopBlocks: 6,

@@ -8,8 +8,11 @@
 //   { "ok": true }          a successful no-op answer (the usage probe, or a review that commits nothing)
 //   { "review": true }      a review that appends a finding to PROGRESS.md and commits it as chore(review)
 //   { "hang": true }        write its pid to <script>.pid, then run until killed
+//   { "hunt": ... }         the bug hunt session, acted out by /build-app's fake (its format, its
+//                           <script>.hunt.calls record): fix commits, then a real findings ledger
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 
 const scriptFile = process.env.FAKE_CLAUDE_SCRIPT;
 const steps = JSON.parse(readFileSync(scriptFile, "utf8"));
@@ -17,6 +20,14 @@ const step = steps.shift() ?? { ok: true };
 writeFileSync(scriptFile, JSON.stringify(steps));
 appendFileSync(`${scriptFile}.calls`, `${JSON.stringify({ step, args: process.argv.slice(2).filter((arg) => arg.startsWith("--")) })}\n`);
 
+if (step.hunt) {
+  const huntScript = `${scriptFile}.hunt`;
+  writeFileSync(huntScript, JSON.stringify([step]));
+  writeFileSync(`${huntScript}.n`, "0");
+  const fake = path.resolve(import.meta.dirname, "..", "..", "..", "build", "tests", "fixtures", "fake-claude.mjs");
+  execFileSync(process.execPath, [fake, ...process.argv.slice(2)], { stdio: "inherit", env: { ...process.env, FAKE_CLAUDE_SCRIPT: huntScript } });
+  process.exit(0);
+}
 const result = (fields) => console.log(JSON.stringify({ type: "result", num_turns: 1, total_cost_usd: 0.01, permission_denials: [], ...fields }));
 if (step.limit) {
   result({ subtype: "error_during_execution", is_error: true, result: step.limit });

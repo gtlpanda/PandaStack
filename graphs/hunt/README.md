@@ -31,6 +31,14 @@ in:
   the last hunt, and reports. It never posts to the PR.
 - **The review gate** (`gate.mjs`, below) makes a finished hunt the price of
   opening a PR, and a `pass` the price of merging one, in every repo.
+- **autobuild** runs it in fix mode over the whole branch before it reports
+  done (`graphs/autobuild/README.md`).
+- **`land.mjs`** is how an unattended caller lands a fix-mode hunt, so
+  `/build-app` and autobuild apply the same checks: intake and the fix
+  worktree, the session's prompt, reading what it saved, the checks (every
+  commit a verified `bughunt: fix F<n>`, no frozen file changed, a clean
+  worktree, the caller's own verify), the fast-forward, and the summary line.
+  The caller runs the session itself.
 
 ## The review gate
 

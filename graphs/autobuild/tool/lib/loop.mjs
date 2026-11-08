@@ -8,7 +8,11 @@
 //   4 frozen files changed       5 preflight failed           6 total budget reached
 //   7 max iterations reached     8 usage limit resets too far away (rerun later)
 //   9 billing / spend limit      10 auth problem              11 another loop is running
+//   12 the bug hunt needs a human (findings left open, or it could not run or land)
 //   130 interrupted
+//
+// Once every feature passes (and the final review ran), lib/bughunt.mjs runs /bughunt --fix over
+// the branch and lands its verified fixes before the loop reports done.
 
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, openSync, closeSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -16,6 +20,7 @@ import path from "node:path";
 import { statePath } from "./config.mjs";
 import { countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures, blockedClosure } from "./features.mjs";
 import { frozenChanges } from "./gate.mjs";
+import { huntEnabled, runBughunt, stopHunt } from "./bughunt.mjs";
 import { classifyOutcome, parseResetTime, planLimitWait } from "./limits.mjs";
 import { buildEnv, git, sh } from "./proc.mjs";
 import { clearStopFailure, readStopFailure, writeSession } from "./session.mjs";
@@ -36,12 +41,14 @@ function track(child) {
 
 /** Ends every running session: SIGTERM, then SIGKILL for any still running after 30 s. */
 async function stopSessions() {
+  const hunt = stopHunt();
   const closed = [...sessions].map((child) => new Promise((resolve) => {
     child.once("close", resolve);
     child.kill("SIGTERM");
   }));
   await Promise.race([Promise.all(closed), sleep(30_000)]);
   for (const child of sessions) child.kill("SIGKILL");
+  await hunt;
 }
 
 /** The newest commit a review session made on this branch, or null when there is none. */
@@ -146,6 +153,14 @@ export async function runLoop(config, options = {}) {
             log(`review: final review, ${completedSinceReview} features passed since ${lastReviewSha.slice(0, 8)} without a review`);
             await reviewIfDue({ final: true });
             if (interrupted) return 130;
+          }
+          if (huntEnabled(config)) {
+            const hunted = await runBughunt(config, { log, runId, stopped: () => interrupted });
+            if (interrupted) return 130;
+            if (hunted !== 0) {
+              log(`every feature passes, but the bug hunt needs attention (exit ${hunted}); see the bug hunt lines above and ${config.progressFile}.`);
+              return hunted;
+            }
           }
           log("every feature passes. Done.");
           return 0;

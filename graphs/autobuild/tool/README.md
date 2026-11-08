@@ -4,7 +4,7 @@ An autonomous, test-gated build loop for Claude Code projects.
 
 You plan once: a spec, a feature list, and **frozen acceptance tests written before the code**. Then `autobuild run` builds one feature per fresh headless session, until everything passes or a human is needed. A Stop hook keeps each session working until the full gate passes and the feature is committed. A guard keeps sessions away from the tests, the harness and anything irreversible.
 
-Set up a new project with the `/autobuild` skill (`~/.claude/skills/autobuild/SKILL.md`).
+Set up a new project with the `/autobuild` skill (`graphs/autobuild/skills/autobuild/`). The tool ships in PandaStack (`graphs/autobuild/tool/`); `install.sh` links `bin/autobuild` into `~/.local/bin`. Its history before the move is kept (a `git subtree` import).
 
 ## Commands
 
@@ -48,6 +48,24 @@ After every `reviewEvery` passing features, a review session reads the code sinc
 - **The starting point is the last `chore(review):` commit.** A review that ends without that commit (a cap, a crash) does not move it, so the next review covers the missed range too. A custom `review.prompt` must commit with that subject.
 - **A restart keeps the schedule.** The loop counts features that pass now but did not at that commit; if a review is already due, it runs before the first feature.
 - **Caps.** `reviewMaxTurns` and `reviewBudgetUsd`. A review that hits either ends without its commit, so the next review covers its range again.
+
+## The bug hunt before done
+
+When every feature passes (and the final review ran), the loop runs `/bughunt --fix` over the build branch against its base: the whole branch, which is what a pull request from it would merge, so PandaStack's review gate accepts that PR once the hunt passes. `lib/bughunt.mjs` does this, through the hunt's landing module (`graphs/hunt/skills/bughunt/land.mjs`, shared with `/build-app`):
+
+1. **Intake and a fix worktree** on `bughunt/<key>`, inside `.git`. What an earlier hunt left is kept as `attempt/bughunt-<stamp>`, never lost.
+2. **One headless session** runs the hunt graph in fix mode. It uses `/build-app`'s session settings (its guard opens only the hunt's state dir in `.git`; background work is not cut off at 10 minutes), not the review settings, which forbid the Workflow tool. Caps: `limits.bughuntBudgetUsd` (default $30) and `limits.bughuntTimeoutMinutes` (360).
+3. **The loop's own checks**, before anything lands:
+   - every commit is a `bughunt: fix F<n>` the hunt's ledger calls verified;
+   - no file that already existed under a frozen path changed (new regression tests may be added);
+   - the fix worktree is clean;
+   - `autobuild check` passes on the fixes.
+4. **A fast-forward** of the build branch, then one `PROGRESS.md` line, committed as `chore(bughunt): <disposition>`: `BUGHUNT <date>: <disposition>; fixed F1, …; open F3, …; report <path>`.
+
+Exit 0 only when the hunt's disposition (after its fixes) is `pass`. Anything else is exit 12 for a human: findings left open, a lens not covered, or a hunt that could not run or land (the log line says which, and the hunt's branch is kept). A usage limit, billing or auth problem during the hunt exits 8, 9 or 10. A hunt runs once per head: rerunning `autobuild run` at the same commit reports the earlier result.
+
+- **The base** is the repo's default branch (`origin/HEAD`, else `main`, else `master`); set `bughuntBase` when the branch merges elsewhere. With no base to compare against, the loop exits 12 and says so.
+- **Off switch:** `"bughunt": false` in `autobuild.json`, or `AUTOBUILD_BUGHUNT=0` for one run.
 
 ## Usage limits: a pause, not a failure
 
@@ -106,6 +124,7 @@ See `templates/autobuild.json`. Defaults are in `lib/config.mjs`.
 | 9 | Billing |
 | 10 | Auth |
 | 11 | Another loop is running |
+| 12 | The bug hunt needs a human (findings left open, or it could not run or land) |
 | 130 | Interrupted |
 
 ## Limits and caveats
@@ -113,4 +132,4 @@ See `templates/autobuild.json`. Defaults are in `lib/config.mjs`.
 - **The guard is a tripwire, not a sandbox.** It inspects commands with patterns, and permission rules can be bypassed, so a determined session could find a gap. The independent frozen-file check after every session is the backstop.
 - **Stopping relies on Claude Code ending its own tool processes.** The loop stops the session; whether `claude` also ends a test run it started in its own process group is untested.
 - **The machine must stay awake.** If the host sleeps, the loop sleeps. On WSL, keep Windows from sleeping.
-- **Hook paths point at `~/.autobuild`.** A project using `hooks: "project"` with wrapper files depends on this install being present.
+- **Hook paths point at the PandaStack checkout.** Injected hooks (the default) are found from wherever the tool runs. A project using `hooks: "project"` with wrapper files names `graphs/autobuild/tool/hooks/` in that checkout; moving the checkout breaks those wrappers.
