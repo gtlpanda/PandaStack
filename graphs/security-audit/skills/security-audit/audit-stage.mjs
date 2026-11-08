@@ -21,7 +21,7 @@
 // A stage lives in stages/<NN>-<name>/: input.json and run.js (plan), result.json (apply, written last, so a stage without one
 // is planned and not applied). Every effect of apply is idempotent and the step is saved last, so a crash leaves the step behind its
 // effects, never ahead: applying the same result again finishes the stage, and changes nothing if it had finished.
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { isDeepStrictEqual } from 'node:util'
 import { dirname, join, resolve } from 'node:path'
@@ -29,7 +29,8 @@ import { fileURLToPath } from 'node:url'
 import { REASONS, RUNNERS, Usage, advanceState, appendEvent, formatNext, loadRun, markIncomplete, nextStep, readJson, recordSpend, reconGate, refuse, waveAllowance, writeJson } from './audit-run.mjs'
 import { applyCriticProblems, criticBudgetExhausted, criticResultProblems, deferHunting, seedProblems, stopHunting } from './audit-ledger.mjs'
 import { RECON_IDS, checkFacts } from './audit-facts.mjs'
-import { BlockError, companions, ordinary, parts, resolve as resolveBlock } from './blocks.mjs'
+import { companions, ordinary, parts, resolve as resolveBlock } from './blocks.mjs'
+import { CLIP, architectureOf, baseInput, blockText, clipText, clipValue } from './audit-inputs.mjs'
 
 // Found from the real file, so the install symlink (~/.claude/skills/security-audit) does not matter, as in upstream.mjs.
 const REPO_ROOT = join(dirname(realpathSync(fileURLToPath(import.meta.url))), '..', '..', '..', '..')
@@ -131,17 +132,6 @@ export function reconInput(runDir, meta, part) {
 const CRITIC_SECTION = 'HUNTING.md#Coverage-critic waves'
 const HUNT_PARTS = ['hunterMethod', 'promotion', 'validationRules', 'hunterResult', 'schema_confirmed', 'schema_needs_validation']
 
-function baseInput(runDir, meta, stage) {
-  return { stage, part: stage, tree: join(runDir, 'tree'), maxParallel: meta.limits.max_parallel, execution: { capability: meta.execution_capability, blockers: meta.execution_blockers } }
-}
-function architectureOf(runDir) {
-  const file = join(runDir, 'architecture.md')
-  if (!existsSync(file)) refuse('architecture.md is missing: seed writes it')
-  return readFileSync(file, 'utf8')
-}
-const blockText = ref => {
-  try { return resolveBlock(ref).text } catch (e) { if (e instanceof BlockError) return refuse(`the ledger names a block that does not resolve: ${e.message}`); throw e }
-}
 // hunter IDs h<wave>-<NN>, in numeric order (so h1-100 follows h1-99)
 const hunterOrder = id => { const m = /^h(\d+)-(\d+)$/.exec(id); return m ? [Number(m[1]), Number(m[2])] : [Infinity, 0] }
 const byHunter = (a, b) => { const [x, y] = [hunterOrder(a.agent_id), hunterOrder(b.agent_id)]; return x[0] - y[0] || x[1] - y[1] || (a.agent_id < b.agent_id ? -1 : 1) }
@@ -173,17 +163,6 @@ export function huntInput(runDir, run, next) {
     ...baseInput(runDir, run.meta, 'hunt'), wave: next.wave, architecture_md: architectureOf(runDir), hunters,
     blocks: Object.fromEntries(refs.map(r => [r, blockText(r)])), parts: Object.fromEntries(HUNT_PARTS.map(k => [k, p[k].text])),
   }
-}
-
-// What the critic and the minter are sent of text that came from agents reading hostile source: a hunter may fill a unit with up to 64 KiB of evidence, so
-// long text and long lists are cut here, never passed whole. The cut is visible (a unit says `truncated`, a text ends in an ellipsis).
-const CLIP = { text: 300, list: 20, keys: 20, depth: 4 }
-const clipText = v => (typeof v === 'string' && v.length > CLIP.text ? `${v.slice(0, CLIP.text)}…` : v)
-function clipValue(v, depth = 0) {
-  if (typeof v === 'string') return clipText(v)
-  if (Array.isArray(v)) return depth >= CLIP.depth ? null : v.slice(0, CLIP.list).map(x => clipValue(x, depth + 1))
-  if (isObj(v)) return depth >= CLIP.depth ? null : Object.fromEntries(Object.entries(v).slice(0, CLIP.keys).map(([k, x]) => [clipText(k), clipValue(x, depth + 1)]))
-  return v
 }
 
 // A unit as the critic needs it: the semantic fields, the block map, the state and the evidence's shape (HUNTING.md: the critic checks units "closed without
