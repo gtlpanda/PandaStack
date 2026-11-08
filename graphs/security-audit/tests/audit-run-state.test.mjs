@@ -530,6 +530,14 @@ await test('markIncomplete sets run_status and the reason once, keeps the first 
   const before = readFileSync(join(done, 'run-metadata.json'), 'utf8')
   assert.throws(() => markIncomplete(done, REASONS.critic), /a complete run cannot be marked incomplete/)
   assert.equal(readFileSync(join(done, 'run-metadata.json'), 'utf8'), before)
+  // only the report's own call marks a complete run down, by naming it: an incomplete run still keeps its first reason, and the reason must still be text
+  assert.equal(markIncomplete(done, 'findings_rejected_by_validator', { downgrade: true }), 'findings_rejected_by_validator')
+  assert.deepEqual([meta(done).run_status, meta(done).incomplete_reason], ['incomplete', 'findings_rejected_by_validator'])
+  assert.equal(markIncomplete(done, REASONS.critic, { downgrade: true }), 'findings_rejected_by_validator', 'the first reason stands, downgrade or not')
+  assert.throws(() => markIncomplete(init([mkRepo(), '--full']).runDir, '', { downgrade: true }), TypeError)
+  const stillGoing = init([mkRepo(), '--full']).runDir
+  assert.equal(markIncomplete(stillGoing, REASONS.critic, { downgrade: true }), REASONS.critic, 'downgrade changes nothing for a run in progress')
+  for (const flag of [1, 'yes', {}, [true], 'true']) { const d = init([mkRepo(), '--full']).runDir; writeJson(join(d, 'run-metadata.json'), { ...meta(d), run_status: 'complete' }); assert.throws(() => markIncomplete(d, 'x', { downgrade: flag }), /a complete run cannot be marked incomplete/, `${JSON.stringify(flag)} is not the flag`) }
 })
 await test('markIncomplete refuses a reason that is not text and a directory that is not a run, and changes nothing', () => {
   const runDir = init([mkRepo(), '--full']).runDir

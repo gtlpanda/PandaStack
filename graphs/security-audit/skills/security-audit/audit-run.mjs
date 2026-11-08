@@ -144,12 +144,14 @@ export function recordSpend(runDir, key, invocations) {
 // Marks the run incomplete with the reason that stopped it (upstream's reason strings, REASONS, or a gate's own), which the report then
 // discloses: a run never ends complete by silence. The first reason stands, so a second gate cannot rewrite why the run stopped, and a
 // complete run is never marked down. Returns the standing reason. run-metadata.json has one writer: this module.
-export function markIncomplete(runDir, reason) {
+// `downgrade` is for one caller and one reason: the report finding that a file complete-check passed is now one a vendored validator rejects, so the run's claim of
+// completeness is false (the only way a complete run is ever marked down; every other caller refuses it).
+export function markIncomplete(runDir, reason, { downgrade = false } = {}) {
   if (typeof reason !== 'string' || reason.trim() === '') throw new TypeError(`an incomplete_reason is non-empty text, not ${JSON.stringify(reason)}`)
   const file = join(runDir, 'run-metadata.json')
   const meta = readJson(file)
   if (meta === undefined) refuse(`${runDir} has no run-metadata.json: it is not a run directory`)
-  if (meta.run_status === 'complete') refuse('a complete run cannot be marked incomplete')
+  if (meta.run_status === 'complete' && downgrade !== true) refuse('a complete run cannot be marked incomplete')
   if (meta.run_status === 'incomplete') return meta.incomplete_reason
   writeJson(file, { ...meta, run_status: 'incomplete', incomplete_reason: reason })
   return reason
@@ -350,6 +352,9 @@ export const REASONS = Object.freeze({
 // PandaStack's own reason strings, which are not upstream's five (so not in REASONS): a ledger or findings.json a vendored validator would not pass, ending the run.
 export const LEDGER_FAILED = 'ledger_validation_failed'
 export const FINDINGS_FAILED = 'findings_validation_failed'
+// The report found a file upstream's validator rejects: written by hand, or by a validator that changed under it (nothing this graph writes is unvalidated).
+export const FINDINGS_REJECTED = 'findings_rejected_by_validator'
+export const LEDGER_REJECTED = 'ledger_rejected_by_validator'
 export const RECON_CALLS = 4
 // PandaStack's own call: the synthesizer reads the four reports and writes the ledger units. Upstream's parent does that work, so SKILL.md's
 // "four baseline reconnaissance calls" leave it out; a gate without it passed budgets that were spent before the first hunter (found by the

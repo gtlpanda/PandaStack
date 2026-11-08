@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import { REPORT_FILES, buildReports, reportContext, writeReport } from '../skills/security-audit/audit-report.mjs'
-import { markIncomplete, STATUSES } from '../skills/security-audit/audit-run.mjs'
+import { advanceState, markIncomplete, STATUSES } from '../skills/security-audit/audit-run.mjs'
 import { audit, ENV, meta, sh } from './audit-fixtures.mjs'
 import { DECISIONS, META, NV, RJ, CF, STATE, TREE_FILES, UNIT, fixtureRun } from './report-fixtures.mjs'
 import { atVerify, next, passed, verifyRound } from './verdict-fixtures.mjs'
@@ -324,23 +324,91 @@ await test('a run still in progress when the report is asked for is decided firs
   assert.match(readFileSync(join(dir, 'REPORT.md'), 'utf8'), /What went wrong:\n\n(- .*\n)*- record "fp-a" has no decision/, 'the problems complete-check found are in the report, not only its name')
   assert.equal(next(dir), 'NEXT: done status=incomplete reason=complete_check_failed')
 })
-await test('report writes nothing when it is not the next step, or when findings.json or the ledger is there and a vendored validator rejects it', () => {
+await test('report writes nothing when it is not the next step', () => {
   const early = fixtureRun({ meta: META(), state: STATE({ last: 'validate' }), ledger: [UNIT('a')] })
   assert.throws(() => writeReport(early), /report is not the next step of this run: NEXT: write-findings/)
   assert.deepEqual(REPORT_FILES.filter(f => existsSync(join(early, f))), [])
-  const bad = fixtureRun({ ledger: [UNIT('a')], findings: [NV('fp-a')], critic: CRITIC_DONE })
-  writeFileSync(join(bad, 'findings.json'), JSON.stringify([{ verdict: 'confirmed', fingerprint: 'x' }]))
-  assert.throws(() => writeReport(bad), /upstream's validator did not pass .*findings\.json \(FAIL: \d+ validation error\(s\)\): prose is never derived from records it rejects/)
-  assert.deepEqual(REPORT_FILES.filter(f => existsSync(join(bad, f))), [])
-  assert.equal(next(bad), 'NEXT: done status=complete'.replace('done status=complete', 'report run=helper'), 'the step is not saved')
-  const badLedger = fixtureRun({ ledger: [UNIT('a')], findings: [], critic: CRITIC_DONE })
-  const l = JSON.parse(readFileSync(join(badLedger, 'coverage-ledger.json'), 'utf8')); l[0].coverage_id = 'tampered'
-  writeFileSync(join(badLedger, 'coverage-ledger.json'), JSON.stringify(l))
-  assert.throws(() => writeReport(badLedger), /did not pass .*coverage-ledger\.json/)
-  assert.deepEqual(REPORT_FILES.filter(f => existsSync(join(badLedger, f))), [])
-  for (const content of ['{', '"x"', '{}', 'null', '7']) {
-    writeFileSync(join(bad, 'findings.json'), content)
-    assert.throws(() => writeReport(bad), /./, content)
+  const done = fixtureRun({ ledger: [UNIT('a')], findings: [NV('fp-a')], critic: CRITIC_DONE, state: STATE({ last: 'report' }) })
+  assert.throws(() => writeReport(done), /report is not the next step of this run: NEXT: done status=complete/)
+})
+// A findings.json (or ledger) a vendored validator rejects at `report`. Nothing the pipeline writes is rejected (every write is validated first), so this is a file changed by hand
+// or a validator that changed under it: the report is still the one way forward, and it discloses it instead of leaving `next` at `report` with no command that finishes.
+const corrupt = (runDir, file, edit) => { const f = join(runDir, file); const v = JSON.parse(readFileSync(f, 'utf8')); edit(v); writeFileSync(f, JSON.stringify(v, null, 2)) }
+const atReport = async () => {
+  const run = await atVerify([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }])
+  assert.equal((await verifyRound(run.runDir, (l, item) => passed(item))).apply.status, 0)
+  assert.equal(next(run.runDir), 'NEXT: report run=helper')
+  return run
+}
+await test('a findings.json that a vendored validator rejects at the report is disclosed, not a dead end: the run is incomplete with a reason, no record of the file is reported, every candidate is unresolved, and next says done', async () => {
+  const { runDir } = await atReport()
+  corrupt(runDir, 'findings.json', f => { f[0].severity = { overall_severity: 'high' } })   // a needs_validation record may not carry a severity
+  assert.equal(meta(runDir).run_status, 'complete', 'verify\'s last round completed it, with a valid file')
+  const out = writeReport(runDir)
+  assert.equal(out.summary, 'report status=incomplete confirmed=0 needs_validation=0 rejected=0 unresolved=2')
+  assert.match(out.notes.join('\n'), /upstream's validator rejected findings\.json \(FAIL: \d+ validation error\(s\)\)/)
+  assert.match(out.notes.join('\n'), /the run is no longer complete \(findings_rejected_by_validator\)/)
+  assert.deepEqual([meta(runDir).run_status, meta(runDir).incomplete_reason], ['incomplete', 'findings_rejected_by_validator'], 'a complete run is marked down for exactly this reason')
+  assert.equal(next(runDir), 'NEXT: done status=incomplete reason=findings_rejected_by_validator')
+  const text = readFileSync(join(runDir, 'REPORT.md'), 'utf8')
+  assert.match(text, /\*\*INCOMPLETE\*\* \(`findings_rejected_by_validator`\)/)
+  assert.match(text, /What went wrong:[\s\S]*upstream's validator rejected findings\.json \(FAIL: \d+ validation error\(s\)\): no record in it is reported/)
+  assert.match(text, /findings\.json: REJECTED \(FAIL: /)
+  for (const fp of ['fp-a', 'fp-b']) assert.match(text, new RegExp(`\\| \`${fp}\` \\| \`findings_rejected_by_validator\` \\|`), `${fp} is unresolved, with the reason`)
+  assert.ok(!text.includes('Lead fp-a') && !text.includes('Lead fp-b'), 'nothing is derived from the rejected records')
+  assert.match(text, /No verdict is reported: findings\.json was rejected/)
+  assert.ok(!/No lead needs validation|\bNone\. A report with no confirmed/.test(text + readFileSync(join(runDir, 'NEEDS-VALIDATION.md'), 'utf8')), 'an absence of records is not reported as an absence of leads')
+  assert.match(readFileSync(join(runDir, 'NEEDS-VALIDATION.md'), 'utf8'), /Not reported: findings\.json was rejected/)
+  assert.match(readFileSync(join(runDir, 'FINDINGS-DETAIL.md'), 'utf8'), /Not reported: findings\.json was rejected/)
+  const task = spawnSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), '..', 'skills', 'security-audit', 'audit-report.mjs'), 'task', runDir, 'fp-a'], { encoding: 'utf8', env: { ...process.env, ...ENV } })
+  assert.equal(task.status, 1)
+  assert.match(task.stdout, /AUDIT: FAIL upstream's validator did not pass .*findings\.json/, 'no task is made from a file the validator rejects')
+})
+await test('a run already incomplete for another reason keeps that reason, and a rejected ledger is disclosed the same way: no coverage figure is reported', async () => {
+  const run = await atVerify([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }])
+  markIncomplete(run.runDir, 'critic_budget_exhausted')
+  assert.equal((await verifyRound(run.runDir, (l, item) => passed(item))).apply.status, 0)
+  const { runDir } = run
+  assert.match(next(runDir), /^NEXT: report run=helper reason=critic_budget_exhausted$/)
+  corrupt(runDir, 'coverage-ledger.json', l => { l[0].coverage_id = 'tampered' })
+  const out = writeReport(runDir)
+  assert.match(out.notes.join('\n'), /upstream's validator rejected coverage-ledger\.json/)
+  assert.deepEqual([meta(runDir).run_status, meta(runDir).incomplete_reason], ['incomplete', 'critic_budget_exhausted'], 'the first reason stands')
+  const text = readFileSync(join(runDir, 'REPORT.md'), 'utf8')
+  assert.match(text, /upstream's validator rejected coverage-ledger\.json \(FAIL: .*\): no coverage figure from it is reported/)
+  assert.match(text, /coverage-ledger\.json was rejected by upstream's validator .*: no coverage claim is made/)
+  assert.match(text, /coverage-ledger\.json: REJECTED \(FAIL: /)
+  assert.ok(text.includes('Lead fp-a'), 'findings.json passed, so its records are reported')
+  assert.equal(next(runDir), 'NEXT: done status=incomplete reason=critic_budget_exhausted')
+})
+await test('a run still in progress with a rejected file is decided first (complete_check_failed stands as its reason), and each candidate is unresolved for the reason that holds', async () => {
+  const run = await atVerify([{ name: 'a', candidates: ['fp-a'] }, { name: 'b', candidates: ['fp-b'] }])
+  advanceState(run.runDir, 'verify')   // verify never ran: the run is still in progress at the report
+  assert.equal(meta(run.runDir).run_status, 'in_progress')
+  corrupt(run.runDir, 'findings.json', f => { f[0].severity = { overall_severity: 'high' } })
+  const out = writeReport(run.runDir)
+  assert.deepEqual([meta(run.runDir).run_status, meta(run.runDir).incomplete_reason], ['incomplete', 'complete_check_failed'])
+  assert.match(out.notes.join('\n'), /rejected findings\.json .*: the report discloses it and reads nothing from that file; the run is incomplete \(complete_check_failed\)/)
+  const text = readFileSync(join(run.runDir, 'REPORT.md'), 'utf8')
+  assert.match(text, /No verdict is reported: findings\.json was rejected/)
+  for (const fp of ['fp-a', 'fp-b']) assert.match(text, new RegExp(`\\| \`${fp}\` \\| \`findings_rejected_by_validator\` \\|`), `${fp} is unresolved for the reason that holds, not the run's first one`)
+  assert.equal(next(run.runDir), 'NEXT: done status=incomplete reason=complete_check_failed')
+})
+await test('a findings.json that is valid JSON but not what a validator takes, in any shape, is disclosed, never a crash; one that is not JSON is refused by name before the report is reached', () => {
+  for (const content of ['{}', '"x"', 'null', '7', '[]', '[1]', '[null]', '{"verdict":"confirmed"}', '[{"verdict":"confirmed","fingerprint":"x"}]', '[{"verdict":"needs_validation"}]']) {
+    const dir = fixtureRun({ ledger: [UNIT('a')], findings: [], critic: CRITIC_DONE })
+    writeFileSync(join(dir, 'findings.json'), content)
+    if (content === '[]') { assert.match(writeReport(dir).summary, /^report status=complete /, 'an empty list is a valid findings file'); continue }
+    const out = writeReport(dir)
+    assert.match(out.summary, /^report status=incomplete confirmed=0 needs_validation=0 rejected=0 unresolved=0$/, content)
+    assert.equal(meta(dir).incomplete_reason, 'findings_rejected_by_validator', content)
+    assert.equal(next(dir), 'NEXT: done status=incomplete reason=findings_rejected_by_validator', content)
+  }
+  for (const content of ['{', '', '[1,']) {
+    const dir = fixtureRun({ ledger: [UNIT('a')], findings: [], critic: CRITIC_DONE })
+    writeFileSync(join(dir, 'findings.json'), content)
+    assert.throws(() => writeReport(dir), /findings\.json is not valid JSON/, JSON.stringify(content))
+    assert.deepEqual(REPORT_FILES.filter(f => existsSync(join(dir, f))), [])
   }
 })
 await test('a run that stopped before the ledger is reported from its metadata alone', () => {
