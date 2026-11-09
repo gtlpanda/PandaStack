@@ -71,8 +71,9 @@ repository. It costs tens to hundreds of agent runs.
   - `deep`: for high-stakes or large targets. Reconnaissance is asked for units
     split per subsystem and lifecycle mode; critics until a clean pass and two
     separate verification passes, as in `standard`; and an independent second
-    pass over each unit an earlier run covered on unchanged source. `init`
-    accepts a `--budget` of 10 or more.
+    pass over each unit an earlier run covered on unchanged source; under a
+    `--budget`, a unit gets that pass only if the next wave can fund a hunter
+    for it. `init` accepts a `--budget` of 10 or more.
 - Not supported in this version: `--changed`, `--model`, `--limits`,
   `--fresh`, `--resume`. Do not pass them and do not pretend they ran. Say so.
 - Variables name where things are. Every Bash call is a fresh shell, so write

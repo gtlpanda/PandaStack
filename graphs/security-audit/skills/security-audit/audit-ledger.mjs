@@ -584,9 +584,15 @@ function buildCritic(runDir, run, critic, mint) {
   }
   const next = [...ledger.map(u => patched.get(u.coverage_id) ?? u), ...fresh]
   if (rules.sameSourceSecondPass) {
-    // After the critic's own work, so a unit whose prior lead it resolved is passed again with the lead resolved.
-    const passed = next.map(u => (needsSecondPass(u) ? reassign(u, SECOND_PASS_REASON) : u))
+    // After the critic's own work, so a unit whose prior lead it resolved is passed again with the lead resolved. Only a unit the next wave would give a hunter: the pass is the
+    // profile's own addition, not the critic's request, and a unit reopened with no hunter to take it would be deferred by planWave, ending the run with a unit this run had covered
+    // listed as deferred coverage where standard, with the same budget, lists it covered. Such a unit keeps its covered pass and gets a note.
+    const wanted = next.map(u => (needsSecondPass(u) ? reassign(u, SECOND_PASS_REASON) : u))
+    const hunted = new Set(wavePlan(meta, wanted).funded.flat().map(u => u.coverage_id))
+    const passed = wanted.map((u, i) => (u !== next[i] && !hunted.has(u.coverage_id) ? next[i] : u))
     tally.second_pass = passed.filter((u, i) => u !== next[i]).length
+    const unfunded = wanted.filter((u, i) => u !== next[i]).length - tally.second_pass
+    if (unfunded) notes.push(`${unfunded} unit(s) an earlier run covered on unchanged source were not given the deep profile's second pass: the next wave cannot fund a hunter for them (--budget ${meta.budget}, ${meta.agents_spent} spent); each keeps the pass this run gave it`)
     return { next: passed, tally, notes, rejections }
   }
   if (rules.hunterWaves !== 1) return { next, tally, notes, rejections }

@@ -55,7 +55,8 @@ an independent verifier for every candidate. A profile changes breadth and redun
 - `deep`: reconnaissance is asked for units split per subsystem and lifecycle mode; critics until
   a clean pass and two separate verification passes, as in `standard`; and an independent second
   pass over each unit an earlier run covered on unchanged source, archived and hunted again by a
-  fresh owner once. `init` accepts a `--budget` of 10 or more.
+  fresh owner once (under a `--budget`, only if the next wave can fund a hunter for it; a unit it
+  cannot reach keeps its covered pass). `init` accepts a `--budget` of 10 or more.
 
 Two of these are this graph's reading of upstream, not its text: deep's second pass (upstream has
 one clause for it) and quick deferring a unit no critic named with the critic's reason.
