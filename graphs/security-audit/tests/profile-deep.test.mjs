@@ -1,6 +1,6 @@
 // profile-deep.test.mjs - P-06: what deep adds to standard. A unit an earlier run covered on unchanged source (prior_covered_same_source) gets an independent second pass: once,
 // at the first critic application after this run's own pass covered it, archived in `attempts` with a fresh owner for the next wave. Deep's critics and its two verification passes
-// are standard's, and nothing else of standard moves. Acceptance test of .autobuild/contracts/profiles.md, section P-06. Frozen.
+// are standard's, and nothing else of standard moves. Acceptance test of the PR 9 profile contract (retro.md, entry 43), section P-06.
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import { applyCritic, mergeWave, planWave, seed } from '../skills/security-audit/audit-ledger.mjs'

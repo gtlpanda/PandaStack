@@ -1,5 +1,5 @@
 // profile-support.mjs - shared by the profile acceptance tests (profile-*.test.mjs) of the quick and deep profiles. Not a test file.
-// Frozen with them: the tests of a feature load modules and exports that feature has yet to add, lazily (lazy()), so a test fails on the
+// The tests of a feature load modules and exports that feature has yet to add, lazily (lazy()), so a test fails on the
 // missing behavior and not on an import. Everything else is built from the fixtures the existing tests share.
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'

@@ -1,4 +1,4 @@
-// audit-report-profile-claims.test.mjs - the report's `Profile rules` line states what the run did only when it did it. The frozen test (profile-report.test.mjs) pins the line
+// audit-report-profile-claims.test.mjs - the report's `Profile rules` line states what the run did only when it did it. The acceptance test (profile-report.test.mjs) pins the line
 // of a complete run in which a hunter ran ("quick ran one hunter wave ...", "deep ... ran critic waves to a clean pass ..."). Two kinds of run cannot say that: an incomplete one
 // (a deep run stopped by critic_budget_exhausted printed "ran critic waves to a clean pass" two sections above a Final critic that says the final-clean critic did not run, and
 // upstream forbids a clean-coverage claim then) and a complete one in which no hunter ran (quick at --budget 8, the smallest init accepts, funds none). Both get a line that says what

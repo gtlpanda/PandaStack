@@ -1,5 +1,5 @@
 // profile-docs.test.mjs - P-08: the entry skill, the graph README and the helper's own text say what the code now does: quick and deep are supported, each with its rules and its minimum
-// budget (read from the code, not typed twice), and nothing still says init refuses them. Acceptance test of .autobuild/contracts/profiles.md, section P-08. Frozen.
+// budget (read from the code, not typed twice), and nothing still says init refuses them. Acceptance test of the PR 9 profile contract (retro.md, entry 43), section P-08.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'

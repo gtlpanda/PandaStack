@@ -1,6 +1,6 @@
 // profile-e2e-support.mjs - the scripted agents of the profile end-to-end tests: the toy audit's answers (toy-agents.mjs) with the recon and mint answers shaped for the profile
 // (quick: every unit under upstream's one subsystem reference; deep: one more unit, split off by a lifecycle mode). Everything else a scripted agent says is toy-agents.mjs's, so the
-// same planted weaknesses are found and the same claim is rejected. Not a test file. Frozen with the profile tests.
+// same planted weaknesses are found and the same claim is rejected. Not a test file.
 import { UNITS, answer as toyAnswer } from './toy-agents.mjs'
 import { SYNTH } from './stage-fixtures.mjs'
 import { QUICK_REF } from './profile-support.mjs'

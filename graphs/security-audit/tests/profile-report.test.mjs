@@ -1,5 +1,5 @@
 // profile-report.test.mjs - P-07: what a report says about the profile. quick is a partial pass and says what it deferred; deep is not a partial pass because of its profile (it is more
-// than standard, not less) and states what it ran; standard says nothing new. Acceptance test of .autobuild/contracts/profiles.md, section P-07. Frozen.
+// than standard, not less) and states what it ran; standard says nothing new. Acceptance test of the PR 9 profile contract (retro.md, entry 43), section P-07.
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import { buildReports, reportContext } from '../skills/security-audit/audit-report.mjs'

@@ -1,6 +1,6 @@
 // profile-e2e-deep.test.mjs - P-10: a whole deep audit of the toy repository, offline, from `init --profile deep` to the reports, driven as the entry skill says, by scripted agents. The recon
 // answer has one unit more than standard's, split off by a lifecycle mode; deep then runs standard's stage machine (critics to a clean pass, Phase 3 and Phase 5 as two passes). Acceptance
-// test of .autobuild/contracts/profiles.md, section P-10. Frozen.
+// test of the PR 9 profile contract (retro.md, entry 43), section P-10.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'

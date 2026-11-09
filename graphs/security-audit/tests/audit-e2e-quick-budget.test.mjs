@@ -1,5 +1,5 @@
 // audit-e2e-quick-budget.test.mjs - the whole offline quick audit of the toy repository (P-09's drive) under the two strict budgets just below what it spends, pinned exactly.
-// P-09's frozen test accepts either outcome at 12; this file pins which one the code gives, and that 11 is where quick first runs out of verifiers.
+// P-09's acceptance test accepts either outcome at 12; this file pins which one the code gives, and that 11 is where quick first runs out of verifiers.
 // The arithmetic: recon 4 + synthesis 1 + one hunter + the critic + its minter = 8 agents before consolidate; four candidates; quick funds floor(left / 1) of them.
 // consolidateInput skips the grouping when its agent would lower that number (audit-verdicts.mjs), so at 12 (4 left) the grouping is skipped and all four
 // verifiers run, and at 11 (3 left) it is skipped and three of the four run.

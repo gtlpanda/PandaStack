@@ -1,6 +1,6 @@
 // profile-quick-waves.test.mjs - P-04: quick's one hunter wave and one final critic. After the critic result is applied the run goes straight to validation: no second wave, no
 // final-clean critic; what the critic found, what it reopened and what no hunter reached are `deferred` with upstream's reason, never hunted. Acceptance test of
-// .autobuild/contracts/profiles.md, section P-04. Frozen.
+// the PR 9 profile contract (retro.md, entry 43), section P-04.
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import { applyCritic, applyCriticProblems } from '../skills/security-audit/audit-ledger.mjs'

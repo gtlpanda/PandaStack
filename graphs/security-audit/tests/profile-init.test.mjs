@@ -1,5 +1,5 @@
 // profile-init.test.mjs - P-02: `audit-run.mjs init --profile quick|deep` starts a run, behind the same gates as standard, each with its own budget minimum. Acceptance
-// test of .autobuild/contracts/profiles.md, section P-02. Frozen.
+// test of the PR 9 profile contract (retro.md, entry 43), section P-02.
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'

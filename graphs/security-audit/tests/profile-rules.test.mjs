@@ -1,5 +1,5 @@
 // profile-rules.test.mjs - P-01: the one table of what each run profile does (audit-profile.mjs), read against the vendored upstream text it summarizes.
-// Acceptance test of .autobuild/contracts/profiles.md, section P-01. Frozen.
+// Acceptance test of the PR 9 profile contract (retro.md, entry 43), section P-01.
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import { PROFILES, QUICK_DEFERRED, QUICK_REF, lazy, vendored } from './profile-support.mjs'

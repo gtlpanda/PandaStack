@@ -1,6 +1,6 @@
 // profile-quick-verify.test.mjs - P-05: quick merges Phase 3 and Phase 5. The one fresh verifier of a candidate is given upstream's Phase 5 record checks too and returns the final
 // record; there is no verify stage; complete-check accepts that verifier as the record's Phase 5 only in a quick run. Standard and deep keep two separate passes. Acceptance test of
-// .autobuild/contracts/profiles.md, section P-05. Frozen.
+// the PR 9 profile contract (retro.md, entry 43), section P-05.
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'

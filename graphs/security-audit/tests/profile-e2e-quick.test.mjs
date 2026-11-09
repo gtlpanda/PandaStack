@@ -1,6 +1,6 @@
 // profile-e2e-quick.test.mjs - P-09: a whole quick audit of the toy repository, offline, from `init --profile quick` to the reports, driven exactly as the entry skill says (the commands come
 // out of SKILL.md, what runs next is whatever `next` prints), by scripted agents through the workflow harness; the vendored validators run on every artifact. Acceptance test of
-// .autobuild/contracts/profiles.md, section P-09. Frozen.
+// the PR 9 profile contract (retro.md, entry 43), section P-09.
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'

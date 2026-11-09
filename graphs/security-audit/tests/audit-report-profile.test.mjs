@@ -1,4 +1,4 @@
-// audit-report-profile.test.mjs - the edges of what REPORT.md says about a run's profile that the frozen acceptance test (profile-report.test.mjs) leaves out: a meta with no profile or an
+// audit-report-profile.test.mjs - the edges of what REPORT.md says about a run's profile that the acceptance test (profile-report.test.mjs) leaves out: a meta with no profile or an
 // unknown one reads as standard, the quick-deferred count is taken from the whole ledger (not the listed slice) and from no profile in particular, and quick's critic sentence is only
 // for a critic that was not the final-clean one.
 import assert from 'node:assert/strict'

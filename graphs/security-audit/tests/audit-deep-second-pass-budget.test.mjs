@@ -1,4 +1,4 @@
-// audit-deep-second-pass-budget.test.mjs - deep's second pass under a budget. The pass is the profile's own addition (SPEC M2), not something a critic asked for, so it is given only to
+// audit-deep-second-pass-budget.test.mjs - deep's second pass under a budget. The pass is the profile's own addition (retro entry 43, decision M2), not something a critic asked for, so it is given only to
 // units the next wave can fund a hunter for: apply-critic asks wavePlan (the one planWave plans with) which units that wave would hand to a hunter, and a unit it would not reach keeps
 // the pass this run already gave it (covered) and gets a note. Before this, apply-critic reopened every covered prior_covered_same_source unit whatever the budget, planWave then deferred the
 // reopened unit with budget_cannot_reserve_critics_and_validation, and a unit this run had covered ended deferred where standard under the same budget listed it covered.

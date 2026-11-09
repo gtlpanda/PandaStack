@@ -1,5 +1,5 @@
 // audit-e2e-deep-vs-standard.test.mjs - P-10's whole offline deep audit of the toy repository, driven next to a standard audit with the same scripted agents (deepAnswer: the toy's
-// units plus one lifecycle unit, which standard accepts too, SPEC M9). P-10's frozen test pins deep's path and agents as literal lists; this file pins that they are the ones a
+// units plus one lifecycle unit, which standard accepts too, retro entry 43, decision M9). P-10's acceptance test pins deep's path and agents as literal lists; this file pins that they are the ones a
 // standard run takes, and that the second pass is the one thing a second audit of the same commit does differently in deep.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'

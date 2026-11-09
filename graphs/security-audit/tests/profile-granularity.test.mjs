@@ -1,6 +1,6 @@
 // profile-granularity.test.mjs - P-03: the units a profile asks for. quick coarsens every unit to upstream's one subsystem reference (seed and mint refuse any other);
 // deep and quick's text is upstream's "Run profiles and scope" block, carried into the synthesizer's, the critic's and the minter's prompts; standard is untouched. Acceptance
-// test of .autobuild/contracts/profiles.md, section P-03. Frozen.
+// test of the PR 9 profile contract (retro.md, entry 43), section P-03.
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
