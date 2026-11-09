@@ -165,7 +165,7 @@
       ],
       "test": "graphs/security-audit/tests/profile-docs.test.mjs",
       "testKind": "profile",
-      "passes": false
+      "passes": true
     },
     {
       "id": "P-09",
