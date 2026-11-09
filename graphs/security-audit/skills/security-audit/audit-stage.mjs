@@ -35,7 +35,7 @@ import { LEDGER_FAILED, REASONS, RUNNERS, Usage, advanceState, appendEvent, form
 import { applyCriticProblems, criticBudgetExhausted, criticResultProblems, deferHunting, seedProblems, stopHunting } from './audit-ledger.mjs'
 import { RECON_IDS, checkFacts } from './audit-facts.mjs'
 import { companions, ordinary, parts, resolve as resolveBlock } from './blocks.mjs'
-import { CLIP, architectureOf, baseInput, blockText, clipText, clipValue, profilePart } from './audit-inputs.mjs'
+import { CLIP, architectureOf, baseInput, blockText, clipText, clipValue, profileName, profilePart } from './audit-inputs.mjs'
 import { applyConsolidate, applyValidate, consolidateInput, validateInput } from './audit-verdicts.mjs'
 import { applyVerify, verifyInput } from './audit-verify.mjs'
 
@@ -196,7 +196,7 @@ function compactUnit(u) {
 export function criticInput(runDir, run, next) {
   const pool = readJson(join(runDir, 'candidates.json')) ?? []
   return {
-    ...baseInput(runDir, run.meta, 'critic'), kind: next.kind, wave: next.wave, hunted: next.hunted !== false, architecture_md: architectureOf(runDir), ledger: run.ledger.map(compactUnit),
+    ...baseInput(runDir, run.meta, 'critic'), ...profileName(run.meta), kind: next.kind, wave: next.wave, hunted: next.hunted !== false, architecture_md: architectureOf(runDir), ledger: run.ledger.map(compactUnit),
     candidates: (Array.isArray(pool) ? pool : []).map(c => ({ fingerprint: c.fingerprint, proposed_verdict: c.proposed_verdict, units: c.units, hunter_ids: c.hunter_ids })),
     prior: priorSummary(runDir), parts: { criticSection: blockText(CRITIC_SECTION), ...profilePart(run.meta) },
   }

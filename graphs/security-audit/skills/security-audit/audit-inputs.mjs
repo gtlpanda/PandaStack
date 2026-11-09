@@ -24,6 +24,8 @@ export const blockText = ref => {
 // a standard run's inputs have no such key, so its prompts are unchanged.
 const PROFILE_SECTION = 'SKILL.md#Run profiles and scope'
 export const profilePart = meta => (rulesOf(meta).profile === 'standard' ? {} : { profile: blockText(PROFILE_SECTION) })
+// The same agents are also told which profile the run is, so they can tell which bullet of that section applies to them. The critic's input gets it only for quick and deep.
+export const profileName = meta => (rulesOf(meta).profile === 'standard' ? {} : { profile: meta.profile })
 // Upstream's Phase 5 section: what the verify stage's verifiers follow, and what a quick run's validate stage adds to its one verifier per candidate (Phase 3 and 5 merged).
 export const PHASE5 = 'VALIDATION-AND-REPORTING.md#Phase 5: Verify the final records with fresh eyes'
 
