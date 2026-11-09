@@ -547,12 +547,18 @@ function buildCritic(runDir, run, critic, mint) {
     tally.reassigned += 1
   }
   const ctx = { runDir, scope: meta.scope_paths, priorStatus: ledger.some(u => u.prior_status !== 'none') ? 'new' : 'none', profile: meta.profile }   // seed decided whether earlier runs exist
+  const rules = rulesOf(meta)
   mint.units.forEach((entry, i) => {
     const built = isObj(entry) && entry.status !== undefined && entry.status !== 'planned' ? { problems: [`status ${JSON.stringify(entry.status)}: a minted unit is planned work; scope and budget decide anything else`] } : unitFromInput(entry, ctx)
     if (built.problems) { tally.minted_rejected += 1; rejections.push(`minted unit ${i}: ${built.problems.join('; ')}; rejected`); return notes.push(rejections.at(-1)) }
     const have = current.get(built.unit.coverage_id) ?? fresh.find(u => u.coverage_id === built.unit.coverage_id)
-    if (have && semanticOf(have) !== semanticOf(built.unit)) fail(`coverage ID collision: minted unit ${i} has the ID of a unit with different semantic fields; upstream never merges them (${LEDGER_FILE} is unchanged)`, [built.unit.coverage_id])
-    if (have) { tally.duplicates += 1; return notes.push(`minted unit ${i}: ${built.unit.coverage_id} is already in the ledger; not added again`) }
+    // Upstream: the same ID under different semantic fields is a collision, never merged (RECONNAISSANCE.md, "Deterministic coverage ledger"). Quick is the exception:
+    // it pins the subsystem reference, so a gap on a unit it already has gets that unit's ID as a matter of course, and the minter words the labels of what it was
+    // told is missing, not of what is there. The reference is the identity ("even if its display label changes"), so the unit is a duplicate (HUNTING.md: "deduplicates
+    // them against current units"); the existing unit keeps its labels and the note says the new ones differ.
+    const relabelled = have && semanticOf(have) !== semanticOf(built.unit)
+    if (relabelled && !rules.coarseSubsystem) fail(`coverage ID collision: minted unit ${i} has the ID of a unit with different semantic fields; upstream never merges them (${LEDGER_FILE} is unchanged)`, [built.unit.coverage_id])
+    if (have) { tally.duplicates += 1; return notes.push(`minted unit ${i}: ${built.unit.coverage_id} is already in the ledger; not added again${relabelled ? ' (it words its labels differently: the quick profile identifies a unit by its references, so the existing unit keeps its own)' : ''}`) }
     fresh.push(built.unit)
     tally[built.unit.status === 'out_of_scope' ? 'out_of_scope' : 'units_added'] += 1
   })
@@ -570,7 +576,6 @@ function buildCritic(runDir, run, critic, mint) {
     tally.resolved += 1
   }
   const next = [...ledger.map(u => patched.get(u.coverage_id) ?? u), ...fresh]
-  const rules = rulesOf(meta)
   if (rules.sameSourceSecondPass) {
     // After the critic's own work, so a unit whose prior lead it resolved is passed again with the lead resolved.
     const passed = next.map(u => (needsSecondPass(u) ? reassign(u, SECOND_PASS_REASON) : u))
