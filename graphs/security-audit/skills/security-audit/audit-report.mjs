@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url'
 import { FINDINGS_FAILED, FINDINGS_REJECTED, LEDGER_FAILED, LEDGER_REJECTED, Usage, advanceState, appendEvent, formatNext, loadRun, markIncomplete, nextStep, readJson, refuse, STATUSES } from './audit-run.mjs'
 import { COMPLETE_CHECK_FAILED, byFingerprint, completeProblems, decisionsOf, finishRun, linkCheck, readPool } from './audit-findings.mjs'
 import { LEDGER_FILE } from './audit-ledger.mjs'
+import { QUICK_DEFERRED, rulesOf } from './audit-profile.mjs'
 import { validateFindingsFile, validateLedgerFile } from './upstream.mjs'
 import { cell, code, fence, fenceTag, inline, plain, plural, where } from './audit-md.mjs'
 
@@ -38,7 +39,7 @@ const WHY = {
   budget_cannot_reserve_critics_and_validation: 'a wave the reserves left no room for was deferred',
   critic_budget_exhausted: 'the budget no longer covered the final critic: the final-clean critic did not run, and no clean-coverage claim is made',
   validation_budget_exhausted: 'a candidate or a record could not be given an independent verifier (the budget could not fund one, or its verifier\'s result was unusable twice), so it is unresolved and is not a finding',
-  quick_profile_final_critic: 'the quick profile deferred what its one critic found',
+  [QUICK_DEFERRED]: 'the quick profile deferred what its one critic found',
   confirmed_without_local_evidence: 'a verifier insisted on confirmed, and this audit executes no target code to back it',
   record_verification_unresolved: 'a record could not be settled by independent Phase 5 verification and was removed from findings.json',
   findings_validation_failed: 'findings.json could not be written through upstream\'s validators',
@@ -103,7 +104,8 @@ const countBy = (items, key) => items.reduce((m, i) => m.set(key(i), (m.get(key(
 function statusSection(ctx) {
   const { meta, unresolved } = ctx
   const out = ['## Status', '']
-  if (meta.run_status === 'complete') out.push('The run is **complete**: every candidate has an independent final disposition and every retained record passed Phase 5 verification. Complete is not clean: see the coverage summary and the limits below.')
+  const verification = rulesOf(meta).mergedValidation ? 'the quick profile\'s merged Phase 3 and Phase 5 verification' : 'Phase 5 verification'
+  if (meta.run_status === 'complete') out.push(`The run is **complete**: every candidate has an independent final disposition and every retained record passed ${verification}. Complete is not clean: see the coverage summary and the limits below.`)
   else {
     out.push(`The run is **INCOMPLETE** (${code(meta.incomplete_reason, 80)}): ${WHY[meta.incomplete_reason] ?? 'see the reason'}. This is a partial pass.`)
   }
@@ -129,6 +131,12 @@ function priorLines(leads) {
   return named.slice(0, MAX_LISTED).concat(named.length > MAX_LISTED ? [`  - …and ${named.length - MAX_LISTED} more in coverage-ledger.json`] : [])
 }
 
+// What a profile other than standard ran, stated right after the "- Run" line (upstream SKILL.md, "Run profiles and scope"). Standard runs the method as written and has no line.
+const PROFILE_RULES_LINE = {
+  quick: '- Profile rules: quick ran one hunter wave and one final critic pass, with one fresh verifier per candidate doing both the candidate validation and the final record check; what the critic found and what it reopened are deferred, not hunted.',
+  deep: '- Profile rules: deep asked for units split per subsystem and lifecycle mode, ran critic waves to a clean pass, kept candidate validation and final record verification as separate fresh agents, and gave units an earlier run covered on unchanged source an independent second pass.',
+}
+
 function runSection(ctx, validators) {
   const { meta, ledger, priors } = ctx
   const dirty = meta.source_ref?.dirty ? ` Uncommitted changes in the working tree (${meta.source_ref.uncommitted?.tracked ?? '?'} tracked, ${meta.source_ref.uncommitted?.untracked ?? '?'} untracked) were not audited.` : ''
@@ -137,11 +145,13 @@ function runSection(ctx, validators) {
   const partial = []
   if (meta.run_status !== 'complete') partial.push('the run is incomplete')
   if (list(meta.scope_paths).length) partial.push(`it was scoped to ${list(meta.scope_paths).map(p => code(p, 120)).join(', ')}`)
-  if (meta.profile !== 'standard') partial.push(`the ${plain(meta.profile, 20)} profile does not run the full method`)
+  const rules = rulesOf(meta)
+  if (rules.partialPass) partial.push(`the ${rules.profile} profile does not run the full method`)
   if (meta.budget !== null) partial.push(`it ran under a strict budget of ${meta.budget} agent invocations`)
   if ((ledger ?? []).some(u => u.status === 'deferred')) partial.push('some coverage was deferred')
   return ['## Run', '',
     `- Run ${code(meta.run_id, 40)} of ${code(meta.repo, 80)}, profile ${code(meta.profile, 20)}, scope ${list(meta.scope_paths).length ? list(meta.scope_paths).map(p => code(p, 120)).join(', ') : 'the whole snapshot'}.`,
+    ...(Object.hasOwn(PROFILE_RULES_LINE, rules.profile) ? [PROFILE_RULES_LINE[rules.profile]] : []),
     `- Source: commit ${code(String(meta.source_ref?.commit ?? '').slice(0, 12))}.${dirty}`,
     `- Execution: ${meta.execution_policy === 'sandboxed-source-and-local-only' ? 'sandboxed source and local checks only' : inline(meta.execution_policy)}; the capability this run had was ${code(meta.execution_capability, 20)}, so **no target code was executed**. Controls the host could not enforce (so nothing ran):`,
     ...list(meta.execution_blockers).map(b => `  - ${plain(b)}`),
@@ -208,6 +218,13 @@ function hardeningSection(ctx) {
   return out
 }
 
+// What the last critic's kind leaves unclaimed. A profile with no final-clean critic (quick) ran its one critic as the final one, by design.
+function criticCaveat(kind, rules) {
+  if (kind === 'final-clean') return ''
+  if (rules.finalCleanCritic) return ' It was not the final-clean critic: coverage is not claimed to be clean.'
+  return ` It was the one final critic the ${rules.profile} profile runs, so no final-clean critic ran, by design: coverage is not claimed to be clean.`
+}
+
 function coverageSection(ctx) {
   const { ledger, state, critic, meta } = ctx
   const out = ['## Coverage summary', '']
@@ -221,10 +238,13 @@ function coverageSection(ctx) {
     for (const u of gaps.slice(0, MAX_LISTED)) out.push(`- ${u.status}: ${labelOf(u)}${list(u.unresolved).length ? `: ${list(u.unresolved).map(x => inline(x, 200)).join('; ')}` : ''}`)
     if (gaps.length > MAX_LISTED) out.push(`- …and ${gaps.length - MAX_LISTED} more in coverage-ledger.json.`)
   }
+  // Counted from the whole ledger (the list above stops at MAX_LISTED), and only where the reason is exactly upstream's string: a hunter's text that contains it, or a blocked unit's, is not.
+  const quickDeferred = ledger.filter(u => u.status === 'deferred' && list(u.unresolved).includes(QUICK_DEFERRED)).length
+  if (quickDeferred) out.push('', `Units deferred as \`${QUICK_DEFERRED}\` (found by the one critic, reopened by it, or not reached by the one wave): ${quickDeferred}. The quick profile does not hunt them.`)
   out.push('', '### Final critic', '')
   if (meta.incomplete_reason === 'critic_budget_exhausted') out.push('The final-clean critic did not run: the budget no longer covered it. No clean-coverage claim is made.')
   else if (!state.critic_kind || !critic) out.push('No coverage critic ran.')
-  else out.push(`The last critic was the ${plain(state.critic_kind, 20)} critic of wave ${state.wave}: it proposed ${plural(list(critic.missing_units).length, 'missing unit')} and ${plural(list(critic.reassign_ids).length, 'reassignment')}, and said stop ${critic.stop === true}.${state.critic_kind === 'final-clean' ? '' : ' It was not the final-clean critic: coverage is not claimed to be clean.'}`)
+  else out.push(`The last critic was the ${plain(state.critic_kind, 20)} critic of wave ${state.wave}: it proposed ${plural(list(critic.missing_units).length, 'missing unit')} and ${plural(list(critic.reassign_ids).length, 'reassignment')}, and said stop ${critic.stop === true}.${criticCaveat(state.critic_kind, rulesOf(meta))}`)
   return out
 }
 
