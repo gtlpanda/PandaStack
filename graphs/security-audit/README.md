@@ -39,7 +39,7 @@ whoever controls the target; the agents are told so, and what they return is jud
 
 ## Profiles
 
-`init --profile` takes upstream's three profiles (`SKILL.md`, "Run profiles and scope"), read by
+`init --profile` takes upstream's three profiles (upstream's `SKILL.md`, "Run profiles and scope"), read by
 the helpers from one table, `skills/security-audit/audit-profile.mjs`. Each profile keeps the same
 evidence bar: the candidate gate, the source-only boundary, `needs_validation`, both validators and
 an independent verifier for every candidate. A profile changes breadth and redundancy, nothing else.
