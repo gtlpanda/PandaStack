@@ -1,4 +1,4 @@
-// autobuild: an autonomous, test-gated build loop for Claude Code projects.
+// autobuild: an autonomous, test-gated build loop for Claude Code or Codex projects.
 // Usage: autobuild <command> [args]   (run from anywhere inside a project with autobuild.json)
 
 import { spawnSync } from "node:child_process";
@@ -15,16 +15,16 @@ import { tail } from "./proc.mjs";
 
 const HOME = path.resolve(import.meta.dirname, "..");
 
-const HELP = `autobuild — autonomous, test-gated build loop for Claude Code
+const HELP = `autobuild — autonomous, test-gated build loop for Claude Code or Codex
 
-  autobuild run [--max-iterations N]   run the loop (one headless session per feature)
+  autobuild run [--backend claude|codex] [--model MODEL] [--max-iterations N]   run the loop (one headless session per feature)
   autobuild next                       print the feature the next session builds
   autobuild status                     passing count, next feature, blockers, last log lines
   autobuild test <ID> [ID...]          run features' frozen acceptance tests
   autobuild check [--feature ID] [--base SHA] [--fail-fast] [--json] [--skip-browser]
                                        run the full gate
   autobuild mark-passed <ID>           rerun a feature's test; set passes:true only if it passes
-  autobuild init                       scaffold autobuild.json, PROGRESS.md and the CLAUDE.md rules
+  autobuild init [--backend claude|codex] scaffold autobuild.json, PROGRESS.md and the CLAUDE.md rules
   autobuild selftest                   test the kit (limit parsing, guard) against this machine
 
 Exit codes of \`run\`: 0 done, 2 no progress, 3 blocked, 4 frozen files changed, 5 preflight,
@@ -37,6 +37,7 @@ function flag(args, name) {
 }
 function value(args, name) {
   const index = args.indexOf(name);
+  if (index >= 0 && (!args[index + 1] || args[index + 1].startsWith("--"))) throw new Error(`${name} requires a value`);
   return index >= 0 ? args[index + 1] : undefined;
 }
 
@@ -44,7 +45,7 @@ export async function main(argv = process.argv.slice(2)) {
   const [command, ...args] = argv;
   switch (command) {
     case "run": {
-      const config = loadConfig();
+      const config = loadConfig(undefined, process.env, { backend: value(args, "--backend"), model: value(args, "--model") });
       const max = value(args, "--max-iterations");
       if (max) config.limits.maxIterations = Number(max);
       return runLoop(config);
@@ -143,7 +144,7 @@ export async function main(argv = process.argv.slice(2)) {
       return 0;
     }
     case "init":
-      return init();
+      return init(value(args, "--backend") || process.env.AUTOBUILD_BACKEND || "claude");
     case "selftest": {
       const result = spawnSync(process.execPath, ["--test", ...readdirSync(path.join(HOME, "test")).filter((f) => f.endsWith(".test.mjs")).map((f) => path.join(HOME, "test", f))], { stdio: "inherit" });
       return result.status ?? 1;
@@ -160,11 +161,19 @@ export async function main(argv = process.argv.slice(2)) {
   }
 }
 
-function init() {
+function init(backend) {
+  if (!["claude", "codex"].includes(backend)) throw new Error("backend must be claude or codex");
   const root = process.cwd();
   const created = [];
   if (!existsSync(path.join(root, CONFIG_FILE))) {
     copyFileSync(path.join(HOME, "templates", "autobuild.json"), path.join(root, CONFIG_FILE));
+    if (backend === "codex") {
+      const file = path.join(root, CONFIG_FILE);
+      const config = JSON.parse(readFileSync(file, "utf8"));
+      Object.assign(config, { backend, model: "gpt-6-astra", subagentModel: "gpt-6.1-sol", probeModel: "gpt-6-luna" });
+      config.frozen.push("AGENTS.md", ".codex");
+      writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
+    }
     created.push(CONFIG_FILE);
   }
   if (!existsSync(path.join(root, "PROGRESS.md"))) {
@@ -177,6 +186,14 @@ function init() {
   if (!existing.includes("## Autonomous build")) {
     appendFileSync(claudeMd, `${existing && !existing.endsWith("\n") ? "\n" : ""}\n${section}`);
     created.push("CLAUDE.md (Autonomous build section)");
+  }
+  if (backend === "codex") {
+    const agents = path.join(root, "AGENTS.md");
+    const existing = existsSync(agents) ? readFileSync(agents, "utf8") : "";
+    if (!existing.includes("## Autobuild with Codex")) {
+      appendFileSync(agents, "\n## Autobuild with Codex\nRead CLAUDE.md for the shared project rules. In AUTOBUILD_ACTIVE=1 sessions with AUTOBUILD_BACKEND=codex, leave features.json flags, git staging and commits to the outer harness. Implement, test, and append progress; the harness independently gates and commits. Do not invoke Claude or its hooks.\n");
+      created.push("AGENTS.md (Codex rules)");
+    }
   }
   const gitignore = path.join(root, ".gitignore");
   const ignore = existsSync(gitignore) ? readFileSync(gitignore, "utf8") : "";

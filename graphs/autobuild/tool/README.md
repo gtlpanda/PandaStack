@@ -138,3 +138,81 @@ See `templates/autobuild.json`. Defaults are in `lib/config.mjs`.
 - **Stopping relies on Claude Code ending its own tool processes.** The loop stops the session; whether `claude` also ends a test run it started in its own process group is untested.
 - **The machine must stay awake.** If the host sleeps, the loop sleeps. On WSL, keep Windows from sleeping.
 - **Hook paths point at the PandaStack checkout.** Injected hooks (the default) are found from wherever the tool runs. A project using `hooks: "project"` with wrapper files names `graphs/autobuild/tool/hooks/` in that checkout; moving the checkout breaks those wrappers.
+
+## Codex backend
+
+Resume an existing Claude project using your saved Codex CLI login:
+
+```bash
+codex login status
+# Run in the project with autobuild.json:
+autobuild run --backend codex --max-iterations 1
+# Continue the same project:
+autobuild run --backend codex
+```
+
+For new projects, `autobuild init --backend codex` writes the backend/models and
+adds an AGENTS.md section pointing at the shared CLAUDE.md project rules. Init
+never overwrites an existing config. For those projects use the run flag, set
+`AUTOBUILD_BACKEND=codex`, or set `"backend": "codex"` in autobuild.json and commit
+that configuration before running. Claude remains the default.
+
+| Role | Claude family | Codex equivalent |
+| --- | --- | --- |
+| Builder, review, final audit | Opus | `gpt-6-astra` |
+| Subagents | Sonnet | `gpt-6.1-sol` |
+| Availability probe | Haiku | `gpt-6-luna` |
+
+These are role mappings, not equal-performance claims. Existing Claude model
+names translate automatically; explicit OpenAI IDs pass through. Use `--model`
+or `AUTOBUILD_MODEL` for the main model; `AUTOBUILD_SUBAGENT_MODEL` and
+`AUTOBUILD_PROBE_MODEL` override the other roles. CLI flags beat environment,
+which beats project config. Codex gets `agents.default_subagent_model`; unlike
+Claude's force setting, explicit spawn-model choices can override that default.
+The role choices follow the [current model guidance](https://learn.chatgpt.com/docs/models)
+and were checked against the local model catalog on 2026-11-09.
+
+Codex configuration is separate from Claude's settings:
+
+```json
+{
+  "backend": "codex",
+  "codexBin": "codex",
+  "codex": { "reasoningEffort": "medium", "sessionTimeoutMinutes": 90 }
+}
+```
+
+`AUTOBUILD_CODEX_BIN` overrides the executable. The CLI must support `exec --json`,
+`--sandbox`, `--output-schema`, `--output-last-message`, and
+`agents.default_subagent_model`. See [non-interactive execution](https://learn.chatgpt.com/docs/non-interactive-mode).
+Authentication stays with Codex; there is no Claude or API-key fallback.
+
+### Verification and operational differences
+
+- Sessions use `workspace-write` and `approval_policy=never`. Codex's own sandbox,
+  user/project configuration and managed policies apply. Claude's allowedTools,
+  disallowedTools and PreToolUse/Stop hooks are not installed in Codex. Frozen
+  paths are checked **after** the session; this is not a per-tool write barrier.
+- Codex leaves feature flags and git commits to the host. The host checks git
+  control files, frozen files, unchanged feature metadata/flags, the full gate
+  (including browser/regression tests), and the progress entry. Only then does
+  it mark the current feature passing and commit. Gate failures are given to
+  the next attempt; uncommitted implementation work is kept.
+- Reviews may change only the progress file; the host verifies and commits it.
+  The native final Codex branch audit can repair defects, returns a structured
+  report, and must pass the full gate. Unresolved findings stop with exit 12.
+  Reports live in `.harness/codex-audit-result.json` and session JSONL logs.
+  This audit does **not** create the Claude Workflow hunt ledger. A later PR
+  still needs the separate PandaStack review-gate workflow.
+- Codex reports token usage, not dollar cost. Claude's per-session dollar and
+  turn caps do not apply. A non-null `totalBudgetUsd` is rejected: remove it
+  explicitly to use Codex. Use iteration/no-progress caps and the wall-clock
+  timeout instead. Probe timeout is two minutes. Model/subagent usage still
+  counts against your Codex account's limits.
+- Availability probes also use Codex (Luna); protocol errors drive quota/auth
+  handling. No text from ordinary assistant/tool messages is classified as a
+  quota failure.
+
+The skill source remains `graphs/autobuild/skills/autobuild`. Codex can discover
+it through `~/.agents/skills/autobuild` or `~/.codex/skills/autobuild`; link that
+single directory if it isn't already exposed by your shared skills setup.

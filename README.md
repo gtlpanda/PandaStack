@@ -11,7 +11,7 @@
 > ```
 > /blueprint <idea>   read the doc or idea → one up-front interview → binding decisions → gated design → gated backlog → your one approval
 > /build-app          the approved backlog, unattended: one /dev per slice → final QA → /bughunt --fix → one PR
-> autobuild run       a hand-written feature list with frozen tests, one session per feature, for as long as it takes → /bughunt --fix
+> autobuild run       a feature list with frozen tests → Claude or Codex sessions → full gates → final branch audit
 > /dev <task>         plan it (you approve) → build it tests-first → prove every acceptance criterion → QA
 > /loop               keep a branch green: check → fix → review → QA, until it passes or needs you
 > /release-pr [PR#]   docs into the PR → you approve the exact commit → merge once → verify the deploy
@@ -49,9 +49,31 @@
 | build | [`graphs/release/`](graphs/release/README.md) | `/release-pr [PR#]` | scribe (docs in the PR) → readiness on the exact head → merger, once → deploy-watcher, evidence for the merge commit | routing tested with mocked agents; run live once on a real PR (reported by the owner) |
 | build | [`graphs/hunt/`](graphs/hunt/README.md) | `/bughunt [PR# \| branch \| a..b]` | intake (exact commits, hunks, routing signals, a worktree at the head) → impact-mapper → one hunter per lens the change calls for (logic, contract, concurrency, security, errors, regression), in parallel → findings merged under stable ids in code → a blind skeptic per finding, the advisor refereeing the contested ones → a reproducer's failing test, run by `evidence.mjs` at the head and the merge-base in a sandbox, then re-run by the session → (`--propose`, `--fix`) a root-cause repair per reproduced bug in an isolated worktree, proven by the reproduction (passes with it, fails without it) and the suite, and in fix mode reviewed by an independent verifier with adversarial tests → a report with a computed disposition | live-run on a 10-case benchmark: 6 of 6 planted bugs found and reproduced, 0 false positives on bug-free changes, $9.64 for discovery |
 | build | [`graphs/build/`](graphs/build/README.md) | `/build-app` | the driver, detached: one fresh headless `/dev --slice` session per backlog slice, its own checks (commit prefix, clean tree, frozen tests, its own verify), fast-forward onto `integration/<app>`, usage-limit waits, the backlog brakes; then one QA pass over the whole branch, the push, and one PR for you | live-run once end to end: a 7-slice CLI in 1 h 40 min (retro 24) |
-| build | [`graphs/autobuild/`](graphs/autobuild/README.md) | `autobuild run` (`/autobuild` sets a project up) | one fresh headless session per feature from `features.json`, a Stop hook that holds it until the project's full gate passes, a guard around the frozen tests, independent checks after every session, usage-limit pauses, periodic and final drift-and-defect reviews; then `/bughunt --fix` over the whole branch, its verified fixes landed through the hunt's own checks (shared with `/build-app`) | used for real builds (the FieldPulse worked example); moved in with 9 `/bughunt` rounds (29 bugs fixed, retro 33); the hunt step tested with a fake `claude` |
+| build | [`graphs/autobuild/`](graphs/autobuild/README.md) | `autobuild run [--backend codex]` (`/autobuild` sets a project up) | one fresh session per feature from `features.json`, independent full gates, usage-limit pauses, periodic/final reviews; Claude uses guard/Stop hooks and `/bughunt --fix`; Codex uses host-owned passing flags/commits and a native final audit | Claude used for real builds; Codex live-tested through build, review and final audit; both covered by the autobuild regression suite |
 | security | [`graphs/security-audit/`](graphs/security-audit/README.md) | `/security-audit --full` (explicit request only) | [Cloudflare's security-audit skill](https://github.com/cloudflare/security-audit-skill), vendored at a pinned commit and run by read-only agents (`Read, Grep, Glob`) over a read-only snapshot of `HEAD`, one stage per Workflow run with code between stages: four researchers and a synthesizer build a coverage ledger → hunting waves, a coverage critic after each, a minter for the gaps → one fresh verifier per candidate, then per record → `findings.json` gated by both upstream validators → `REPORT.md`, `NEEDS-VALIDATION.md` and `FINDINGS-DETAIL.md` written by code, never by a model; `task` and `export-remediation` give `/dev` the text for one finding. Source only: no target code runs, so nothing is `confirmed` and a report with none is not a clean bill of health | offline end to end in `scripts/test.sh`; two live audits of a small fixture through headless `claude -p` (28 and 30 agents, $2.93 and $3.05, about 9.5 minutes each; retro 42); the sandbox and the `quick` and `deep` profiles are later changes |
 | marketing | [`graphs/seo/`](graphs/seo/README.md) | `seo-check.mjs check <dir> --site <url>` | so far only the check: a built site's title, description, canonical, Open Graph, and JSON-LD tags, duplicates across pages, the sitemaps (which decide the strict pages), and robots.txt, `SEO-CHECK: PASS\|FAIL`; the audit graph not built yet | check tested offline |
+
+## Autobuild with Codex
+
+Use your saved Codex CLI login to resume an existing autobuild project:
+
+```bash
+codex login status
+cd /path/to/project
+autobuild run --backend codex
+```
+
+For a new project, use `autobuild init --backend codex`. Existing configuration
+and completed features are preserved. Model roles translate automatically:
+Opus → `gpt-6-astra`, Sonnet → `gpt-6.1-sol`, Haiku → `gpt-6-luna`.
+Override the main model with `--model`; Claude remains the default backend.
+
+Codex runs with the workspace-write sandbox. The host independently checks the
+full gate and commits passing work. Claude tool hooks and dollar/turn caps do
+not transfer; Codex uses session timeouts and iteration limits. Its native final
+audit does not generate the separate Claude Workflow PR-review ledger.
+See the [Codex setup and backend differences](graphs/autobuild/tool/README.md#codex-backend)
+for model overrides, skill installation, limits and frozen-file checks.
 
 ## The build-app loop
 
@@ -332,7 +354,7 @@ scripts/validate.sh       # JSON valid, frontmatter complete, CLAUDE.md under 20
 scripts/test-install.sh   # install / re-install / uninstall against a temp HOME
 scripts/test-secrets.sh   # proves the scanner and pre-commit hook block real key formats
 scripts/test-workflow.sh  # runs every graphs/*/tests/*.test.mjs against scripted agents; checks every workflow parses
-scripts/test-autobuild.sh # autobuild's own suite (node:test) against a fake claude, including the hunt's landing
+scripts/test-autobuild.sh # autobuild's suite against fake Claude/Codex CLIs, including gates, reviews and audits
 scripts/check-secrets.sh  # the scanner itself (prints "check-secrets: clean" or lists hits); also the pre-commit hook
 ```
 

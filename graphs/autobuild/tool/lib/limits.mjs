@@ -27,10 +27,10 @@ export function classifyOutcome({ stopFailure = null, result = null, text = "" }
   if (/credit balance is too low|spend limit|usage credits required|individual usage limit|team's shared budget/i.test(message) || error === "billing_error") {
     return { kind: "billing", message: firstLine(message, /credit|spend limit|usage credits|usage limit|budget/i) };
   }
-  if (["authentication_failed", "oauth_org_not_allowed", "account_on_hold"].includes(error) || /not logged in|please run \/login|authentication required/i.test(message)) {
+  if (["authentication_failed", "oauth_org_not_allowed", "account_on_hold"].includes(error) || /not logged in|please run \/login|authentication required|refresh token.*(?:expired|invalid)|unauthorized|401 Unauthorized/i.test(message)) {
     return { kind: "auth", message: firstLine(message, /log ?in|authenticat|org|on hold/i) };
   }
-  if (/hit your (?:session|weekly|opus|sonnet|fable|haiku|[a-z]+) limit|usage limit reached|claude ai usage limit/i.test(message)) {
+  if (/hit your (?:session|weekly|opus|sonnet|fable|haiku|[a-z]+) limit|usage limit reached|hit your usage limit|usage_limit_reached|claude ai usage limit/i.test(message)) {
     return { kind: "usage_limit", message: firstLine(message, /limit/i) };
   }
   if (error === "rate_limit") return { kind: "usage_limit", message: firstLine(message, /limit|429/i) };

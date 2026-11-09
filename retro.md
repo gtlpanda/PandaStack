@@ -3094,3 +3094,11 @@ added). `scripts/test-workflow.mjs` and `CLAUDE.md` are byte for byte the base's
   changed (the loop's D19). No quick drive reached that reason (the budgets scanned, 8 to 14, end `validation_budget_exhausted` or `complete`).
 - `tasks/` does not exist in this worktree (entry 42: `tasks/lessons.md` is git-ignored and lives in the main checkout), so no lesson was written and the plan's status in `tasks/plan-security-audit.md` was not
   updated here. PR 10 (the sandbox and `confirmed`) is still ahead: the skill's "never say confirmed" rule, the report's "no target code was executed" and the README's source-only statements change with it.
+
+## Autobuild Codex backend — 2026-11-09
+Added opt-in Codex execution using saved CLI authentication, JSONL protocol parsing,
+model role equivalents (Astra/Sol/Luna), bounded sessions, native reviews/audit, and
+host-owned gate/mark/commit. Existing Claude paths remain available. Codex skill
+link installed; README/skill explain sandbox, hook, accounting and PR-ledger differences.
+Live smoke ran real Astra through builder, review and audit successfully. Audit found
+and fixed dirty-tree cache acceptance and gate side effects on frozen files.
