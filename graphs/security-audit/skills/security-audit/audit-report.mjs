@@ -18,7 +18,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FINDINGS_FAILED, FINDINGS_REJECTED, LEDGER_FAILED, LEDGER_REJECTED, Usage, advanceState, appendEvent, formatNext, loadRun, markIncomplete, nextStep, readJson, refuse, STATUSES } from './audit-run.mjs'
 import { COMPLETE_CHECK_FAILED, byFingerprint, completeProblems, decisionsOf, finishRun, linkCheck, readPool } from './audit-findings.mjs'
-import { LEDGER_FILE } from './audit-ledger.mjs'
+import { LEDGER_FILE, needsSecondPass } from './audit-ledger.mjs'
 import { QUICK_DEFERRED, rulesOf } from './audit-profile.mjs'
 import { validateFindingsFile, validateLedgerFile } from './upstream.mjs'
 import { cell, code, fence, fenceTag, inline, plain, plural, where } from './audit-md.mjs'
@@ -148,14 +148,21 @@ const NOT_CLAIMED = {
   incomplete: ' This run is incomplete, so none of that is claimed as done: the Status section says why it stopped.',
   noHunter: ' No hunter ran in this run, so none of that is claimed as done.',
 }
-// A hunter ran when a unit holds its result (live) or its archived pass (a critic reopened the unit, and quick then deferred it). Only a hunter's ID, h<wave>-<NN>, counts.
+// A hunter ran when a unit holds its result (live) or its archived pass (a critic reopened the unit, and quick then deferred it), or when a hunt stage spent agents: a hunter
+// that returned nothing usable leaves no owner behind, but it ran. Only a hunter's ID, h<wave>-<NN>, counts in the ledger; the stage is named NN-hunt-w<wave> (a lost one adds -lost-<hash>).
 const HUNTER_ID = /^h\d+-\d+$/
+const HUNT_STAGE = /^\d+-hunt-w\d+(-lost-[0-9a-f]+)?$/
 const isHunter = id => typeof id === 'string' && HUNTER_ID.test(id)
-const hunterRan = ledger => list(ledger).some(u => isObj(u) && (isHunter(u.agent_id) || list(u.attempts).some(a => isObj(a) && isHunter(a.agent_id))))
+const huntSpent = meta => isObj(meta.stage_spend) && Object.entries(meta.stage_spend).some(([stage, agents]) => HUNT_STAGE.test(stage) && agents > 0)
+const hunterRan = (meta, ledger) => huntSpent(meta) || list(ledger).some(u => isObj(u) && (isHunter(u.agent_id) || list(u.attempts).some(a => isObj(a) && isHunter(a.agent_id))))
+// Deep's pinned line says it gave units an earlier run covered on unchanged source a second pass. A run that left such a unit covered with no pass (the budget did not allow it: with
+// no budget every one is given) cannot say so; a run with no such unit says it vacuously, as the line always did.
+const DEEP_RAN_PARTLY = '- Profile rules: deep asked for units split per subsystem and lifecycle mode, ran critic waves to a clean pass, and kept candidate validation and final record verification as separate fresh agents; the budget did not allow every unit an earlier run covered on unchanged source an independent second pass.'
 function profileRulesLine(profile, { meta, ledger }) {
   const text = PROFILE_RULES_LINE[profile]
   if (meta.run_status !== 'complete') return text.asked + NOT_CLAIMED.incomplete
-  return hunterRan(ledger) ? text.ran : text.asked + NOT_CLAIMED.noHunter
+  if (!hunterRan(meta, ledger)) return text.asked + NOT_CLAIMED.noHunter
+  return profile === 'deep' && list(ledger).some(u => isObj(u) && needsSecondPass(u)) ? DEEP_RAN_PARTLY : text.ran
 }
 
 function runSection(ctx, validators) {

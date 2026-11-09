@@ -524,7 +524,7 @@ function reassign(unit, reason) {
 // PandaStack's reading: once this run's own pass covered such a unit, archive that pass and plan the unit again for a fresh owner. Once: the
 // archive (attempts) is what stops a second time. A unit the critic reopened in the same application is already planned, so it is not archived twice.
 export const SECOND_PASS_REASON = 'the deep profile gives a unit an earlier run covered on unchanged source (prior_covered_same_source) an independent second pass'
-const needsSecondPass = u => u.prior_status === 'prior_covered_same_source' && u.status === 'covered' && u.attempts.length === 0
+export const needsSecondPass = u => u.prior_status === 'prior_covered_same_source' && u.status === 'covered' && u.attempts.length === 0
 
 // The critic's `reassign_ids` carry no per-unit reason (HUNTING.md's JSON, which a critic must return exactly), though
 // RECONNAISSANCE.md asks for "the critic's source-backed reassignment_reason": the archive says so instead of inventing one.
