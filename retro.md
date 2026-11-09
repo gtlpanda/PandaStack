@@ -3049,8 +3049,9 @@ new tests' strength (mutations of the gate and of the collision exception each f
 - *A hunter that ran and died was reported as "No hunter ran".* True (reproduced: a quick drive whose `h1-01` throws is `complete` with every unit deferred and no owner left). A hunt stage that spent agents
   (`meta.stage_spend`, `NN-hunt-w<wave>`, also a lost one) now counts as a hunter that ran. Fixed, tested on fixtures and on that drive.
 - *The pinned deep line claims a second pass that was not given.* True in two states. After the gate above, a complete run can leave an eligible unit covered with no pass (the budget did not allow it; reasoned from code and shown on a fixture, no driven budget from 14 to 20 ended complete): the line now says so
-  (`needsSecondPass`, shared with apply-critic). Still true, and left: a complete deep run with no such unit at all (a first deep run) prints "and gave units an earlier run covered on unchanged source an independent
-  second pass", vacuously; `profile-report.test.mjs` pins that line on a fixture with no such unit, and the owner asked to keep the pinned line for complete runs. Relaxing the pin is the owner's call.
+  (`needsSecondPass`, shared with apply-critic). Fixed after this pass: a complete deep run with no such unit at all (a first deep run) printed "and gave units an earlier run covered on unchanged
+  source an independent second pass", a pass it never gave. It now says no unit had earlier coverage on unchanged source, so none needed one; `profile-report.test.mjs` and
+  `audit-report-profile-claims.test.mjs` pin the new line (3 of their tests fail on the old code).
 - *Seed still refuses two quick units that share an ID* (the synthesizer's own pair of units with the same three references and different subsystem labels). Not changed, reasoned from code only: upstream says "fail on every
   duplicate ID" for a ledger, a seed duplicate is the synthesizer's own mistake (it is told once, as for any seed problem), and unlike a minted gap it is not a proposal about units that already exist.
 - *The header comments pointed at an entry 43 that did not exist yet.* This entry.
@@ -3085,7 +3086,7 @@ added). `scripts/test-workflow.mjs` and `CLAUDE.md` are byte for byte the base's
 **Left undone.** - No live run of quick or deep: both were driven offline by scripted agents through the harness (entry 42's live audits were standard's), so their cost and wall time with real agents, and whether real critics and
   minters honor the profile text, are unmeasured. The two readings above (M2, M3) are untested hypotheses about upstream's intent.
 - This branch's `/bughunt` pass (head `78bb1a2`) predates the four fixes, the refactor, the follow-up and the harness removal: run `/bughunt` on the final head before opening the PR (the review gate needs it).
-- The pinned deep line for a first deep run (above); a deep run's "ran critic waves to a clean pass" on a complete run is read from the run being complete (the next step of the machine is a final-clean critic that accepts
+- a deep run's "ran critic waves to a clean pass" on a complete run is read from the run being complete (the next step of the machine is a final-clean critic that accepts
   nothing), not re-derived from `critic.json`; not examined for a hand-edited ledger.
 - The second-pass gate funds against the budget at apply-critic time, which is what `planWave` sees at the next step: nothing is spent between them (reasoned from code; the QA pass found none). A unit it left covered is
   looked at again at the next critic application (the sweep runs at every one), so a later application may still give it the pass.

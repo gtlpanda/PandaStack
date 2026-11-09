@@ -15,7 +15,8 @@ const lines = text => text.split('\n')
 const says = (text, pattern, what) => assert.ok(pattern.test(text), what)
 const lacks = (text, pattern, what) => assert.ok(!pattern.test(text), what)
 const QUICK_LINE = '- Profile rules: quick ran one hunter wave and one final critic pass, with one fresh verifier per candidate doing both the candidate validation and the final record check; what the critic found and what it reopened are deferred, not hunted.'
-const DEEP_LINE = '- Profile rules: deep asked for units split per subsystem and lifecycle mode, ran critic waves to a clean pass, kept candidate validation and final record verification as separate fresh agents, and gave units an earlier run covered on unchanged source an independent second pass.'
+// The fixture is a first run (no unit an earlier run covered), so deep says none needed a second pass; the line for a run that gave one is in audit-report-profile-claims.test.mjs.
+const DEEP_LINE = '- Profile rules: deep asked for units split per subsystem and lifecycle mode, ran critic waves to a clean pass, and kept candidate validation and final record verification as separate fresh agents; no unit had earlier coverage on unchanged source, so none needed an independent second pass.'
 
 await test('the Run section says what the profile ran: one exact line for quick and one for deep, none for standard', () => {
   assert.ok(lines(run('quick')).includes(QUICK_LINE), 'quick')

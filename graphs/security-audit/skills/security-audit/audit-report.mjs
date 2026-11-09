@@ -156,13 +156,16 @@ const isHunter = id => typeof id === 'string' && HUNTER_ID.test(id)
 const huntSpent = meta => isObj(meta.stage_spend) && Object.entries(meta.stage_spend).some(([stage, agents]) => HUNT_STAGE.test(stage) && agents > 0)
 const hunterRan = (meta, ledger) => huntSpent(meta) || list(ledger).some(u => isObj(u) && (isHunter(u.agent_id) || list(u.attempts).some(a => isObj(a) && isHunter(a.agent_id))))
 // Deep's pinned line says it gave units an earlier run covered on unchanged source a second pass. A run that left such a unit covered with no pass (the budget did not allow it: with
-// no budget every one is given) cannot say so; a run with no such unit says it vacuously, as the line always did.
+// no budget every one is given) cannot say so, and a run with no such unit (a first deep run) says there was none instead of claiming a pass it never gave.
+const DEEP_RAN_NO_PRIOR = '- Profile rules: deep asked for units split per subsystem and lifecycle mode, ran critic waves to a clean pass, and kept candidate validation and final record verification as separate fresh agents; no unit had earlier coverage on unchanged source, so none needed an independent second pass.'
 const DEEP_RAN_PARTLY = '- Profile rules: deep asked for units split per subsystem and lifecycle mode, ran critic waves to a clean pass, and kept candidate validation and final record verification as separate fresh agents; the budget did not allow every unit an earlier run covered on unchanged source an independent second pass.'
 function profileRulesLine(profile, { meta, ledger }) {
   const text = PROFILE_RULES_LINE[profile]
   if (meta.run_status !== 'complete') return text.asked + NOT_CLAIMED.incomplete
   if (!hunterRan(meta, ledger)) return text.asked + NOT_CLAIMED.noHunter
-  return profile === 'deep' && list(ledger).some(u => isObj(u) && needsSecondPass(u)) ? DEEP_RAN_PARTLY : text.ran
+  if (profile !== 'deep') return text.ran
+  if (list(ledger).some(u => isObj(u) && needsSecondPass(u))) return DEEP_RAN_PARTLY
+  return list(ledger).some(u => isObj(u) && u.prior_status === 'prior_covered_same_source') ? text.ran : DEEP_RAN_NO_PRIOR
 }
 
 function runSection(ctx, validators) {

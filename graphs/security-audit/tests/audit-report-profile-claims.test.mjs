@@ -29,6 +29,7 @@ const QUICK_RAN = '- Profile rules: quick ran one hunter wave and one final crit
 const DEEP_RAN = '- Profile rules: deep asked for units split per subsystem and lifecycle mode, ran critic waves to a clean pass, kept candidate validation and final record verification as separate fresh agents, and gave units an earlier run covered on unchanged source an independent second pass.'
 const QUICK_ASKED = '- Profile rules: quick asks for one hunter wave and one final critic pass, with one fresh verifier per candidate doing both the candidate validation and the final record check; what the critic finds and what it reopens are deferred, not hunted.'
 const DEEP_ASKED = '- Profile rules: deep asks for units split per subsystem and lifecycle mode, critic waves until a clean pass, candidate validation and final record verification as separate fresh agents, and an independent second pass for units an earlier run covered on unchanged source.'
+const DEEP_RAN_NO_PRIOR = '- Profile rules: deep asked for units split per subsystem and lifecycle mode, ran critic waves to a clean pass, and kept candidate validation and final record verification as separate fresh agents; no unit had earlier coverage on unchanged source, so none needed an independent second pass.'
 const DEEP_RAN_PARTLY = '- Profile rules: deep asked for units split per subsystem and lifecycle mode, ran critic waves to a clean pass, and kept candidate validation and final record verification as separate fresh agents; the budget did not allow every unit an earlier run covered on unchanged source an independent second pass.'
 const INCOMPLETE_TAIL = ' This run is incomplete, so none of that is claimed as done: the Status section says why it stopped.'
 const NO_HUNTER_TAIL = ' No hunter ran in this run, so none of that is claimed as done.'
@@ -69,7 +70,7 @@ await test('a complete deep run in which no hunter ran says the same: it asks, a
 })
 await test('a complete run in which a hunter ran keeps the pinned line, whether its evidence is live or only archived (quick reopens a hunted unit and defers it, so the hunter is in attempts)', () => {
   assert.equal(rulesLine(run('quick')), QUICK_RAN)
-  assert.equal(rulesLine(run('deep')), DEEP_RAN)
+  assert.equal(rulesLine(run('deep')), DEEP_RAN_NO_PRIOR, 'a first deep run: the ran line, without a second-pass claim')
   const attempt = { wave: 1, status: 'covered', agent_id: 'h1-01', reviewed_paths: ['src/app.js'], local_checks: [checkOf('h1-01', ['src/app.js'])], result_fingerprints: [], unresolved: [], reassignment_reason: 'the critic listed this unit' }
   const archived = UNIT('a', 'deferred', { wave: 2, unresolved: [QUICK_DEFERRED], agent_id: null, attempts: [attempt] })
   assert.equal(rulesLine(run('quick', { ledger: [archived], state: { critic_kind: 'post-wave', wave: 1 } })), QUICK_RAN)
@@ -89,15 +90,15 @@ await test('what counts as a hunter is an exact hunter ID: a verifier, a critic,
     assert.equal(rulesLine(run('quick', { ledger: [unit], state: { critic_kind: 'post-wave', wave: 1 } })), QUICK_ASKED + NO_HUNTER_TAIL, `owner ${JSON.stringify(agent)}`)
   }
 })
-await test('a complete deep run that left a unit an earlier run covered on unchanged source without its second pass (the budget did not allow it) does not claim it; one that gave it, or has none, keeps the pinned line', () => {
+await test('a complete deep run that left a unit an earlier run covered on unchanged source without its second pass (the budget did not allow it) does not claim it; one that gave it keeps the pinned line, and one with no such unit (a first deep run) says none needed a pass', () => {
   const eligible = { ...UNIT('b'), prior_status: 'prior_covered_same_source' }
   assert.equal(rulesLine(run('deep', { ledger: [UNIT('a'), eligible] })), DEEP_RAN_PARTLY)
   const attempt = { wave: 1, status: 'covered', agent_id: 'h1-01', reviewed_paths: ['src/app.js'], local_checks: [checkOf('h1-01', ['src/app.js'])], result_fingerprints: [], unresolved: [], reassignment_reason: SECOND_PASS_REASON }
   const given = { ...UNIT('b', 'covered', { wave: 2, agent_id: 'h2-01', local_checks: [checkOf('h2-01', ['src/app.js'])], attempts: [attempt] }), prior_status: 'prior_covered_same_source' }
   assert.equal(rulesLine(run('deep', { ledger: [UNIT('a'), given] })), DEEP_RAN, 'the pass was given')
-  assert.equal(rulesLine(run('deep', { ledger: [UNIT('a')] })), DEEP_RAN, 'no such unit (the pinned fixture)')
+  assert.equal(rulesLine(run('deep', { ledger: [UNIT('a')] })), DEEP_RAN_NO_PRIOR, 'no such unit: no second pass is claimed')
   for (const status of ['candidate', 'blocked']) assert.equal(rulesLine(run('deep', { ledger: [UNIT('a'), { ...UNIT('b', status, status === 'candidate' ? { result_fingerprints: ['fp-b'] } : {}), prior_status: 'prior_covered_same_source' }] })), DEEP_RAN, `a ${status} unit is not eligible for the pass`)
-  assert.equal(rulesLine(run('deep', { ledger: [UNIT('a'), { ...UNIT('b'), prior_status: 'prior_covered_changed_source' }] })), DEEP_RAN, 'changed source is not eligible')
+  assert.equal(rulesLine(run('deep', { ledger: [UNIT('a'), { ...UNIT('b'), prior_status: 'prior_covered_changed_source' }] })), DEEP_RAN_NO_PRIOR, 'changed source is not eligible, so no second pass is claimed')
 })
 await test('standard says nothing about its profile in any state, and a meta with no profile or an unknown one reads as standard', () => {
   for (const over of [{}, incomplete('critic_budget_exhausted'), incomplete('validation_budget_exhausted')]) assert.equal(rulesLine(run('standard', { meta: over })), undefined, JSON.stringify(over))
@@ -131,12 +132,12 @@ await test('quick at --budget 12 (complete, one hunter wave) keeps the pinned li
   assert.deepEqual([m.run_status, m.incomplete_reason], ['incomplete', 'validation_budget_exhausted'])
   assert.equal(line, QUICK_ASKED + INCOMPLETE_TAIL)
 })
-await test('deep at --budget 11 (incomplete, validation_budget_exhausted) claims nothing; at --budget 10 (complete, no hunter) neither; at --budget 22 (complete) it keeps the pinned line', async () => {
+await test('deep at --budget 11 (incomplete, validation_budget_exhausted) claims nothing; at --budget 10 (complete, no hunter) neither; at --budget 22 (complete, a first audit) it says what ran and that no second pass was needed', async () => {
   const eleven = await rulesOfRun('deep', deepAnswer, 11)
   assert.deepEqual([eleven.m.run_status, eleven.m.incomplete_reason], ['incomplete', 'validation_budget_exhausted'])
   assert.equal(eleven.line, DEEP_ASKED + INCOMPLETE_TAIL)
   const ten = await rulesOfRun('deep', deepAnswer, 10)
   assert.deepEqual([ten.m.run_status, ten.m.incomplete_reason], ['complete', null])
   assert.equal(ten.line, DEEP_ASKED + NO_HUNTER_TAIL)
-  assert.equal((await rulesOfRun('deep', deepAnswer, 22)).line, DEEP_RAN)
+  assert.equal((await rulesOfRun('deep', deepAnswer, 22)).line, DEEP_RAN_NO_PRIOR, 'a first real deep audit claims no second pass')
 })
