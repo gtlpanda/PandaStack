@@ -131,10 +131,31 @@ function priorLines(leads) {
   return named.slice(0, MAX_LISTED).concat(named.length > MAX_LISTED ? [`  - …and ${named.length - MAX_LISTED} more in coverage-ledger.json`] : [])
 }
 
-// What a profile other than standard ran, stated right after the "- Run" line (upstream SKILL.md, "Run profiles and scope"). Standard runs the method as written and has no line.
+// What a profile other than standard did, stated right after the "- Run" line (upstream SKILL.md, "Run profiles and scope"). Standard runs the method as written and has no line.
+// `ran` is for a complete run in which a hunter ran: that run did what the profile does. Any other run (incomplete, or complete with no hunter) says what the profile asks for
+// and that none of it is claimed as done, so the line never says "ran critic waves to a clean pass" above a Final critic section that says the final-clean critic did not run.
 const PROFILE_RULES_LINE = {
-  quick: '- Profile rules: quick ran one hunter wave and one final critic pass, with one fresh verifier per candidate doing both the candidate validation and the final record check; what the critic found and what it reopened are deferred, not hunted.',
-  deep: '- Profile rules: deep asked for units split per subsystem and lifecycle mode, ran critic waves to a clean pass, kept candidate validation and final record verification as separate fresh agents, and gave units an earlier run covered on unchanged source an independent second pass.',
+  quick: {
+    ran: '- Profile rules: quick ran one hunter wave and one final critic pass, with one fresh verifier per candidate doing both the candidate validation and the final record check; what the critic found and what it reopened are deferred, not hunted.',
+    asked: '- Profile rules: quick asks for one hunter wave and one final critic pass, with one fresh verifier per candidate doing both the candidate validation and the final record check; what the critic finds and what it reopens are deferred, not hunted.',
+  },
+  deep: {
+    ran: '- Profile rules: deep asked for units split per subsystem and lifecycle mode, ran critic waves to a clean pass, kept candidate validation and final record verification as separate fresh agents, and gave units an earlier run covered on unchanged source an independent second pass.',
+    asked: '- Profile rules: deep asks for units split per subsystem and lifecycle mode, critic waves until a clean pass, candidate validation and final record verification as separate fresh agents, and an independent second pass for units an earlier run covered on unchanged source.',
+  },
+}
+const NOT_CLAIMED = {
+  incomplete: ' This run is incomplete, so none of that is claimed as done: the Status section says why it stopped.',
+  noHunter: ' No hunter ran in this run, so none of that is claimed as done.',
+}
+// A hunter ran when a unit holds its result (live) or its archived pass (a critic reopened the unit, and quick then deferred it). Only a hunter's ID, h<wave>-<NN>, counts.
+const HUNTER_ID = /^h\d+-\d+$/
+const isHunter = id => typeof id === 'string' && HUNTER_ID.test(id)
+const hunterRan = ledger => list(ledger).some(u => isObj(u) && (isHunter(u.agent_id) || list(u.attempts).some(a => isObj(a) && isHunter(a.agent_id))))
+function profileRulesLine(profile, { meta, ledger }) {
+  const text = PROFILE_RULES_LINE[profile]
+  if (meta.run_status !== 'complete') return text.asked + NOT_CLAIMED.incomplete
+  return hunterRan(ledger) ? text.ran : text.asked + NOT_CLAIMED.noHunter
 }
 
 function runSection(ctx, validators) {
@@ -151,7 +172,7 @@ function runSection(ctx, validators) {
   if ((ledger ?? []).some(u => u.status === 'deferred')) partial.push('some coverage was deferred')
   return ['## Run', '',
     `- Run ${code(meta.run_id, 40)} of ${code(meta.repo, 80)}, profile ${code(meta.profile, 20)}, scope ${list(meta.scope_paths).length ? list(meta.scope_paths).map(p => code(p, 120)).join(', ') : 'the whole snapshot'}.`,
-    ...(Object.hasOwn(PROFILE_RULES_LINE, rules.profile) ? [PROFILE_RULES_LINE[rules.profile]] : []),
+    ...(Object.hasOwn(PROFILE_RULES_LINE, rules.profile) ? [profileRulesLine(rules.profile, ctx)] : []),
     `- Source: commit ${code(String(meta.source_ref?.commit ?? '').slice(0, 12))}.${dirty}`,
     `- Execution: ${meta.execution_policy === 'sandboxed-source-and-local-only' ? 'sandboxed source and local checks only' : inline(meta.execution_policy)}; the capability this run had was ${code(meta.execution_capability, 20)}, so **no target code was executed**. Controls the host could not enforce (so nothing ran):`,
     ...list(meta.execution_blockers).map(b => `  - ${plain(b)}`),
