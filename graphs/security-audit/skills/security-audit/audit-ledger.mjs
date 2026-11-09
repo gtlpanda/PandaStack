@@ -310,6 +310,15 @@ export const exhaustCriticBudget = (runDir, run) => stopHunting(runDir, REASONS.
 
 export const hunterId = (wave, n) => `h${wave}-${String(n).padStart(2, '0')}`   // matches upstream's agent ID pattern; wave-unique, so fresh
 
+// What a wave planned now would do with `ledger`: its hunter work in rank order, the hunters the budget allows, the groups of units it would make, and the groups
+// that get a hunter. planWave plans with this, and anything asking what a wave would fund asks it too, so the two cannot disagree.
+function wavePlan(meta, ledger) {
+  const work = rankUnits(ledger.filter(isHunterWork))
+  const allowance = meta.budget === null ? { hunters: Infinity, reason: null } : waveAllowance(meta.profile, meta.budget - meta.agents_spent)
+  const groups = allowance.hunters === 0 ? [] : groupIntoHunters(work, meta.limits.max_units_per_hunter)
+  return { work, allowance, groups, funded: groups.slice(0, allowance.hunters) }
+}
+
 export function planWave(runDir) {
   const started = Date.now()
   const run = loadRun(runDir)
@@ -320,16 +329,14 @@ export function planWave(runDir) {
     finish(runDir, 'plan-wave', started, { hunters: 0, assigned: 0, deferred, still_planned: 0 }, { wave }, { reason: REASONS.critic, wave, assignments: [] })
     return { summary: `wave=${wave} hunters=0 assigned=0 deferred=${deferred} reason=${REASONS.critic}`, notes: [] }
   }
-  const work = rankUnits(ledger.filter(isHunterWork))
-  const allowance = meta.budget === null ? { hunters: Infinity, reason: null } : waveAllowance(meta.profile, meta.budget - meta.agents_spent)
+  const { work, allowance, groups, funded } = wavePlan(meta, ledger)
   const patched = new Map()
   let hunters = []
   if (allowance.hunters === 0) {
     // Upstream: launch no hunter from this wave and defer its planned units (HUNTING.md, "A budget bounds it the same way").
     for (const u of work) patched.set(u.coverage_id, deferUnit(u, allowance.reason))
   } else {
-    const groups = groupIntoHunters(work, meta.limits.max_units_per_hunter)
-    hunters = groups.slice(0, allowance.hunters).map((units, i) => ({ agent_id: hunterId(wave, i + 1), units }))
+    hunters = funded.map((units, i) => ({ agent_id: hunterId(wave, i + 1), units }))
     const rank = new Map(work.map((u, i) => [u.coverage_id, i + 1]))
     for (const h of hunters) {
       for (const u of h.units) {
