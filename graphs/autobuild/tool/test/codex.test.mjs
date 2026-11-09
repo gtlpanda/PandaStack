@@ -1,13 +1,39 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { project, run, KIT, CLI } from "../test-fixtures/project.mjs";
 import { loadConfig } from "../lib/config.mjs";
 import { codexArgs, readCodexResult } from "../lib/codex.mjs";
 const env = { AUTOBUILD_BACKEND: "codex", AUTOBUILD_CODEX_BIN: path.join(KIT, "test-fixtures", "fake-codex.mjs"), AUTOBUILD_CLAUDE_BIN: "/no/claude" };
+const REVIEW_STATUS = path.resolve(KIT, "../../hunt/skills/bughunt/review-status.mjs");
+const git = (root, ...args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
+const huntBuild = { build: "F-1", files: { "src/feature.js": "export function feature() { return -1; }\n" } };
+function huntProject(limits = {}, patch = {}) {
+  const root = project(["F-1"], limits);
+  git(root, "branch", "main");
+  configure(root, { bughuntBase: "main", ...patch });
+  return root;
+}
+function repairProject() {
+  const root = project(["F-1"]);
+  mkdirSync(path.join(root, "src"));
+  writeFileSync(path.join(root, "src/feature.js"), "export function feature() { return 0; }\n");
+  writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "hunt-repair-fixture", type: "module", scripts: { test: "node --test tests/*.test.mjs" } }));
+  writeFileSync(path.join(root, "tests/existing.test.mjs"), "import { test } from 'node:test'; import assert from 'node:assert/strict'; test('baseline', () => assert.equal(1, 1));\n");
+  git(root, "add", "."); git(root, "commit", "-qm", "baseline suite"); git(root, "branch", "main");
+  configure(root, { bughuntBase: "main" });
+  return root;
+}
+function huntCalls(root) {
+  const file = path.join(root, ".harness-script.json.hunt-calls");
+  return existsSync(file) ? readFileSync(file, "utf8").trim().split("\n").map(line => JSON.parse(line)) : [];
+}
+function reviewStatus(root) {
+  return JSON.parse(execFileSync(process.execPath, [REVIEW_STATUS, "status", "--repo", root, "--head", "HEAD", "--base", "main"], { encoding: "utf8" }));
+}
 function configure(root, patch) {
   const file = path.join(root, "autobuild.json");
   writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), ...patch }));
@@ -46,21 +72,82 @@ test("frozen edits and passing-flag manipulation stop Codex", () => {
     assert.equal(result.code, 4, result.out);
   }
 });
-test("Codex reviews and the native final audit finish without Claude", () => {
-  const root = project(["F-1"], { finalReview: true });
-  execFileSync("git", ["-C", root, "branch", "main"]);
-  configure(root, { bughuntBase: "main" });
-  const result = run(root, [{ build: "F-1" }, { review: true }, { audit: { verdict: "pass", summary: "Reviewed branch; no defects", unresolved: [] } }], { ...env, AUTOBUILD_BUGHUNT: "1" });
+test("Codex final review and full hunt produce the shared PR ledger without Claude", () => {
+  const root = huntProject({ finalReview: true });
+  const result = run(root, [huntBuild, { review: true }], { ...env, AUTOBUILD_BUGHUNT: "1" });
   assert.equal(result.code, 0, result.out);
-  assert.equal(result.calls.length, 3);
-  assert.match(result.out, /branch audit and full gate: PASS/);
+  assert.equal(result.calls.length, 2, "only builder and periodic review consume the sequential queue");
+  const calls = huntCalls(root);
+  assert.ok(calls.some(c => c.role === "impact-mapper"));
+  assert.ok(calls.some(c => c.label === "hunt: logic"));
+  assert.ok(calls.some(c => c.label === "hunt: regression"));
+  assert.ok(calls.every(c => c.args.includes("read-only")), "analysis-only leaves are read-only");
+  assert.ok(calls.every(c => c.args.includes("gpt-6.1-sol")), "specialists use the configured subagent tier");
+  assert.match(result.out, /bug hunt:.*pass/);
+  const status = reviewStatus(root);
+  assert.equal(status.hunted, true, JSON.stringify(status));
+  assert.equal(status.disposition, "pass", JSON.stringify(status));
+  assert.match(git(root, "log", "-1", "--format=%s"), /^chore\(bughunt\): pass$/);
+  assert.equal(git(root, "status", "--porcelain"), "");
+  const again = run(root, [], { ...env, AUTOBUILD_BUGHUNT: "1" });
+  assert.equal(again.code, 0, again.out);
+  assert.equal(huntCalls(root).length, calls.length, "same-head resume reuses the verified ledger");
 });
-test("Codex audit with unresolved findings does not report done", () => {
-  const root = project(["F-1"]);
-  execFileSync("git", ["-C", root, "branch", "main"]);
-  configure(root, { bughuntBase: "main" });
-  const result = run(root, [{ build: "F-1" }, { audit: { verdict: "needs_human", summary: "problem", unresolved: ["file:1 bug"] } }], { ...env, AUTOBUILD_BUGHUNT: "1" });
+test("Codex hunt keeps confirmed unreproduced findings open instead of claiming done", () => {
+  const root = huntProject();
+  const result = run(root, [huntBuild], { ...env, AUTOBUILD_BUGHUNT: "1", FAKE_HUNT_MODE: "unresolved" });
   assert.equal(result.code, 12, result.out);
+  const calls = huntCalls(root);
+  assert.ok(calls.some(c => c.role === "skeptic"));
+  assert.ok(calls.some(c => c.role === "reproducer"));
+  const status = reviewStatus(root);
+  assert.equal(status.hunted, true, "finished review is recorded even though it requires changes");
+  assert.notEqual(status.disposition, "pass", JSON.stringify(status));
+  assert.doesNotMatch(result.out, /every feature passes\. Done/);
+});
+test("Codex hunt reproduces, repairs, independently verifies and lands only the verified fix", () => {
+  const root = repairProject();
+  const result = run(root, [huntBuild], { ...env, AUTOBUILD_BUGHUNT: "1", FAKE_HUNT_MODE: "repair" });
+  assert.equal(result.code, 0, result.out);
+  assert.equal(readFileSync(path.join(root, "src/feature.js"), "utf8"), "export function feature() { return 0; }\n");
+  assert.ok(existsSync(path.join(root, "tests/bughunt-f1.test.mjs")), "reproduction test is retained with the fix");
+  const roles = huntCalls(root).map(c => c.role);
+  for (const role of ["skeptic", "reproducer", "repairer", "fix-verifier"]) assert.ok(roles.includes(role), role);
+  assert.ok(!roles.includes("runner"), "host executes evidence instead of trusting a model transcription");
+  const status = reviewStatus(root);
+  assert.equal(status.hunted, true, JSON.stringify(status));
+  assert.equal(status.disposition, "pass", JSON.stringify(status));
+  assert.match(git(root, "log", "-3", "--format=%s"), /bughunt: fix F1/);
+  assert.equal(git(root, "status", "--porcelain"), "");
+});
+test("Codex rejected fix is not landed even when the reproduction and suite pass", () => {
+  const root = repairProject();
+  const result = run(root, [huntBuild], { ...env, AUTOBUILD_BUGHUNT: "1", FAKE_HUNT_MODE: "reject-fix" });
+  assert.equal(result.code, 12, result.out);
+  assert.equal(readFileSync(path.join(root, "src/feature.js"), "utf8"), huntBuild.files["src/feature.js"]);
+  assert.doesNotMatch(git(root, "log", "--format=%s"), /^bughunt: fix F1$/m);
+  assert.notEqual(reviewStatus(root).disposition, "pass");
+});
+test("Codex incomplete coverage remains manual review", () => {
+  const root = huntProject();
+  const result = run(root, [huntBuild], { ...env, AUTOBUILD_BUGHUNT: "1", FAKE_HUNT_MODE: "partial" });
+  assert.equal(result.code, 12, result.out);
+  assert.equal(reviewStatus(root).disposition, "manual_review");
+});
+test("Codex zero-exit missing result and malformed hunt output never unlock the PR gate", () => {
+  for (const mode of ["no-result", "malformed"]) {
+    const root = huntProject();
+    const result = run(root, [huntBuild], { ...env, AUTOBUILD_BUGHUNT: "1", FAKE_HUNT_MODE: mode });
+    assert.equal(result.code, 12, result.out);
+    assert.equal(reviewStatus(root).hunted, false, `invalid leaf output must not create finished review: ${mode}`);
+    assert.doesNotMatch(result.out, /every feature passes\. Done/);
+  }
+});
+test("Codex hunt usage failure returns usage-limit exit and no finished review", () => {
+  const root = huntProject();
+  const result = run(root, [huntBuild], { ...env, AUTOBUILD_BUGHUNT: "1", FAKE_HUNT_MODE: "usage-limit" });
+  assert.equal(result.code, 8, result.out);
+  assert.equal(reviewStatus(root).hunted, false);
 });
 test("Codex usage failures probe with Luna, then resume; auth fails immediately", () => {
   const root = project(["F-1"]);
@@ -127,12 +214,11 @@ test("gate commands cannot modify frozen tests before the host commits", () => {
   assert.equal(result.code, 4, result.out);
   assert.equal(JSON.parse(readFileSync(path.join(root, "features.json"))).features[0].passes, false);
 });
-test("cached Codex audit refuses later dirty code and reruns clean-tree gates", () => {
-  const root = project(["F-1"]);
-  execFileSync("git", ["-C", root, "branch", "main"]);
-  configure(root, { bughuntBase: "main", gate: [{ name: "regression", command: "test ! -f bad-code && test ! -f .harness/fail-gate" }] });
+test("cached Codex hunt refuses dirty code and rechecks the full host gate", () => {
+  const root = huntProject({}, { gate: [{ name: "regression", command: "test ! -f bad-code && test ! -f .harness/fail-gate" }] });
   const enabled = { ...env, AUTOBUILD_BUGHUNT: "1" };
-  assert.equal(run(root, [{ build: "F-1" }, { audit: { verdict: "pass", summary: "clean", unresolved: [] } }], enabled).code, 0);
+  const first = run(root, [huntBuild], enabled);
+  assert.equal(first.code, 0, first.out);
   writeFileSync(path.join(root, "bad-code"), "bad\n");
   const dirty = run(root, [], enabled);
   assert.equal(dirty.code, 12, dirty.out);
@@ -140,7 +226,7 @@ test("cached Codex audit refuses later dirty code and reruns clean-tree gates", 
   writeFileSync(path.join(root, ".harness/fail-gate"), "fail\n");
   const failed = run(root, [], enabled);
   assert.equal(failed.code, 12, failed.out);
-  assert.match(failed.out, /host gate: FAIL/);
+  assert.match(failed.out, /gate.*FAIL|FAIL.*gate/i);
 });
 
 test("a missing backend value fails instead of silently launching Claude", () => {
