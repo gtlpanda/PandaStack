@@ -213,7 +213,7 @@
       ],
       "test": "graphs/security-audit/tests/profile-e2e-deep.test.mjs",
       "testKind": "profile",
-      "passes": false
+      "passes": true
     }
   ]
 }
