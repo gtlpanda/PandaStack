@@ -35,12 +35,13 @@
 // committed. Every git call in the fix worktree runs without hooks or
 // fsmonitor, in the sandbox environment.
 // Exit 0 when it ran, 1 on an error it could not run past, 2 on usage.
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, lstatSync, symlinkSync, realpathSync, openSync, closeSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, lstatSync, symlinkSync, realpathSync, openSync, closeSync, readdirSync } from 'node:fs'
 import { join, dirname, extname, normalize, relative, basename } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 import { git as rawGit } from '../../../build/skills/build-app/driver/proc.mjs'
+import { packageDirs } from '../../../../core/skills/verify/packages.mjs'
 import { TEST_FILE } from '../../../build/skills/build-app/driver/checks.mjs'
 import { readLedger, writeLedger, reconcile, reconcileFix } from '../../../../core/skills/findings/findings.mjs'
 
@@ -188,6 +189,24 @@ function linkDeps(repo, dir, pkgDir) {
     const from = join(repo, d, 'node_modules')
     const to = join(dir, d, 'node_modules')
     if (existsSync(from) && existsSync(join(dir, d)) && !existsSync(to)) symlinkSync(from, to)
+  }
+}
+
+// Suites can import sibling libraries even when those libraries have no tests.
+// Discover only real immediate package directories in the immutable export.
+function linkSuiteDeps(repo, dir) {
+  for (const pkg of ['.', ...packageDirs(dir)]) {
+    const from = join(repo, pkg, 'node_modules')
+    const to = join(dir, pkg, 'node_modules')
+    if (!existsSync(from)) continue
+    if (existsSync(to)) throw new Error(`suite dependency directory already exists: ${pkg}/node_modules`)
+    // Keep the container private so config bundlers/cache writers cannot write
+    // through a node_modules symlink into the user's installed dependencies.
+    mkdirSync(to)
+    for (const name of readdirSync(from)) {
+      if (name.startsWith('.') && name !== '.bin') continue
+      symlinkSync(join(from, name), join(to, name))
+    }
   }
 }
 
@@ -598,7 +617,7 @@ export function fix(stateDir, id, { timeoutMs = DEFAULT_TIMEOUT_MS, suiteTimeout
     if (suiteTime() < 30_000) return out('BLOCKED', 'no time is left in this check for the suite; the suite must fit in what the 9-minute check leaves', { tree }, runs)
     const err = exportTree(intake.repo, tree, join(work, 'suite-fixed'))
     if (err) return out('ERROR', err, { tree }, runs)
-    linkDeps(intake.repo, join(work, 'suite-fixed'), '.')
+    linkSuiteDeps(intake.repo, join(work, 'suite-fixed'))
     const withFix = runSuite(join(work, 'suite-fixed'), work, 'suite-fixed', suiteTime())
     runs.push({ arm: 'suite with the repair', sha: tree, exit: withFix.pass ? 0 : 1, timedOut: withFix.timedOut, marker: false, error: null, failing: withFix.failing, tail: withFix.tail })
     if (withFix.pass) return out('PASS', `${repro ? 'the reproduction passes with the repair and fails without it; ' : 'no reproduction proved this finding (the human approved it); '}the suite passes`, { tree, files }, runs)
@@ -606,7 +625,7 @@ export function fix(stateDir, id, { timeoutMs = DEFAULT_TIMEOUT_MS, suiteTimeout
     if (suiteTime() < 30_000) return out('BLOCKED', 'the suite fails with the repair, and no time is left to see whether it failed without it', { tree }, runs)
     const baseErr = exportTree(intake.repo, wt.head, join(work, 'suite-base'))
     if (baseErr) return out('ERROR', baseErr, { tree }, runs)
-    linkDeps(intake.repo, join(work, 'suite-base'), '.')
+    linkSuiteDeps(intake.repo, join(work, 'suite-base'))
     const base = runSuite(join(work, 'suite-base'), work, 'suite-base', suiteTime())
     runs.push({ arm: 'suite without the repair', sha: wt.head, exit: base.pass ? 0 : 1, timedOut: base.timedOut, marker: false, error: null, failing: base.failing, tail: base.tail })
     const worse = withFix.failing.filter(step => !base.failing.includes(step))

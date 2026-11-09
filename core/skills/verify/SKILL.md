@@ -28,6 +28,19 @@ the first argument to verify a subproject, e.g. `packages/api`.
   `go test`, `terraform fmt -check`/`validate`/`tflint`.
 - Prints each command, its tail (5 lines on success, 60 on failure), and its
   exit code. Then the summary block.
+- If no root test-class step ran, checks every non-hidden immediate child Node package
+  with a `lint`, `typecheck`, or `test` script. Libraries without scripts are
+  dependency providers, not test suites. It does not recursively search fixtures
+  or infer arbitrary workspace layouts. Symlinked package paths and malformed
+  manifests fail closed. A root aggregate test remains authoritative.
+- A discovered subproject's bare `vitest run` script gets serial file execution
+  only when the installed runner advertises `--fileParallelism`. Existing config
+  loaders and test selection are preserved, including CommonJS configurations.
+- Hunt suite exports use private `node_modules` directories with links to installed
+  dependency entries, including sibling libraries. Tool cache directories are not
+  linked, so default config bundling and cache writes stay inside the export.
+  Network isolation still prevents access to host databases; passing local/mock
+  suites never replaces the driver's full host gate.
 - Never prints PASS when nothing ran, and never when only lint/format ran: at
   least one test-class step (`test`, `pytest`, `go test`, `terraform validate`,
   `scripts/test.sh`) must have run. A missing toolchain is a FAIL, not a skip.

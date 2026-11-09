@@ -10,6 +10,7 @@
 # the verdict is the LAST line of output. Exit code mirrors the verdict.
 set -uo pipefail
 
+VERIFY_SCRIPT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/verify.sh"
 ROOT="${1:-.}"
 cd "$ROOT" || { echo "VERIFY: FAIL"; echo "  cannot cd to $ROOT"; exit 1; }
 
@@ -65,7 +66,19 @@ if [ -f package.json ]; then
   else
     has_script() { node -e 'const s=require("./package.json").scripts||{};process.exit(s[process.argv[1]]?0:1)' "$1"; }
     for s in lint typecheck test; do
-      if has_script "$s"; then run_step "node:$s" "$PM" run "$s"; else skip "no \"$s\" script in package.json"; fi
+      if ! has_script "$s"; then
+        skip "no \"$s\" script in package.json"
+      elif [ "$s" = test ] && [ "${2:-}" = "--leaf" ] && node -e 'process.exit(/^vitest run$/.test(require("./package.json").scripts.test.trim()) ? 0 : 1)'; then
+        # Preserve the existing config loader. Only request serial file runs
+        # when this installed Vitest advertises that option; keep every test.
+        if [ -x node_modules/.bin/vitest ] && node_modules/.bin/vitest --help 2>/dev/null | grep -- '--fileParallelism' >/dev/null; then
+          run_step "node:$s" "$PM" run "$s" -- --no-file-parallelism
+        else
+          run_step "node:$s" "$PM" run "$s"
+        fi
+      else
+        run_step "node:$s" "$PM" run "$s"
+      fi
     done
     if ! has_script typecheck && [ -f tsconfig.json ]; then
       if [ -x node_modules/.bin/tsc ]; then run_step "node:tsc" node_modules/.bin/tsc --noEmit -p tsconfig.json
@@ -110,6 +123,21 @@ if [ "$RAN" -eq 0 ]; then
   if   [ -x scripts/test.sh ];     then run_step "repo:test"     scripts/test.sh
   elif [ -x scripts/validate.sh ]; then run_step "repo:validate" scripts/validate.sh
   fi
+fi
+
+# A root package may only orchestrate development (no test script). Discover all
+# immediate Node subprojects, not arbitrary nested fixtures or dependencies.
+# Each child remains a normal verify run; a failed child can never become PASS.
+if [ "$TESTED" -eq 0 ] && [ "${2:-}" != "--leaf" ] && have node; then
+  packages="$(mktemp)"
+  if node "$(dirname "$VERIFY_SCRIPT")/packages.mjs" "$PWD" >"$packages"; then
+    while IFS= read -r -d '' package; do
+      TAIL_OK=20 DISPLAY_CMD="verify subproject $package" run_step "repo:test" env -u DISPLAY_CMD VERIFY_TAIL_OK=12 bash "$VERIFY_SCRIPT" "$package" --leaf
+    done <"$packages"
+  else
+    fail_step "subproject discovery failed" 1
+  fi
+  rm -f "$packages"
 fi
 
 # ---------- Verdict ----------

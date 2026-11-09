@@ -3118,3 +3118,26 @@ publication and shared pre-preparation locks across providers. Full suite:
 passed. Real Codex build/hunt/resume and reproduced repair/verified landing
 passed through the unchanged review gate. Details and limits are in
 `graphs/autobuild/tool/PARITY-VERIFICATION.md`.
+
+## Monorepo regression evidence — 2026-11-09
+
+The shared hunt evidence verifier now discovers runnable immediate Node subprojects
+when the root has no test-class step. Suite exports use private dependency
+containers with links to installed package entries, including sibling libraries;
+tool caches remain local to the export. Malformed manifests and symlinked package
+paths fail closed. Existing manifest/test protections and counterfactual checks
+remain in force. Discovered bare Vitest scripts request serial file execution
+only when the installed runner advertises support, preserving existing config
+loaders and test selection.
+
+Eight executed fixtures cover both-package regressions, sibling dependencies,
+protected manifests, invalid discovery, installed-skill symlinks, unchanged
+installed cache sentinels and old/new Vitest flag capabilities. Existing
+evidence/repair checks passed 53 cases. Real installed Vitest also passed a CJS
+config fixture. An isolated export of Cherry `5db164d` passed client 1,292 tests
+and server 5,899 tests; server retained 3 expected failures and 333 skips.
+This local proof does not replace the complete host database acceptance gate.
+Self-review caught inherited command-display labels and symlink entrypoint
+detection; independent review caught the forced-loader CJS incompatibility.
+Independent re-audit passed after the compatibility fix and independently reran
+all eight fixtures successfully.
