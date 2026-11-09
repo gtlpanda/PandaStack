@@ -139,7 +139,7 @@ export function statePath(config, ...parts) {
 
 // Role equivalents, not claims of identical capability. Explicit OpenAI model IDs pass through.
 export function codexModel(model) {
-  if (/^(?:claude-)?opus(?:-|$)/i.test(model)) return "gpt-6-astra";
+  if (model === "fable" || /^(?:claude-)?opus(?:-|$)/i.test(model)) return "gpt-6-astra";
   if (/^(?:claude-)?sonnet(?:-|$)/i.test(model)) return "gpt-6.1-sol";
   if (/^(?:claude-)?haiku(?:-|$)/i.test(model)) return "gpt-6-luna";
   if (/^claude-/i.test(model)) throw new Error(`No Codex equivalent for ${model}; set an explicit OpenAI model`);

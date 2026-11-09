@@ -31,6 +31,34 @@ No mode ever touches the branch under review or merges. The one push is
 
 These instructions are the opt-in to the Workflow tool for this skill.
 
+## Codex runner
+
+When invoked from Codex, run the same graph through the host CLI; do not invoke
+Claude or translate a one-shot audit into a ledger. Resolve this installed skill
+symlink to find `native-cli.mjs` beside this file:
+
+```bash
+node <resolved-skill-dir>/native-cli.mjs --repo <absolute-repo> --base <base-ref> --backend codex --mode discover
+```
+
+The native runner reads source-owned graph/agent/lens instructions, launches fresh
+Codex leaves, runs evidence/recheck on the host and saves the shared findings
+ledger. `--mode propose` and `--mode fix` use isolated repair worktrees and do
+not land or push; autobuild uses the existing checked landing path separately.
+A nonzero exit or incomplete coverage is not a passing review. Inspect the
+printed ledger/report and `review-status.mjs` before publication. Saved Codex CLI
+login is used; no Claude dependency or fallback. Model roles come from the
+project's autobuild config when present, otherwise Astra/Sol/Luna defaults.
+Codex supports time bounds and token telemetry rather than Claude USD budgets.
+The Workflow-tool steps below apply only to Claude; all evidence, review and
+publication requirements still apply to both backends.
+
+Before a manual Claude Workflow hunt, check the git common directory for
+`native-hunt.lock` or the target state's `native.lock`. If present, stop before
+intake or preparation; another provider may own retained work there. Do not
+remove an unknown lock. Autobuild and the native CLI acquire the shared lock
+before preparation for both providers.
+
 ## 1. Resolve the target
 
 The review gate (`gate.mjs`, a hook) reads the ledger this skill writes. A PR

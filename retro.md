@@ -3102,3 +3102,19 @@ host-owned gate/mark/commit. Existing Claude paths remain available. Codex skill
 link installed; README/skill explain sandbox, hook, accounting and PR-ledger differences.
 Live smoke ran real Astra through builder, review and audit successfully. Audit found
 and fixed dirty-tree cache acceptance and gate side effects on frozen files.
+
+## Autobuild end-to-end provider parity — 2026-11-09
+
+Replaced the separate Codex final audit with a host adapter for the existing
+hunt graph: specialist reviews, blind skepticism, reproductions, isolated
+repairs, independent verification, shared ledger and checked landing. Added
+standalone native invocation, safe Codex-only skill installation, review-aware
+status, Fable mapping and honest backend-limit documentation.
+
+Caught real strict-schema HTTP 400, premature ledger publication and competing
+review preparation that could replace active repair work. Added fail-closed
+publication and shared pre-preparation locks across providers. Full suite:
+1425 workflow, 106 autobuild, 138 install and 22 secret cases passed; validation
+passed. Real Codex build/hunt/resume and reproduced repair/verified landing
+passed through the unchanged review gate. Details and limits are in
+`graphs/autobuild/tool/PARITY-VERIFICATION.md`.

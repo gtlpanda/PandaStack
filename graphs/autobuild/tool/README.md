@@ -199,20 +199,43 @@ Authentication stays with Codex; there is no Claude or API-key fallback.
   it mark the current feature passing and commit. Gate failures are given to
   the next attempt; uncommitted implementation work is kept.
 - Reviews may change only the progress file; the host verifies and commits it.
-  The native final Codex branch audit can repair defects, returns a structured
-  report, and must pass the full gate. Unresolved findings stop with exit 12.
-  Reports live in `.harness/codex-audit-result.json` and session JSONL logs.
-  This audit does **not** create the Claude Workflow hunt ledger. A later PR
-  still needs the separate PandaStack review-gate workflow.
+  Both providers then run the same final hunt graph: impact map, specialist lenses,
+  blind skeptics, referee, reproduction, repair and independent fix verification.
+  Codex uses fresh CLI sessions for leaves; deterministic evidence/recheck commands
+  run on the host. Both save the same validated findings ledger under the git
+  common directory's `bughunt/` state and use the same landing checks. A successful
+  hunt satisfies the unchanged PR review gate. The old `.harness/codex-audit*`
+  files are historical only and never accepted as review evidence.
+  Missing coverage, malformed responses and unresolved findings stop the run.
+  The host also reruns the full gate for a no-fix or cached passing hunt.
+  `autobuild status` reports review coverage separately from passing features.
 - Codex reports token usage, not dollar cost. Claude's per-session dollar and
   turn caps do not apply. A non-null `totalBudgetUsd` is rejected: remove it
   explicitly to use Codex. Use iteration/no-progress caps and the wall-clock
-  timeout instead. Probe timeout is two minutes. Model/subagent usage still
+  timeout instead. The whole hunt is bounded by `bughuntTimeoutMinutes`; each
+  model leaf is also bounded by `codex.sessionTimeoutMinutes`. Probe timeout is two minutes. Model/subagent usage still
   counts against your Codex account's limits.
 - Availability probes also use Codex (Luna); protocol errors drive quota/auth
   handling. No text from ordinary assistant/tool messages is classified as a
   quota failure.
 
 The skill source remains `graphs/autobuild/skills/autobuild`. Codex can discover
-it through `~/.agents/skills/autobuild` or `~/.codex/skills/autobuild`; link that
-single directory if it isn't already exposed by your shared skills setup.
+it through `~/.agents/skills/autobuild` or `~/.codex/skills/autobuild`. Use the
+explicit Codex installation mode documented in the repository README; it does
+not copy Claude credentials, settings or hooks.
+
+### Parity contract
+
+| Stage | Shared guarantee | Provider mechanism |
+|---|---|---|
+| Build | Frozen acceptance tests, full gate, durable progress | Claude hooks; Codex host-owned flags/commit |
+| Drift review | Completed review before done | Provider CLI; Codex host validates progress-only edits |
+| Final hunt | Same graph, evidence, blind challenges and repair verification | Claude Workflow or Codex host graph adapter |
+| Tests and Docker | Real host results, never model assertions | Host evidence/full gate |
+| PR handoff | Exact-head shared ledger and unchanged review gate | Provider-independent |
+| Resume | Committed work retained; cached success rechecks ledger and full gate | No provider fallback; incomplete review stays incomplete |
+| Limits | Explicit bounded execution and honest failure | Claude USD/turn caps; Codex time/iteration bounds and token telemetry |
+
+This is workflow parity, not a claim that the two CLIs implement identical
+permission hooks, pricing or model capability. Browser QA beyond configured
+gates and repository-specific documentation/publication rules still apply.

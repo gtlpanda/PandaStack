@@ -27,7 +27,7 @@ import { buildEnv, git, sh, quote } from "./proc.mjs";
 import { isOurs } from "../../../build/skills/build-app/driver/proc.mjs";
 import { clearStopFailure, readStopFailure, writeSession } from "./session.mjs";
 import { runCodex, readCodexResult } from "./codex.mjs";
-import { finishCodexBuilder, finishCodexReview, runCodexHunt } from "./codex-gate.mjs";
+import { finishCodexBuilder, finishCodexReview } from "./codex-gate.mjs";
 import { runFeatureTests } from "./tests.mjs";
 
 const HOME = path.resolve(import.meta.dirname, "..");
@@ -234,9 +234,7 @@ export async function runLoop(config, options = {}) {
             if (interrupted) return 130;
           }
           if (huntEnabled(config)) {
-            const hunted = config.backend === "codex"
-              ? await runCodexHunt(config, { log, runId, run: (options) => runCodex(config, options, track), stopped: () => interrupted })
-              : await runBughunt(config, { log, runId, stopped: () => interrupted });
+            const hunted = await runBughunt(config, { log, runId, stopped: () => interrupted });
             if (interrupted) return 130;
             if (hunted !== 0) {
               log(`every feature passes, but the bug hunt needs attention (exit ${hunted}); see the bug hunt lines above and ${config.progressFile}.`);
