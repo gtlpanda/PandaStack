@@ -52,3 +52,35 @@ Independent audit found no remaining verified blocker within the examined
 routing, failure, isolation, schema, installation and landing scope. Live
 smokes are small synthetic JavaScript repositories, not proof of identical
 model quality on arbitrary applications. No review guard is disabled.
+
+## Shared monorepo evidence supplement (2026-11-09)
+
+Commit `e82a354` extends the shared Claude/Codex regression verifier when no root
+test-class step runs: every non-hidden immediate Node child with a test/lint/typecheck
+script is checked. Existing root aggregate suites remain authoritative. This is
+bounded immediate-child support, not arbitrary nested workspace discovery.
+Private dependency containers link installed package entries and sibling-library
+dependencies without sharing tool cache directories. Existing config loaders,
+manifest/test protections and baseline/candidate comparison remain intact.
+
+`bash scripts/test.sh` completed with exit 0: VALIDATE PASS; install 138/0;
+secrets 22/0; workflow 1426/0; autobuild 106/0; TEST PASS. The workflow count
+includes one awaited wrapper for eight executed monorepo fixture cases. A
+subsequent test-only counterfactual case proves that fixing a baseline client
+failure while breaking the server returns FAIL with distinct package identities;
+the direct final fixture command passed all nine cases, exit 0. The full suite
+was not repeated for that additional test-only case and this documentation.
+
+A disposable export of Cherry `5db164df562bef6c86c351851203c63667ab5a05`
+ran the revised verifier with private dependency containers, network/PID isolation
+and a 300-second cap. Exit 0, VERIFY PASS: client 115 files / 1292 tests passed;
+server 454 files passed, 19 skipped / 5899 tests passed, 3 expected failures,
+333 skipped. A separate real Vitest 4.1.4 CommonJS-config fixture passed one test.
+The host Docker database was unreachable from these namespaces. Skipped database
+coverage is not a pass: the complete host acceptance gate remains required.
+Local receipts: `/tmp/monorepo-overlay-proof-l5chd7h4/receipt.json` and sibling
+`cherry.log`/`cjs.log`; full harness log:
+`/tmp/pandastack-monorepo-e82a354-full-test.log`.
+
+Independent re-audit passed and independently executed the initial eight fixture
+cases after identifying and resolving the forced-config-loader incompatibility.

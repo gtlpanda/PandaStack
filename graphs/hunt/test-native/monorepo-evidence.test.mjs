@@ -16,7 +16,7 @@ function git(repo, ...args) {
   const r = spawnSync('git', ['-c', 'core.hooksPath=/dev/null', '-C', repo, ...args], { encoding: 'utf8', env })
   assert.equal(r.status, 0, r.stderr); return r.stdout.trim()
 }
-function fixture(t) {
+function fixture(t, baselineFailure = null) {
   const repo = mkdtempSync(join(tmpdir(), 'mono-evidence-'))
   t.after(() => rmSync(repo, { recursive: true, force: true }))
   git(repo, 'init', '-q', '-b', 'main')
@@ -27,7 +27,7 @@ function fixture(t) {
   }
   put(join(repo, 'shared/value.mjs'), "import n from 'fixture-value'; export default n\n")
   put(join(repo, 'server/value.mjs'), 'export default 4\n')
-  put(join(repo, 'client/value.mjs'), 'export default 4\n')
+  put(join(repo, 'client/value.mjs'), `export default ${baselineFailure === 'client' ? 0 : 4}\n`)
   for (const pkg of ['server', 'client']) put(join(repo, pkg, 'check.test.mjs'), `import { mkdirSync, writeFileSync } from 'node:fs'; mkdirSync('node_modules/.vite-temp',{recursive:true}); writeFileSync('node_modules/.vite-temp/sentinel','export-only'); import assert from 'node:assert/strict'; import n from './value.mjs'; import shared from '../shared/value.mjs'; assert.equal(n,4); assert.equal(shared,4); console.log('${pkg} executed')\n`)
   git(repo, 'add', '.'); git(repo, 'commit', '-qm', 'base'); git(repo, 'checkout', '-qb', 'feature')
   put(join(repo, 'feature.txt'), 'feature'); git(repo, 'add', '.'); git(repo, 'commit', '-qm', 'feature')
@@ -91,4 +91,16 @@ test('installed skill symlink still discovers and executes subprojects', t => {
   symlinkSync(dirname(verify), join(repo, '.installed'))
   const r = spawnSync('bash', [join(repo, '.installed/verify.sh'), repo], { encoding: 'utf8' })
   assert.equal(r.status, 0, r.stdout+r.stderr); assert.match(r.stdout, /verify subproject app/)
+})
+
+test('a baseline client failure cannot hide a newly regressed server suite', t => {
+  const { state, wt } = fixture(t, 'client')
+  put(join(wt, 'client/value.mjs'), 'export default 4\n')
+  put(join(wt, 'server/value.mjs'), 'export default 0\n')
+  const result = fix(state, 'F1')
+  assert.equal(result.verdict, 'FAIL', result.reason)
+  assert.match(result.reason, /verify subproject server/)
+  const rec = JSON.parse(readFileSync(join(state, 'evidence/F1.json')))
+  assert.ok(rec.runs.find(r => r.arm === 'suite with the repair').failing.includes('verify subproject server'))
+  assert.ok(rec.runs.find(r => r.arm === 'suite without the repair').failing.includes('verify subproject client'))
 })

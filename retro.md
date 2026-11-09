@@ -3130,7 +3130,7 @@ remain in force. Discovered bare Vitest scripts request serial file execution
 only when the installed runner advertises support, preserving existing config
 loaders and test selection.
 
-Eight executed fixtures cover both-package regressions, sibling dependencies,
+Nine executed fixtures cover cross-package baseline/candidate failures, both-package regressions, sibling dependencies,
 protected manifests, invalid discovery, installed-skill symlinks, unchanged
 installed cache sentinels and old/new Vitest flag capabilities. Existing
 evidence/repair checks passed 53 cases. Real installed Vitest also passed a CJS
