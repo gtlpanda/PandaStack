@@ -21,6 +21,9 @@ export const DEFAULTS = {
   subagentModelForce: true,
   probeModel: "claude-haiku-5-5",
   claudeBin: "claude",
+  backend: "claude",
+  codexBin: "codex",
+  codex: { reasoningEffort: "medium", sessionTimeoutMinutes: 90 },
   hooks: "inject",
   bughunt: true,
   bughuntBase: null,
@@ -92,7 +95,7 @@ export function findProjectRoot(start = process.cwd()) {
   }
 }
 
-export function loadConfig(root = findProjectRoot(), env = process.env) {
+export function loadConfig(root = findProjectRoot(), env = process.env, overrides = {}) {
   const file = path.join(root, CONFIG_FILE);
   const raw = JSON.parse(readFileSync(file, "utf8"));
   const config = {
@@ -101,6 +104,7 @@ export function loadConfig(root = findProjectRoot(), env = process.env) {
     limits: { ...DEFAULTS.limits, ...(raw.limits ?? {}) },
     env: { ...DEFAULTS.env, ...(raw.env ?? {}) },
     review: { ...DEFAULTS.review, ...(raw.review ?? {}) },
+    codex: { ...DEFAULTS.codex, ...(raw.codex ?? {}) },
     root,
   };
   for (const [key, names] of Object.entries(LEGACY_ENV)) {
@@ -110,15 +114,34 @@ export function loadConfig(root = findProjectRoot(), env = process.env) {
   if (env.AUTOBUILD_MODEL || env.MODEL) config.model = env.AUTOBUILD_MODEL || env.MODEL;
   if (env.AUTOBUILD_SUBAGENT_MODEL || env.SUBAGENT_MODEL) config.subagentModel = env.AUTOBUILD_SUBAGENT_MODEL || env.SUBAGENT_MODEL;
   if (env.AUTOBUILD_CLAUDE_BIN) config.claudeBin = env.AUTOBUILD_CLAUDE_BIN;
+  config.backend = overrides.backend || env.AUTOBUILD_BACKEND || config.backend;
+  if (!["claude", "codex"].includes(config.backend)) throw new Error('backend must be "claude" or "codex"');
+  if (env.AUTOBUILD_CODEX_BIN) config.codexBin = env.AUTOBUILD_CODEX_BIN;
+  if (env.AUTOBUILD_PROBE_MODEL) config.probeModel = env.AUTOBUILD_PROBE_MODEL;
+  if (overrides.model) config.model = overrides.model;
+  if (config.backend === "codex") {
+    for (const key of ["model", "subagentModel", "probeModel"]) config[key] = codexModel(config[key]);
+    if (!Number.isFinite(config.codex.sessionTimeoutMinutes) || config.codex.sessionTimeoutMinutes <= 0) throw new Error("codex.sessionTimeoutMinutes must be positive");
+    if (config.limits.totalBudgetUsd != null) throw new Error("Codex does not report dollar cost; remove totalBudgetUsd and use maxIterations/sessionTimeoutMinutes instead");
+  }
   if (env.EXPECTED_BRANCH) config.branch = env.EXPECTED_BRANCH;
   config.env.pathPrepend = (config.env.pathPrepend ?? []).map(expandHome);
   config.env.ldLibraryPath = (config.env.ldLibraryPath ?? []).map(expandHome);
   // The config file and the harness state are always frozen for builders.
-  config.frozen = [...new Set([CONFIG_FILE, config.featuresFile, config.stateDir, ...(config.frozen ?? [])])];
+  config.frozen = [...new Set([CONFIG_FILE, config.featuresFile, config.stateDir, ...(config.backend === "codex" ? ["AGENTS.md", ".codex"] : []), ...(config.frozen ?? [])])];
   if (!["inject", "project"].includes(config.hooks)) throw new Error(`${CONFIG_FILE}: "hooks" must be "inject" or "project"`);
   return config;
 }
 
 export function statePath(config, ...parts) {
   return path.join(config.root, config.stateDir, ...parts);
+}
+
+// Role equivalents, not claims of identical capability. Explicit OpenAI model IDs pass through.
+export function codexModel(model) {
+  if (/^(?:claude-)?opus(?:-|$)/i.test(model)) return "gpt-6-astra";
+  if (/^(?:claude-)?sonnet(?:-|$)/i.test(model)) return "gpt-6.1-sol";
+  if (/^(?:claude-)?haiku(?:-|$)/i.test(model)) return "gpt-6-luna";
+  if (/^claude-/i.test(model)) throw new Error(`No Codex equivalent for ${model}; set an explicit OpenAI model`);
+  return model;
 }

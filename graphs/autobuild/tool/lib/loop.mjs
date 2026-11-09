@@ -23,9 +23,11 @@ import { countPassing, featureById, nextFeature, readBlockers, readFeatures, rea
 import { frozenChanges, gitControlChanges, gitControlDigest } from "./gate.mjs";
 import { huntEnabled, runBughunt, stopHunt } from "./bughunt.mjs";
 import { classifyOutcome, parseResetTime, planLimitWait } from "./limits.mjs";
-import { buildEnv, git, sh } from "./proc.mjs";
+import { buildEnv, git, sh, quote } from "./proc.mjs";
 import { isOurs } from "../../../build/skills/build-app/driver/proc.mjs";
 import { clearStopFailure, readStopFailure, writeSession } from "./session.mjs";
+import { runCodex, readCodexResult } from "./codex.mjs";
+import { finishCodexBuilder, finishCodexReview, runCodexHunt } from "./codex-gate.mjs";
 import { runFeatureTests } from "./tests.mjs";
 
 const HOME = path.resolve(import.meta.dirname, "..");
@@ -178,7 +180,8 @@ export async function runLoop(config, options = {}) {
   try {
     const pre = preflight(config, log);
     if (pre !== 0) return pre;
-    log(`loop ${runId}: up to ${limits.maxIterations} iterations; ${limits.maxTurns} turns and $${limits.maxBudgetUsd} (estimated) per session; review every ${limits.reviewEvery} features (${limits.reviewMaxTurns} turns, $${limits.reviewBudgetUsd}); model ${config.model} (subagents ${config.subagentModel}${config.subagentModelForce === false ? " by default" : ""})`);
+    if (config.backend === "codex") log(`Codex: ${config.model}; subagents ${config.subagentModel}; probes ${config.probeModel}; ${config.codex.sessionTimeoutMinutes} min/session. Dollar/turn caps and Claude tool hooks do not apply; full gates run outside the session.`);
+    else log(`loop ${runId}: up to ${limits.maxIterations} iterations; ${limits.maxTurns} turns and $${limits.maxBudgetUsd} (estimated) per session; review every ${limits.reviewEvery} features (${limits.reviewMaxTurns} turns, $${limits.reviewBudgetUsd}); model ${config.model} (subagents ${config.subagentModel}${config.subagentModelForce === false ? " by default" : ""})`);
 
     let iteration = 0;
     let noProgress = 0;
@@ -200,9 +203,8 @@ export async function runLoop(config, options = {}) {
       await runReview(config, { since: lastReviewSha, iteration, runId, log });
       if (interrupted) return 0;
       if (controlTampered(config, control, "review", log)) return 4;
-      completedSinceReview = 0;
       const reviewed = lastReviewCommit(config);
-      if (reviewed && reviewed !== lastReviewSha) lastReviewSha = reviewed;
+      if (reviewed && reviewed !== lastReviewSha) { lastReviewSha = reviewed; completedSinceReview = 0; }
       else log(`review: no chore(review) commit; the next review covers ${lastReviewSha.slice(0, 8)}..HEAD again`);
       return 0;
     };
@@ -232,7 +234,9 @@ export async function runLoop(config, options = {}) {
             if (interrupted) return 130;
           }
           if (huntEnabled(config)) {
-            const hunted = await runBughunt(config, { log, runId, stopped: () => interrupted });
+            const hunted = config.backend === "codex"
+              ? await runCodexHunt(config, { log, runId, run: (options) => runCodex(config, options, track), stopped: () => interrupted })
+              : await runBughunt(config, { log, runId, stopped: () => interrupted });
             if (interrupted) return 130;
             if (hunted !== 0) {
               log(`every feature passes, but the bug hunt needs attention (exit ${hunted}); see the bug hunt lines above and ${config.progressFile}.`);
@@ -267,7 +271,7 @@ export async function runLoop(config, options = {}) {
       });
       if (interrupted) return 130;
       const elapsed = Math.round((Date.now() - started) / 1000);
-      const result = readResult(iterLog);
+      const result = config.backend === "codex" ? readCodexResult(iterLog) : readResult(iterLog);
       totalCost += Number(result?.total_cost_usd ?? 0);
 
       // Independent verification: never trust the session's own account.
@@ -276,6 +280,10 @@ export async function runLoop(config, options = {}) {
       if (frozen.changed.length > 0) {
         log(`iteration ${iteration + 1}: FROZEN FILES CHANGED — stopping for a human:\n${frozen.changed.join("\n")}`);
         return 4;
+      }
+      if (config.backend === "codex") {
+        const finished = finishCodexBuilder(config, { feature, base, docBefore: doc, exitCode, result, log });
+        if (finished === 4) return 4;
       }
       const committed = git(config, ["log", `${base}..HEAD`, "--format=%s"]).output.split("\n").some((line) => line.startsWith(`feat(${feature.id}):`));
       const passes = featureById(readFeatures(config), feature.id).passes === true;
@@ -306,7 +314,7 @@ export async function runLoop(config, options = {}) {
         log(`iteration ${iteration + 1}: ${feature.id} was marked passing but has no feat(${feature.id}) commit; passes reset`);
       }
 
-      const summary = `${result?.subtype ?? "no_result"}, ${result?.num_turns ?? 0} turns, $${Number(result?.total_cost_usd ?? 0).toFixed(2)} est, ${(result?.permission_denials ?? []).length} permission denials, ${elapsed}s`;
+      const summary = config.backend === "codex" ? `${result?.subtype ?? "no_result"}, ${JSON.stringify(result?.usage ?? {})} tokens, ${elapsed}s` : `${result?.subtype ?? "no_result"}, ${result?.num_turns ?? 0} turns, $${Number(result?.total_cost_usd ?? 0).toFixed(2)} est, ${(result?.permission_denials ?? []).length} permission denials, ${elapsed}s`;
 
       // A session that ended on an API problem rather than its own work.
       if (outcome === "INCOMPLETE") {
@@ -414,9 +422,10 @@ function preflight(config, log) {
       log(`preflight: uncommitted changes from an earlier attempt are kept for the next session:\n${dirty.split("\n").slice(0, 20).join("\n")}`);
     }
   }
-  const claude = sh(config, `command -v ${config.claudeBin}`);
+  const bin = config.backend === "codex" ? config.codexBin : config.claudeBin;
+  const claude = sh(config, `command -v ${quote(bin)}`);
   if (!claude.ok) {
-    log(`preflight: ${config.claudeBin} not found on PATH`);
+    log(`preflight: ${bin} not found on PATH`);
     failed = true;
   }
   for (const check of config.preflight ?? []) {
@@ -472,6 +481,11 @@ export function sessionSettings(config) {
 }
 
 async function runClaude(config, { role, prompt, appendSystemPrompt, maxTurns, maxBudgetUsd, allowedTools, logFile }) {
+  if (config.backend === "codex") {
+    const feedback = statePath(config, "codex-feedback.txt");
+    if (role === "builder" && existsSync(feedback)) prompt += `\nPrevious gate feedback:\n${readFileSync(feedback, "utf8")}`;
+    return runCodex(config, { role, prompt, appendSystemPrompt, logFile }, track);
+  }
   const settingsFile = statePath(config, `session-settings.json`);
   writeFileSync(settingsFile, `${JSON.stringify(sessionSettings(config), null, 2)}\n`);
   const env = buildEnv(config, {
@@ -539,7 +553,7 @@ async function probeUntilAvailable(config, log, limits, sleepMs, maxWaitHours = 
     await sleepMs(limits.probeEveryMinutes * 60_000);
     const probeLog = statePath(config, "probe.jsonl");
     const env = buildEnv(config, { CLAUDE_CODE_RETRY_WATCHDOG: "0" });
-    const code = await new Promise((resolve) => {
+    const code = config.backend === "codex" ? await runCodex(config, { role: "probe", prompt: "Reply OK.", logFile: probeLog }, track) : await new Promise((resolve) => {
       const out = openSync(probeLog, "w");
       const child = track(spawn(config.claudeBin, ["-p", "Reply with OK.", "--model", config.probeModel, "--max-turns", "1", "--tools", "", "--strict-mcp-config", "--output-format", "stream-json", "--verbose"], { cwd: config.root, env, stdio: ["ignore", out, out] }));
       child.on("close", (exitCode) => {
@@ -551,7 +565,7 @@ async function probeUntilAvailable(config, log, limits, sleepMs, maxWaitHours = 
         resolve(127);
       });
     });
-    const result = readResult(probeLog);
+    const result = config.backend === "codex" ? readCodexResult(probeLog) : readResult(probeLog);
     const errored = result && (result.is_error || result.subtype !== "success") ? result : null;
     const verdict = classifyOutcome({ result: errored });
     if (code === 0 && result?.subtype === "success" && !result?.is_error && verdict.kind === "normal") {
@@ -588,7 +602,7 @@ async function runReview(config, { since, iteration, runId, log }) {
     `Append each finding as one line to ${config.progressFile}: 'REVIEW ${date}: DEFECT <file:line> <title> — <scenario; suggested fix>' for a bug in built code, 'REVIEW ${date}: PROPOSED-FEATURE <title> — <why>' for missing work, or 'BLOCKER <ID>: <why>' only for a pending feature whose test or contract is wrong. ` +
     `If there are no findings, append 'REVIEW ${date}: no drift or defects found'. Do not change code, tests or the feature list. Commit only ${config.progressFile} with message 'chore(review): drift review after ${iteration} iterations'. Then stop.`;
   log(`review: comparing ${since.slice(0, 8)}..${base.slice(0, 8)}`);
-  await runClaude(config, {
+  const exitCode = await runClaude(config, {
     role: "review",
     prompt,
     appendSystemPrompt: `No human is present. Never ask questions. You may only write ${config.progressFile}.`,
@@ -597,7 +611,8 @@ async function runReview(config, { since, iteration, runId, log }) {
     allowedTools: config.reviewTools,
     logFile: reviewLog,
   });
-  const result = readResult(reviewLog);
+  const result = config.backend === "codex" ? readCodexResult(reviewLog) : readResult(reviewLog);
+  if (config.backend === "codex") finishCodexReview(config, { base, exitCode, result, log });
   const dirty = git(config, ["status", "--porcelain"]).output.trim();
   if (dirty) log(`review: left uncommitted changes:\n${dirty}`);
   log(`review: done (${result?.subtype ?? "no_result"}, ${result?.num_turns ?? 0} turns); log ${path.relative(config.root, reviewLog)}`);

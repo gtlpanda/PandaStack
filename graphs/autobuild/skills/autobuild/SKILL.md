@@ -7,6 +7,16 @@ description: Set up and run an autonomous, test-gated build for a project with t
 
 The tool ships in PandaStack at `graphs/autobuild/tool/`; `install.sh` links it onto PATH as `~/.local/bin/autobuild`. Read that directory's `README.md` for every option. This skill is the playbook for getting a project ready, then running it. The process was proven on FieldPulse; its `autobuild.json`, `SPEC.md`, `spec/contracts/` and `tests/` are a complete worked example.
 
+## Choose the backend first
+
+When running this skill in Codex, use `autobuild run --backend codex` (or `AUTOBUILD_BACKEND=codex`); never launch Claude as a fallback. In Claude Code, the default backend remains Claude. Existing project configs and completed features can be resumed unchanged. New Codex projects: `autobuild init --backend codex`.
+
+Model role equivalents (configurable, not identical capability): Opus → `gpt-6-astra` for builders/reviews/audits; Sonnet → `gpt-6.1-sol` for subagents; Haiku → `gpt-6-luna` for probes. Claude model names map automatically in Codex mode. Explicit OpenAI IDs are preserved. `--model`, `AUTOBUILD_MODEL`, `AUTOBUILD_SUBAGENT_MODEL`, and `AUTOBUILD_PROBE_MODEL` override them. Codex receives `agents.default_subagent_model`; explicit per-agent model choices can override that default.
+
+Codex uses saved CLI authentication (`codex login status`). It runs in `workspace-write` with approvals set to `never`. Claude allowedTools/deny hooks, dollar budgets and maxTurns do not transfer. The host checks frozen files, full gates and progress before setting passes and committing; failed gates feed the next attempt. Keep `maxIterations`, `noProgressLimit`, and `codex.sessionTimeoutMinutes` bounded. Codex reports tokens, not dollar cost; a configured totalBudgetUsd is rejected instead of silently ignored.
+
+Codex builders leave flags/staging/commits to the host, overriding the Claude-specific completion steps below. The final native Codex audit replaces the Claude-only Workflow hunt for this backend; it does not generate a PandaStack hunt ledger or bypass the PR review gate. Frozen-file detection happens after the session, not before each tool call. Read the README's Codex section for the exact boundaries.
+
 ## 0. Is the project already set up?
 Run `autobuild status` in the project.
 - If it works, skip to step 6 (run) or step 7 (check on a run).
