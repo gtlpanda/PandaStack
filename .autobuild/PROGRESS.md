@@ -81,3 +81,9 @@ REVIEW 2026-11-08: PROPOSED-FEATURE decide what deep's second pass does when the
 - Tests: graphs/security-audit/tests/profile-docs.test.mjs passing (5/5); new audit-docs-profiles.test.mjs (4); regression suite green (`node scripts/test-workflow.mjs`: 1351 passed, 0 failed); `check-existing-tests.mjs` PASS; `scripts/validate.sh` PASS
 - Decisions: D22, D23, D24, D25
 - Notes: no code change; the facts-script bound is untouched. The README Cost bullet and the skill's "smallest `init` accepts, 10" sentence are standard's (pinned); the profile lists carry quick's 8. The REVIEW items above (D10's two defects, the P-06 budget proposal) are still open.
+
+## P-09 — End to end, quick (2026-11-08)
+- What: no source change (contract: fixtures frozen; P-02 to P-05 and P-07 make it pass). The frozen e2e passed at session start. One new test file pins the strict-budget outcomes the frozen test leaves open: quick at `--budget 12` and `11`.
+- Tests: graphs/security-audit/tests/profile-e2e-quick.test.mjs passing (9/9); new audit-e2e-quick-budget.test.mjs (2); regression suite green (`node scripts/test-workflow.mjs`: 1358 passed, 0 failed)
+- Decisions: D26
+- Notes: P-05's untested hypothesis about `--budget 12` is now measured: 12 ends `complete` with 12 agents (grouping skipped, four verifiers), not `incomplete` as features.json and the contract's note say; 11 is the first `incomplete` (`validation_budget_exhausted`, three of four funded). The frozen test accepts either outcome (D26). The REVIEW items above (D10's two defects, the P-06 budget proposal) are still open.

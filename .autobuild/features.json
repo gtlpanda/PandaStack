@@ -190,7 +190,7 @@
       ],
       "test": "graphs/security-audit/tests/profile-e2e-quick.test.mjs",
       "testKind": "profile",
-      "passes": false
+      "passes": true
     },
     {
       "id": "P-10",
