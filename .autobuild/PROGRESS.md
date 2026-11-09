@@ -97,3 +97,5 @@ REVIEW 2026-11-09: PROPOSED-FEATURE make the report's `Profile rules` line say w
 - Notes: measured, not inferred: a first deep audit equals a standard one (path, 22 agents, ledger, verdicts). A second audit of the same commit costs deep 22 agents to standard's 19: the second pass adds `h2-01`, `h2-02` and a post-wave critic `c2`. Nothing else differs. This was the last feature. The REVIEW items above are still open: D10's two defects, the P-06 budget proposal and the P-07 rules-line proposal.
 
 REVIEW 2026-11-09: no drift or defects found
+
+BUGHUNT 2026-11-09: pass; fixed none; open none; report /home/gtlpanda/code/PandaStack/.git/bughunt/feat-security-audit-10-profiles-d4475f/report.md
