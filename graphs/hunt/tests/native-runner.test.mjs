@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -87,4 +87,28 @@ for (const stop of [false, true]) test(`process ${stop ? 'stop' : 'timeout'} ter
     assert.equal(code, stop ? 130 : 124);
     assert.ok(Date.now() - start < 3000);
   } finally { rmSync(cwd, { recursive: true, force: true }); }
+});
+
+test('ledger remains incomplete during host recheck and when report write fails', async () => {
+  const f = repoFixture();
+  try {
+    mkdirSync(join(f.prep.stateDir, 'report.md'));
+    let observed = false;
+    const base = leaves('clean', []);
+    const runner = async (bin, argv, opts) => {
+      if (argv.includes('recheck')) { observed = true; assert.equal(reviewStatus(f.repo, 'HEAD', { base: 'main' }).hunted, false); }
+      return base(bin, argv, opts);
+    };
+    const r = await runNativeHunt({ repo: f.repo, tree: join(f.prep.stateDir, 'tree'), stateDir: f.prep.stateDir, config: f.config, mode: 'discover', processRunner: runner });
+    assert.equal(observed, true); assert.equal(r.code, 12); assert.equal(r.ledger.status, 'escalate');
+    assert.equal(reviewStatus(f.repo, 'HEAD', { base: 'main' }).hunted, false);
+  } finally { f.close(); }
+});
+test('an owned state lock refuses concurrent execution without touching the ledger', async () => {
+  const f = repoFixture();
+  try {
+    mkdirSync(join(f.prep.stateDir, 'native.lock'));
+    const calls = []; const r = await runCase(f, 'clean', calls);
+    assert.equal(r.code, 12); assert.equal(r.ledger, null); assert.equal(calls.length, 0);
+  } finally { f.close(); }
 });

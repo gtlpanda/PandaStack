@@ -2,7 +2,7 @@
 // Standalone Codex entrypoint for the shared hunt graph. No Claude installation,
 // branch switch, PR write or automatic landing is needed for discover mode.
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runNativeHunt } from './native-runner.mjs';
@@ -20,6 +20,12 @@ export async function main(argv) {
   }
   if (opts.backend && opts.backend !== 'codex') throw new Error('Native CLI currently accepts --backend codex; Claude uses the same graph through Workflow');
   const repo = realpathSync(opts.repo || process.cwd());
+  const common = spawnSync('git', ['-C', repo, '-c', 'core.hooksPath=/dev/null', 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' });
+  if (common.status !== 0) throw new Error('Cannot locate repository git directory');
+  const lock = join(common.stdout.trim(), 'native-hunt-cli.lock');
+  try { mkdirSync(lock); } catch (e) { if (e.code === 'EEXIST') throw new Error('Another native hunt owns this repository, or left an interrupted lock; inspect native-hunt-cli.lock'); throw e; }
+  try {
+  writeFileSync(join(lock, 'owner.json'), JSON.stringify({ pid: process.pid, at: new Date().toISOString() }));
   const mode = opts.mode || 'discover';
   if (!['discover', 'propose', 'fix'].includes(mode)) throw new Error('mode must be discover, propose or fix');
   const config = existsSync(join(repo, 'autobuild.json'))
@@ -50,9 +56,10 @@ export async function main(argv) {
   process.on('SIGINT', stop); process.on('SIGTERM', stop);
   try {
     const result = await runNativeHunt({ repo, tree: join(stateDir, 'tree'), stateDir, mode, fixBranch, config, log: console.log, stopped: () => stopping });
-    if (result.ledger) console.log(`HUNT: ${disposition(result.ledger).disposition}; ledger=${join(stateDir, 'ledger.json')}`);
+    if (result.ledger) console.log(`HUNT: ${result.ledger.status === 'done' && result.code === 0 ? disposition(result.ledger).disposition : 'incomplete'}; ledger=${join(stateDir, 'ledger.json')}`);
     return result.code || (disposition(result.ledger).disposition === 'pass' ? 0 : 12);
   } finally { process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop); }
+  } finally { rmSync(lock, { recursive: true }); }
 }
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   main(process.argv.slice(2)).then(code => { process.exitCode = code; }).catch(error => { console.error(error.message); process.exitCode = 12; });

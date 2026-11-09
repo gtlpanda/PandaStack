@@ -1,19 +1,18 @@
 // Execute the same hunt graph outside Claude's Workflow tool. Models are leaves;
 // intake, routing, evidence, ledger persistence and landing remain host-owned.
 import { spawn } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdirSync, openSync, closeSync, existsSync, symlinkSync, lstatSync, realpathSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, openSync, closeSync, existsSync, symlinkSync, lstatSync, realpathSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildEnv, git } from '../../../autobuild/tool/lib/proc.mjs';
 import { gitControlDigest, gitControlChanges } from '../../../autobuild/tool/lib/gate.mjs';
 import { readCodexResult } from '../../../autobuild/tool/lib/codex.mjs';
 import { classifyOutcome } from '../../../autobuild/tool/lib/limits.mjs';
-import { readLedger } from '../../../../core/skills/findings/findings.mjs';
+import { readLedger, saveRun, writeLedger, missingEvidence, renderReport, readEvidence } from '../../../../core/skills/findings/findings.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../../../..');
 const GRAPH = resolve(HERE, '../../workflows/bughunt-flow.js');
-const FINDINGS = resolve(ROOT, 'core/skills/findings/findings.mjs');
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const ROLES = new Set(['impact-mapper', 'hunter', 'skeptic', 'advisor', 'reproducer', 'repairer', 'fix-verifier']);
 
@@ -96,10 +95,25 @@ function leafCwd(opts, tree, stateDir) {
   return tree;
 }
 
+// An active run owns its state directory until all leaf and host checks finish.
+export async function runNativeHunt(options) {
+  const lock = join(options.stateDir, 'native.lock');
+  try { mkdirSync(lock); }
+  catch (e) {
+    if (e.code !== 'EEXIST') throw e;
+    options.log?.('Native hunt already active or left an interrupted lock; inspect native.lock before retrying');
+    return { code: 12, ledger: null };
+  }
+  try {
+    writeFileSync(join(lock, 'owner.json'), JSON.stringify({ pid: process.pid, at: new Date().toISOString() }));
+    return await runPreparedHunt(options);
+  } finally { rmSync(lock, { recursive: true }); }
+}
+
 /** Run a prepared intake/fix worktree. Never launches Claude, pushes, or lands.
  * The caller retains the existing landHunt checks and full project test gate.
  */
-export async function runNativeHunt({ repo, tree, configDir, stateDir, mode = 'fix', fixBranch, config,
+async function runPreparedHunt({ repo, tree, configDir, stateDir, mode = 'fix', fixBranch, config,
   log = () => {}, stopped = () => false, runId = 'hunt', processRunner = runNativeProcess }) {
   const intakeFile = join(stateDir, 'intake.json');
   const intake = JSON.parse(readFileSync(intakeFile, 'utf8'));
@@ -131,7 +145,9 @@ export async function runNativeHunt({ repo, tree, configDir, stateDir, mode = 'f
     const logFile = join(runDir, `${stem}.jsonl`);
     const code = await processRunner(bin, argv, { cwd: repo, env, logFile,
       timeoutMs: Math.max(1, deadline - Date.now()), stopped, ...extra });
-    return { code, output: readFileSync(logFile, 'utf8') + readFileSync(`${logFile}.stderr`, 'utf8'), logFile };
+    const stdout = readFileSync(logFile, 'utf8');
+    const stderr = readFileSync(`${logFile}.stderr`, 'utf8');
+    return { code, stdout, stderr, output: stderr + (stderr && !stderr.endsWith('\n') ? '\n' : '') + stdout, logFile };
   };
   const leaf = async (prompt, opts) => {
     if (unavailable()) return null;
@@ -200,18 +216,42 @@ export async function runNativeHunt({ repo, tree, configDir, stateDir, mode = 'f
   if (failure) result = { ...result, status: 'escalate', reason: failure.message };
   const resultFile = join(runDir, 'result.json');
   writeFileSync(resultFile, JSON.stringify(result, null, 2));
-  const saved = await command(process.execPath, [FINDINGS, 'save', ledgerFile, intakeFile, resultFile, '--repo', tree, '--started', started], 'save', { stopped: () => false, timeoutMs: 30_000 });
-  if (saved.code !== 0 || !saved.output.includes('FINDINGS: SAVED')) return { code: failure?.code || 12, ledger: null };
-  if (failure) return { code: failure.code, ledger: readLedger(ledgerFile, intake.key) };
-  const checked = await command(process.execPath, [join(HERE, 'evidence.mjs'), 'recheck', stateDir], 'recheck');
-  if (checked.code !== 0 || !/^RECHECK: (PASS|CORRECTED [0-9]+)$/m.test(checked.output)) {
-    result = { ...result, status: 'escalate', reason: 'Native hunt evidence recheck did not complete' };
-    writeFileSync(resultFile, JSON.stringify(result));
-    await command(process.execPath, [FINDINGS, 'save', ledgerFile, intakeFile, resultFile, '--repo', tree, '--started', started], 'recheck-failed', { stopped: () => false, timeoutMs: 30_000 });
-    return { code: stopped() ? 130 : 12, ledger: readLedger(ledgerFile, intake.key) };
+  // Publish only a provisional ledger while host checks run. It contains the
+  // current graph findings for recheck, but review-status must not accept it.
+  const next = saveRun(prior, intake, result, new Date().toISOString(), started);
+  for (const finding of next.findings) if (finding.head === intake.target.head) {
+    finding.evidence_missing = missingEvidence(finding, file => {
+      const read = git({ ...cfg, root: tree }, ['show', `${intake.target.head}:${file}`]);
+      return read.ok ? read.output : null;
+    });
   }
-  const report = await command(process.execPath, [FINDINGS, 'report', ledgerFile, join(stateDir, 'evidence')], 'report');
-  if (report.code !== 0) return { code: 12, ledger: readLedger(ledgerFile, intake.key) };
-  writeFileSync(join(stateDir, 'report.md'), report.output);
-  return { code: 0, ledger: readLedger(ledgerFile, intake.key) };
+  const pending = reason => {
+    next.status = 'escalate'; next.reason = reason;
+    next.runs[next.runs.length - 1].status = 'escalate';
+    next.runs[next.runs.length - 1].reason = reason;
+    writeLedger(ledgerFile, next);
+  };
+  pending(failure?.message || 'Host evidence recheck and report are pending');
+  if (failure) return { code: failure.code, ledger: next };
+  const checked = await command(process.execPath, [join(HERE, 'evidence.mjs'), 'recheck', stateDir], 'recheck');
+  if (checked.code !== 0 || !/^RECHECK: (PASS|CORRECTED [0-9]+)$/.test(checked.stdout.trim().split('\n').pop())) {
+    // Keep recheck corrections, and leave the covering run explicitly incomplete.
+    const incomplete = readLedger(ledgerFile, intake.key);
+    incomplete.reason = 'Native hunt evidence recheck did not complete';
+    writeLedger(ledgerFile, incomplete);
+    return { code: stopped() ? 130 : 12, ledger: incomplete };
+  }
+  const completed = readLedger(ledgerFile, intake.key);
+  completed.status = result.status; completed.reason = result.reason;
+  completed.runs[completed.runs.length - 1].status = result.status;
+  completed.runs[completed.runs.length - 1].reason = result.reason;
+  try {
+    writeFileSync(join(stateDir, 'report.md'), renderReport(completed, readEvidence(join(stateDir, 'evidence'))));
+    // Final atomic publication is LAST: no PR can see done before rechecks/report.
+    writeLedger(ledgerFile, completed);
+  } catch (e) {
+    log(`Native hunt report/publication failed: ${e.message}`);
+    return { code: 12, ledger: readLedger(ledgerFile, intake.key) };
+  }
+  return { code: 0, ledger: completed };
 }
