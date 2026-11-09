@@ -3,14 +3,14 @@
 // (vendor/cloudflare-security-audit/skills/security-audit/SKILL.md) is the authority for names and
 // reason strings; nothing here paraphrases it.
 //
-//   node audit-run.mjs init [<target>] --full [--out <dir>] [--profile standard] [--scope <path,...>]
+//   node audit-run.mjs init [<target>] --full [--out <dir>] [--profile quick|standard|deep] [--scope <path,...>]
 //                           [--budget N] [--prior <run dir>]... [--max-parallel N] [--max-units-per-hunter N]
 //   node audit-run.mjs next|status|check <run dir>
 //
 // init gates, then claims a new run directory (default <git common dir>/security-audit/run-<N>/, decision
 // D4 A) and writes into it: tree/ (a read-only snapshot of the committed HEAD), run-metadata.json,
 // stage-state.json, events.jsonl. Gates: --full given; target is a git working tree with a commit;
-// profile supported; --scope paths safe, committed, and held by tree/; --prior is a directory; --out new and
+// profile one of quick, standard, deep; --scope paths safe, committed, and held by tree/; --prior is a directory; --out new and
 // either outside the target, under <git dir>/security-audit, or wholly ignored by version control. A refusal
 // creates nothing, except the budget refusal: it runs after the directory is claimed, launches nothing, and
 // records the run as incomplete so the refusal is disclosed rather than lost (SKILL.md, "Cost budget").
@@ -36,6 +36,7 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildEnv, git as rawGit, tail } from '../../../build/skills/build-app/driver/proc.mjs'
 import { VENDOR_DIR, isSafeRelativePath, validateFindingsFile, validateLedgerFile } from './upstream.mjs'
+import { PROFILES, QUICK_DEFERRED, rulesOf } from './audit-profile.mjs'
 
 // Every git call here runs without the target's hooks or fsmonitor: both are config a repo may set with a
 // relative path, which resolves inside the checkout, the code under audit. A local copy of the flags in
@@ -45,8 +46,8 @@ import { VENDOR_DIR, isSafeRelativePath, validateFindingsFile, validateLedgerFil
 export const SAFE_GIT = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false']
 export const git = (dir, args, opts) => rawGit(dir, [...SAFE_GIT, ...args], opts)
 
-export const KNOWN_PROFILES = ['quick', 'standard', 'deep']
-export const SUPPORTED_PROFILES = ['standard']                          // plan section 0: the others wait for PR 9
+export const KNOWN_PROFILES = PROFILES                                  // audit-profile.mjs: the one table of what each profile does
+export const SUPPORTED_PROFILES = KNOWN_PROFILES                        // init runs every profile it knows; none is run as another
 export const DEFAULTS = { maxParallel: 8, maxUnitsPerHunter: 4 }        // decision D9
 export const EXECUTION_POLICY = 'sandboxed-source-and-local-only'       // SKILL.md, "run-metadata.json" paragraph
 // The controls upstream requires before any target code runs (SKILL.md, "Universal execution safety").
@@ -347,7 +348,7 @@ export const REASONS = Object.freeze({
   reserve: 'budget_cannot_reserve_critics_and_validation',   // a wave (or a focused recon agent) the reserves leave no room for: its units are deferred
   critic: 'critic_budget_exhausted',                         // the final critic's reserve is gone: run incomplete, planned work deferred
   validation: 'validation_budget_exhausted',                 // candidates outnumber the validation reserve: run incomplete
-  quick: 'quick_profile_final_critic',                       // quick's accepted discoveries and reassignments, deferred
+  quick: QUICK_DEFERRED,                                     // quick_profile_final_critic: quick's accepted discoveries and reassignments, deferred
 })
 // PandaStack's own reason strings, which are not upstream's five (so not in REASONS): a ledger or findings.json a vendored validator would not pass, ending the run.
 export const LEDGER_FAILED = 'ledger_validation_failed'
@@ -522,13 +523,18 @@ export function nextStep({ meta, state, ledger, findings }) {
       // Planned but not merged: run (or re-run) the wave. After seed or apply-critic, plan-wave died before saving its
       // step, so the wave it planned is the next one.
       if (c.in_progress > 0) return go('hunt', { wave: state.last === 'plan-wave' ? state.wave : state.wave + 1 })
+      // Quick runs exactly one wave and one critic (HUNTING.md, "Coverage-critic waves"): once its result is applied, hunting is over,
+      // whatever apply-critic left (it defers every untouched unit, so only a verifier's carried units can still be planned).
+      const rules = rulesOf(meta)
+      if (state.last === 'apply-critic' && rules.hunterWaves === 1) return coverageDone()
       const huntable = c.planned - awaitingVerifier(ledger)
       if (state.last === 'plan-wave' && huntable > 0) refuse(`plan-wave left ${huntable} unit(s) planned and assigned none: units the budget cannot reach are deferred`)
       if (huntable > 0) return go('plan-wave', { wave: state.wave + 1 })
       if (state.last === 'apply-critic' && state.critic_kind === 'final-clean') return coverageDone()
-      // Nothing left to hunt: the retained final-clean critic. Straight after seed no wave ran (wave 0), but a critic's wave starts at 1
-      // (its ID is cf<wave>), so it runs as wave 1 and says no hunting wave ran.
-      return go('critic', { kind: 'final-clean', wave: Math.max(state.wave, 1), ...(state.wave === 0 ? { hunted: false } : {}) })
+      // Nothing left to hunt: the retained final-clean critic (quick, which has none: its one post-wave critic). Straight after seed no wave
+      // ran (wave 0), but a critic's wave starts at 1 (its ID is cf<wave>, quick's c<wave>), so it runs as wave 1 and says no hunting wave ran.
+      const kind = rules.finalCleanCritic ? 'final-clean' : 'post-wave'
+      return go('critic', { kind, wave: Math.max(state.wave, 1), ...(state.wave === 0 ? { hunted: false } : {}) })
     }
     case 'consolidate': return go('validate')
     case 'validate': return go('write-findings')
@@ -537,6 +543,8 @@ export function nextStep({ meta, state, ledger, findings }) {
       // the one it already had, which stands), and the report says why. Only that explains a missing file.
       if (findings === undefined && state.write_failed === true && meta.run_status === 'incomplete') return toReport()
       if (!Array.isArray(findings)) refuse('findings.json is missing or not an array after write-findings')
+      // Quick merges Phase 3 and Phase 5 (VALIDATION-AND-REPORTING.md, Phase 5): its validate stage was the records' final check, and write-findings ended the run.
+      if (rulesOf(meta).mergedValidation) return toReport()
       return findings.some(r => r?.verdict === 'confirmed' || r?.verdict === 'needs_validation') ? go('verify') : toReport()
     }
     case 'verify': return toReport()
@@ -660,7 +668,7 @@ export function checkRun(runDir) {
 export function init(opts) {
   const started = Date.now()
   if (!opts.full) refuse('a full audit needs --full: it is the explicit request upstream requires, and guidance mode creates no run')
-  if (!SUPPORTED_PROFILES.includes(opts.profile)) refuse(`profile ${opts.profile} is not available yet (only ${SUPPORTED_PROFILES.join(', ')}); it is never run as a different profile`)
+  if (!SUPPORTED_PROFILES.includes(opts.profile)) refuse(`profile must be one of ${SUPPORTED_PROFILES.join(', ')}, not ${JSON.stringify(opts.profile)}`)   // the parser already stops this; a direct caller is refused before anything is created
   const f = repoFacts(opts.target)
   const scope_paths = scopePaths(f, opts.scope)
   for (const dir of opts.prior) if (!isDirectory(dir)) refuse(`--prior ${dir} is not a directory`)
@@ -700,7 +708,7 @@ const isDirectory = p => { try { return statSync(p).isDirectory() } catch { retu
 
 // ---------- command line ----------
 const INT = /^(0|[1-9][0-9]*)$/
-const USAGE = `usage: audit-run.mjs init [<target>] --full [--out <dir>] [--profile standard] [--scope <path,...>] [--budget N] [--prior <run dir>]... [--max-parallel N] [--max-units-per-hunter N]
+const USAGE = `usage: audit-run.mjs init [<target>] --full [--out <dir>] [--profile quick|standard|deep] [--scope <path,...>] [--budget N] [--prior <run dir>]... [--max-parallel N] [--max-units-per-hunter N]
        audit-run.mjs next|status|check <run dir>`
 // flag -> [option, parse(value, options), repeatable]; a parse error is a Usage error.
 const int = (min, max) => v => { if (!INT.test(v) || !Number.isSafeInteger(Number(v)) || Number(v) < min) throw new Usage(); return Math.min(Number(v), max) }
@@ -750,7 +758,8 @@ function runInit(argv) {
   if (snapshot.skipped_total) console.log(`note: ${snapshot.skipped_total} symlink(s) and submodule(s) are not in tree/ (listed in run-metadata.json)`)
   for (const p of priors.filter(p => !p.compatible).slice(0, 5)) console.log(`note: earlier run ${p.run_id} is incompatible (${p.reasons[0]}); it is recorded in prior-runs.json, never treated as empty coverage`)
   // What a session says to its user before any agent runs: printed here, because an instruction to "tell the user" was skipped by the session in two live runs, and a note it is told to relay is in the transcript either way.
-  console.log(`note: what runs: about one agent per coverage unit, then one or two verifiers per surviving lead; ${metadata.budget === null ? 'no budget is set, so nothing stops spend but you' : `a budget of ${metadata.budget} agent invocations is set`}`)
+  const verifiers = rulesOf(metadata).verifiersPerCandidate === 1 ? 'one verifier' : 'one or two verifiers'   // quick's one verifier does Phase 3 and Phase 5
+  console.log(`note: what runs: about one agent per coverage unit, then ${verifiers} per surviving lead; ${metadata.budget === null ? 'no budget is set, so nothing stops spend but you' : `a budget of ${metadata.budget} agent invocations is set`}`)
   console.log(`note: the agents can only read, search and list files in a read-only snapshot of the commit (${join(runDir, 'tree')}); no code of the target is executed and nothing in the repository is edited`)
   console.log(`note: the run is ${runDir}; it resumes from disk: audit-run.mjs next ${runDir}`)
   console.log(`AUDIT: OK run=${metadata.run_id} profile=${metadata.profile} commit=${s.commit.slice(0, 12)} files=${snapshot.files} earlier_runs=${priors.length} compatible=${priors.filter(p => p.compatible).length}`)

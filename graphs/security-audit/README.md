@@ -11,9 +11,9 @@ decides every candidate, and code writes the reports from the JSON. Copyright (c
 Status: **version 1, source only.** No agent executes the target's code, because
 PandaStack has no sandbox that meets upstream's bar, so no finding can be `confirmed`: a
 surviving lead is `needs_validation` (with its blocker and a safe plan) or `rejected`. A
-report with zero confirmed findings is not a clean bill of health, and says so. The
-profiles `quick` and `deep` and the hardened sandbox are later changes; `init` refuses a
-profile other than `standard` rather than run a different audit than it names.
+report with zero confirmed findings is not a clean bill of health, and says so. All three
+of upstream's profiles run: `--profile quick` and `--profile deep` as well as `standard`, the
+default (see [Profiles](#profiles)); the hardened sandbox is a later change.
 
 It is explicit-request only. Three gates, any one of which stops an ordinary question:
 the skill's `description` fires only on the literal `/security-audit` and plain
@@ -26,8 +26,8 @@ refuses without `--full`.
 
 | Agent | Upstream role | Does |
 |---|---|---|
-| `audit-researcher` | `research` | the four reconnaissance researchers, the coverage critic, the Phase 5 verifier of each final record |
-| `audit-analyst` | `general` | the hunters, the Phase 3 verifier of each candidate, the verifier of a material replacement |
+| `audit-researcher` | `research` | the four reconnaissance researchers, the coverage critic, the Phase 5 verifier of each final record (not in `quick`) |
+| `audit-analyst` | `general` | the hunters, the Phase 3 verifier of each candidate (in `quick`, also its final record check), the verifier of a material replacement |
 | `audit-synthesizer` | the parent's own work | `architecture.md` and the coverage units, units for what a critic or hunter found missing, grouping candidates of one root cause. It has no verdict power |
 
 All three are leaves: `sonnet`, effort `high`, `tools: Read, Grep, Glob`, and nothing
@@ -36,6 +36,30 @@ offers an agent only the tools its `tools:` line names (retro 38). `scripts/vali
 pins the line, and a test compares each agent's model and effort with the workflow's
 `NODES`. Everything inside the snapshot, and every block the prompts fence, is data written by
 whoever controls the target; the agents are told so, and what they return is judged by code.
+
+## Profiles
+
+`init --profile` takes upstream's three profiles (upstream's `SKILL.md`, "Run profiles and scope"), read by
+the helpers from one table, `skills/security-audit/audit-profile.mjs`. Each profile keeps the same
+evidence bar: the candidate gate, the source-only boundary, `needs_validation`, both validators and
+an independent verifier for every candidate. A profile changes breadth and redundancy, nothing else.
+
+- `standard` (the default): the whole method. Units per subsystem, hunter waves while coverage
+  needs them, a critic after each wave and then a distinct final-clean critic, and two verifiers
+  per lead (Phase 3, then Phase 5). `init` accepts a `--budget` of 10 or more.
+- `quick`: a bounded pass. Every unit is coarsened to the one subsystem reference
+  `profile/quick/all-in-scope-subsystems`, one hunter wave runs, then one final critic; what the
+  critic finds or reopens, and every unit the wave did not reach, is deferred as
+  `quick_profile_final_critic`, not hunted. There is one verifier per lead: Phase 3 and Phase 5
+  are one fresh pass. A partial pass: the report says so. `init` accepts a `--budget` of 8 or more.
+- `deep`: reconnaissance is asked for units split per subsystem and lifecycle mode; critics until
+  a clean pass and two separate verification passes, as in `standard`; and an independent second
+  pass over each unit an earlier run covered on unchanged source, archived and hunted again by a
+  fresh owner once (under a `--budget`, only if the next wave can fund a hunter for it; a unit it
+  cannot reach keeps its covered pass). `init` accepts a `--budget` of 10 or more.
+
+Two of these are this graph's reading of upstream, not its text: deep's second pass (upstream has
+one clause for it) and quick deferring a unit no critic named with the critic's reason.
 
 ## Topology
 
@@ -55,10 +79,13 @@ wave N          audit-ledger.mjs plan-wave  rank and size to the budget, units i
 critic N        Workflow stage critic       one fresh audit-researcher over the ledger
                 Workflow stage mint         one audit-synthesizer mints units for the gaps found (none: no agent)
                 audit-ledger.mjs apply-critic   accept, wave + 1; loop while work remains, then one distinct final-clean critic
+                                            (quick: critic 1 is its one critic; what is left is deferred and the run goes to validation)
 consolidate     Workflow stage              candidates of one root cause grouped; code applies only a grouping that covers every fingerprint once
 validate        Workflow stage              one fresh audit-analyst per candidate (Phase 3), in rounds, a failed one retried once
+                                            (quick: the same verifier also makes the Phase 5 checks)
 write-findings  audit-findings.mjs write    findings.json sorted; both upstream validators and the link-check gate the write
 verify          Workflow stage              one fresh audit-researcher per record (Phase 5); a material replacement gets a new verifier
+                                            (not in quick: write-findings goes to the report)
 report          audit-report.mjs report     REPORT.md, NEEDS-VALIDATION.md, FINDINGS-DETAIL.md, all made by code
 done | incomplete
 ```

@@ -53,16 +53,18 @@ await test('init refuses a repository with no commits', () => {
   assert.match(init([empty, '--full']).last, /^AUDIT: FAIL .*has no commits/)
   assert.deepEqual(runsOf(empty), [])
 })
-await test('init refuses profiles quick and deep instead of running them as standard, and rejects an unknown one as usage', () => {
+await test('init accepts profiles quick and deep and records each as itself, and rejects an unknown one as usage', () => {
+  const unknown = mkRepo()
+  assert.equal(init([unknown, '--full', '--profile', 'fast']).status, 2)
+  assert.equal(init([unknown, '--full', '--profile', 'Standard']).status, 2)
+  assert.deepEqual(runsOf(unknown), [])
   const repo = mkRepo()
   for (const profile of ['quick', 'deep']) {
     const r = init([repo, '--full', '--profile', profile])
-    assert.equal(r.status, 1, profile)
-    assert.match(r.last, new RegExp(`^AUDIT: FAIL profile ${profile} is not available yet`))
+    assert.equal(r.status, 0, profile)
+    assert.match(r.last, new RegExp(`^AUDIT: OK run=run-\\d+ profile=${profile} `))
+    assert.equal(meta(r.runDir).profile, profile)
   }
-  assert.equal(init([repo, '--full', '--profile', 'fast']).status, 2)
-  assert.equal(init([repo, '--full', '--profile', 'Standard']).status, 2)
-  assert.deepEqual(runsOf(repo), [])
 })
 await test('init refuses an unsafe --out and creates nothing: inside the target and not ignored, by .., by symlink, existing, partly ignored', () => {
   const repo = mkRepo({ ...FILES, '.gitignore': '*.json\nignored-out/\n' })

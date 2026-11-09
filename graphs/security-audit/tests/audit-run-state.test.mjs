@@ -64,7 +64,7 @@ await test('the execution blockers quote upstream\'s controls, and the policy st
 await test('RUNNERS names every step but init, and STEPS has no duplicates', () => {
   assert.deepEqual(Object.keys(RUNNERS).sort(), STEPS.filter(s => s !== 'init').sort())
   assert.equal(new Set(STEPS).size, STEPS.length)
-  assert.deepEqual(SUPPORTED_PROFILES, ['standard'])
+  assert.deepEqual(SUPPORTED_PROFILES, ['quick', 'standard', 'deep'])
 })
 
 console.log('== the budget gate')
@@ -447,7 +447,7 @@ await test('check names each problem: a writable or non-regular tree, bad metada
   assert.deepEqual(problems(d => edit(d, m => ({ ...m, run_status: 'incomplete' }))), [reason])
   assert.deepEqual(problems(d => edit(d, m => ({ ...m, run_status: 'in_progress', incomplete_reason: 'x' }))), [reason])
   assert.deepEqual(problems(d => edit(d, m => ({ ...m, budget: 10, agents_spent: 11, stage_spend: { recon: 11 } }))), ['run-metadata.json: 11 agents spent against a budget of 10, and the run is not marked incomplete'])
-  assert.deepEqual(problems(d => edit(d, m => ({ ...m, profile: 'quick' }))), ['run-metadata.json: profile must be one of standard'])
+  assert.deepEqual(problems(d => edit(d, m => ({ ...m, profile: 'fast' }))), ['run-metadata.json: profile must be one of quick, standard, deep'])
   assert.deepEqual(problems(d => edit(d, m => ({ ...m, scope_paths: ['../x'], limits: { max_parallel: 17, max_units_per_hunter: 0 } }))), ['run-metadata.json: scope_paths must be safe repository-relative paths', 'run-metadata.json: limits.max_parallel is 1-16 and limits.max_units_per_hunter at least 1'])
   assert.deepEqual(problems(d => edit(d, m => ({ ...m, execution_blockers: [] }))), ['run-metadata.json: execution_capability must be none (with its blockers) or sandboxed'])
   assert.deepEqual(problems(d => appendFileSync(join(d, 'events.jsonl'), '{"at": "x"')), ['events.jsonl ends in the middle of a line'])

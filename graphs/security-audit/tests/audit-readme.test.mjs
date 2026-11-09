@@ -22,7 +22,7 @@ await test('the README names the pin that UPSTREAM.json holds, a test-updated li
   for (const agent of ['audit-researcher', 'audit-analyst', 'audit-synthesizer']) assert.ok(existsSync(join(REPO, 'graphs', 'security-audit', 'agents', `${agent}.md`)))
 })
 await test('the README states the limitations a reader needs: source only, no confirmed, reads not isolated, cost, model pins, and that a zero-confirmed report is not clean', () => {
-  for (const need of ['source only', 'not a clean bill of health', 'Agents are not isolated from your files', '**Cost.**', 'CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL', 'other than `standard`'])
+  for (const need of ['source only', 'not a clean bill of health', 'Agents are not isolated from your files', '**Cost.**', 'CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL'])
     assert.ok(README.includes(need), `the README says: ${need}`)
 })
 

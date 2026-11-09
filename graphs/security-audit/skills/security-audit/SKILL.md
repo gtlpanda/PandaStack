@@ -40,7 +40,7 @@ repository. It costs tens to hundreds of agent runs.
 ## 2. Usage
 
 ```text
-/security-audit [<target>] --full [--profile standard] [--out <dir>] [--scope <path>,<path>...] [--budget N]
+/security-audit [<target>] --full [--profile quick|standard|deep] [--out <dir>] [--scope <path>,<path>...] [--budget N]
                 [--max-parallel N] [--max-units-per-hunter N] [--prior <run dir>]... [--unattended]
 /security-audit --guidance "<question>"
 ```
@@ -52,8 +52,29 @@ repository. It costs tens to hundreds of agent runs.
   invocations: nothing launches past it, and the report says what was deferred.
   `--prior` names an earlier run to carry leads from (runs of this repository
   are found by themselves).
-- Not supported in this version: `--profile quick` and `deep` (init refuses
-  them; they are a later change), `--changed`, `--model`, `--limits`,
+- `--profile` names how much of the method runs; each is upstream's profile,
+  and `init` never runs one as another. Each profile keeps the same evidence
+  bar: the candidate gate, source only, `needs_validation`, the validators and
+  an independent verifier for every candidate.
+  - `standard` (the default): the whole method. Units per subsystem, hunter
+    waves while coverage needs them, a critic after each wave and then a
+    distinct final-clean critic, and two verifiers per lead (candidate
+    validation, then the final record check). `init` accepts a `--budget` of
+    10 or more.
+  - `quick`: a bounded pass for small targets, re-runs or a fast first look.
+    Units are coarsened to one subsystem, one hunter wave runs, then one final
+    critic; what the critic finds or reopens, and every unit the wave did not
+    reach, is deferred as `quick_profile_final_critic`, not hunted. There is
+    one verifier per lead, doing both the candidate validation and the final
+    record check. A partial pass, and the report says so. `init` accepts a `--budget`
+    of 8 or more.
+  - `deep`: for high-stakes or large targets. Reconnaissance is asked for units
+    split per subsystem and lifecycle mode; critics until a clean pass and two
+    separate verification passes, as in `standard`; and an independent second
+    pass over each unit an earlier run covered on unchanged source; under a
+    `--budget`, a unit gets that pass only if the next wave can fund a hunter
+    for it. `init` accepts a `--budget` of 10 or more.
+- Not supported in this version: `--changed`, `--model`, `--limits`,
   `--fresh`, `--resume`. Do not pass them and do not pretend they ran. Say so.
 - Variables name where things are. Every Bash call is a fresh shell, so write
   them literally at the head of each command (`AUDIT=<dir> REPO=<dir>
@@ -83,7 +104,7 @@ yours, and `init` refuses them (a usage error, exit 2). `REPO` is the target. Th
 (uncommitted changes, symlinks left out, an earlier run that cannot be carried).
 `init` prints three more `note:` lines, after the run directory and before the
 `AUDIT: OK` line: what runs and its budget (about one agent per coverage unit,
-then one or two verifiers per surviving lead), that the agents only read a
+then one or two verifiers per surviving lead; one under `quick`), that the agents only read a
 read-only snapshot and nothing in the target is executed, and where the run
 lives and how it resumes. Repeat them in your reply, with the others, before the
 first `plan` command and so before any agent runs: they are not optional,
@@ -153,7 +174,8 @@ Budget and cost:
 - Each `plan-wave` line says how many hunters launch and how many units were
   deferred for the budget. Relay it. What a budget does: one that cannot fund
   reconnaissance and the reserves is refused at `init` (the smallest `init`
-  accepts, 10, funds no hunter); a wave the reserves leave no room for is
+  accepts, 10, funds no hunter: that is `standard`'s smallest, and section 2
+  gives each profile's); a wave the reserves leave no room for is
   deferred and named in the report, and the run can still end `complete` with
   that coverage deferred (a partial pass: say so); one that runs short of the
   final critic or of validation ends the run `incomplete`. Never launch an agent
@@ -185,6 +207,9 @@ them. Read `REPORT.md` and tell the user, in your own words:
 
 - the status. `incomplete` is a partial pass: say the reason and name every
   unresolved candidate the report lists, first;
+- the profile: a `quick` run is a partial pass even when `complete`; say so,
+  and name what it deferred as `quick_profile_final_critic` (the report counts
+  and lists those units);
 - the counts of confirmed (always zero in this version), needs-validation and
   rejected, and that zero confirmed does not mean clean;
 - each lead by title, its trace and the blocker that keeps it unproven;
@@ -231,5 +256,5 @@ repository.
   exploitable. Say `needs_validation`, and name its blocker.
 - Never launch an audit agent yourself, outside a planned stage, and never
   use another tool to read the target's code on the audit's behalf.
-- Do not set a profile, model or limit this version does not take, and do not
+- Do not set a model or limit this version does not take, and do not
   claim a flag worked that the helpers did not accept.

@@ -21,6 +21,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CARRIED, REASONS, Usage, advanceState, appendEvent, countStatuses, formatNext, git, isCommitId, loadRun, markIncomplete, nextStep, readJson, refuse, waveAllowance, writeJson } from './audit-run.mjs'
 import { BlockError, companions, ordinary, resolve as resolveBlock } from './blocks.mjs'
+import { QUICK_DEFERRED, QUICK_SUBSYSTEM_REF, rulesOf } from './audit-profile.mjs'
 import { canonicalCoverageId, isSafeRelativePath, validateFindingsFile, validateLedgerDocument, validateLedgerFile } from './upstream.mjs'
 
 export const LEDGER_FILE = 'coverage-ledger.json'
@@ -151,9 +152,22 @@ function blockProblems(input) {
   return found
 }
 
+// Why `input` is not a unit of the run profile `profile` (empty when it is, or when there is no profile). Only quick gates: its subsystem
+// dimension is upstream's one fixed value and it adds no lifecycle mode (RECONNAISSANCE.md, "Deterministic coverage ledger": "quick coarsens
+// subsystem identity", "deep adds lifecycle modes"). The display label `subsystem` stays free.
+function profileProblems(input, profile) {
+  if (!rulesOf({ profile }).coarseSubsystem) return []
+  const refs = isObj(input.canonical_refs) ? input.canonical_refs : {}
+  const problems = []
+  if (refs.subsystem !== QUICK_SUBSYSTEM_REF) problems.push(`the quick profile coarsens every unit to one subsystem: canonical_refs.subsystem must be ${JSON.stringify(QUICK_SUBSYSTEM_REF)}, not ${String(JSON.stringify(refs.subsystem))}`)
+  if (input.lifecycle !== undefined || refs.lifecycle !== undefined) problems.push('the quick profile does not split units by lifecycle mode: leave out lifecycle and canonical_refs.lifecycle')
+  return problems
+}
+
 // One ledger unit from a recon or mint entry: { unit } or { problems }. The entry names the work (labels, canonical_refs,
 // paths, blocks, priority); this adds the unit's start state. A planned unit outside the run's scope is recorded out_of_scope,
 // never planned (SKILL.md: "record everything else as out_of_scope"). Upstream's validator judges the finished unit.
+// ctx.profile is the run's profile (absent: no profile gate, as for an earlier run's unit carried forward).
 export function unitFromInput(input, ctx) {
   if (!isObj(input)) return { problems: ['is not an object'] }
   const problems = []
@@ -165,6 +179,7 @@ export function unitFromInput(input, ctx) {
   const minted = mintId(input)
   if (minted.problems) problems.push(...minted.problems)
   problems.push(...blockProblems(input))
+  problems.push(...profileProblems(input, ctx.profile))
   const paths = Array.isArray(input.starting_paths) ? input.starting_paths : []
   for (const p of paths) {
     if (!ctx.skipPathCheck && typeof p === 'string' && isSafeRelativePath(p) && !existsSync(join(ctx.runDir, 'tree', p))) problems.push(`starting path ${p} is not in tree/ (the audited snapshot)`)
@@ -196,7 +211,7 @@ const wordCount = text => text.trim().split(/\s+/).length
 function buildSeed(runDir, run, input) {
   const notes = []
   const priors = loadPriors(runDir, notes)
-  const ctx = { runDir, scope: run.meta.scope_paths, priorStatus: priors.length ? 'new' : 'none' }
+  const ctx = { runDir, scope: run.meta.scope_paths, priorStatus: priors.length ? 'new' : 'none', profile: run.meta.profile }
   const problems = []
   if (!isObj(input)) fail('recon.json must be an object { architecture_md, units }')
   if (!isText(input.architecture_md)) problems.push('architecture_md is missing')
@@ -269,6 +284,9 @@ export function groupIntoHunters(ranked, perHunter) {
 export const FINAL_CRITIC_RESERVE = 1
 export const criticBudgetExhausted = meta => meta.budget !== null && meta.budget - meta.agents_spent < FINAL_CRITIC_RESERVE
 
+// A unit no hunter will take, unassigned with the reason. Only for a unit with no live evidence (planned, in_progress, or just reopened by reassign()).
+const deferUnit = (u, reason) => ({ ...u, status: 'deferred', agent_id: null, unresolved: [reason] })
+
 // Defers every unit a hunter would take or already has been given (a wave planned and not run), with the reason, without ending the run: upstream's
 // budget_cannot_reserve_critics_and_validation, after which the retained final-clean critic records the gap. Returns how many units it deferred (none
 // when it already ran). A unit assigned and not yet merged has no evidence, so it can be deferred; a unit a verifier owns is not hunter work.
@@ -276,7 +294,7 @@ export function deferHunting(runDir, reason, run = loadRun(runDir)) {
   const ledger = ledgerOf(run)
   const work = ledger.filter(u => isHunterWork(u) || u.status === 'in_progress')
   if (work.length) {
-    const deferred = new Map(work.map(u => [u.coverage_id, { ...u, status: 'deferred', agent_id: null, unresolved: [reason] }]))
+    const deferred = new Map(work.map(u => [u.coverage_id, deferUnit(u, reason)]))
     commitLedger(runDir, ledger.map(u => deferred.get(u.coverage_id) ?? u))
   }
   return work.length
@@ -292,6 +310,15 @@ export const exhaustCriticBudget = (runDir, run) => stopHunting(runDir, REASONS.
 
 export const hunterId = (wave, n) => `h${wave}-${String(n).padStart(2, '0')}`   // matches upstream's agent ID pattern; wave-unique, so fresh
 
+// What a wave planned now would do with `ledger`: its hunter work in rank order, the hunters the budget allows, the groups of units it would make, and the groups
+// that get a hunter. planWave plans with this, and anything asking what a wave would fund asks it too, so the two cannot disagree.
+function wavePlan(meta, ledger) {
+  const work = rankUnits(ledger.filter(isHunterWork))
+  const allowance = meta.budget === null ? { hunters: Infinity, reason: null } : waveAllowance(meta.profile, meta.budget - meta.agents_spent)
+  const groups = allowance.hunters === 0 ? [] : groupIntoHunters(work, meta.limits.max_units_per_hunter)
+  return { work, allowance, groups, funded: groups.slice(0, allowance.hunters) }
+}
+
 export function planWave(runDir) {
   const started = Date.now()
   const run = loadRun(runDir)
@@ -302,16 +329,14 @@ export function planWave(runDir) {
     finish(runDir, 'plan-wave', started, { hunters: 0, assigned: 0, deferred, still_planned: 0 }, { wave }, { reason: REASONS.critic, wave, assignments: [] })
     return { summary: `wave=${wave} hunters=0 assigned=0 deferred=${deferred} reason=${REASONS.critic}`, notes: [] }
   }
-  const work = rankUnits(ledger.filter(isHunterWork))
-  const allowance = meta.budget === null ? { hunters: Infinity, reason: null } : waveAllowance(meta.profile, meta.budget - meta.agents_spent)
+  const { work, allowance, groups, funded } = wavePlan(meta, ledger)
   const patched = new Map()
   let hunters = []
   if (allowance.hunters === 0) {
     // Upstream: launch no hunter from this wave and defer its planned units (HUNTING.md, "A budget bounds it the same way").
-    for (const u of work) patched.set(u.coverage_id, { ...u, status: 'deferred', agent_id: null, unresolved: [allowance.reason] })
+    for (const u of work) patched.set(u.coverage_id, deferUnit(u, allowance.reason))
   } else {
-    const groups = groupIntoHunters(work, meta.limits.max_units_per_hunter)
-    hunters = groups.slice(0, allowance.hunters).map((units, i) => ({ agent_id: hunterId(wave, i + 1), units }))
+    hunters = funded.map((units, i) => ({ agent_id: hunterId(wave, i + 1), units }))
     const rank = new Map(work.map((u, i) => [u.coverage_id, i + 1]))
     for (const h of hunters) {
       for (const u of h.units) {
@@ -495,6 +520,12 @@ function reassign(unit, reason) {
   return { ...rest, ...LIVE_EVIDENCE, attempts: [...unit.attempts, attempt], wave: wave + 1, status: 'planned' }
 }
 
+// Deep's second pass (upstream SKILL.md "Run profiles and scope": deep gives "prior_covered_same_source units an independent second pass").
+// PandaStack's reading: once this run's own pass covered such a unit, archive that pass and plan the unit again for a fresh owner. Once: the
+// archive (attempts) is what stops a second time. A unit the critic reopened in the same application is already planned, so it is not archived twice.
+export const SECOND_PASS_REASON = 'the deep profile gives a unit an earlier run covered on unchanged source (prior_covered_same_source) an independent second pass'
+export const needsSecondPass = u => u.prior_status === 'prior_covered_same_source' && u.status === 'covered' && u.attempts.length === 0
+
 // The critic's `reassign_ids` carry no per-unit reason (HUNTING.md's JSON, which a critic must return exactly), though
 // RECONNAISSANCE.md asks for "the critic's source-backed reassignment_reason": the archive says so instead of inventing one.
 // Everything apply-critic does up to the write: the next ledger and the tallies. Throws a refusal (or a failure with its problems) for what
@@ -522,13 +553,19 @@ function buildCritic(runDir, run, critic, mint) {
     patched.set(id, reassign(unit, `the ${by} listed this unit in reassign_ids; the critic result gives no per-unit reason`))
     tally.reassigned += 1
   }
-  const ctx = { runDir, scope: meta.scope_paths, priorStatus: ledger.some(u => u.prior_status !== 'none') ? 'new' : 'none' }   // seed decided whether earlier runs exist
+  const ctx = { runDir, scope: meta.scope_paths, priorStatus: ledger.some(u => u.prior_status !== 'none') ? 'new' : 'none', profile: meta.profile }   // seed decided whether earlier runs exist
+  const rules = rulesOf(meta)
   mint.units.forEach((entry, i) => {
     const built = isObj(entry) && entry.status !== undefined && entry.status !== 'planned' ? { problems: [`status ${JSON.stringify(entry.status)}: a minted unit is planned work; scope and budget decide anything else`] } : unitFromInput(entry, ctx)
     if (built.problems) { tally.minted_rejected += 1; rejections.push(`minted unit ${i}: ${built.problems.join('; ')}; rejected`); return notes.push(rejections.at(-1)) }
     const have = current.get(built.unit.coverage_id) ?? fresh.find(u => u.coverage_id === built.unit.coverage_id)
-    if (have && semanticOf(have) !== semanticOf(built.unit)) fail(`coverage ID collision: minted unit ${i} has the ID of a unit with different semantic fields; upstream never merges them (${LEDGER_FILE} is unchanged)`, [built.unit.coverage_id])
-    if (have) { tally.duplicates += 1; return notes.push(`minted unit ${i}: ${built.unit.coverage_id} is already in the ledger; not added again`) }
+    // Upstream: the same ID under different semantic fields is a collision, never merged (RECONNAISSANCE.md, "Deterministic coverage ledger"). Quick is the exception:
+    // it pins the subsystem reference, so a gap on a unit it already has gets that unit's ID as a matter of course, and the minter words the labels of what it was
+    // told is missing, not of what is there. The reference is the identity ("even if its display label changes"), so the unit is a duplicate (HUNTING.md: "deduplicates
+    // them against current units"); the existing unit keeps its labels and the note says the new ones differ.
+    const relabelled = have && semanticOf(have) !== semanticOf(built.unit)
+    if (relabelled && !rules.coarseSubsystem) fail(`coverage ID collision: minted unit ${i} has the ID of a unit with different semantic fields; upstream never merges them (${LEDGER_FILE} is unchanged)`, [built.unit.coverage_id])
+    if (have) { tally.duplicates += 1; return notes.push(`minted unit ${i}: ${built.unit.coverage_id} is already in the ledger; not added again${relabelled ? ' (it words its labels differently: the quick profile identifies a unit by its references, so the existing unit keeps its own)' : ''}`) }
     fresh.push(built.unit)
     tally[built.unit.status === 'out_of_scope' ? 'out_of_scope' : 'units_added'] += 1
   })
@@ -545,7 +582,26 @@ function buildCritic(runDir, run, critic, mint) {
     }
     tally.resolved += 1
   }
-  return { next: [...ledger.map(u => patched.get(u.coverage_id) ?? u), ...fresh], tally, notes, rejections }
+  const next = [...ledger.map(u => patched.get(u.coverage_id) ?? u), ...fresh]
+  if (rules.sameSourceSecondPass) {
+    // After the critic's own work, so a unit whose prior lead it resolved is passed again with the lead resolved. Only a unit the next wave would give a hunter: the pass is the
+    // profile's own addition, not the critic's request, and a unit reopened with no hunter to take it would be deferred by planWave, ending the run with a unit this run had covered
+    // listed as deferred coverage where standard, with the same budget, lists it covered. Such a unit keeps its covered pass and gets a note.
+    const wanted = next.map(u => (needsSecondPass(u) ? reassign(u, SECOND_PASS_REASON) : u))
+    const hunted = new Set(wavePlan(meta, wanted).funded.flat().map(u => u.coverage_id))
+    const passed = wanted.map((u, i) => (u !== next[i] && !hunted.has(u.coverage_id) ? next[i] : u))
+    tally.second_pass = passed.filter((u, i) => u !== next[i]).length
+    const unfunded = wanted.filter((u, i) => u !== next[i]).length - tally.second_pass
+    if (unfunded) notes.push(`${unfunded} unit(s) an earlier run covered on unchanged source were not given the deep profile's second pass: the next wave cannot fund a hunter for them (--budget ${meta.budget}, ${meta.agents_spent} spent); each keeps the pass this run gave it`)
+    return { next: passed, tally, notes, rejections }
+  }
+  if (rules.hunterWaves !== 1) return { next, tally, notes, rejections }
+  // Quick's one critic is final: no wave follows it (HUNTING.md: "exactly one hunter wave followed by exactly one final critic pass"). What it
+  // reopened (already archived by reassign()), what it found (minted, planned) and what no hunter reached are deferred with upstream's reason;
+  // a unit a verifier owns (a carried record) is not hunter work and stays planned for validation.
+  const quickNext = next.map(u => (isHunterWork(u) || u.status === 'in_progress' ? deferUnit(u, QUICK_DEFERRED) : u))
+  tally.deferred = quickNext.filter((u, i) => u !== next[i]).length
+  return { next: quickNext, tally, notes, rejections }
 }
 
 // What apply-critic would refuse this critic result and mint for, as plain strings (empty when it would write), without writing: the whole-apply
@@ -572,7 +628,9 @@ export function applyCritic(runDir, critic, mint) {
   commitLedger(runDir, next)
   writeJson(join(runDir, 'uncovered.json'), [])   // after the ledger holds what was made of the queue: a crash in between keeps the gaps
   finish(runDir, 'apply-critic', started, tally, {}, { wave: state.wave, critic_kind: state.critic_kind, critic_stop: critic.stop })
-  return { summary: `wave=${state.wave} kind=${state.critic_kind} units_added=${tally.units_added} out_of_scope=${tally.out_of_scope} reassigned=${tally.reassigned} resolved=${tally.resolved} rejected=${tally.reassign_rejected + tally.minted_rejected}`, notes }
+  // A profile's own count (quick's deferred, deep's second_pass) is the last field, and only for the profile that has it.
+  const profileCount = key => (tally[key] === undefined ? '' : ` ${key}=${tally[key]}`)
+  return { summary: `wave=${state.wave} kind=${state.critic_kind} units_added=${tally.units_added} out_of_scope=${tally.out_of_scope} reassigned=${tally.reassigned} resolved=${tally.resolved} rejected=${tally.reassign_rejected + tally.minted_rejected}${profileCount('deferred')}${profileCount('second_pass')}`, notes }
 }
 
 
@@ -693,7 +751,8 @@ function forceAdd(was, prior, ctx) {
     priority_class: was.priority_class ?? 4, ...(typeof was.priority_why === 'string' && { priority_why: was.priority_why }),
     ...(gone && { status: 'not_applicable', reason: `none of its starting paths is in the audited snapshot; it was a unit of earlier run ${prior.run_id}` }),
   }
-  const built = unitFromInput(input, { ...ctx, skipPathCheck: gone })
+  // No profile gate: an earlier run's unit keeps its own references (a quick run never coarsens earlier evidence, so no prior lead vanishes).
+  const built = unitFromInput(input, { ...ctx, profile: undefined, skipPathCheck: gone })
   return built.unit ? { ...built.unit, force_added_from: prior.run_id, ...(added.length && { companion_blocks_added: added }) } : null
 }
 
