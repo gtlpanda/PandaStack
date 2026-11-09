@@ -95,3 +95,5 @@ REVIEW 2026-11-09: PROPOSED-FEATURE make the report's `Profile rules` line say w
 - Tests: graphs/security-audit/tests/profile-e2e-deep.test.mjs passing (9/9); new audit-e2e-deep-vs-standard.test.mjs (4); regression suite green (`node scripts/test-workflow.mjs`: 1371 passed, 0 failed)
 - Decisions: D27
 - Notes: measured, not inferred: a first deep audit equals a standard one (path, 22 agents, ledger, verdicts). A second audit of the same commit costs deep 22 agents to standard's 19: the second pass adds `h2-01`, `h2-02` and a post-wave critic `c2`. Nothing else differs. This was the last feature. The REVIEW items above are still open: D10's two defects, the P-06 budget proposal and the P-07 rules-line proposal.
+
+REVIEW 2026-11-09: no drift or defects found
