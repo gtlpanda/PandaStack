@@ -2984,3 +2984,112 @@ file that is not JSON (above). The init notes (not run live after the change), t
 `resumeFromRunId` were not exercised. An output file for a Workflow that failed: only successful ones were seen, the charge for a lost run assumes the shape. One fixture, two runs: cost and wall time are two samples. The
 focused-reconnaissance agents (entry 38), the separate-root-cause re-entry (entry 40), the critic's compacted ledger (entry 39) and the Markdown that was read and not rendered (entry 41) stay as the README lists them.
 `tasks/lessons.md` is git-ignored and lives only in the main checkout, so no lesson was written from this worktree.
+
+## 43. security-audit PR 9: the quick and deep profiles, built by an autobuild loop (2026-11-08)
+
+PR 9 of the `security-audit` graph (`feat/security-audit-10-profiles`, on `feat/security-audit-9-skill` at `2de2d19`, entry 42). `init --profile quick` and `--profile deep` run, each as upstream's `SKILL.md`
+("Run profiles and scope") describes it; before this, `init` refused both. Not built, as scoped: the hardened sandbox, anything that makes `confirmed` reachable (plan D1 A stays: source only), a new agent or
+tool list, `--changed`, `--model`, `--limits`, `--fresh`, `--resume`. A profile never changes the evidence bar (the candidate gate, the source/local boundary, `needs_validation`, both validators, an independent
+verifier for every candidate). Plan: `tasks/plan-security-audit.md` 1.3, 4.7, 9 (row 9).
+
+**What changed.**
+- `audit-profile.mjs` (new, 43 lines): the one table (`profileRules(profile)`, frozen, nine keys; the tolerant `rulesOf(meta)`, which reads a meta with no profile, an unknown one, `null` or `undefined` as standard).
+  Every stage branches on a rule key (`hunterWaves`, `finalCleanCritic`, `mergedValidation`, `sameSourceSecondPass`, `partialPass`, `coarseSubsystem`, `verifiersPerCandidate`), never on the name, except the two places that print it.
+- `audit-run.mjs`: `init` takes the three profiles (`minimumBudget`: quick 8, standard 10, deep 10; the `note: what runs` line says one verifier per lead for quick). `nextStep`: quick goes from
+  apply-critic straight to validation, and wherever the machine falls through to "ask a critic" quick asks its one `post-wave` critic (wave 1, `c1`; no new `critic_kind`), never `final-clean`; after `write-findings` quick goes to `report`.
+- `audit-ledger.mjs`: quick's unit gate (every unit's `canonical_refs.subsystem` is `profile/quick/all-in-scope-subsystems`, no lifecycle; seed and mint refuse rather than rewrite; an earlier run's units are exempt);
+  quick's one sweep at apply-critic (what the critic found, what it reopened and every unit no hunter reached is `deferred` with `quick_profile_final_critic`; `deferred=D` ends the summary for quick only); deep's second
+  pass over `prior_covered_same_source` units (`SECOND_PASS_REASON`, `second_pass=K` for deep only).
+- `audit-inputs.mjs`, `audit-stage.mjs`, `security-audit-flow.js`: upstream's "Run profiles and scope" section, verbatim, as `parts.profile` in the synthesizer's, the critic's and the minter's input and prompt, for
+  quick and deep only (standard's inputs and prompts are byte for byte what they were); quick's validate prompt also carries upstream's Phase 5 text.
+- `audit-verdicts.mjs`, `audit-findings.mjs`, `audit-verify.mjs`: quick merges Phase 3 and Phase 5 (one fresh verifier per candidate does both). Validation funds `floor(left / verifiersPerCandidate)` candidates (so
+  quick no longer reserves an agent per candidate for a Phase 5 that never runs), the consolidate stage's skip formula divides the same way (`37e32c9`), a decided confirmed or needs_validation entry is marked
+  `phase5: { state: 'merged', verifier_id }`, `complete-check` accepts that marker only in quick and only for the entry's own verifier, and `write-findings` ends a quick run.
+- `audit-report.mjs`: a `Profile rules` line after the `- Run` line (quick and deep), quick as the only partial pass of its own, quick's one critic stated as final by design, a count of units deferred as
+  `quick_profile_final_critic`. `SKILL.md` and the graph README: usage, the three profiles with their rules, budgets and the shared evidence bar, and the two readings below disclosed in one sentence.
+
+**How it was built.** An `autobuild` run (`graphs/autobuild`, entry 33) over a frozen SPEC and a contract with one section per feature: ten features, each behind an acceptance test (`profile-*.test.mjs`, written
+before the loop) and a gate that also required the existing security-audit tests to only grow (four named exceptions) and `scripts/test.sh` green. Builder model `claude-opus-5-5`, its subagents `claude-sonnet-5-5`; the
+audit's own agents stay sonnet, effort high (plan D9).
+- **Sessions.** 10 features: P-01 in a dry run (`maxIterations` 1, 735 s, 26 turns), then nine builder sessions P-02 to P-10 (29 to 75 turns, 844 to 2,006 s each), every one passing its gate on the first attempt. Four
+  review sessions (after features 2, 5, 8 and 9; 526 to 940 s each) and one final `/bughunt --fix` over the whole branch: disposition **pass**, 0 confirmed bugs, one refuted finding (the harness config itself:
+  `autobuild.json` told automated agents to put the project's rules over user-level ones, a design and not a defect, and gone with the harness), all six lenses (logic, regression, security, contract, errors, concurrency)
+  covered. The hunt covered `2de2d19..78bb1a2`: this entry's fixes come after it.
+- **Cost, by the CLI's estimates (the sum of each session's final `total_cost_usd`, not a bill).** **$60.35**: builders $40.76 (the dry run $2.25; P-02 to P-10 $2.42, $5.23, $5.10, $7.15, $4.14, $5.01, $4.82, $2.30,
+  $2.34), reviews $15.60, the bug hunt $4.00 (the exact sum is $60.354; the three rounded parts add to $60.36). The cap was $200 for the builders of one `autobuild run`.
+- **Wall time (the loop log, UTC).** 12 min 15 s for the dry run (21:42:07 to 21:54:22), then 3 h 47 min 23 s for the loop (21:54:36 to 01:41:59): builders 2 h 51 min of it, reviews 50 min, the bug hunt 5 min 46 s;
+  about 4 hours in all.
+
+**The review defects and what they led to** (the four review sessions' findings, each reproduced by a failing test before it was fixed; the tests are new files, `audit-*.test.mjs`):
+1. **The coverage critic was never told the profile** (after feature 2). Quick's and deep's critics got upstream's whole "Run profiles and scope" section (three bullets) but `criticInput` carried no `profile` and
+   `criticPrompt` printed no `Run profile:` line (the synthesizer's and the minter's did). Fixed for quick and deep only; `audit-critic-profile.test.mjs` (4 tests, 2 failed before: `input.profile` undefined) also pins that a
+   quick or deep critic prompt differs from standard's by exactly that line and the profile section.
+2. **Quick's coverage-ID collision ended the run** (after feature 2). Quick pins the subsystem reference, `mintId` derives the ID from `canonical_refs` only, so a gap on an already-seeded surface x boundary x attack class
+   gets that unit's ID; the minter words its labels for the gap, `buildCritic` compared the labels, and apply-critic failed `coverage ID collision`. The mint stage retried once, collided again, and the run ended
+   `incomplete` / `ledger_validation_failed`. Reproduced through `driveAudit` (the first mint apply refused, `attempt 1 of 2`; with the refusals tolerated, the second ended the run).
+   **Choice:** in quick a minted unit with an existing ID is a duplicate (counted, not added, with a note that its labels differ; the existing unit keeps its own); standard and deep keep upstream's rule (same ID, different
+   labels: collision, never merged). The other reading the review offered, dropping `subsystem` from the comparison, would not have fixed its own scenario: the minter's labels differ in more than the subsystem. Reasons:
+   the reference is the identity upstream gives a unit ("even if its display label changes", `RECONNAISSANCE.md`), and `HUNTING.md` has the parent deduplicate minted units against current ones.
+   `audit-quick-mint-duplicate.test.mjs` (7 tests, 4 failed before) includes the negatives (standard and deep still collide, a new ID that only looks like an existing one is still added, a lifecycle unit is still refused).
+3. **The report's `Profile rules` line claimed what did not happen** (after feature 8). It was past tense for every quick and deep run. A deep run stopped by `critic_budget_exhausted` said it "ran critic waves to a clean pass" two
+   sections above a Final critic saying the final-clean critic did not run (upstream forbids a clean-coverage claim then, `SKILL.md`, `VALIDATION-AND-REPORTING.md`); quick at `--budget 8`, the smallest `init` accepts, is
+   `complete` after 7 agents, no hunt stage, and said it "ran one hunter wave". A complete run in which a hunter ran (a unit's owner, live or archived in `attempts`, is `h<wave>-<NN>`) keeps the pinned line; any other run says
+   what the profile asks for and that none of it is claimed as done (the run is incomplete, or no hunter ran). `audit-report-profile-claims.test.mjs` (14 tests; 9 of the first 11 failed before the fix, 3 more were added by the QA pass below and failed before their own), on fixtures and on real drives
+   (quick at budgets 8, 11, 12; deep at 10, 11, 22).
+4. **Deep's second pass under a budget that cannot fund it** (after feature 5). apply-critic reopened every covered `prior_covered_same_source` unit whatever the budget, and `planWave` then deferred the reopened unit.
+   Measured on the toy's second audit: deep at `--budget` 14 and 15 ended both units `deferred` where standard listed both `covered`; at 16 one was deferred. The pass is the profile's own addition (decision M2 below), not the
+   critic's request, so it is now given only to the units `wavePlan` (the ranking, allowance and grouping `planWave` plans with, factored out in its own commit) says the next wave would hand to a hunter; a unit it would
+   not reach keeps its covered pass, `second_pass=K` counts only the units given the pass, and a note says how many were not and why. Without a budget nothing changes. `audit-deep-second-pass-budget.test.mjs` (12 tests, 7
+   failed before; budgets 14, 15, 16 and 18 on the real path), and SKILL.md and the README say so.
+
+**The independent QA pass over these fixes** (a read-only `qa-auditor` agent, given the four fixes and the harness removal and no conclusions; it ran the new tests and its own probes in a copy of the worktree):
+no blocker. Held, by its own reading and probes (not re-run here, except the tests): standard's critic input and prompt, `planWave`'s behavior (`wavePlan` reproduces the old rank, allowance and grouping; in its simulation of 20,000 random ledgers, dropping the unfunded second-pass units and re-planning left the
+funded set unchanged), the dry run versus the real apply-critic (the mint stage's `applyCriticProblems` runs before the minter's spend is recorded, so it may reopen more; both ledgers validate), the harness removal and the
+new tests' strength (mutations of the gate and of the collision exception each failed a test) all held. Four findings, each checked here before acting:
+- *A hunter that ran and died was reported as "No hunter ran".* True (reproduced: a quick drive whose `h1-01` throws is `complete` with every unit deferred and no owner left). A hunt stage that spent agents
+  (`meta.stage_spend`, `NN-hunt-w<wave>`, also a lost one) now counts as a hunter that ran. Fixed, tested on fixtures and on that drive.
+- *The pinned deep line claims a second pass that was not given.* True in two states. After the gate above, a complete run can leave an eligible unit covered with no pass (the budget did not allow it; reasoned from code and shown on a fixture, no driven budget from 14 to 20 ended complete): the line now says so
+  (`needsSecondPass`, shared with apply-critic). Still true, and left: a complete deep run with no such unit at all (a first deep run) prints "and gave units an earlier run covered on unchanged source an independent
+  second pass", vacuously; `profile-report.test.mjs` pins that line on a fixture with no such unit, and the owner asked to keep the pinned line for complete runs. Relaxing the pin is the owner's call.
+- *Seed still refuses two quick units that share an ID* (the synthesizer's own pair of units with the same three references and different subsystem labels). Not changed, reasoned from code only: upstream says "fail on every
+  duplicate ID" for a ledger, a seed duplicate is the synthesizer's own mistake (it is told once, as for any seed problem), and unlike a minted gap it is not a proposal about units that already exist.
+- *The header comments pointed at an entry 43 that did not exist yet.* This entry.
+
+**Plan and upstream mismatches (decisions; upstream is the authority, and where the plan differs it lost).**
+- M1 Deep adds nothing to the critic loop or the verification passes. Upstream gives `standard` and `deep` the same loop (`HUNTING.md`: "In `standard` and `deep`, ...") and every profile but quick the same two passes
+  (`VALIDATION-AND-REPORTING.md`); the plan's "critics to a clean pass, separate Phase 3/5 verifiers" for deep are standard's, and a test pins that `next` is the same line for both in every state. What deep adds: lifecycle
+  units (recon is asked for them; the seed accepts them) and the second pass.
+- M2 The second pass is a reading, not upstream's text: one clause (`SKILL.md`: deep gives `prior_covered_same_source` units "an independent second pass"), read as archive-and-replan once, for a fresh owner, at the first critic
+  application after the unit is covered. An untested hypothesis about upstream's intent; the README says so. It costs a second audit of one commit three agents more in deep (22) than in standard (19) on the toy.
+- M3 Quick defers every untouched unit with upstream's one reason (a unit no critic named, or whose hunter result failed once, has no critic reason). A reading of the early-stop rule: no `planned` unit survives a finished quick run.
+- M4/M5 Quick's one critic runs even when nothing is huntable (`hunted: false`, as standard's final-clean critic does), as `post-wave` of wave 1; no new enum, and the report says it was the final one by design.
+- M6 Quick's merged verification marker (`phase5.state: 'merged'` and the `complete-check` branch) is ours: upstream describes the effect and has no record of verification state. Kept narrow: quick only, the entry's own verifier.
+- M7 Only quick is a partial pass because of its profile (`SKILL.md`: "a scoped or `quick` run must present itself as partial coverage"); the code had made every non-standard profile one.
+- M8 An earlier run's unit is never coarsened (a quick run force-adds such a unit with its own references; no prior lead vanishes). M9 Lifecycle is allowed in every profile except quick and required in none: no code can
+  require a target to have lifecycle modes, so the deep report line says deep "asked for" units split by it.
+- M10a Quick funds validation at one agent per candidate. Measured before the fix: quick at budgets 13, 14 and 16 ended `incomplete` after 11 or 12 agents although the run spends 13. At 13 it now completes with 13.
+- D26 (measured, contradicts the contract) Quick at `--budget 12` ends `complete` with 12 agents (the grouping is skipped, all four verifiers run), not `incomplete`; 11 is its first incomplete budget. The acceptance test
+  accepts either outcome, and `audit-e2e-quick-budget.test.mjs` pins the measured one.
+- D15 The facts-script bound in `audit-stage.test.mjs` is 61,000 (60,000 before): the Phase 5 text the quick validator prompt carries lives in the workflow file every script holds. D1 `init()` keeps a profile guard for a
+  direct caller (the parser already stops unknown names), so a refusal creates nothing. D23 The pinned "smallest budget, 10" sentences are standard's and stay; the profile lists carry each profile's own number.
+- Where the loop's own notes were wrong and the code is right: the contract said the `consolidateInput` formula of `37e32c9` was not on the branch (it was; it divides by `verifiersPerCandidate` now), and its
+  `--budget 12` outcome (D26).
+
+**Numbers.** 29 commits before this entry (head `f6ef7c4`): 15 `feat(P-nn)` for the ten features, 3 setup, 3 `chore(review)`, 1 `chore(bughunt)`, 6 for the review defects and the QA pass (5 fixes and the `wavePlan`
+refactor), 1 that removes the harness. 42 files against `feat/security-audit-9-skill`, +2,404 / -77, this entry excluded: source 11 files +286 / -62 (`audit-profile.mjs` new, 43), `SKILL.md` +31 / -6 (260 lines), the
+graph README +32 / -5 (214), tests 30 files +2,086 / -10 (26 new: the ten acceptance files `profile-*.test.mjs` and two support modules, written before the loop and kept, and 14 `audit-*.test.mjs` the loop and the fixes
+added). `scripts/test-workflow.mjs` and `CLAUDE.md` are byte for byte the base's. The plan's row 9 estimated ~250 lines; the tests and docs are most of the rest. `scripts/test.sh` on that head: `VALIDATE: PASS`,
+`TEST-INSTALL: 138 passed`, `TEST-SECRETS: 22 passed`, `TEST-WORKFLOW: 1417 passed, 0 failed` (1,245 at entry 42: +135 from the loop, +37 from the fixes), `TEST-AUTOBUILD: 75 passed`, `TEST: PASS`, exit 0;
+`scripts/check-secrets.sh` clean.
+
+**Left undone.** - No live run of quick or deep: both were driven offline by scripted agents through the harness (entry 42's live audits were standard's), so their cost and wall time with real agents, and whether real critics and
+  minters honor the profile text, are unmeasured. The two readings above (M2, M3) are untested hypotheses about upstream's intent.
+- This branch's `/bughunt` pass (head `78bb1a2`) predates the four fixes, the refactor, the follow-up and the harness removal: run `/bughunt` on the final head before opening the PR (the review gate needs it).
+- The pinned deep line for a first deep run (above); a deep run's "ran critic waves to a clean pass" on a complete run is read from the run being complete (the next step of the machine is a final-clean critic that accepts
+  nothing), not re-derived from `critic.json`; not examined for a hand-edited ledger.
+- The second-pass gate funds against the budget at apply-critic time, which is what `planWave` sees at the next step: nothing is spent between them (reasoned from code; the QA pass found none). A unit it left covered is
+  looked at again at the next critic application (the sweep runs at every one), so a later application may still give it the pass.
+- The report's `critic_budget_exhausted` sentences ("the final-clean critic did not run") still read the same for a quick run, which has no final-clean critic and whose one critic they do not name: literally true, not
+  changed (the loop's D19). No quick drive reached that reason (the budgets scanned, 8 to 14, end `validation_budget_exhausted` or `complete`).
+- `tasks/` does not exist in this worktree (entry 42: `tasks/lessons.md` is git-ignored and lives in the main checkout), so no lesson was written and the plan's status in `tasks/plan-security-audit.md` was not
+  updated here. PR 10 (the sandbox and `confirmed`) is still ahead: the skill's "never say confirmed" rule, the report's "no target code was executed" and the README's source-only statements change with it.
