@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from 'nod
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { runNativeHunt, runNativeProcess, nativeLeafArgs, schemaProblems } from '../skills/bughunt/native-runner.mjs';
+import { runNativeHunt, runNativeProcess, nativeLeafArgs, schemaProblems, codexOutputSchema, withNativeRepoLock } from '../skills/bughunt/native-runner.mjs';
 import { prepareHunt } from '../skills/bughunt/land.mjs';
 import { reviewStatus } from '../skills/bughunt/review-status.mjs';
 import { DEFAULTS, codexModel } from '../../autobuild/tool/lib/config.mjs';
@@ -110,5 +110,58 @@ test('an owned state lock refuses concurrent execution without touching the ledg
     mkdirSync(join(f.prep.stateDir, 'native.lock'));
     const calls = []; const r = await runCase(f, 'clean', calls);
     assert.equal(r.code, 12); assert.equal(r.ledger, null); assert.equal(calls.length, 0);
+  } finally { f.close(); }
+});
+
+test('Codex output closes nested objects without mutating the shared schema', () => {
+  const source = { type: 'object', required: ['rows'], properties: { rows: { type: 'array', items: { type: 'object', required: ['name'], properties: { name: { type: 'string' } } } } } };
+  const original = JSON.stringify(source);
+  const strict = codexOutputSchema(source);
+  assert.equal(strict.additionalProperties, false);
+  assert.equal(strict.properties.rows.items.additionalProperties, false);
+  assert.deepEqual(strict.required, ['rows']);
+  assert.equal(JSON.stringify(source), original);
+  assert.throws(() => codexOutputSchema({ type: 'object', properties: { optional: { type: 'string' } }, required: [] }), /optional fields/);
+  assert.throws(() => codexOutputSchema({ type: 'object', properties: {}, required: ['unknown'] }), /required/);
+});
+test('stop arriving after successful recheck still cannot publish a covering ledger', async () => {
+  const f = repoFixture();
+  try {
+    let stopped = false;
+    const base = leaves('clean', []);
+    const runner = async (bin, argv, opts) => {
+      const code = await base(bin, argv, opts);
+      if (argv.includes('recheck')) stopped = true;
+      return code;
+    };
+    const r = await runNativeHunt({ repo: f.repo, tree: join(f.prep.stateDir, 'tree'), stateDir: f.prep.stateDir, config: f.config, mode: 'discover', stopped: () => stopped, processRunner: runner });
+    assert.equal(r.code, 130); assert.equal(r.ledger.status, 'escalate');
+    assert.equal(reviewStatus(f.repo, 'HEAD', { base: 'main' }).hunted, false);
+  } finally { f.close(); }
+});
+
+test('shared repository lock protects preparation and permits only its owner token', async () => {
+  const f = repoFixture();
+  try {
+    const before = f.git('rev-parse', 'HEAD');
+    await withNativeRepoLock(f.repo, async lockToken => {
+      await assert.rejects(withNativeRepoLock(f.repo, async () => { throw new Error('must not prepare'); }), { code: 'HUNT_LOCKED' });
+      const refused = await runCase(f, 'clean');
+      assert.equal(refused.code, 12);
+      const accepted = await runNativeHunt({ repo: f.repo, tree: join(f.prep.stateDir, 'tree'), stateDir: f.prep.stateDir, config: f.config, mode: 'discover', lockToken, processRunner: leaves('clean', []) });
+      assert.equal(accepted.code, 0);
+    });
+    assert.equal(f.git('rev-parse', 'HEAD'), before);
+  } finally { f.close(); }
+});
+
+test('legacy target lock refuses before a preparation callback can alter retained repairs', async () => {
+  const f = repoFixture();
+  try {
+    mkdirSync(join(f.prep.stateDir, 'native.lock'));
+    const sentinel = join(f.prep.fixDir, 'retained-repair.txt'); writeFileSync(sentinel, 'keep');
+    let prepared = false;
+    await assert.rejects(withNativeRepoLock(f.repo, async () => { prepared = true; }), /Existing hunt lock/);
+    assert.equal(prepared, false); assert.equal(readFileSync(sentinel, 'utf8'), 'keep');
   } finally { f.close(); }
 });
