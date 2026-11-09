@@ -212,6 +212,28 @@ cd PandaStack
 ./install.sh             # link it
 ```
 
+For Codex, install just the supported entry skills:
+
+```bash
+./install.sh --codex --dry-run
+./install.sh --codex
+./install.sh --codex --uninstall  # remove these links and restore conflicts
+```
+
+This links only `autobuild` and `bughunt` into `~/.agents/skills`; it does not
+copy Claude settings, hooks, credentials, agent definitions or workflows, change
+git hooks, or install a PATH command. The linked skills use this checkout's native
+runners. Set `PANDASTACK_CODEX_SKILLS_DIR` to an absolute directory for another
+skill location (for example `$HOME/.codex/skills`). Conflicting entries are backed
+up beside that directory under `.pandastack-codex-backups-<directory-name>/`;
+foreign skills and replacements made after installation are preserved. `--skip`
+accepts `skills`, `skills/autobuild`, or `skills/bughunt` in this mode.
+
+A symlinked destination or ancestor is refused, including the common
+`~/.agents/skills -> ~/.claude/skills` arrangement. If those shared entry links
+already work, leave them as-is; otherwise choose a real dedicated skills directory.
+No account installation is needed to run the repository's CLI directly.
+
 If `~/.claude/settings.json` is already a file of your own, it is **merged,
 not replaced**:
 - Our hooks (the review gate) are added after yours.
