@@ -369,3 +369,18 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   also observed before the change. Cause is unestablished; do not waive it or
   claim full acceptance. Worker import/dispatch checks pass separately. External
   host retains the remaining acceptance result, full gates, flags and commits.
+
+- D76 (P2-10): Encode the source object directory as one C-quoted Git alternate
+  list element. Escape quotes, backslashes and control characters with three-digit
+  octal escapes; preserve ordinary Unicode and remove only rev-parse's terminating
+  newline. Retain private export creation, literal blob restoration, repacking,
+  temporary alternate removal and cleanup. Scope is only createSuiteExport path
+  handling; no other hunt finding or blocked nested-process reproduction.
+- D77 (P2-10 validation): Selected acceptance failed all four cases at fixture
+  initialization with spawnSync git EPERM, before calling createSuiteExport. Do
+  not retry or bypass that boundary. Prepare new workflow-harness tests before
+  implementation using a synthetic Git process boundary and actual owned export
+  directory/file operations. These checks establish arguments, bytes/modes and
+  cleanup under the synthetic responses, not real Git decoding or self-contained
+  object retention. External host retains actual Git acceptance, full gates,
+  feature flags, commits and final review under the backend-specific instructions.

@@ -199,7 +199,11 @@ export function createSuiteExport({repo,tree}) {
   try{
     call(['init','-q','--template='])
     const objects=git(repo,['rev-parse','--path-format=absolute','--git-path','objects']);if(!objects.ok)throw new Error('Suite source object directory is unavailable')
-    env.GIT_ALTERNATE_OBJECT_DIRECTORIES=objects.stdout.trim()
+    // Git parses this as a path list. C-quote one element so literal colons,
+    // quotes and backslashes cannot change its meaning; controls use octal.
+    const objectDirectory=objects.stdout.replace(/\n$/, '')
+    const quotedDirectory=objectDirectory.replace(/["\\\x00-\x1f\x7f]/g, c=>'\\'+c.charCodeAt(0).toString(8).padStart(3,'0'))
+    env.GIT_ALTERNATE_OBJECT_DIRECTORIES='"'+quotedDirectory+'"'
     call(['read-tree',tree])
     const entries=call(['ls-files','--stage','-z']).split('\0').filter(Boolean).map(e=>{const m=/^(\d+) ([0-9a-f]+) 0\t([\s\S]+)$/.exec(e);if(!m||m[3].split('/').some(p=>!p||p==='.'||p==='..'||p.toLowerCase()==='.git')||!['100644','100755','120000'].includes(m[1]))throw new Error('Unsupported suite tree entry');return {mode:m[1],sha:m[2],path:m[3]}})
     call(['checkout-index','-a','-f'])

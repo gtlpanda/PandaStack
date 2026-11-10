@@ -2205,3 +2205,50 @@ tests and DECISIONS.md/PROGRESS.md. Frozen inputs, prior capture implementation,
 pass flags, staging, commits, branches, Git control and pinned host are untouched.
 No providers, full gates, P2-10 work or rejected nested-process reproduction ran.
 The external host retains remaining acceptance verification and final completion.
+
+## P2-10 — Preserve literal source paths in isolated Git exports
+
+Changed createSuiteExport to pass the source object directory as one C-quoted
+Git alternate-list element. Quotes, backslashes and control characters use
+three-digit octal escapes; ordinary Unicode is preserved. Remove only the Git
+output's terminating newline. Existing private export, literal blob restoration,
+repack, alternate removal and cleanup operations remain unchanged. D76-D77 record
+the scope and validation boundary. Git's documented alternate-list format is at
+https://git-scm.com/docs/git#Documentation/git.txt-GITALTERNATEOBJECTDIRECTORIES.
+
+Prepared seven workflow-harness test groups before implementation. Six exercise
+ordinary, spaces/quotes, colon, combined colon/spaces/quotes, backslash, and
+control/Unicode paths through a synthetic Git process boundary. They check the
+literal alternate argument across export operations, selected tree, actual owned
+export directory mode, restored binary bytes/executable mode, repack invocation,
+read-only source command and idempotent cleanup. The seventh simulates repack
+failure and checks refusal plus owned-directory removal. The mock is restored in
+finally. These checks do not prove actual Git decoding or self-contained objects.
+
+Exact focused validation:
+- `node acceptance/phase2/p2-10.test.mjs`: exit 1; 0 passed / 4 failed. All four
+  cases failed during fixture initialization at line 17 with
+  `Error: spawnSync git EPERM` (git helper at line 12), before createSuiteExport.
+  No retry, bypass, waiver or acceptance modification was made. Real Git export
+  acceptance remains host-owned and unverified in this session.
+- Before implementation,
+  `node --input-type=module -e "await import('./tests/suite-export-paths.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1; aggregate `{ pass: 0, fail: 7 }`. The boundary received raw paths instead
+  of a quoted element; the transfer-failure test stopped at the same assertion.
+- After implementation, the identical focused aggregate command: exit 0;
+  `{ pass: 7, fail: 0 }`. All Git responses were synthetic; no child or provider
+  was launched by these implementation tests. No suite, namespace, retention
+  relay or descendant-lifecycle reproduction was invoked.
+- `bash scripts/check-secrets.sh`: exit 0; `check-secrets: clean` (tracked files).
+- `bash scripts/check-secrets.sh tests/suite-export-paths.test.mjs`: exit 0;
+  `check-secrets: clean` (the only new untracked source/test file). Scanner rules
+  unchanged; no synthetic fixture annotations needed.
+- `git diff --check`: exit 0.
+
+Required read-only Explore audit and parent diff inspection: bounded PASS for
+path data flow, edge/error handling, security, consistency and completeness; no
+concrete issue found. The audit is static and does not establish actual Git
+acceptance. Changed only evidence.mjs path encoding, the new implementation tests,
+and DECISIONS.md/PROGRESS.md. Frozen inputs, pass flags, staging, commits, branches,
+Git control and pinned host remain untouched. No full gates or live providers
+ran. The external host retains real Git acceptance, full gates and final review.
