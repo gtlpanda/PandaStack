@@ -75,3 +75,27 @@ for(const control of ['GIT_DIR','GIT_CEILING_DIRECTORIES'])test(`failed discover
  const before=process.env[control];const out=await scopeEnv({[control]:value},async()=>{const query=spawnSync('git',['-C',nested,'rev-parse','--show-toplevel'],{encoding:'utf8',timeout:5000});assert.notEqual(query.status,0,'fixture control must cause actual discovery failure');return invoke(api,opts(nested,runner,storeDir,'env-discovery'),async()=>{calls++;inside=api.currentRunId();return 0;});});
  assert.equal(process.env[control],before);assert.equal(fs.existsSync(storeDir),false);assert.equal(inside,null);assert.equal(calls,1);assert.equal(out.value,0);assert.equal(out.warnings,warning);assert.equal(rawGit(repo,'status','--porcelain'),'');
 });
+
+
+for(const [label,filename,contents,valid]of [
+ ['diagnostic phrase in malformed config filename','not a git repository.config','[broken\n',false],
+ ['ordinary malformed config filename','ordinary.config','[broken\n',false],
+ ['valid empty config with genuine repository absence','valid.config','',true],
+])test(`Git configuration discovery: ${label}`,async t=>{
+ const api=await mod('tracking'),{createRunStore}=await mod('store'),dir=base(t),repo=join(dir,'project'),runner=join(dir,'runner'),storeDir=join(dir,'external'),config=join(dir,filename);
+ fs.mkdirSync(repo);fs.mkdirSync(runner);fs.writeFileSync(config,contents);
+ const patch={GIT_CONFIG_GLOBAL:config,GIT_CONFIG_NOSYSTEM:'1',LC_ALL:'C'};
+ const prior=new Map(Object.keys(patch).map(key=>[key,process.env[key]]));let calls=0,inside;
+ const result=await scopeEnv(patch,async()=>{
+  const query=spawnSync('git',['-C',repo,'rev-parse','--show-toplevel'],{encoding:'utf8',timeout:5000});assert.equal(query.status,128);assert.equal(query.stdout,'');
+  if(valid)assert.equal(query.stderr,'fatal: not a git repository (or any of the parent directories): .git\n','positive fixture must establish genuine complete absence diagnostic');
+  else{assert.match(query.stderr,/^fatal: bad config line 1 in file /);assert.ok(query.stderr.includes(config),'fixture must exercise the actual selected local configuration');}
+  return invoke(api,opts(repo,runner,storeDir,'config-discovery'),async()=>{calls++;inside=api.currentRunId();return 7;});
+ });
+ for(const [key,value]of prior)assert.equal(process.env[key],value,'owned environment must be restored: '+key);
+ assert.equal(calls,1);assert.equal(result.value,7);assert.equal(api.currentRunId(),null);assert.equal(fs.readFileSync(config,'utf8'),contents);
+ assert.equal(fs.existsSync(storeDir),valid,'configuration errors cannot become repository absence merely because their filename contains diagnostic words');
+ assert.equal(inside,valid?'config-discovery':null);assert.equal(result.warnings,valid?'':warning);
+ assert.deepEqual(fs.readdirSync(repo),[]);assert.deepEqual(fs.readdirSync(runner),[]);
+ if(valid){const s=createRunStore(storeDir),record=s.readRun('config-discovery');assert.equal(record.revision,null);assert.equal(record.runnerRevision,null);assert.deepEqual(s.readEvents(record.id).map(e=>e.type).sort(),['failed','started']);}
+});

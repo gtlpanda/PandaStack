@@ -50,3 +50,7 @@ trim convention cannot make wrong-root behavior pass. Ordinary static malformed
 metadata cases preserve their input entries. Environment changes restore in finally.
 
 Pre-freeze independent evidence at8a0a7c51e600716e2bf631e298c312cfbc91d2f5:36 cases,3 controls passed and33 expected behavioral failures. Syntax, raw Git path-byte fixture checks and independent review passed. This matrix reproduces final-review findings; no native-hunt disposition or final acceptance is implied.
+
+## Complete absence diagnostic
+
+A failed Git query is genuine absence only when its complete recognized diagnostic establishes that class; a substring in a configuration filename or other error text is insufficient. A malformed global configuration remains indeterminate regardless of filename. Preserve supported valid caller configuration: do not blanket reject GIT_CONFIG_GLOBAL or change launcher environment. Three append-only cases independently assert Git status/stderr, callback and warning behavior, environment restoration, and the valid empty-config control. The original36 acceptance cases remain byte-identical. On the retained first implementation, the expanded39 cases had38 passes and1 expected failure before this correction.
