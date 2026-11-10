@@ -256,5 +256,5 @@
       "CI": "1"
     }
   },
-  "prompt": "Read SPEC.md, spec/contracts/phase1.md, features.json and PROGRESS.md. Implement the next failing feature with tests, respecting frozen inputs. Use the existing Node stack. Do not push or open PRs; host owns commits and passes flags. New tests under tests/ must use scripts/workflow-harness.mjs test() if ending .test.mjs; acceptance/phase1 uses node:test separately. Do not mark the roadmap phase complete; supervisor owns live evidence."
+  "prompt": "Read SPEC.md, spec/contracts/phase1.md, features.json and PROGRESS.md. Implement the next failing feature with tests, respecting frozen inputs. Use the existing Node stack. Do not push or open PRs; host owns commits and passes flags. New tests under tests/ must use scripts/workflow-harness.mjs test() if ending .test.mjs; acceptance/phase1 uses node:test separately. Do not mark the roadmap phase complete; supervisor owns live evidence. Inside the sandbox run the selected acceptance file and focused implementation tests only; do not run the entire scripts/test.sh or scripts/test-workflow.mjs suite. The external host runs every full gate authoritatively after your session. Report targeted evidence and return promptly; never wait on a known sandbox-only localhost permission failure."
 }
