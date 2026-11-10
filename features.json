@@ -41,7 +41,7 @@
       ],
       "test": "acceptance/phase2/p2-03.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "P2-04",

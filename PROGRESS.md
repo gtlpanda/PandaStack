@@ -1477,3 +1477,54 @@ runner robustness observation was fixed and verified by the parent. This is a
 bounded inspection result, not a full-gate pass. No frozen files, feature flags,
 Git control, staging or commits changed. No full gates or live providers ran;
 external host retains process acceptance, full regression gates and final review.
+
+## P2-03 — CLI delivery, waiting and acknowledgments
+
+Added core/skills/decisions/routing.mjs with bounded monotonic polling, safe abort
+and timeout errors, detached recipient identity and durable delivery replay. Only
+NOT_READY retries; storage and recipient/revision/live-state failures stop. Wait
+never acknowledges; answer application still requires consumer checkpoints or
+idempotent effects. Added scripts/decision-cli.mjs and a lazy decision branch in
+scripts/pandastack.mjs for request/list/show/answer/wait/ack/cancel, strict flags,
+decimal timeout validation, inert JSON input, safe JSON errors and connection
+cleanup. Doctor behavior and existing queue implementation remain unchanged.
+
+Added tests/decision-routing.test.mjs using workflow-harness test() and aggregate
+summary. Seven groups cover routing isolation/replay, recipient mutation, pending
+wrong/stale/missing requests, cancel/expiry/storage errors, abort listener cleanup,
+timer bounds, CLI shared state/explicit ack, inert text, malformed flags/files,
+timeout and delayed native answers. D52-D54 record implementation choices and
+the process-boundary limitation.
+
+Exact focused validation:
+- Before implementation, `node acceptance/phase2/p2-03.test.mjs`: exit 1;
+  0 passed, 4 failed with ERR_MODULE_NOT_FOUND for decisions/routing.mjs.
+- Before implementation,
+  `node --input-type=module -e "await import('./tests/decision-routing.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1, ERR_MODULE_NOT_FOUND before tests loaded. After initial implementation,
+  the same command exited 0 with `{ pass: 6, fail: 0 }`.
+- After implementation, `node acceptance/phase2/p2-03.test.mjs`: exit 1;
+  2 passed, 2 failed. Both native routing cases passed. CLI process replay failed
+  at p2-03.test.mjs:59: `Unexpected end of JSON input` from empty stdout; CLI
+  invalid-flags case failed at :83: `errors must go to stderr`, actual empty
+  string. These process cases were not retried or waived.
+- Independent inert diagnostic:
+  `node --input-type=module -e 'import {spawnSync} from "node:child_process"; const r=spawnSync(process.execPath,["-e","console.log(JSON.stringify({ok:true}));console.error(\"diagnostic\")"],{encoding:"utf8"});console.log(JSON.stringify({status:r.status,signal:r.signal,out:r.stdout,err:r.stderr,error:r.error?.code}))'`:
+  exit 0; output `{"status":0,"signal":null,"out":"","err":"","error":"EPERM"}`.
+  Real-process CLI behavior remains unverified in this sandbox.
+- Final focused implementation and compatibility run:
+  `node --input-type=module -e "await import('./tests/decision-routing.test.mjs'); await import('./tests/decision-queue.test.mjs'); await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; `{ pass: 23, fail: 0 }` (seven routing/CLI, nine queue and seven doctor
+  groups). Before the final seventh group was added, this aggregate was 22/0.
+- `bash scripts/check-secrets.sh`: exit 0, `check-secrets: clean` (tracked files).
+- `bash scripts/check-secrets.sh core/skills/decisions/routing.mjs scripts/decision-cli.mjs tests/decision-routing.test.mjs`:
+  exit 0, `check-secrets: clean` (every new untracked source/test file).
+- `git diff --check`: exit 0.
+
+Read-only Explore audit and parent inspection: static PASS for data flow,
+edge/error handling, security, consistency and completeness; no concrete defects
+found. Static review and in-process checks do not establish process acceptance or
+full-gate completion. Changed only the routing module, CLI module/entry point,
+new implementation test and decision/progress logs. Frozen inputs, feature flags,
+Git control, staging and commits remain untouched. No full gates or live providers
+ran; the external host retains process acceptance, full gates and final review.

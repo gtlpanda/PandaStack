@@ -194,3 +194,24 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   inherited --input-type module mismatch with an ESM data-URL worker. Keep full
   gates, flags, staging, commits and final completion host-owned; record bounded
   evidence in PROGRESS.md only.
+
+## P2-03 CLI and waiting boundaries
+
+- D52 (P2-03): Poll the existing transactional deliver() operation, retrying only
+  NOT_READY. Snapshot recipient fields before waiting; preserve queue checks for
+  identity, revision, cancellation and expiry on every poll. Use monotonic elapsed
+  time, abortable sleeps, integer poll intervals 1..2147483647ms and timeouts
+  0..2147483647ms. Timeout zero permits one immediate delivery attempt. Timers do
+  not preempt synchronous SQLite operations, which retain their bounded busy
+  timeout. Delivery does not acknowledge or establish action authority; consumers
+  still need durable checkpoints/idempotent effects for answer application.
+- D53 (P2-03): Add a lazy decision CLI branch to preserve doctor behavior. Parse
+  exact per-command flags and decimal timeout before opening storage; load input
+  only as JSON data, emit JSON results/errors, close owned connections on every
+  handled exit and redact file/parser/queue diagnostics. No provider or managed
+  integration is introduced. Keep full gates, flags and Git mutations host-owned.
+- D54 (P2-03): Both real-process CLI acceptance cases failed on empty child output.
+  A separate inert spawnSync diagnostic returned EPERM with empty stdout/stderr,
+  independently confirming a local process boundary limitation. Do not bypass or
+  retry it. In-process CLI tests cover shared native state and safe errors but do
+  not replace frozen process acceptance; leave that validation to the host.

@@ -4,6 +4,10 @@ import { fileURLToPath } from 'node:url'
 import { inspectDoctor } from '../core/skills/run-records/doctor.mjs'
 
 export async function main(args) {
+  if (args?.[0] === 'decision') {
+    const { decisionMain } = await import('./decision-cli.mjs')
+    return decisionMain(args.slice(1))
+  }
   try {
     if (args[0] !== 'doctor') throw Error('usage')
     const options = {}, seen = new Set()
