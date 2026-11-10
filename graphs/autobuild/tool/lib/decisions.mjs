@@ -1,8 +1,6 @@
 // Host-owned feature gate. Queue state is authoritative; observations are not.
 import { createHash } from 'node:crypto'
 import { realpathSync } from 'node:fs'
-import { createDecisionQueue } from '../../../../core/skills/decisions/queue.mjs'
-import { waitForDecision } from '../../../../core/skills/decisions/routing.mjs'
 import { validateDecisionConfig } from '../../../../core/skills/decisions/config.mjs'
 import { git } from './proc.mjs'
 
@@ -39,6 +37,10 @@ function contextData(snapshots) {
 export async function prepareDecisionGate({ config, feature, trace, signal, readRevision = () => decisionRevision(config) }) {
   const decisions = validateDecisionConfig(config.decisions)
   if (!decisions || feature.id !== decisions.featureId || feature.passes) return null
+  // Both modules reach SQLite. Inspection and skipped gates must stay storage-free;
+  // an assigned gate still propagates import failure before any queue side effects.
+  const { createDecisionQueue } = await import('../../../../core/skills/decisions/queue.mjs')
+  const { waitForDecision } = await import('../../../../core/skills/decisions/routing.mjs')
   let repo
   try { repo = realpathSync(config.root) } catch { throw error('IO_ERROR') }
   const revision = readRevision()

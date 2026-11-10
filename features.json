@@ -119,7 +119,7 @@
       ],
       "test": "acceptance/phase2/p2-08.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     }
   ]
 }

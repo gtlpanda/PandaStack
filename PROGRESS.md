@@ -2050,3 +2050,53 @@ This is bounded review and focused evidence, not full-gate or live-provider proo
 Frozen inputs, prior implementation, feature flags and Git control remain
 unchanged. No staging, commits, full gates, provider calls or P2-08 work performed.
 External host retains full gates, actual CLI/pipe acceptance and final completion.
+
+## P2-08 — Load decision storage only for enabled gate work
+
+Moved both queue and routing imports inside prepareDecisionGate after structural
+validation and the disabled/completed/unassigned return. Pure helper/config imports
+and skipped gates no longer resolve SQLite. An assigned incomplete gate still
+loads its owning storage and rejects unavailable SQLite; available storage retains
+NOT_FOUND for an empty queue. The gate signature and subsequent routing, HEAD,
+acknowledgment, context and observation logic remain unchanged. D72-D73 record the
+implementation and validation boundaries.
+
+Added five workflow-harness groups with fresh worker module caches: enabled pure
+config inspection, imported CLI help, all gate skips, invalid configuration on
+skipped/assigned gates, and denied/available SQLite controls. The narrow resolution
+hook denies only node:sqlite; the positive control uses the real queue. Workers
+have bounded deadlines and cleanup. CLI main is called as a library with eval
+entry metadata; actual CLI process acceptance remains separately host-owned.
+This is Node v24.21.0 missing-builtin simulation, not Node 20 compatibility.
+
+Exact focused validation:
+- Before implementation,
+  `node --input-type=module -e "await import('./tests/decision-lazy-storage.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1; `{ pass: 0, fail: 4 }`, each reporting
+  `No such built-in module: node:sqlite`. After implementation the same command
+  exited 0 with `{ pass: 4, fail: 0 }`, before the CLI group was added.
+- `node acceptance/phase2/p2-08.test.mjs`: exit 1; 0 passed, 7 failed. Every case
+  reported `Error: spawnSync /usr/bin/node EPERM` at p2-08-support.mjs:16.
+  No case was retried, weakened or waived. Actual subprocess acceptance remains
+  unverified in this session.
+- Final focused implementation and compatibility command:
+  `node --input-type=module -e "for (const name of ['lazy-storage','managed','launch','transport-receipt','output','observations']) await import('./tests/decision-'+name+'.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; `{ pass: 44, fail: 0 }`. Before adding the CLI group this passed 43/0.
+  The first run including that group exited 1 with 43/1 and
+  `ENOENT: no such file or directory, lstat '/home/gtlpanda/code/PandaStack/[worker eval]'`.
+  Corrected the test's eval-worker entry metadata to Node -e's absent entry path,
+  then reran the same aggregate for the final 44/0. Product entry guards were
+  unchanged. Provider boundaries are synthetic mocks; no providers ran.
+- `bash scripts/check-secrets.sh`: exit 0; `check-secrets: clean` (tracked files).
+- `bash scripts/check-secrets.sh tests/decision-lazy-storage.test.mjs`: exit 0;
+  `check-secrets: clean` (the only new untracked source/test file). Scanner rules
+  unchanged; no fixture annotations needed.
+- `git diff --check`: exit 0.
+
+Required read-only Explore audit and parent inspection: bounded PASS for data
+flow, edge/error handling, security, consistency, completeness and prior behavior;
+no concrete defect found. The audit was static, distinct from executed tests.
+Changed only the managed gate import boundary, new implementation tests and
+DECISIONS.md/PROGRESS.md. Frozen inputs, pass flags, staging, commits, branches,
+Git control and the pinned host remain untouched. No full gates or live providers
+ran. The external host retains actual acceptance, full gates and final completion.

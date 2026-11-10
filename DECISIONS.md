@@ -341,3 +341,18 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   previously blocked subprocess boundaries; external host owns full gates and
   actual CLI/pipe acceptance. Record fresh focused evidence without promoting
   inherited host results to this session's validation.
+
+- D72 (P2-08): Defer both queue and routing imports until after structural
+  configuration validation and the disabled/completed/unassigned gate return.
+  Routing also reaches SQLite through queue-storage, so deferring only the queue
+  would leave inspection eager. Keep the existing gate signature and all owning
+  queue/HEAD/acknowledgment/context behavior. Missing SQLite rejects enabled work
+  before storage or observations; no fallback, permission grant or provider call.
+- D73 (P2-08 validation): Prepare workflow-harness tests before implementation.
+  Use fresh worker module caches with a narrow node:sqlite resolution hook for
+  inspection, skip/invalid-config boundaries and real queue positive control.
+  Imported CLI main help is supplementary library coverage, not actual process
+  acceptance. All seven frozen P2-08 cases failed at spawnSync Node EPERM; do not
+  retry, bypass or waive them. This is Node 24 unavailable-builtin simulation,
+  not older-runtime validation. External host retains full gates, feature flags,
+  Git mutations and completion under the final backend-specific instructions.
