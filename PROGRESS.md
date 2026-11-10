@@ -681,3 +681,88 @@ full gates, review, live evidence and final completion.
 Read-only Explore sanity audit: PASS for data flow, edge/error handling, security,
 consistency and missing pieces; no concrete defects found. This is static-review
 evidence only. Final `git diff --check`: exit 0 after the documentation updates.
+
+## PATH-parity two-pass review — 2026-11-10
+
+Reviewed 759ba555b2621e722f16ab50d70ff0f9781f5d79..68ff68a5a485f38c3873f898fb0141c0b83f58b0
+after reading AGENTS.md, CLAUDE.md, SPEC.md, all seven spec/contracts/phase1*.md
+contracts and prior PROGRESS.md findings. Pass 1 compared behavior and the
+host-owned acceptance/feature additions against those contracts. Pass 2 checked
+correctness, concurrency, durability, error handling, configuration provenance
+and compatibility, including surrounding unchanged code for prior dispositions.
+
+REVIEW 2026-11-10: DEFECT core/skills/run-records/doctor.mjs:88 Anchoring relative prefixes before PATH serialization misreads repository names containing a colon — For a valid Linux repository such as /tmp/project:one with env.pathPrepend:["local"], an executable bare-name provider only in its local/ directory, no explicit PATH override and no inherited match, the launcher retains "local" in PATH (graphs/autobuild/tool/lib/proc.mjs:21-23) and searches it relative to the child cwd (:35; loop.mjs:535). Doctor instead serializes "/tmp/project:one/local" into PATH at :88-91 and splits it at :94, turning the repository-name colon into a separator and losing the valid candidate. Default inspection therefore reports blocked instead of degraded, violating target-path selection parity for both backends. Keep the original expanded prefix in the constructed PATH while using fromRepo(repo, prefix) only for its existence check; anchor individual candidates after PATH splitting, preserving empty-prefix filtering and kernel traversal. Add an inert-file parity case for a colon-containing repository root; reasoned from code, untested hypothesis, no new reproduction executed.
+
+No other specification drift or defects identified in the reviewed diff.
+Selected models reach shared validation and provenance at doctor.mjs:38-39 and
+graphs/autobuild/tool/lib/config.mjs:169-186; non-model validation remains at
+doctor.mjs:13-25. Claude child model propagation agrees with the provider argument
+at graphs/autobuild/tool/lib/loop.mjs:490, :513 and :520, with child overrides
+applied last at proc.mjs:26. These changes do not add shared mutable launch state
+or alter store publication. Existing test discovery includes both implementation
+test files at scripts/test-workflow.mjs:10-14. The synthetic fixture annotation
+at tests/run-launch-parity.test.mjs:73 preserves its value and assertions.
+
+Prior findings dispositions (current file:line evidence):
+- Empty PATH prefix becoming repository search: addressed at
+  core/skills/run-records/doctor.mjs:88 by filtering before anchoring. Existing
+  acceptance and implementation cases passed for both backends. The distinct
+  colon serialization defect above remains open.
+- Relative-prefix inspector-cwd dependence and symlink/parent lexical collapse:
+  addressed for the tested matrix by doctor.mjs:82, :88 and :94. Existing tests
+  passed from target and unrelated cwd, including home-expanded prefixes,
+  inherited versus explicit empty PATH entries and physical symlink traversal.
+- Shadowed model rejection, including native hunt F1 from the P1-09 follow-up:
+  addressed at doctor.mjs:13-17 and :38-39, with selected-only validation and
+  winning-source provenance at graphs/autobuild/tool/lib/config.mjs:169-186.
+  Selected invalid values still block; focused precedence and edge tests passed.
+- Lost CLI model context in Claude hooks: addressed in the propagation path at
+  graphs/autobuild/tool/lib/loop.mjs:490, :513 and :520. Session-settings/reload
+  tests passed; hook and permission construction remains at :473-491. Actual
+  hook acceptance was not rerun after the historical git-spawn EPERM. Native
+  F2's historical evidence ERROR is unchanged; this review adds no end-to-end
+  hook execution evidence and does not promote prior limited checks to passes.
+- Doctor/launcher rejection mismatch: remains addressed by doctor.mjs:38 and
+  graphs/autobuild/tool/lib/config.mjs:127-148. Existing selected/non-model
+  rejection tests passed; timeout/budget cases were inspected, not rerun here.
+- Directory symlink replacement race: retained no-follow descriptors and procfs
+  anchoring remain at core/skills/run-records/store.mjs:28-66, reads at :79,
+  publication at :120 and :128, cleanup at :139 and enumeration at :148.
+  Addressed by inspection; no exploit or blocked reproduction was retried.
+- Missing parent-directory durability barriers: parent sync remains at
+  core/skills/run-records/store.mjs:56-63, file sync at :122, publication sync
+  at :132 and replay sync at :113. Addressed by inspection; no physical
+  power-loss claim or new durability experiment.
+- Selected central configuration/source-checkout dependency, including the older
+  BUGHUNT F1: remains addressed by graphs/autobuild/tool/lib/config.mjs:114-119,
+  with public lazy getters retained at :73-77. Doctor reads the selected owner
+  at core/skills/run-records/doctor.mjs:107 and passes it at :38. Inspection only
+  for the absent-source scenario in this review.
+- Close-after-release EIO cleanup: ownership is cleared before close at
+  core/skills/run-records/store.mjs:124-126 and unlink remains independent at
+  :134-139. Addressed by inspection; close fault-injection tests were not rerun.
+- Operational read classification, falsy selected binaries and null selected
+  launch models: remain addressed at core/skills/run-records/store.mjs:88-95
+  and :20-23, and graphs/autobuild/tool/lib/config.mjs:134-137 and :169-175.
+  Existing edge tests passed for safe errors, recovery, valid overrides and
+  observational null compatibility.
+- Earlier ordering and adapter corrections remain at
+  core/skills/run-records/store.mjs:11-17 and adapters.mjs:18-19, :36-52
+  (inspection only). Null effort rejection and explicit-path prerequisites
+  remain at doctor.mjs:20 and :133; focused doctor tests passed. These filenames
+  are under core/skills/run-records.
+- Historical manual_review, interrupted gates and revision-specific live evidence
+  retain their recorded limits. Full gates, review disposition and final
+  completion remain with the external host.
+
+Focused verification:
+- `node acceptance/phase1/p1-10.test.mjs`: exit 0; 58 passed, 0 failed.
+- `node --test acceptance/phase1/p1-09-precedence.cases.mjs acceptance/phase1/p1-09-path.cases.mjs`:
+  exit 0; two passing file entries, zero failures. Hook cases were excluded.
+- `node --input-type=module -e "await import('./tests/run-path-parity.test.mjs'); await import('./tests/run-launch-parity.test.mjs'); await import('./tests/run-edge-validation.test.mjs'); await import('./tests/run-doctor-trust.test.mjs'); await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; 25 passed, 0 failed. These cases do not cover the colon defect above.
+- `git diff --check`: exit 0 before this append.
+
+Only PROGRESS.md was modified. No full suite, bare autobuild, provider call,
+exploit reproduction, blocked reproduction retry, code/test edit, staging,
+commit, push, branch change, git-control edit or feature-pass change was performed.

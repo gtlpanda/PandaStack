@@ -154,6 +154,22 @@
       "test": "acceptance/phase1/p1-10.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "P1-11",
+      "title": "Preserve PATH serialization with colon-bearing repository names",
+      "description": "Implement spec/contracts/phase1-path-serialization.md; keep launcher semantics and every earlier frozen test. Inert fixtures only.",
+      "contract": "spec/contracts/phase1-path-serialization.md",
+      "dependencies": [
+        "P1-10"
+      ],
+      "acceptance": [
+        "Keep target-relative existence checks separate from PATH composition, preserving actual delimiter semantics.",
+        "Match managed discovery for colon and whitespace roots, relative/absolute prefixes, inherited/explicit PATH and explicit binary paths."
+      ],
+      "test": "acceptance/phase1/p1-11.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
