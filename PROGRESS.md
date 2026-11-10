@@ -414,3 +414,64 @@ exit 0 after documentation updates.
 No full suite, frozen-input edits, staging, commits, pass flags, branch changes or
 roadmap completion. The external host retains authoritative full gates, live
 evidence and final completion.
+
+## Edge-validation two-pass review — 2026-11-10
+
+Reviewed e9b47e8fe7f653d8941fa8cceed732c526d0035e..HEAD after reading AGENTS.md,
+CLAUDE.md and the prior progress findings. Pass 1 compared the changes with
+SPEC.md and all five contracts: phase1.md, phase1-hardening.md,
+phase1-followup.md, phase1-doctor-trust.md and phase1-edge-validation.md.
+The added acceptance cases and feature definition match the host-owned P1-08
+contract and decisions D27-D28. Pass 2 checked correctness, concurrency,
+durability, error handling, configuration provenance and compatibility, including
+unchanged surrounding code needed to assess the earlier findings.
+
+REVIEW 2026-11-10: No specification drift or additional defects found in the reviewed diff. Selected binaries are validated after environment precedence at graphs/autobuild/tool/lib/config.mjs:134-137 and consumed by doctor at core/skills/run-records/doctor.mjs:107-110. Selected launch models are validated before mapping at config.mjs:169-175 while precedence/provenance remain at :178-186. Observational null models remain accepted at core/skills/run-records/records.mjs:8. Operational reads now escape the JSON-only catch at core/skills/run-records/store.mjs:88-92 and receive safe IO_ERROR normalization at :20-23; read cleanup remains at :95. Existing test discovery includes the added implementation tests through scripts/test-workflow.mjs:10-14.
+
+Prior findings dispositions (current file:line evidence):
+- Doctor/launcher rejection mismatch: remains addressed by
+  core/skills/run-records/doctor.mjs:40 and shared budget, timeout and hooks
+  validation at graphs/autobuild/tool/lib/config.mjs:127-148. Focused tests
+  passed for rejection parity, safe diagnostics and backend selection.
+- Directory symlink replacement race: remains addressed by retained no-follow
+  traversal at core/skills/run-records/store.mjs:28-66, anchored reads at :79,
+  publication at :120 and :128, cleanup at :139, and enumeration at :148-150.
+  This disposition uses inspection and ordinary-operation invariant tests;
+  no exploit or previously blocked reproduction was executed.
+- Missing parent-directory durability barriers: remains addressed by
+  core/skills/run-records/store.mjs:56-63, file sync at :122, publication sync
+  at :132 and replay sync at :113. Sync-ordering and failure/retry tests passed;
+  physical power-loss behavior was not tested.
+- Selected central configuration/source-checkout dependency, including prior
+  BUGHUNT F1: remains addressed at graphs/autobuild/tool/lib/config.mjs:114-119;
+  public lazy getters remain at :73-77. Doctor reads the selected central owner
+  at core/skills/run-records/doctor.mjs:104 and passes it at :40. Focused tests
+  passed for absent/invalid source configuration and preserved precedence.
+- Close-after-release EIO cleanup: remains addressed by
+  core/skills/run-records/store.mjs:124-126 and :134-139. Focused fault-injection
+  tests passed for safe errors, descriptor ownership and independent unlink.
+- Default provider execution/trust boundary: remains addressed at
+  core/skills/run-records/doctor.mjs:99 and :124-132. Existing trust tests passed
+  for zero default subprocess invocation, missing binaries and injected probes.
+- P1-08's operational read classification, falsy selected binaries and null
+  selected launch models: addressed at the locations in the review entry above;
+  all 23 acceptance tests and five new implementation groups passed, including
+  valid overrides, source attribution, safe errors and observational null values.
+- Earlier implementation-review corrections remain present: fractional and
+  mixed-case event ordering at core/skills/run-records/store.mjs:11-17 (focused
+  tests passed); null effort rejection at doctor.mjs:22 and explicit-path checks
+  at :130 (doctor tests passed); merged runtime provenance at adapters.mjs:18-19
+  and actual session settings at :36-52 (inspection only this review). The last
+  three filenames are under core/skills/run-records.
+- Historical failed/limited checks and manual_review are not promoted to full
+  passes. Host gates, native review, live evidence and completion remain with
+  the external host; no ledger or feature flag was changed.
+
+Focused verification:
+- `node acceptance/phase1/p1-08.test.mjs`: exit 0; 23 passed, 0 failed.
+- `node --input-type=module -e "await import('./tests/run-edge-validation.test.mjs'); await import('./tests/run-doctor-trust.test.mjs'); await import('./tests/run-doctor.test.mjs'); await import('./tests/run-followup.test.mjs'); await import('./tests/run-hardening.test.mjs'); await import('./tests/run-store.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`: exit 0; 29 passed, 0 failed.
+- `git diff --check`: exit 0 before this append.
+
+Only PROGRESS.md was modified. No full suite, bare autobuild, provider execution,
+exploit reproduction, blocked reproduction retry, code/test edit, staging,
+commit, push, branch change, git-control edit or pass-flag change was performed.
