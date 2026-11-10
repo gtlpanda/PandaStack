@@ -170,6 +170,92 @@
       "test": "acceptance/phase2/p2-11.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "P2-12",
+      "title": "Preserve finite control-byte observation at capture decisions",
+      "description": "Conditional fallback only after supervisor reconciles terminal native-hunt result. Implement the narrow four-read-site contract; preserve root-local authority and existing bounds.",
+      "contract": "spec/contracts/phase2-control-read.md",
+      "dependencies": [
+        "P2-11"
+      ],
+      "acceptance": [
+        "Every finite inert input byte including NUL and partial EOF is observed at each of four decision predicates",
+        "Empty stdin is not a request",
+        "Existing ownership/grant/timeout behavior remains unchanged; no lifecycle proof claimed"
+      ],
+      "test": "acceptance/phase2/p2-12.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "P2-13",
+      "title": "Retain valid Bash evidence under literal backslash parents",
+      "description": "Conditional narrow normal-path correction after supervisor reconciles terminal native hunt; preserve strict path/hash/ownership validation.",
+      "contract": "spec/contracts/phase2-literal-evidence-parent.md",
+      "dependencies": [
+        "P2-12"
+      ],
+      "acceptance": [
+        "Ordinary private evidence parent remains successful",
+        "Literal backslash private parent publishes valid root and child JSON with exact hashes and bytes",
+        "No private-path, digest or lifecycle assertion is weakened"
+      ],
+      "test": "acceptance/phase2/p2-13.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "P2-14",
+      "title": "Prepare fixed capture directories idempotently",
+      "description": "Conditional defensive correction with sequential ordinary helper acceptance only; no blocked filesystem-race reproduction or concurrency proof.",
+      "contract": "spec/contracts/phase2-capture-directories.md",
+      "dependencies": [
+        "P2-13"
+      ],
+      "acceptance": [
+        "Fresh and sequential repeated preparation preserve fixed private allocation semantics",
+        "Static files and symlinks refuse before target mutation",
+        "Existing real0755 logs root hardens while evidence-parent policy stays unchanged",
+        "Independent static review verifies armCapture wiring, EEXIST-only handling and existing root authority"
+      ],
+      "test": "acceptance/phase2/p2-14.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "P2-15",
+      "title": "Export large Git trees and regular blobs without stdout-buffer failure",
+      "description": "Conditional large-source export correction; preserve source-only identity and owned cleanup. No capture or blocked reproduction work.",
+      "contract": "spec/contracts/phase2-large-suite-export.md",
+      "dependencies": [
+        "P2-14"
+      ],
+      "acceptance": [
+        "Exact bytes for 17 distinct 8 MiB files",
+        "Exact size, executable mode and SHA256 for a 129 MiB regular blob",
+        "Preserve literal paths, failed-export cleanup and existing gates without raising subprocess or gate bounds"
+      ],
+      "test": "acceptance/phase2/p2-15.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "P2-16",
+      "title": "Preserve source Git object format for full and abbreviated identifiers",
+      "description": "Conditional fallback after P215 and terminal native reconciliation; actual source query, no length inference.",
+      "contract": "spec/contracts/phase2-suite-object-format.md",
+      "dependencies": [
+        "P2-15"
+      ],
+      "acceptance": [
+        "SHA1 full and SHA256 full/40/48/63-character prefixes export exact source trees",
+        "Source format is queried explicitly, never inferred from supplied ID length",
+        "Preserve literal-path, byte/mode/cleanup controls and prior large-export behavior"
+      ],
+      "test": "acceptance/phase2/p2-16.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }

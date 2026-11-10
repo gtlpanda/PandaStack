@@ -39,3 +39,13 @@ P2-07 is governed by spec/contracts/phase2-review-corrections.md and P2-08 by
 spec/contracts/phase2-lazy-import.md, in addition to spec/contracts/phase2.md.
 These additive corrections preserve every prior requirement and acceptance gate.
 Final review, native hunt and live demonstrations remain mandatory.
+
+## Conditional P2-12 through P2-14
+
+P2-12 follows P2-11 under spec/contracts/phase2-control-read.md; P2-13 follows P2-12 under spec/contracts/phase2-literal-evidence-parent.md; P2-14 follows P2-13 under spec/contracts/phase2-capture-directories.md. These are narrow corrective scopes, not broader lifecycle or hostile containment claims.
+
+Preserve every earlier frozen test/contract/gate. P2-12 primitive read evidence, P2-13 ordinary normal-path evidence and P2-14 new-API/sequential evidence have distinct limitations; none reconstructs a blocked reproduction. Independent postimplementation static review must verify P2-14 armCapture wiring, EEXIST-only handling and existing authority. The native F3 ERROR and refused F4 reproduction remain unchanged. Host checks, final hunt, live demonstrations and report review remain mandatory.
+
+P2-15 follows P2-14 under spec/contracts/phase2-large-suite-export.md. Its two ordinary Git cases assert136MiB aggregate bytes and129MiB executable blob size/mode/digest. Root observed both failing on immutableb31; that is export evidence, not blocked capture/ownership/race proof. Preserve subprocess and gate bounds. Native F2 terminal source/protocol reconciliation remains mandatory; object-format mock changes require the separately reviewed P2-16 amendment.
+
+P2-16 follows P2-15 under spec/contracts/phase2-suite-object-format.md. Three ordinary Git cases cover full SHA1 and full/abbreviated SHA256 exports. Root initialred on immutableb31 records one SHA1controlpass and two SHA256failures, not accepted implementation. Terminal native F2 reconciliation still controls whether this fallback is needed.

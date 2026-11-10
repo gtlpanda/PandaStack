@@ -27,11 +27,16 @@ function withGitBoundary(repo, alternate, check, { failRepack = false } = {}) {
     let at = 2
     while (args[at] === '-c') at += 2
     const operation = args[at]
-    calls.push({ operation, cwd: args[1], env: { ...options.env } })
+    calls.push({ operation, args: args.slice(at), cwd: args[1], env: { ...options.env } })
     let stdout = ''
     if (args[1] === repo) {
-      assert.deepEqual(args.slice(at), ['rev-parse', '--path-format=absolute', '--git-path', 'objects'])
-      stdout = join(repo, '.git', 'objects') + '\n'
+      if (args[at + 1] === '--show-object-format') {
+        assert.deepEqual(args.slice(at), ['rev-parse', '--show-object-format'])
+        stdout = 'sha1\n'
+      } else {
+        assert.deepEqual(args.slice(at), ['rev-parse', '--path-format=absolute', '--git-path', 'objects'])
+        stdout = join(repo, '.git', 'objects') + '\n'
+      }
     } else {
       directory = args[1]
       if (operation !== 'init') assert.equal(options.env.GIT_ALTERNATE_OBJECT_DIRECTORIES, alternate)
@@ -42,7 +47,13 @@ function withGitBoundary(repo, alternate, check, { failRepack = false } = {}) {
         case 'checkout-index': break
         case 'cat-file':
           assert.deepEqual(options.input, Buffer.from(blob + '\n'))
-          stdout = Buffer.concat([Buffer.from(`${blob} blob ${bytes.length}\n`), bytes, Buffer.from('\n')])
+          if (args[at + 1] === '--batch-check') {
+            assert.equal(options.encoding, 'utf8')
+            stdout = `${blob} blob ${bytes.length}\n`
+          } else {
+            assert.equal(args[at + 1], '--batch')
+            stdout = Buffer.concat([Buffer.from(`${blob} blob ${bytes.length}\n`), bytes, Buffer.from('\n')])
+          }
           break
         case 'rev-parse': assert.equal(args[at + 1], tree + '^{tree}'); stdout = tree + '\n'; break
         case 'commit-tree': assert.equal(args[at + 1], tree); stdout = commit + '\n'; break
@@ -83,7 +94,13 @@ for (const [label, repo, alternate] of paths) {
         assert.deepEqual(readFileSync(join(exported.directory, 'entry.txt')), bytes)
         assert.equal(statSync(join(exported.directory, 'entry.txt')).mode & 0o777, 0o755)
         assert.equal(existsSync(join(exported.directory, '.git', 'objects', 'info', 'alternates')), false)
-        assert.deepEqual(calls.filter(call => call.cwd === repo).map(call => call.operation), ['rev-parse'])
+        const sourceQueries = calls.filter(call => call.cwd === repo).map(call => call.args)
+        const objectQuery = ['rev-parse', '--path-format=absolute', '--git-path', 'objects']
+        assert.ok(
+          JSON.stringify(sourceQueries) === JSON.stringify([objectQuery]) ||
+          JSON.stringify(sourceQueries) === JSON.stringify([['rev-parse', '--show-object-format'], objectQuery]),
+          'only the original object query or one format query followed by that object query is allowed',
+        )
         assert.equal(calls.at(-1).operation, 'repack')
       } finally {
         exported.cleanup()
