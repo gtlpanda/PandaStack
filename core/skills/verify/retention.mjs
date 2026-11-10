@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {createHash,randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {parseScopeRecord,validateScopeJoin} from './scope-record.mjs';
 export const STEP_LIMIT=16*1024*1024, RUN_LIMIT=128*1024*1024;
 export function noSymlinks(path){
  const full=resolve(path);let current=full;
@@ -59,29 +60,80 @@ export function verifyManifest(root,path){
  const childPaths=new Set();for(const child of children){if(!child||typeof child.path!=='string'||isAbsolute(child.path)||child.path.split('/').some(p=>!p||p==='.'||p==='..'))throw Error('Invalid nested manifest reference');const target=resolve(dirname(full),child.path);if(!others.includes(target)||childPaths.has(target))throw Error('Unknown nested manifest reference');childPaths.add(target);const actual=reference(dirname(full),target);if(actual.sha256!==child.sha256||actual.bytes!==child.bytes||child.complete!==true)throw Error('Nested manifest integrity mismatch');}
  return {...ref,complete};
 }
-// Own one detached process group; no caller-provided callback or command string.
-async function capture(argv,limit,write){
- let bytes=0,complete=true,child,exited=false,deadline,settled=false,anchorBirth;
- const birth=pid=>{try{const raw=fs.readFileSync('/proc/'+pid+'/stat','utf8');return raw.slice(raw.lastIndexOf(')')+2).split(' ')[19];}catch{return null;}};
- const kill=signal=>{if(child&&!exited&&anchorBirth&&birth(child.pid)===anchorBirth){try{process.kill(-child.pid,signal);}catch(e){if(e.code!=='ESRCH')complete=false;}}};
- let failStop=()=>{};const stop=()=>{complete=false;kill('SIGKILL');if(!deadline)deadline=setTimeout(()=>failStop(),2500);};
- const onSignal=()=>stop();process.on('SIGTERM',onSignal);process.on('SIGINT',onSignal);
+function procRow(pid){
+ const raw=fs.readFileSync('/proc/'+pid+'/stat','utf8'),v=raw.slice(raw.lastIndexOf(')')+2).split(' ');
+ return {pid,parentPid:Number(v[1]),start:v[19],pgid:Number(v[2]),state:v[0]};
+}
+function scopeFiles(path){
+ if(typeof path!=='string'||!isAbsolute(path)||resolve(path)!==path||/[\r\n\0]/.test(path))throw Error('Invalid capture scope');
+ privateRoot(path);
+ if((fs.lstatSync(path).mode&0o7777)!==0o700)throw Error('Invalid capture scope');
+ for(const [name,fifo] of [['scope-v1.tsv',false],['stop',true]]){
+  const st=fs.lstatSync(join(path,name));
+  if(st.isSymbolicLink()||(fifo?!st.isFIFO():!st.isFile())||(st.mode&0o7777)!==0o600||st.uid!==process.getuid()||(!fifo&&st.size>256))throw Error('Invalid capture scope');
+ }
+ return parseScopeRecord(fs.readFileSync(join(path,'scope-v1.tsv'),'utf8'));
+}
+function joinScope(path){
+ const record=scopeFiles(path),owner=procRow(record.ownerPid),anchor=procRow(record.anchorPid),current=procRow(process.pid),lineage=[];
+ let row=current;
+ for(let n=0;n<256;n++){lineage.push(row);if(row.pid===anchor.pid)break;row=procRow(row.parentPid);}
+ const bootId=fs.readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim();
+ if(!validateScopeJoin(record,{bootId,owner,anchor,current,lineage}))throw Error('Invalid capture scope');
+ // Reobserve the authoritative births next to admission, not just at path lookup.
+ if(procRow(owner.pid).start!==owner.start||procRow(anchor.pid).start!==anchor.start)throw Error('Invalid capture scope');
+ return record;
+}
+async function requestStop(path,joined){
+ const until=performance.now()+250;
+ do{
+  let fd;
+  try{
+   if(joined)joinScope(path);
+   fd=fs.openSync(join(path,'stop'),fs.constants.O_WRONLY|fs.constants.O_NONBLOCK|fs.constants.O_NOFOLLOW);
+   const st=fs.fstatSync(fd);
+   if(!st.isFIFO()||(st.mode&0o7777)!==0o600||st.uid!==process.getuid())return false;
+   return fs.writeSync(fd,Buffer.from('STOP\n'))===5;
+  }catch(e){if(!['ENOENT','ENXIO','EAGAIN'].includes(e.code))return false;}
+  finally{if(fd!==undefined)fs.closeSync(fd);}
+  await new Promise(r=>setTimeout(r,10));
+ }while(performance.now()<until);
+ return false;
+}
+// The shared owner holds local signal authority. Joined helpers never detach.
+async function capture(argv,limit,write,allocation){
+ const joined=Object.hasOwn(process.env,'VERIFY_CAPTURE_SCOPE_DIR');
+ const scope=joined?process.env.VERIFY_CAPTURE_SCOPE_DIR:fs.mkdtempSync(join(privateRoot(allocation),'scope-'));
+ try{if(joined)joinScope(scope);else fs.chmodSync(scope,0o700);}
+ catch{return {exitCode:125,bytes:0,complete:false};}
+ let bytes=0,complete=true,child,deadline,settled=false,stopping=false;
+ let finish=()=>{};
+ const stop=()=>{
+  complete=false;if(stopping)return;stopping=true;
+  if(!joined){try{writePrivate(join(scope,'.closing'),'closing\n');}catch{}}
+  // No inherited record or message ever becomes a signal destination here.
+  void requestStop(scope,joined);
+  deadline=setTimeout(()=>{child?.stdout.destroy();child?.unref();finish(125);},4000);
+ };
+ process.on('SIGTERM',stop);process.on('SIGINT',stop);
  try{return await new Promise(resolveResult=>{
-  const done=code=>{if(settled)return;settled=true;resolveResult({exitCode:complete?(Number.isInteger(code)?code:1):125,bytes,complete});};
-  try{child=spawn('bash',['-c','trap ":" TERM INT; "$@" </dev/null 2>&1; rc=$?; exec 1>&- 2>&-; IFS= read -r release; exit "$rc"','bash',...argv],{detached:true,stdio:['pipe','pipe','ignore']});anchorBirth=birth(child.pid);}catch{complete=false;return done(125);}
-  const consume=data=>{
+  finish=code=>{
+   if(settled)return;settled=true;
+   if(joined){try{joinScope(scope);}catch{complete=false;}}
+   if(!Number.isInteger(code)||fs.existsSync(join(scope,'.incomplete'))||(!joined&&!fs.existsSync(join(scope,'.settled'))))complete=false;
+   resolveResult({exitCode:complete?code:125,bytes,complete});
+  };
+  try{child=spawn('bash',[fileURLToPath(new URL('./capture-owner.sh',import.meta.url)),'run',scope,'--',...argv],{detached:false,stdio:['ignore','pipe','ignore']});}
+  catch{complete=false;return finish(125);}
+  child.stdout.on('data',data=>{
    if(!complete)return;
    const remaining=limit-bytes,part=data.subarray(0,Math.max(0,remaining));
    try{write(part);bytes+=part.length;}catch{stop();}
    if(data.length>remaining)stop();
-
-  };
-  failStop=()=>{kill('SIGKILL');child.stdin.destroy();child.stdout.destroy();done(125);};
-  child.stdin.on('error',()=>{if(complete)stop();});
-  child.stdout.on('end',()=>{if(complete)child.stdin.end('release\n');});
-  child.stdout.on('data',consume);child.stderr?.on('data',consume);
-  child.on('error',()=>{complete=false;done(125);});child.on('exit',()=>{exited=true;if(!child.stdout.readableEnded&&complete)stop();});child.on('close',code=>done(code));
- });}finally{clearTimeout(deadline);process.off('SIGTERM',onSignal);process.off('SIGINT',onSignal);}
+  });
+  child.stdout.on('error',stop);
+  child.on('error',()=>{complete=false;finish(125);});child.on('close',finish);
+ });}finally{clearTimeout(deadline);process.off('SIGTERM',stop);process.off('SIGINT',stop);}
 }
 function sessionBudget(session,change){
  const root=privateRoot(session),lock=join(root,'.budget-lock');let locked=false;
@@ -105,14 +157,15 @@ async function main(args){
  }
  if(args[0]==='relay'){
   let offset=1,receipt=null;if(args[offset]==='--receipt'){receipt=args[offset+1];privateRoot(dirname(receipt));if(basename(receipt)!=='capture.json')throw Error('Invalid capture receipt');offset+=2;}if(args[offset]!=='--'||args.length<offset+2)throw Error('Invalid capture invocation');
-  const result=await capture(args.slice(offset+1),STEP_LIMIT,b=>fs.writeFileSync(1,b));if(receipt)writePrivate(receipt,JSON.stringify({schemaVersion:1,...result})+'\n');return result.exitCode;
+  const allocation=receipt?dirname(receipt):invocation();
+  const result=await capture(args.slice(offset+1),STEP_LIMIT,b=>fs.writeFileSync(1,b),allocation);if(receipt)writePrivate(receipt,JSON.stringify({schemaVersion:1,...result})+'\n');return result.exitCode;
  }
  if(args[0]==='step'){
   const dir=privateRoot(args[1]),label=args[2];if(!label||args[3]!=='--'||args.length<5)throw Error('Invalid verification capture');
   const manifest=join(dir,'manifest.json');noSymlinks(manifest);
   const doc=JSON.parse(fs.readFileSync(manifest,'utf8'));const session=privateRoot(process.env.VERIFY_CAPTURE_SESSION||dir),inside=relative(session,dir);if(inside.startsWith('../')||isAbsolute(inside))throw Error('Invalid capture session');activeSession=session;const reservation=sessionBudget(session,null);
   const file=join(dir,'step-'+randomUUID()+'.log'),fd=fs.openSync(file,'wx',0o600);let result;
-  try{result=reservation?await capture(args.slice(4),reservation,b=>fs.writeFileSync(fd,b)):{exitCode:125,bytes:0,complete:false};}finally{let retained;try{retained=fs.fstatSync(fd).size;if(result)result.bytes=retained;}finally{fs.closeSync(fd);}sessionBudget(session,retained-reservation);}
+  try{result=reservation?await capture(args.slice(4),reservation,b=>fs.writeFileSync(fd,b),dir):{exitCode:125,bytes:0,complete:false};}finally{let retained;try{retained=fs.fstatSync(fd).size;if(result)result.bytes=retained;}finally{fs.closeSync(fd);}sessionBudget(session,retained-reservation);}
   if(!result.complete)markIncomplete();
   doc.steps.push({label,exitCode:result.exitCode,log:reference(dir,file,result.complete)});
   const next=join(dir,'manifest-'+randomUUID()+'.tmp');writePrivate(next,JSON.stringify(doc)+'\n');fs.renameSync(next,manifest);

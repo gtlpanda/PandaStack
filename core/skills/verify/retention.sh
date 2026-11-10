@@ -3,6 +3,10 @@
 set -uo pipefail
 umask 077
 fail() { if [[ -n "${SESSION_VALIDATED:-}" ]]; then printf 'capture incomplete\n' >"$SESSION_VALIDATED/.incomplete" || :; fi; echo 'Verification evidence capture failed' >&2; exit 125; }
+CAPTURE_OWNER="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/capture-owner.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=capture-owner.sh
+source "$CAPTURE_OWNER" || fail
 for tool in stat sha256sum mktemp mkdir chmod head wc mv rm setsid sleep mkfifo rmdir; do command -v "$tool" >/dev/null 2>&1 || fail; done
 private_root() {
   local path="$1" current
@@ -72,10 +76,20 @@ case "${1:-}" in
   session="${VERIFY_CAPTURE_SESSION:-$dir}"; [[ "$dir" == "$session" || "$dir" == "$session/"* ]] || fail; private_root "$session" || fail; SESSION_VALIDATED="$session"; limit="$(budget "$session" reserve)" || fail; ((limit>=0)) || fail
   log="$(mktemp "$dir/step.XXXXXX.log")" || fail; raw="$(mktemp "$dir/raw.XXXXXX")" || fail; fifo="$raw.pipe"
   mkfifo "$fifo" || fail
-  control="$raw.control"; mkfifo "$control" || fail; exec {controlFd}<>"$control"
-  setsid bash -c 'trap ":" TERM INT; control="$1"; shift; "$@" </dev/null 2>&1; rc=$?; exec 1>&- 2>&-; IFS= read -r release <"$control"; exit "$rc"' bash "$control" "$@" >"$fifo" & pid=$!
+  joined=false
+  if [[ ${VERIFY_CAPTURE_SCOPE_DIR+x} ]]; then
+    joined=true; scope="$VERIFY_CAPTURE_SCOPE_DIR"; capture_join "$scope" || fail
+  else scope="$(mktemp -d "$dir/scope.XXXXXX")" || fail; fi
+  set +m
+  bash "$CAPTURE_OWNER" run "$scope" -- "$@" >"$fifo" & pid=$!
   owner="$(birth "$pid")" || owner=''
-  stop_owned() { [[ -n "$owner" && "$(birth "$pid" 2>/dev/null || :)" == "$owner" ]] && kill -KILL -- "-$pid" 2>/dev/null || :; }
+  stop_owned() {
+    if [[ "$joined" == true ]]; then capture_request "$scope" || :
+    else
+      printf 'closing\n' >"$scope/.closing" || :
+      timeout --foreground --kill-after=1 1 bash -c '[[ -p "$1/stop" ]] && printf "STOP\n" >"$1/stop"' bash "$scope" || :
+    fi
+  }
   stopped=false; trap 'stopped=true; stop_owned' TERM INT
   head -c "$((limit+1))" "$fifo" >"$raw" & readerPid=$!
   wait "$readerPid"; reader=$?
@@ -85,11 +99,14 @@ case "${1:-}" in
     for ((n=0;n<150;n++)); do [[ "$(birth "$pid" 2>/dev/null || :)" != "$owner" ]] && break; sleep .02; done
     if [[ -n "$owner" && "$(birth "$pid" 2>/dev/null || :)" == "$owner" ]]; then rc=125; else wait "$pid" 2>/dev/null || :; fi
     rc=125
-  else printf 'release\n' >&"$controlFd"; wait "$pid"; rc=$?; fi
-  exec {controlFd}>&-
+  else
+    wait "$pid"; rc=$?
+    if [[ "$joined" == true ]] && ! capture_join "$scope"; then complete=false; rc=125; fi
+    if [[ -e "$scope/.incomplete" || ( "$joined" == false && ! -f "$scope/.settled" ) ]]; then complete=false; rc=125; fi
+  fi
   trap - TERM INT
   head -c "$limit" "$raw" >"$log" || { complete=false; rc=125; }
-  rm -f "$raw" "$fifo" "$control"
+  rm -f "$raw" "$fifo"
   bytes="$(wc -c <"$log")" || fail; budget "$session" "$((bytes-limit))" >/dev/null || { complete=false; rc=125; }; hashline="$(sha256sum "$log")" || fail; read -r hash _ <<<"$hashline" || fail
   if [[ "$complete" == false ]]; then printf 'capture incomplete\n' >"$session/.incomplete" || fail; fi
   row="{\"label\":$(quote "$label"),\"exitCode\":$rc,\"log\":{\"path\":$(quote "${log##*/}"),\"sha256\":\"$hash\",\"bytes\":$bytes,\"complete\":$complete}}"

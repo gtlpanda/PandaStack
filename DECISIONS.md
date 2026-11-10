@@ -384,3 +384,31 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   cleanup under the synthetic responses, not real Git decoding or self-contained
   object retention. External host retains actual Git acceptance, full gates,
   feature flags, commits and final review under the backend-specific instructions.
+
+- D78 (P2-11): Use the reserved capture-owner.sh helper for both retention
+  adapters. Each new outer capture allocates its own private scope; the helper
+  remains outside its one waiting-anchor group and captures signal identities
+  locally. Only the payload inherits VERIFY_CAPTURE_SCOPE_DIR. A present hint
+  must validate or refuse125; joined launches never detach. Keep output-budget
+  sessions independent of process ownership. The exact pure parser/predicate
+  lives in scope-record.mjs; Bash implements the same record and lineage checks
+  without Node. Bound FIFO requests and grant/release reads, retain the first
+  incomplete result before signalling, and require empty observed membership,
+  settled output and an anchor join before publishing root completion.
+- D79 (P2-11 validation): Follow the final backend instructions: no feature flags,
+  staging or commits; external host owns full gates and promotion. Run only the
+  reviewed six pure plus one ordinary nested-success acceptance and focused
+  harness checks. Use inert records, filesystem fixtures, synthetic kernel/spawn
+  observations and pure Bash rules for additional cases. Do not execute or
+  translate the rejected negative reproduction. Real ordinary Node-path success
+  is distinct from no-Node source/parity checks and untested cancellation,
+  overflow, lost-owner, orphan or escape behavior. Internal read-only review does
+  not replace the supervisor's independent source review before promotion.
+
+- D80 (P2-11 gate correction): Limit this follow-up to the supervisor's three
+  packaging/lint blockers. Make capture-owner.sh executable, identify the sibling
+  source to ShellCheck using SCRIPTDIR, and document CO_SCOPE_ID as a sourced
+  parser output with a statement-local SC2034 directive. Preserve its value and
+  all runtime ownership behavior. Add executable-access coverage and assert the
+  exposed scope ID in the existing pure parser test. Keep frozen gates/scanner
+  rules unchanged; only selected acceptance and focused checks run here.

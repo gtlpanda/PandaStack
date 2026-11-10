@@ -2252,3 +2252,114 @@ acceptance. Changed only evidence.mjs path encoding, the new implementation test
 and DECISIONS.md/PROGRESS.md. Frozen inputs, pass flags, staging, commits, branches,
 Git control and pinned host remain untouched. No full gates or live providers
 ran. The external host retains real Git acceptance, full gates and final review.
+
+## P2-11 — Keep cooperative nested verification in its owned capture group
+
+Added the exact scope-record parser and pure observed-lineage predicate, plus
+the shared Bash capture owner used by both retention adapters. Root scope metadata
+is private and created before a single waiting-anchor grant; only payloads inherit
+the scope path. Present inherited hints validate or refuse125, and joined launches
+use the existing group. STOP is a fixed bounded FIFO message. Group signals use
+only root-local birth/group observations. Root completion requires observed empty
+membership, settled output and bounded anchor release/join. Existing transcript
+limits, budget reservations, hashes and receipts remain in their owning adapters.
+D78-D79 record scope and evidence boundaries.
+
+Prepared pure parser and Bash primitive tests before implementation. Added Node
+adapter admission checks using inert filesystem fixtures and mocked spawn/kernel
+observations, including exact modes, symlinks, bounded records, FIFO types and
+nondetached admission. Added Bash relation vectors with injected kernel facts.
+Read-only review found and corrected exact leaf-mode parity, completion-time
+ownership revalidation, and FIFO opens outside timed reads. Parent source review
+also corrected atomic status publication and bounded admission/settlement details.
+These are static findings, not executed negative lifecycle reproductions.
+
+Exact focused validation:
+- Tests-first pure-module import failed with ERR_MODULE_NOT_FOUND before the
+  implementation existed. The subsequent pure harness passed 7/0; direct pure
+  acceptance passed 6/0. Early combined implementation/entrypoint checks passed
+  16/0 before the remaining adapter and Bash relation groups were added.
+- `node acceptance/phase2/p2-11.test.mjs`: exit 0; 7 passed, 0 failed. Repeated
+  after the final ownership/release fixes with the same 7/0 result. This includes
+  the reviewed actual immediate nested-success execution, group/lineage snapshots,
+  private retained root/nested manifests, transcript bytes and hash checks.
+- `node --input-type=module -e "for (const name of ['scope-record','scope-adapter','capture-owner','entrypoint']) await import('./tests/verify-'+name+'.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; aggregate `{ pass: 24, fail: 0 }`.
+- `bash -n core/skills/verify/capture-owner.sh core/skills/verify/retention.sh && node --check core/skills/verify/retention.mjs && node --check core/skills/verify/scope-record.mjs && git diff --check`:
+  exit 0.
+- `bash scripts/check-secrets.sh`: exit 0; `check-secrets: clean` (tracked files).
+- `bash scripts/check-secrets.sh core/skills/verify/capture-owner.sh core/skills/verify/scope-record.mjs tests/verify-capture-owner.test.mjs tests/verify-scope-record.test.mjs tests/verify-scope-adapter.test.mjs`:
+  exit 0; `check-secrets: clean` (every new untracked source/test file). Scanner
+  rules unchanged; no fixture annotations needed.
+- `git diff --check`: exit 0 after the documentation append.
+
+Required read-only Explore audit and parent review: bounded PASS for data flow,
+edge/error handling, security/root-local signal authority, consistency and
+completeness. The ordinary runtime case exercises the Node retention path with
+the shared Bash owner. No-Node relation parity has inert-test and source-review
+evidence, not a new no-Node end-to-end runtime claim. No overflow/cancellation/
+orphan/escape or lost-owner reproduction ran, and no hostile containment is
+claimed. No full gates, providers, frozen-input changes, pass flags, staging,
+commits, branches, Git-control changes or pinned-host modifications. The external
+host retains full gates, independent promotion review and final completion.
+
+## P2-11 supervisor diagnostics after first attempt
+
+The supervisor ran CI=1 bash scripts/validate.sh with the approved ShellCheck
+binary on PATH against the unchanged implementation: exit1. Confirmed blockers:
+- core/skills/verify/capture-owner.sh is mode0644; validate.sh requires every .sh executable.
+- ShellCheck SC2034 at capture-owner.sh:22: CO_SCOPE_ID appears unused.
+- ShellCheck SC1090 at retention.sh:7: dynamic source cannot be followed.
+Fix these narrowly. Preserve mandatory ShellCheck and all gates; no global lint
+suppression or test changes. An accurate fixed-source directive and documented
+sourced-output handling are preferable to disabling checks. Run focused lint,
+syntax and existing focused tests; the host owns full gates.
+
+Independent static Node/Bash/caller review found no additional concrete functional
+defect at the recorded source hashes. Separately host-approved ordinary no-Node
+nested-success check passed exit0,1case,0skip with Node/Python absent in fixture
+PATH, actual group/lineage and retained log integrity assertions. This is normal
+completion only, not the blocked negative reproduction. No rejected reproduction
+was retried, translated or waived. Source remained byte-identical during that check.
+Evidence: /tmp/pandastack-harness-nested-ownership-plan/packaging-diagnostic.json,
+implementation-review.json, caller-integration-review.json, and
+no-node/actual-normal-success.json. Preserve those limits in any claims.
+
+## P2-11 — Keep cooperative nested verification in its owned capture group
+
+Corrected the supervisor-reported packaging/lint blockers: capture-owner.sh is
+now mode0755; its CO_SCOPE_ID assignment documents the sourced parser output with
+a statement-local SC2034 directive; retention.sh identifies the actual sibling
+source using ShellCheck's SCRIPTDIR directive. No runtime control flow changed.
+Added a workflow-harness executable-access regression and extended the existing
+pure parser assertion to verify the exposed scope ID. D80 records this scope.
+
+Exact focused validation for this corrective session:
+- Before the fix,
+  `node --input-type=module -e "await import('./tests/verify-capture-owner.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1, `{ pass: 8, fail: 1 }`; executable access failed with EACCES.
+- `shellcheck -S warning core/skills/verify/capture-owner.sh core/skills/verify/retention.sh`:
+  exit 0 after the fix, no diagnostics. Before the fix it reported SC2034 and
+  SC1090, matching the supervisor's feedback. No global suppression was added.
+- `node acceptance/phase2/p2-11.test.mjs`: exit 0; 7 passed, 0 failed, 0 skipped.
+  This is the six reviewed pure cases and actual immediate ordinary nested-success
+  case, including group/lineage and retained manifest/log integrity assertions.
+- `node --input-type=module -e "for (const name of ['scope-record','scope-adapter','capture-owner','entrypoint']) await import('./tests/verify-'+name+'.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; aggregate `{ pass: 25, fail: 0 }`.
+- `bash -n core/skills/verify/capture-owner.sh core/skills/verify/retention.sh && node --check core/skills/verify/retention.mjs && node --check core/skills/verify/scope-record.mjs && git diff --check`:
+  exit 0.
+- `bash scripts/check-secrets.sh`: exit 0; `check-secrets: clean` (tracked files).
+- `bash scripts/check-secrets.sh core/skills/verify/capture-owner.sh core/skills/verify/scope-record.mjs tests/verify-capture-owner.test.mjs tests/verify-scope-record.test.mjs tests/verify-scope-adapter.test.mjs`:
+  exit 0; `check-secrets: clean` (every new untracked source/test file).
+  Scanner rules unchanged; no fixture annotations needed.
+
+Required read-only Explore audit of this corrective patch: bounded PASS for data
+flow, edge/error handling, security/root-local signal authority, consistency and
+completeness; no concrete defect found. This is static review, not additional
+runtime evidence. Final `git diff --check` after documentation: exit 0.
+
+No blocked negative reproduction, live provider call or full gate ran. The
+ordinary success case does not establish hostile containment or failure-path
+runtime behavior. Frozen inputs, feature flags, staging, commits, branches, Git
+control and the pinned host remain untouched. The external host owns full gates,
+commits and final review.
