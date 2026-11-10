@@ -1,0 +1,62 @@
+{
+  "features": [
+    {
+      "id": "P1-01",
+      "title": "Versioned safe run and event contracts",
+      "description": "Implement only this feature per spec/contracts/phase1.md. Add implementation tests; never edit frozen acceptance.",
+      "contract": "spec/contracts/phase1.md",
+      "dependencies": [],
+      "acceptance": [
+        "Validate malformed inputs, allowlist settings, preserve caller input and reject path-unsafe IDs."
+      ],
+      "test": "acceptance/phase1/p1-01.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "P1-02",
+      "title": "Durable idempotent run/event store",
+      "description": "Implement only this feature per spec/contracts/phase1.md. Add implementation tests; never edit frozen acceptance.",
+      "contract": "spec/contracts/phase1.md",
+      "dependencies": [
+        "P1-01"
+      ],
+      "acceptance": [
+        "Prove cross-process publication, replay/conflict behavior, filtering, corruption detection and symlink refusal."
+      ],
+      "test": "acceptance/phase1/p1-02.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "P1-03",
+      "title": "Effective configuration doctor",
+      "description": "Implement only this feature per spec/contracts/phase1.md. Add implementation tests; never edit frozen acceptance.",
+      "contract": "spec/contracts/phase1.md",
+      "dependencies": [
+        "P1-02"
+      ],
+      "acceptance": [
+        "Prove real precedence, provenance, drift detection, tri-state evidence and read-only CLI behavior."
+      ],
+      "test": "acceptance/phase1/p1-03.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "P1-04",
+      "title": "Observe existing runners without changing execution",
+      "description": "Implement only this feature per spec/contracts/phase1.md. Add implementation tests; never edit frozen acceptance.",
+      "contract": "spec/contracts/phase1.md",
+      "dependencies": [
+        "P1-03"
+      ],
+      "acceptance": [
+        "Prove lifecycle and parent records with real runner entry points and fake providers, error preservation and docs/CI integration."
+      ],
+      "test": "acceptance/phase1/p1-04.test.mjs",
+      "testKind": "node",
+      "passes": false
+    }
+  ]
+}

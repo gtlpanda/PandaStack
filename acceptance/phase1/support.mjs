@@ -1,0 +1,11 @@
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { resolve, join } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+export const ROOT = fileURLToPath(new URL('../../', import.meta.url));
+export const modulePath = name => join(ROOT, 'core/skills/run-records', name + '.mjs');
+export const mod = name => import(pathToFileURL(modulePath(name)).href);
+export const temp = () => mkdtempSync(join(tmpdir(), 'pandastack-p1-'));
+export const cleanup = path => rmSync(path, { recursive: true, force: true });
+export const baseRun = (patch = {}) => ({ schemaVersion: 1, id: 'run-1', repo: '/project/one', revision: 'a'.repeat(40), runnerRoot: '/runner', runnerRevision: 'b'.repeat(40), workflow: 'autobuild', backend: 'codex', parentRunId: null, startedAt: '2026-11-09T12:00:00.000Z', settings: { model: 'gpt-6-astra', effort: 'medium', maxConcurrentSubagents: 8 }, ...patch });
+export const event = (patch = {}) => ({ schemaVersion: 1, id: 'start', runId: 'run-1', type: 'started', at: '2026-11-09T12:00:00.000Z', exitCode: null, ...patch });
