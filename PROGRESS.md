@@ -1947,3 +1947,5 @@ full gates, pass flags, staging, commits, branches, Git control or pinned-host
 changes. Previously blocked process/CLI/runner-entry and filesystem-race checks
 remain excluded. External host retains full gates, review disposition, live smoke
 and final completion.
+
+BUGHUNT 2026-11-10: changes_requested; fixed none; open F1, F2 (F1, F2); report /home/gtlpanda/code/PandaStack/.git/bughunt/codex-phase2-decisions-b483da/report.md
