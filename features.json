@@ -170,6 +170,22 @@
       "test": "acceptance/phase1/p1-11.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "P1-12",
+      "title": "Preserve the full accepted Claude launch context in child reloads",
+      "description": "Implement spec/contracts/phase1-child-context.md; preserve guards, gates, auth and all prior frozen tests. Only owned fake-provider fixtures; no live Claude calls.",
+      "contract": "spec/contracts/phase1-child-context.md",
+      "dependencies": [
+        "P1-11"
+      ],
+      "acceptance": [
+        "Child reloads retain accepted backend/main/subagent/probe models and selected binary after project environment merging.",
+        "Real hooks and mark-passed preserve ordinary writes, frozen/push denials, failing/passing gates and synthetic auth preservation."
+      ],
+      "test": "acceptance/phase1/p1-12.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }

@@ -78,3 +78,9 @@ Stopped exact owned host43274 during post-review gates to address this confirmed
 
 - D35 (P1-11): Preserve expanded prefix bytes when composing doctor's PATH; anchor only existence checks and post-split search candidates to the target repository. Actual PATH colons remain delimiters, while explicit binary paths retain literal colons. Keep launcher behavior and default nonexecution unchanged.
 - D36 (P1-11): Extend the existing workflow-harness PATH fixture for colon and whitespace roots with inert files and actual loadConfig/buildEnv comparisons from target and unrelated cwd. Run only P1-11 acceptance and focused implementation tests. Leave frozen inputs, staging, commits, pass flags, full gates, live evidence and phase completion to the external host.
+
+## P1-12 accepted child launch context
+
+P1-11 full feature and final-review gates passed; fresh native hunt at75fcf6c covered all six lenses. Five returned no findings; contract review confirmed lost Claude backend selection. Native evidence reproduced F1 (head fails with marker, baseline passes). Stopped exact owned host44432 at Repair before repeating known isolated export suite failures; retained native evidence and unlanded work. No final hunt pass is claimed.
+
+Independent fake-Claude tests exercised actual guard/stop-gate/mark-passed and reproduced the same child-merge boundary for backend, subagent/probe models and selected binary, including valid/invalid/legacy/empty shadows. Freeze15 cases (3 controls pass,12 expected failures) for the entire selected context rather than another single-field fix. Preserve existing authorization and auth handling. The synthetic auth sentinel uses an EXAMPLE marker; no real credentials are recorded.
