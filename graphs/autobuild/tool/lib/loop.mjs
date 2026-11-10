@@ -1,3 +1,5 @@
+import { withTrackedRun } from '../../../../core/skills/run-records/tracking.mjs';
+import { autobuildTracking } from '../../../../core/skills/run-records/adapters.mjs';
 // The autobuild loop: one fresh headless Claude session per feature, until every feature
 // passes, the iteration cap is hit, NO_PROGRESS_LIMIT sessions in a row make no progress,
 // or something needs a human. A usage limit is a pause, not a failure: the loop sleeps
@@ -142,6 +144,10 @@ function takeLock(pidFile) {
 }
 
 export async function runLoop(config, options = {}) {
+  return withTrackedRun(autobuildTracking(config, "autobuild"), () => runLoopWork(config, options));
+}
+
+async function runLoopWork(config, options) {
   const runId = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
   const logsDir = path.join(config.root, config.logsDir);
   mkdirSync(logsDir, { recursive: true });
@@ -482,7 +488,12 @@ export function sessionSettings(config) {
   return { ...native, model: config.model ?? native.model, env, hooks, permissions: { deny: [...deny, "Bash(git push)", "Bash(git push *)", "Bash(rm -rf *)", "Bash(curl *)", "Bash(wget *)", "Bash(npx *)"] } };
 }
 
-async function runClaude(config, { role, prompt, appendSystemPrompt, maxTurns, maxBudgetUsd, allowedTools, logFile }) {
+async function runClaude(config, options) {
+  if (config.backend === "codex") return runClaudeWork(config, options);
+  return withTrackedRun(autobuildTracking(config, "session"), () => runClaudeWork(config, options));
+}
+
+async function runClaudeWork(config, { role, prompt, appendSystemPrompt, maxTurns, maxBudgetUsd, allowedTools, logFile }) {
   if (config.backend === "codex") {
     const feedback = statePath(config, "codex-feedback.txt");
     if (role === "builder" && existsSync(feedback)) prompt += `\nPrevious gate feedback:\n${readFileSync(feedback, "utf8")}`;

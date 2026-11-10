@@ -89,3 +89,38 @@ with an injected probe, with regression coverage. Bare-name injected probes own
 discovery as required for isolated acceptance fixtures; default probes always
 resolve executables locally. No provider/model calls, frozen input edits, feature
 flags, commits, or roadmap completion. Supervisor owns live evidence and full gates.
+
+## P1-04 implementation — 2026-11-09
+
+Added shared async-scoped lifecycle tracking and managed settings adapters. Wrapped
+existing autobuild runLoop/Claude/Codex and build-app runDriver/Claude execution
+functions without changing locks, timeouts, approvals, gates or signal handlers.
+Records use canonical paths, Git revisions, fresh UUIDs, per-worktree storage or
+explicit overrides. Storage failure preserves work execution and error identity;
+conflicting IDs leave existing records/events untouched. Managed build-app session
+snapshots honor actual model flags and settings-file effort/concurrency. Merged
+runtime settings do not falsely claim project provenance. Probes and native hunt
+leaves remain explicitly outside coverage. README and run-records skill document
+scope and limitations. Existing copyKit already copies the shared modules; existing
+workflow discovery includes the new tests without changing frozen CI gates.
+
+Targeted evidence:
+- `node --input-type=module -e "await import('./tests/run-tracking.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0, `{ pass: 6, fail: 0 }`. Includes actual fake Claude/Codex processes,
+  model/settings precedence, failed session events, probe exclusion, async parent
+  isolation, collision/error preservation, bounded warnings, canonical paths and
+  default/explicit storage selection.
+- `node acceptance/phase1/p1-04.test.mjs`: exit 1, 1 passed / 2 failed.
+  Lifecycle/error/parent acceptance passed. Autobuild fixture setup failed with
+  `Error: spawnSync git EPERM` at project.mjs:21 while initializing its temporary
+  repository. Build-app acceptance returned `AssertionError: 3 !== 0` at
+  p1-04.test.mjs:46 with empty child output; its cause remains unverified. No root
+  runner acceptance pass is claimed; external host must run it authoritatively.
+- `git diff --check`: exit 0.
+
+Read-only Explore review: PASS for data flow, edge/error handling, security,
+consistency, and completeness within documented coverage. Review found incorrect
+project provenance for merged settings and missing settings-file overrides; both
+were corrected and covered by focused tests. No full gate, paid provider call,
+frozen input change, staging, commit, pass flag or roadmap completion. Supervisor
+retains root acceptance verification, full gates, live dogfood and final completion.

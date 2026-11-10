@@ -460,3 +460,26 @@ is a trusted integration/testing boundary, not evidence read from project files;
 for bare executable names it supplies discovery evidence as well. Explicit binary
 paths are checked locally even with injection. These reports describe managed
 launch configuration, not interactive sessions or account-level model access.
+
+### Local run lifecycle records
+
+Autobuild roots and managed Claude/Codex builder/review sessions, plus build-app
+roots and managed Claude sessions, write immutable metadata through
+`core/skills/run-records/tracking.mjs`. Session parent IDs use async-scoped context;
+each invocation gets a fresh ID. Availability probes and native hunt graph leaves
+are not captured. Existing runner logs and ledgers remain authoritative.
+
+The default store is Git's per-worktree `pandastack-runs` path. Set
+`PANDASTACK_RUNS_DIR` to an absolute directory for a shared local store; library
+callers can override it with `storeDir`. Use `createRunStore(directory).listRuns()`
+and `readEvents(id)` from `core/skills/run-records/store.mjs` to inspect records.
+Only allowlisted settings are stored, never prompts, commands, output or credentials.
+Effective merged adapter settings use runtime provenance where original provenance
+is unavailable. Build-app records its selected model, including `HARNESS_BUILD_MODEL`.
+
+Storage failures emit a bounded warning and preserve execution outcomes. Exceptions
+are rethrown unchanged; interruption or a crash can leave a started record without
+a terminal event. A conflicting supplied run ID does not modify the earlier run.
+Focused tests under `tests/run-tracking.test.mjs` are discovered by normal workflow
+CI. Fake-provider coverage does not establish native provider support or live
+readiness; supervisor-run acceptance and live dogfood evidence remain required.

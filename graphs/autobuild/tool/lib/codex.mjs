@@ -1,3 +1,5 @@
+import { withTrackedRun } from '../../../../core/skills/run-records/tracking.mjs';
+import { autobuildTracking } from '../../../../core/skills/run-records/adapters.mjs';
 // Codex sessions use the saved CLI login. No Claude flags, hooks or API fallback.
 import { codexConcurrencyArgs } from "../../../../scripts/agent-config.mjs";
 import { spawn } from "node:child_process";
@@ -26,6 +28,11 @@ export function codexArgs(config, { prompt, appendSystemPrompt = "", role = "bui
 }
 
 export async function runCodex(config, options, track = (child) => child) {
+  if (options.role === "probe") return runCodexWork(config, options, track);
+  return withTrackedRun(autobuildTracking(config, "session"), () => runCodexWork(config, options, track));
+}
+
+async function runCodexWork(config, options, track) {
   const { args, input } = codexArgs(config, options);
   const out = openSync(options.logFile, "w");
   const err = openSync(`${options.logFile}.stderr`, "w");

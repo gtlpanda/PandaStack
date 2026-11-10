@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { withTrackedRun } from '../../../../../core/skills/run-records/tracking.mjs'
+import { buildTracking } from '../../../../../core/skills/run-records/adapters.mjs'
 import { readAgentConfig } from '../../../../../scripts/agent-config.mjs'
 // driver.mjs — the /build-app driver: builds an approved backlog unattended, one
 // slice per fresh headless `claude -p "/dev --slice ..."` session, landing each on
@@ -99,7 +101,11 @@ function reconcile(repo, integration, backlog, ledger, log) {
   return ledger
 }
 
-export async function runDriver({ repo: given, app, noPr: noPrFlag = null }, cfg = settingsFromEnv()) {
+export async function runDriver(options, cfg = settingsFromEnv()) {
+  return withTrackedRun(buildTracking(options.repo, cfg.model, 'build-app'), () => runDriverWork(options, cfg))
+}
+
+async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg) {
   // One real path: the guard compares file paths against it.
   const repo = realpathSync(resolve(given))
   const integration = `integration/${app}`

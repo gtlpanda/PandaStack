@@ -1,3 +1,5 @@
+import { withTrackedRun } from '../../../../../core/skills/run-records/tracking.mjs'
+import { buildSessionTracking } from '../../../../../core/skills/run-records/adapters.mjs'
 // One headless Claude session: the settings it runs with, starting it, and
 // reading its result. runClaude, readResult, and probeUntilAvailable follow the
 // autobuild kit's lib/loop.mjs; the settings are this driver's own.
@@ -52,7 +54,13 @@ export async function stopSessions(graceMs = 30_000) {
 // stdout goes to logFile (stream-json), stderr to logFile.stderr.
 // pidFile, when given, holds the session's pid while it runs, so a driver
 // started after a crash can tell an orphaned session is still at work.
-export async function runClaude({ bin, repo, args, env, logFile, timeoutMs, pidFile }) {
+export async function runClaude(options) {
+  // Availability probes omit managed --settings; their coverage is deferred.
+  if (!options.args.includes('--settings')) return runClaudeWork(options)
+  return withTrackedRun(buildSessionTracking(options), () => runClaudeWork(options))
+}
+
+async function runClaudeWork({ bin, repo, args, env, logFile, timeoutMs, pidFile }) {
   const out = openSync(logFile, 'w')
   const err = openSync(`${logFile}.stderr`, 'w')
   try {
