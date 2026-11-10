@@ -1836,3 +1836,57 @@ Changed only the native adapter, queue implementation/error allowlist, new test,
 README and decision/progress logs. Frozen inputs, feature flags, staging, commits,
 Git control and the pinned host remain untouched. No full gates or providers ran.
 The external host retains process acceptance, full gates, live smoke and review.
+
+## P2-06 — Managed context receipts and complete decision traces
+
+Added context_supplied receipts and idempotent trace_closed observations. Received
+spans bind answer, launch and actual nested Phase 1 session IDs; exact receipt
+replay emits nothing. Close snapshots inventory all started spans, preceding
+intended events (including failed sink attempts), and context receipts in order.
+Snapshots remain detached from callers/sinks; invalid inputs, open spans and
+observer failures make coverage incomplete. The outer loop closes ordinary exits,
+including opt-out, failed preflight and completed-feature skips. Root-null traces
+remain incomplete; child-null receipts retain transport evidence without child
+attribution. No observer grants action permission.
+
+The shared launch observer captures IDs within session tracking. Claude records
+successful spawn with the constructed context argv. Codex requires both spawn
+and successful stdin completion; EPIPE or missing completion produces no receipt
+and incomplete coverage. Known spawn failure closes with zero receipts. Callback
+and sink failures preserve provider outcomes. Retry launches have distinct IDs;
+usage probes and untargeted features get no decision context. Native steer
+receipts remain separate. Updated README and managed skill guidance describe
+coverage limits; D65-D67 record implementation and validation choices.
+
+New tests use workflow-harness test() and aggregate summary. Existing unfrozen
+decision launch/managed tests retain their routing, approval, HEAD, context and
+provider-outcome assertions while checking the new receipt/closure schema.
+Synthetic process functions exercise both provider boundaries; real local stores
+verify parent/child attribution. These checks do not constitute live provider or
+separate-process acceptance evidence.
+
+Exact focused validation:
+- Baseline `node --test --test-isolation=none --test-name-pattern='^trace context|^valid repeated|^empty complete|^sink exceptions' acceptance/phase2/p2-06.test.mjs`:
+  exit 1; 0 passed, 4 failed because contextSupplied/close were absent. After
+  implementation, the same command exited 0; 4 passed, 0 failed.
+- Tests prepared before implementation:
+  `node --input-type=module -e "await import('./tests/decision-trace-close.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1; `{ pass: 0, fail: 3 }`, missing contextSupplied. The final aggregate
+  below includes all three now-passing groups and the transport observer groups.
+- `node --input-type=module -e "for (const name of ['trace-close','transport-receipt','observations','launch','managed','codex-delivery']) await import('./tests/decision-'+name+'.test.mjs'); await import('./tests/run-launch-parity.test.mjs'); await import('./tests/run-child-context.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; `{ pass: 53, fail: 0 }`, including native adapter compatibility and
+  unchanged Phase 1 launch/settings checks. No live providers were called.
+- `node scripts/check-refs.mjs`: exit 0;
+  `check-refs: 267 references, all resolve`.
+- `bash scripts/check-secrets.sh`: exit 0; `check-secrets: clean` (tracked files).
+- `bash scripts/check-secrets.sh graphs/autobuild/tool/lib/context-receipt.mjs tests/decision-trace-close.test.mjs tests/decision-transport-receipt.test.mjs`:
+  exit 0; `check-secrets: clean` (every new untracked source/test file). Scanner
+  rules are unchanged; no fixture annotations were needed.
+- `git diff --check`: exit 0.
+
+Read-only Explore audit and parent inspection: bounded PASS for data flow,
+lifecycle/error handling, security, consistency/completeness, observer isolation
+and prior-phase preservation; no confirmed defect. Previously documented sandbox
+process limitations were not retried or waived. Process-based P2-06 acceptance,
+full gates and live smoke remain host-owned. Frozen inputs, feature pass flags,
+Git control, staging, commits and the pinned host remain untouched.

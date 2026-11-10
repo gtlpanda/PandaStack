@@ -78,8 +78,21 @@ The host emits one-line `PANDASTACK_DECISION` JSON v2 observations for `waiting`
 `received` and `wait_failed`, with a persisted random queue namespace, logical
 identity, actual Phase 1 outer ID (or null), fresh trace/span/event IDs and
 monotonic elapsed milliseconds. No answer text, actor or raw errors are emitted.
-Observations are best-effort and never authorize work. This feature does not claim
-complete trace coverage, supplied-context counts, or native interactive delivery.
+`context_supplied` binds the received answer to a fresh launch ID and the actual
+nested Phase 1 session ID (or null). Claude records successful spawn with context
+argv; Codex additionally requires successful stdin write completion. Failed spawns
+produce no receipt. Unknown writes and EPIPE leave trace coverage incomplete.
+Receipts prove host transport only, not model consumption or exactly-once action.
+
+Every ordinary invocation closes with `trace_closed`, including opt-out and
+completed-feature skips. The close lists started spans, all preceding intended
+events (including failed sink attempts), and context receipts in emission order.
+A complete close with empty lists establishes known zero for that invocation;
+missing closure never does. Open spans, observer failures, uncertain transport,
+or missing outer tracking make coverage incomplete. A null child ID preserves
+the transport fact but leaves child attribution unknown. Workflow success is
+separate from trace completeness. Observations are best-effort and never
+authorize work; failed observation output cannot replace the provider result.
 Owned Codex active-turn delivery is a separate adapter; Claude interactive delivery
 remains unsupported/unproven and requires manual handoff. Terminal-session resume
 is separate. Never fall back to another provider. Live demonstrations are owned by

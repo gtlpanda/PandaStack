@@ -120,7 +120,15 @@ await test('managed gate checks HEAD before ack and at launch and carries multip
   try { head = 'b'.repeat(40); assert.throws(() => ready.beforeLaunch(), code('STALE')) } finally { ready.close() }
   queue.request(request({ id: 'second' })); answer('second')
   const both = await gate({ config: { ...config, decisions: { ...config.decisions, ids: ['choice', 'second'] } } })
-  try { both.beforeLaunch(); assert.equal(queue.read('second').state, 'acknowledged'); assert.match(both.context, /second/) } finally { both.close() }
+  try {
+    both.beforeLaunch(); assert.equal(queue.read('second').state, 'acknowledged'); assert.match(both.context, /second/)
+    both.onContextSupplied({ providerRunId: 'child', launchId: 'launch' })
+    const receipts = events.filter(e => e.event === 'context_supplied')
+    assert.deepEqual(receipts.map(e => e.decisionId), ['choice', 'second'])
+    assert.ok(receipts.every(e => e.providerRunId === 'child' && e.launchId === 'launch' && e.answerId === 'answer'))
+    both.onContextSupplied({ providerRunId: 'child', launchId: 'launch' })
+    assert.equal(events.filter(e => e.event === 'context_supplied').length, 2)
+  } finally { both.close() }
 }))
 
 await test('managed gate refuses an early receipt that expires while a later answer is pending', () => fixture(async ({ queue, config, request, answer, gate }) => {
@@ -140,5 +148,9 @@ await test('observational failure never changes managed queue success or origina
   const trace = new Proxy({}, { get() { return () => { throw Error('PRIVATE_INPUT') } } })
   queue.request(request()); await assert.rejects(gate({ trace }), code('TIMEOUT'))
   answer(); const ready = await gate({ trace })
-  try { ready.beforeLaunch(); assert.equal(queue.read('choice').state, 'acknowledged') } finally { ready.close() }
+  try {
+    ready.beforeLaunch(); assert.equal(queue.read('choice').state, 'acknowledged')
+    assert.doesNotThrow(() => ready.onContextSupplied({ providerRunId: 'child', launchId: 'launch' }))
+    assert.doesNotThrow(() => ready.onContextUncertain())
+  } finally { ready.close() }
 }))

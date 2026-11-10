@@ -291,3 +291,24 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   distinct from separate-process and live-provider evidence. Preserve all frozen
   inputs, pass flags, staging and commits; later backend instructions override
   the generic mark-passed/commit/Stop-hook procedure.
+
+- D65 (P2-06): Retain v2 wait observations and add detached context receipts and
+  idempotent trace closure. Inventory intended events before calling the sink,
+  including failed emissions. Bind receipts to received spans and exact launch
+  replay identity; close uses the initial outer revision. Close every ordinary
+  runLoop exit in the outer tracking scope, including opt-out, preflight failure
+  and completed-feature skips. Missing closure is unknown coverage, never zero.
+- D66 (P2-06): Use a small shared host transport observer, installed only for
+  targeted context, inside each provider's nested tracking scope. Capture child
+  run ID and fresh launch ID there. Claude requires the spawn event; Codex also
+  requires successful stdin end completion. Known failed spawn has no receipt;
+  lost/error writes are incomplete. Observation callbacks cannot replace provider
+  results. Preserve all existing arguments, auth, cancellation and timeout logic.
+  Native steer delivery remains separate from managed launch accounting.
+- D67 (P2-06 validation): Prepare new workflow-harness tests before implementation.
+  Use the four process-free frozen acceptance cases and synthetic launch-boundary
+  checks, with real local queue/run stores. Do not retry previously sandbox-denied
+  process acceptance or launch providers. Expanded focused checks verify actual
+  child/parent IDs, multiple answers per launch, usage probes/retries, failed
+  spawns, unknown writes and sink failures. Outer host retains separate-process
+  acceptance, full gates, live demonstrations, pass flags, commits and review.

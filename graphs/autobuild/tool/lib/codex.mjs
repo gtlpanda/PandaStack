@@ -5,6 +5,7 @@ import { codexConcurrencyArgs } from "../../../../scripts/agent-config.mjs";
 import { spawn } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync } from "node:fs";
 import { buildEnv } from "./proc.mjs";
+import { observeContextLaunch } from './context-receipt.mjs';
 
 export function codexArgs(config, { prompt, appendSystemPrompt = "", role = "builder", outputFile, schemaFile } = {}) {
   const probe = role === "probe";
@@ -43,6 +44,7 @@ async function runCodexWork(config, options, track) {
     options.beforeLaunch?.();
     return await new Promise((resolve) => {
       const child = track(spawn(config.codexBin, args, { cwd: config.root, env, detached: true, stdio: ["pipe", out, err] }));
+      const written = observeContextLaunch(child, options, { stdin: true });
       const killGroup = (signal) => {
         if (!child.pid) return;
         try { process.kill(-child.pid, signal); } catch (error) { if (error.code !== "ESRCH") throw error; }
@@ -58,7 +60,8 @@ async function runCodexWork(config, options, track) {
       child.once("close", (code) => finish(code ?? 1));
       child.once("error", () => finish(127));
       child.stdin.on("error", () => {}); // early CLI failure can close stdin before the prompt is sent
-      child.stdin.end(input);
+      try { child.stdin.end(input, written); }
+      catch (error) { written(error); throw error; }
     });
   } finally {
     closeSync(out);

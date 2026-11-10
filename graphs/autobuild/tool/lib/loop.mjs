@@ -33,6 +33,7 @@ import { buildEnv, sessionConfigEnv, git, sh, quote } from "./proc.mjs";
 import { isOurs } from "../../../build/skills/build-app/driver/proc.mjs";
 import { clearStopFailure, readStopFailure, writeSession } from "./session.mjs";
 import { runCodex, readCodexResult } from "./codex.mjs";
+import { observeContextLaunch } from './context-receipt.mjs';
 import { finishCodexBuilder, finishCodexReview } from "./codex-gate.mjs";
 import { runFeatureTests } from "./tests.mjs";
 
@@ -147,16 +148,17 @@ function takeLock(pidFile) {
 }
 
 export async function runLoop(config, options = {}) {
-  return withTrackedRun(autobuildTracking(config, "autobuild"), () => runLoopWork(config, options));
-}
-
-async function runLoopWork(config, options) {
-  let decisionTrace;
-  if (config.decisions !== undefined) {
+  return withTrackedRun(autobuildTracking(config, "autobuild"), async () => {
+    let decisionTrace;
     try {
       decisionTrace = createDecisionTrace({ repo: realpathSync(config.root), revision: decisionRevision(config), invocationRunId: currentRunId() });
     } catch { /* Observations cannot change queue or work behavior. */ }
-  }
+    try { return await runLoopWork(config, options, decisionTrace); }
+    finally { try { decisionTrace?.close(); } catch { /* Missing closure is incomplete evidence. */ } }
+  });
+}
+
+async function runLoopWork(config, options, decisionTrace) {
   const runId = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
   const logsDir = path.join(config.root, config.logsDir);
   mkdirSync(logsDir, { recursive: true });
@@ -295,6 +297,8 @@ async function runLoopWork(config, options) {
             try { decisionGate.beforeLaunch(); }
             catch (error) { gateFailure = error; throw error; }
           } : undefined,
+          onContextSupplied: decisionGate?.onContextSupplied,
+          onContextUncertain: decisionGate?.onContextUncertain,
           appendSystemPrompt: builderSystemPrompt(config, feature, iteration + 1),
           maxTurns: limits.maxTurns,
           maxBudgetUsd: limits.maxBudgetUsd,
@@ -533,11 +537,11 @@ async function runClaude(config, options) {
   return withTrackedRun(autobuildTracking(config, "session"), () => runClaudeWork(config, options));
 }
 
-async function runClaudeWork(config, { role, prompt, appendSystemPrompt, maxTurns, maxBudgetUsd, allowedTools, logFile, beforeLaunch }) {
+async function runClaudeWork(config, { role, prompt, appendSystemPrompt, maxTurns, maxBudgetUsd, allowedTools, logFile, beforeLaunch, onContextSupplied, onContextUncertain }) {
   if (config.backend === "codex") {
     const feedback = statePath(config, "codex-feedback.txt");
     if (role === "builder" && existsSync(feedback)) prompt += `\nPrevious gate feedback:\n${readFileSync(feedback, "utf8")}`;
-    return runCodex(config, { role, prompt, appendSystemPrompt, logFile, beforeLaunch }, track);
+    return runCodex(config, { role, prompt, appendSystemPrompt, logFile, beforeLaunch, onContextSupplied, onContextUncertain }, track);
   }
   const settingsFile = statePath(config, `session-settings.json`);
   writeFileSync(settingsFile, `${JSON.stringify(sessionSettings(config), null, 2)}\n`);
@@ -571,6 +575,7 @@ async function runClaudeWork(config, { role, prompt, appendSystemPrompt, maxTurn
     beforeLaunch?.();
     return await new Promise((resolve) => {
       const child = track(spawn(config.claudeBin, args, { cwd: config.root, env, stdio: ["ignore", out, err] }));
+      observeContextLaunch(child, { onContextSupplied, onContextUncertain });
       child.on("close", (code) => resolve(code ?? 1));
       child.on("error", () => resolve(127));
     });

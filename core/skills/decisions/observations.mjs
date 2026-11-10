@@ -29,11 +29,18 @@ export function createDecisionTrace(input) {
   let opts
   try { opts = traceOptions(input) } catch { throw invalid() }
   const traceId = randomUUID(), spans = new Map()
-  let incomplete = false, lastMonotonic = 0
+  const eventIds = [], contextEventIds = []
+  let incomplete = false, lastMonotonic = 0, closed = null
 
   function guarded(work) {
     try { return work() }
     catch { incomplete = true; throw invalid() }
+  }
+
+  function requireOpen() { requireValid(closed === null) }
+
+  function complete() {
+    return !incomplete && opts.invocationRunId !== null && [...spans.values()].every(span => span.terminal !== null)
   }
 
   function clocks() {
@@ -48,12 +55,15 @@ export function createDecisionTrace(input) {
   function publish(event) {
     // The sink and caller each receive their own snapshot; neither can corrupt
     // terminal replay or correlation metadata retained by the trace.
-    try { opts.emit({ ...event }) } catch { incomplete = true }
-    return { ...event }
+    if (event.event !== 'trace_closed') eventIds.push(event.eventId)
+    if (event.event === 'context_supplied') contextEventIds.push(event.eventId)
+    try { opts.emit(structuredClone(event)) } catch { incomplete = true }
+    return structuredClone(event)
   }
 
   function terminal(spanId, input, event) {
     return guarded(() => {
+      requireOpen()
       requireValid(validId(spanId) && spans.has(spanId))
       const span = spans.get(spanId)
       const key = event === 'received' ? 'answerId' : 'outcome'
@@ -75,6 +85,7 @@ export function createDecisionTrace(input) {
   return {
     startWait(input) {
       return guarded(() => {
+        requireOpen()
         const fields = exactRecord(input, waitKeys)
         requireValid(waitKeys.every(key => key === 'revision' ? sha(fields[key]) : validId(fields[key])))
         const { at, monotonic } = clocks(), spanId = randomUUID()
@@ -83,15 +94,43 @@ export function createDecisionTrace(input) {
           decisionRunId: fields.decisionRunId, invocationRunId: opts.invocationRunId,
           featureId: fields.featureId, decisionId: fields.decisionId, revision: fields.revision,
           deliveryId: fields.deliveryId }
-        spans.set(spanId, { waiting, started: monotonic, terminal: null })
+        spans.set(spanId, { waiting, started: monotonic, terminal: null, launches: new Map() })
         return publish(waiting)
       })
     },
     finishWait(spanId, input) { return terminal(spanId, input, 'received') },
     failWait(spanId, input) { return terminal(spanId, input, 'wait_failed') },
-    markIncomplete() { incomplete = true },
-    get complete() {
-      return !incomplete && opts.invocationRunId !== null && [...spans.values()].every(span => span.terminal !== null)
+    contextSupplied(spanId, input) {
+      return guarded(() => {
+        requireOpen()
+        requireValid(validId(spanId) && spans.has(spanId))
+        const span = spans.get(spanId)
+        requireValid(span.terminal?.event === 'received')
+        const { providerRunId, launchId } = exactRecord(input, ['providerRunId', 'launchId'])
+        requireValid((providerRunId === null || validId(providerRunId)) && validId(launchId))
+        const prior = span.launches.get(launchId)
+        if (prior) {
+          requireValid(prior.providerRunId === providerRunId)
+          return structuredClone(prior)
+        }
+        const { at } = clocks()
+        const event = { ...span.waiting, event: 'context_supplied', eventId: randomUUID(), at,
+          answerId: span.terminal.answerId, providerRunId, launchId }
+        span.launches.set(launchId, event)
+        return publish(event)
+      })
     },
+    markIncomplete() { return guarded(() => { requireOpen(); incomplete = true }) },
+    close() {
+      return guarded(() => {
+        if (closed) return structuredClone(closed)
+        const { at } = clocks()
+        closed = { schemaVersion: 2, event: 'trace_closed', eventId: randomUUID(), at, traceId,
+          repo: opts.repo, revision: opts.revision, invocationRunId: opts.invocationRunId,
+          spanIds: [...spans.keys()], eventIds: [...eventIds], contextEventIds: [...contextEventIds], complete: complete() }
+        return publish(closed)
+      })
+    },
+    get complete() { return complete() },
   }
 }

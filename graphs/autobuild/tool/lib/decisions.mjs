@@ -47,7 +47,7 @@ export async function prepareDecisionGate({ config, feature, trace, signal, read
     if (signal?.aborted) throw error('CANCELLED')
     if (readRevision() !== revision) throw error('STALE')
   }
-  const queue = createDecisionQueue(decisions.store), deliveries = [], snapshots = []
+  const queue = createDecisionQueue(decisions.store), deliveries = [], snapshots = [], spanIds = []
   try {
     const queueNamespace = queue.readNamespace()
     for (const id of decisions.ids) {
@@ -65,6 +65,7 @@ export async function prepareDecisionGate({ config, feature, trace, signal, read
         checkHead()
         queue.acknowledge(id, recipient)
         if (span) observe(trace, 'finishWait', span.spanId, { answerId: snapshot.answer.answerId })
+        if (span) spanIds.push(span.spanId)
         snapshots.push(snapshot); deliveries.push({ id, recipient })
       } catch (failure) {
         const outcome = ({ TIMEOUT: 'timeout', CANCELLED: 'cancelled', EXPIRED: 'expired', STALE: 'stale', MANUAL_HANDOFF: 'manual_handoff' })[failure.code] ?? 'failed'
@@ -79,6 +80,10 @@ export async function prepareDecisionGate({ config, feature, trace, signal, read
         for (const { id, recipient } of deliveries) queue.deliver(id, recipient)
         checkHead()
       },
+      onContextSupplied(receipt) {
+        for (const spanId of spanIds) observe(trace, 'contextSupplied', spanId, receipt)
+      },
+      onContextUncertain() { observe(trace, 'markIncomplete') },
       close: () => queue.close(),
     }
   } catch (failure) {
