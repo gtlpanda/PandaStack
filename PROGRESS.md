@@ -2156,3 +2156,52 @@ invocation, pass flags, staging, commits, branches, Git control or pinned-host
 changes. Previously blocked process/CLI/pipe, filesystem-race and isolation
 reproductions were not retried or waived. External host owns disposition, full
 gates, live evidence and final completion.
+
+## P2-09 — Execute installed verifier through directory symlinks
+
+Replaced the retention CLI's lexical entrypoint comparison with a nonthrowing
+canonical filesystem path comparison. Installed directory symlinks now select
+the existing dispatcher. Missing/unresolvable entry paths remain inert imports;
+exports, main/catch behavior and capture/verdict implementations are unchanged.
+D74-D75 record the scoped implementation and unresolved acceptance boundary.
+
+Prepared four workflow-harness test groups before implementation. Fresh workers
+exercise real module evaluation for canonical, relative, directory-symlink and
+file-symlink entries; absent/unrelated/missing/broken entries; real private
+init/finalize manifests; and safe rejection of a nonprivate evidence directory.
+These workers do not call step/relay or launch children. Actual task execution is
+covered separately by the selected frozen acceptance, not inferred from workers.
+
+Exact focused validation:
+- Before implementation, `node acceptance/phase2/p2-09.test.mjs`: exit 1,
+  0 passed / 3 failed. The import/refusal case reported `'' !== 'IMPORT_ONLY'`
+  at line 51. Both installed task cases reported `the task must actually execute`
+  (`false !== true`) at line 57.
+- Before implementation,
+  `node --input-type=module -e "await import('./tests/verify-entrypoint.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1; `{ pass: 1, fail: 3 }`. Installed invalid-operation and capture-failure
+  cases returned 0 instead of 125; installed init emitted zero paths instead of
+  one. Inert-import checks passed.
+- After implementation, the same focused aggregate command: exit 0;
+  `{ pass: 4, fail: 0 }`.
+- After implementation, `node acceptance/phase2/p2-09.test.mjs`: exit 1,
+  2 passed / 1 failed. Both installed task cases passed: actual task exit 7
+  yielded failure, task exit 0 yielded success, with actual marker, manifest,
+  private complete log, content, bytes and hash assertions passing. The first
+  case still failed at line 51 with `'' !== 'IMPORT_ONLY'`. Cause is
+  unestablished; no complete acceptance pass or refusal subprocess proof claimed.
+  No further retries or acceptance modifications were made.
+- `bash scripts/check-secrets.sh`: exit 0; `check-secrets: clean` (tracked files).
+- `bash scripts/check-secrets.sh tests/verify-entrypoint.test.mjs`: exit 0;
+  `check-secrets: clean` (the only new untracked source/test file). Scanner rules
+  unchanged; no annotations needed.
+- `git diff --check`: exit 0.
+
+Required read-only Explore audit and parent review: bounded PASS for data flow,
+edge/error handling, security, consistency, completeness and selected scope;
+no blocking finding. Static review and worker checks do not replace outstanding
+acceptance or full gates. Changed only retention entry dispatch, the new focused
+tests and DECISIONS.md/PROGRESS.md. Frozen inputs, prior capture implementation,
+pass flags, staging, commits, branches, Git control and pinned host are untouched.
+No providers, full gates, P2-10 work or rejected nested-process reproduction ran.
+The external host retains remaining acceptance verification and final completion.

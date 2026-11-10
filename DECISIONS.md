@@ -356,3 +356,16 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   retry, bypass or waive them. This is Node 24 unavailable-builtin simulation,
   not older-runtime validation. External host retains full gates, feature flags,
   Git mutations and completion under the final backend-specific instructions.
+
+- D74 (P2-09): Follow the selected installed-verifier contract's minimal repair:
+  compare canonical filesystem paths in a nonthrowing retention CLI entry guard.
+  Missing/unresolvable argv remains an inert import; retain public exports and
+  the existing main/catch behavior. Do not expand into capture internals, other
+  review findings or P2-10. Prepare worker-based harness regressions before code;
+  workers exercise actual module dispatch without step/relay or child processes.
+- D75 (P2-09 validation): The post-change selected acceptance passes both actual
+  installed task/evidence cases (exit 7 and exit 0). Its import/refusal case still
+  fails at the import marker assertion: empty stdout instead of IMPORT_ONLY,
+  also observed before the change. Cause is unestablished; do not waive it or
+  claim full acceptance. Worker import/dispatch checks pass separately. External
+  host retains the remaining acceptance result, full gates, flags and commits.

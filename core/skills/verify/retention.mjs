@@ -120,6 +120,11 @@ async function main(args){
  }
  throw Error('Unknown verification capture operation');
 }
-if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+function isMain(){
+ // Installed skills use directory symlinks; Node canonicalizes the module URL.
+ if(!process.argv[1])return false;
+ try{return fs.realpathSync(process.argv[1])===fs.realpathSync(fileURLToPath(import.meta.url));}catch{return false;}
+}
+if(isMain()){
  try{process.exitCode=await main(process.argv.slice(2));}catch{markIncomplete();console.error('Verification evidence capture failed');process.exitCode=125;}
 }
