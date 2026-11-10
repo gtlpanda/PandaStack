@@ -40,6 +40,18 @@
     {
       "name": "Phase 1 acceptance",
       "command": "node --test acceptance/phase1/p1-*.test.mjs"
+    },
+    {
+      "name": "Hunt evidence retention acceptance",
+      "command": "node --test acceptance/harness/harness-repair.test.mjs"
+    },
+    {
+      "name": "Hunt export and namespace acceptance",
+      "command": "node --test acceptance/harness/export-namespace.test.mjs"
+    },
+    {
+      "name": "Hunt capture descendant acceptance",
+      "command": "node --test acceptance/harness/capture-descendant.test.mjs"
     }
   ],
   "preflight": [
@@ -52,6 +64,11 @@
       "name": "SQLite runtime",
       "command": "node --input-type=module -e 'import {DatabaseSync} from \"node:sqlite\"; const d=new DatabaseSync(\":memory:\"); d.close()'",
       "hint": "Use Node 24 with node:sqlite support"
+    },
+    {
+      "name": "ShellCheck for CI verification",
+      "command": "shellcheck --version",
+      "hint": "Provide ShellCheck on PATH; CI lint remains mandatory."
     }
   ],
   "frozen": [

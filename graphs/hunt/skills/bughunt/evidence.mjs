@@ -35,11 +35,12 @@
 // committed. Every git call in the fix worktree runs without hooks or
 // fsmonitor, in the sandbox environment.
 // Exit 0 when it ran, 1 on an error it could not run past, 2 on usage.
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, lstatSync, symlinkSync, realpathSync, openSync, closeSync, readdirSync } from 'node:fs'
-import { join, dirname, extname, normalize, relative, basename } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, lstatSync, symlinkSync, realpathSync, openSync, closeSync, readdirSync, mkdtempSync, chmodSync, readlinkSync } from 'node:fs'
+import { join, dirname, extname, normalize, relative, basename, resolve, isAbsolute } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
+import { invocation, reference, verifyManifest, noSymlinks, STEP_LIMIT } from '../../../../core/skills/verify/retention.mjs'
 import { git as rawGit } from '../../../build/skills/build-app/driver/proc.mjs'
 import { packageDirs } from '../../../../core/skills/verify/packages.mjs'
 import { TEST_FILE } from '../../../build/skills/build-app/driver/checks.mjs'
@@ -83,26 +84,25 @@ export function sandboxEnv(base = process.env) {
 // Without the namespace, killing only the runner left a node --test child
 // spinning forever, and a detached grandchild survived the run.
 let probed = null
+const namespaceArgv = (argv, seconds) => ['unshare', '-cnpf', '--keep-caps', '--kill-child', '--mount-proc', 'sh', '-c',
+  'ip link set lo up || exit 125; exec setpriv --inh-caps=-all --ambient-caps=-all --bounding-set=-all timeout -s KILL "$@"', 'sh', String(seconds), ...argv]
 export function isolation() {
   if (probed) return probed
-  const ok = (cmd, args) => spawnSync(cmd, args, { stdio: 'ignore' }).status === 0
-  const pidns = ok('unshare', ['-rnpf', '--kill-child', '--mount-proc', 'true'])
-  probed = {
-    pidns,
-    network: pidns || ok('unshare', ['-rn', 'true']),
-    loopback: pidns && ok('unshare', ['-rnpf', '--kill-child', '--mount-proc', 'sh', '-c', 'ip link set lo up']),
-    timeout: ok('timeout', ['-s', 'KILL', '5', 'true']),
+  let supported = false
+  if (process.platform === 'linux' && process.getuid?.() > 0) {
+    const check = String.raw`const fs=require('fs'),cp=require('child_process');const a=process.argv.slice(1);let ok=process.getuid()===+a[0]&&process.getgid()===+a[1];const caps=fs.readFileSync('/proc/self/status','utf8').split('\n').filter(x=>/^Cap(Inh|Prm|Eff|Bnd|Amb):/.test(x));ok&&=caps.length===5&&caps.every(x=>/:\s*0+$/.test(x));for(const [i,n] of ['pid','net','user'].entries())ok&&=fs.readlinkSync('/proc/self/ns/'+n)!==a[i+2];const r=cp.spawnSync('ip',['-j','link','show'],{encoding:'utf8'});const links=r.status===0?JSON.parse(r.stdout):[];ok&&=links.length===1&&links[0].ifname==='lo'&&links[0].flags.includes('UP');process.exit(ok?0:1)`
+    const argv = namespaceArgv([process.execPath, '-e', check, String(process.getuid()), String(process.getgid()), ...['pid','net','user'].map(n=>readlinkSync('/proc/self/ns/'+n))], 5)
+    supported = spawnSync(argv[0], argv.slice(1), {stdio:'ignore', timeout:8000, killSignal:'SIGKILL', env:sandboxEnv()}).status === 0
   }
+  probed = {pidns:supported,network:supported,loopback:supported,timeout:supported}
   return probed
 }
-// The command line around a runner's argv. The shell string is fixed; the argv
-// follows it as positional arguments, never as shell text.
-function wrap(argv, seconds) {
-  const i = isolation()
-  const timed = i.timeout ? ['timeout', '-s', 'KILL', String(seconds), ...argv] : argv
-  if (i.pidns) return ['unshare', '-rnpf', '--kill-child', '--mount-proc', 'sh', '-c', `${i.loopback ? 'ip link set lo up 2>/dev/null; ' : ''}exec "$@"`, 'sh', ...timed]
-  return i.network ? ['unshare', '-rn', ...timed] : timed
+export function wrapIsolation(argv, timeoutMs) {
+  if (!Array.isArray(argv) || !argv.length || argv.some(a=>typeof a!=='string'||a.includes('\0')) || !Number.isInteger(timeoutMs) || timeoutMs<=0) throw new Error('Invalid isolated invocation')
+  if (!isolation().pidns) throw Object.assign(new Error('Required non-root execution isolation is unavailable'),{code:'ISOLATION_UNAVAILABLE'})
+  return namespaceArgv(argv, Math.max(1,Math.ceil(timeoutMs/1000)))
 }
+function wrap(argv, seconds) { return wrapIsolation(argv, seconds*1000) }
 
 export const markerFor = id => `BUGHUNT-${id}`
 
@@ -182,6 +182,47 @@ function exportTree(repo, sha, dir) {
   }
 }
 
+export function createSuiteExport({repo,tree}) {
+  if(typeof repo!=='string'||typeof tree!=='string'||! /^[0-9a-f]{40,64}$/.test(tree))throw new Error('Invalid suite export source')
+  let parent = realpathSync(tmpdir())
+  for(let current=parent;;current=dirname(current)){
+    if(basename(current)==='.git')throw new Error('Suite temporary location is inside Git metadata')
+    if(current===dirname(current))break
+  }
+  const directory=mkdtempSync(join(parent,'bughunt-suite-'));chmodSync(directory,0o700)
+  const env={...sandboxEnv(),GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',GIT_AUTHOR_NAME:'bughunt export',GIT_AUTHOR_EMAIL:'export@localhost',GIT_COMMITTER_NAME:'bughunt export',GIT_COMMITTER_EMAIL:'export@localhost'}
+  const call=(args,extra={})=>{
+    const r=spawnSync('git',['-C',directory,...SAFE_GIT,'-c','commit.gpgsign=false','-c','core.autocrlf=false',...args],{env,encoding:'utf8',timeout:30000,maxBuffer:128*1024*1024,...extra})
+    if(r.status!==0)throw new Error('Suite Git export failed');return r.stdout
+  }
+  let cleaned=false;const cleanup=()=>{if(!cleaned){rmSync(directory,{recursive:true,force:true});cleaned=true}}
+  try{
+    call(['init','-q','--template='])
+    const objects=git(repo,['rev-parse','--path-format=absolute','--git-path','objects']);if(!objects.ok)throw new Error('Suite source object directory is unavailable')
+    env.GIT_ALTERNATE_OBJECT_DIRECTORIES=objects.stdout.trim()
+    call(['read-tree',tree])
+    const entries=call(['ls-files','--stage','-z']).split('\0').filter(Boolean).map(e=>{const m=/^(\d+) ([0-9a-f]+) 0\t([\s\S]+)$/.exec(e);if(!m||m[3].split('/').some(p=>!p||p==='.'||p==='..'||p.toLowerCase()==='.git')||!['100644','100755','120000'].includes(m[1]))throw new Error('Unsupported suite tree entry');return {mode:m[1],sha:m[2],path:m[3]}})
+    call(['checkout-index','-a','-f'])
+    // Restore literal blob bytes after checkout conversion (e.g. working-tree-encoding).
+    const blobs=call(['cat-file','--batch'],{encoding:null,input:Buffer.from(entries.map(e=>e.sha).join('\n')+'\n')});let cursor=0
+    for(const entry of entries){const end=blobs.indexOf(10,cursor),header=blobs.subarray(cursor,end).toString(),match=/^[0-9a-f]+ blob (\d+)$/.exec(header);if(end<0||!match)throw new Error('Invalid exported blob');const size=Number(match[1]);cursor=end+1;const data=blobs.subarray(cursor,cursor+size);cursor+=size+1;const path=join(directory,entry.path);if(data.length!==size)throw new Error('Incomplete exported blob');rmSync(path,{force:true});mkdirSync(dirname(path),{recursive:true});if(entry.mode==='120000')symlinkSync(data.toString(),path);else{writeFileSync(path,data);chmodSync(path,entry.mode==='100755'?0o755:0o644)}}
+    const snapshotTree=call(['rev-parse',tree+'^{tree}']).trim();const commit=call(['commit-tree',snapshotTree,'-m','Private source-only suite snapshot']).trim();call(['update-ref','HEAD',commit])
+    // Objects are copied into this source-only repository; no persistent alternate or source ref.
+    call(['repack','-a','-d']);delete env.GIT_ALTERNATE_OBJECT_DIRECTORIES
+    return {directory,cleanup}
+  }catch(e){cleanup();throw e}
+}
+
+function armCapture(workDir,name){
+  const stateDir=dirname(dirname(workDir)),evidence=join(stateDir,'evidence'),root=join(evidence,'logs');noSymlinks(stateDir);if(!existsSync(evidence))mkdirSync(evidence,{mode:0o700});noSymlinks(evidence);if(!existsSync(root))mkdirSync(root,{mode:0o700});noSymlinks(root);chmodSync(root,0o700)
+  const dir=invocation(root),path=join(dir,name+'.out');return {stateDir,dir,path}
+}
+function captureResult(capture,result){
+  const path=join(capture.dir,'capture.json');if(!existsSync(path))return {complete:false,error:result.status===124||result.status===137||result.signal==='SIGKILL'||result.error?.code==='ETIMEDOUT'?null:'Evidence capture receipt is unavailable'}
+  try{noSymlinks(path);if(lstatSync(path).size>1024)throw new Error('Capture receipt too large');const receipt=JSON.parse(readFileSync(path,'utf8'));if(receipt.schemaVersion!==1||typeof receipt.complete!=='boolean'||!Number.isInteger(receipt.exitCode)||receipt.exitCode!==result.status||receipt.bytes!==lstatSync(capture.path).size)throw new Error('Invalid capture receipt');return {complete:receipt.complete,error:receipt.complete?null:'Evidence capture did not complete'};}catch{return {complete:false,error:'Evidence capture receipt is invalid'}}
+}
+const CAPTURE_JS=join(dirname(VERIFY_SH),'retention.mjs')
+
 // Installed dependencies are not in git: link the repo's own, at the root and
 // for the test's package.
 function linkDeps(repo, dir, pkgDir) {
@@ -240,11 +281,11 @@ function runArm(repo, source, arm, testFile, testText, workDir, timeoutMs, marke
   const runner = runnerFor(testFile, dir)
   if (runner.error) return fail(runner.error)
   const seconds = Math.max(1, Math.ceil(timeoutMs / 1000))
-  const argv = wrap(runner.argv, seconds)
   // Output goes to a file, not a pipe: a child that keeps the pipe open can
   // never hold the run past its own end.
-  const outFile = join(workDir, `${arm}.out`)
-  const fd = openSync(outFile, 'w')
+  const capture=armCapture(workDir,arm),outFile=capture.path
+  const argv=wrap([process.execPath,CAPTURE_JS,'relay','--receipt',join(capture.dir,'capture.json'),'--',...runner.argv],seconds)
+  const fd = openSync(outFile, 'wx',0o600)
   const started = Date.now()
   let r
   try {
@@ -252,6 +293,7 @@ function runArm(repo, source, arm, testFile, testText, workDir, timeoutMs, marke
   } finally {
     closeSync(fd)
   }
+  const captured=captureResult(capture,r)
   const out = readFileSync(outFile, 'utf8')
   const killed = r.signal === 'SIGKILL' || r.status === 137 || r.status === 124
   const timedOut = Boolean((r.error && r.error.code === 'ETIMEDOUT') || (killed && Date.now() - started >= seconds * 1000 - 100))
@@ -262,8 +304,9 @@ function runArm(repo, source, arm, testFile, testText, workDir, timeoutMs, marke
     arm, sha, command: runner.argv.map(a => a.replace(dir + '/', '')),
     network: i.network ? `blocked${i.loopback ? ', loopback up' : ''}` : 'not blocked', processes: i.pidns ? 'own PID namespace' : i.timeout ? 'process group' : 'runner only',
     exit: r.status, timedOut, marker: out.includes(marker),
-    error: r.error && !timedOut ? r.error.message : notRun ? `the runner could not start (exit ${r.status})` : null,
+    error: captured.error ? captured.error : r.error && !timedOut ? r.error.message : notRun ? `the runner could not start (exit ${r.status})` : null,
     tail: out.trimEnd().split('\n').slice(-TAIL_LINES).join('\n'),
+    log: reference(capture.stateDir,outFile,captured.complete),
   }
 }
 
@@ -520,19 +563,24 @@ function reproFor(stateDir, id) {
 // {pass, failing: [step], timedOut, tail}.
 function runSuite(dir, workDir, name, timeoutMs) {
   const seconds = Math.max(1, Math.ceil(timeoutMs / 1000))
-  const argv = wrap(['bash', VERIFY_SH, '.'], seconds)
-  const outFile = join(workDir, `${name}.out`)
-  const fd = openSync(outFile, 'w')
-  const started = Date.now()
-  let r
-  try {
-    r = spawnSync(argv[0], argv.slice(1), { cwd: dir, env: sandboxEnv(), stdio: ['ignore', fd, fd], timeout: (seconds + 15) * 1000, killSignal: 'SIGKILL' })
-  } finally { closeSync(fd) }
-  const lines = readFileSync(outFile, 'utf8').trimEnd().split('\n')
-  const last = lines[lines.length - 1] || ''
-  const failing = lines.map(l => l.match(/^  \[(\d+)\] (.+)$/)).filter(m => m && m[1] !== '0').map(m => m[2])
-  const timedOut = (r.signal === 'SIGKILL' || r.status === 137 || r.status === 124) && Date.now() - started >= seconds * 1000 - 100
-  return { pass: last === 'VERIFY: PASS', failing, timedOut, tail: lines.slice(-TAIL_LINES).join('\n') }
+  const capture=armCapture(workDir,name),outFile=capture.path,verifyRoot=join(capture.dir,'verify')
+  const argv=wrap([process.execPath,CAPTURE_JS,'relay','--receipt',join(capture.dir,'capture.json'),'--','bash',VERIFY_SH,'.'],seconds)
+  mkdirSync(verifyRoot,{mode:0o700})
+  const fd=openSync(outFile,'wx',0o600),started=Date.now();let r
+  try{r=spawnSync(argv[0],argv.slice(1),{cwd:dir,env:{...sandboxEnv(),VERIFY_EVIDENCE_DIR:verifyRoot},stdio:['ignore',fd,fd],timeout:(seconds+15)*1000,killSignal:'SIGKILL'})}finally{closeSync(fd)}
+  const lines=readFileSync(outFile,'utf8').trimEnd().split('\n'),last=lines.at(-1)||''
+  const failing=lines.map(l=>l.match(/^  \[(\d+)\] (.+)$/)).filter(m=>m&&m[1]!=='0').map(m=>m[2])
+  const timedOut=Boolean(r.error?.code==='ETIMEDOUT'||((r.signal==='SIGKILL'||r.status===137||r.status===124)&&Date.now()-started>=seconds*1000-100))
+  const captured=captureResult(capture,r),log=reference(capture.stateDir,outFile,captured.complete)
+  let verification=null,error=captured.error|| (r.error&&!timedOut?'Suite execution failed':null)
+  const markers=lines.filter(l=>l.startsWith('VERIFY_EVIDENCE: ')).map(l=>l.slice('VERIFY_EVIDENCE: '.length))
+  try{
+    for(const marker of markers){const rel=relative(verifyRoot,resolve(marker));if(!rel||rel.startsWith('../')||isAbsolute(rel))throw new Error('Verification marker is outside its allocation')}
+    if(markers.length){const manifest=markers.at(-1),verified=verifyManifest(verifyRoot,manifest);verification={...verified,path:relative(capture.stateDir,manifest)};if(!verified.complete)throw new Error('Incomplete verification capture')}
+    // A timed-out verifier may not have emitted its final manifest. Captured bytes remain useful.
+    // Missing nested logs cannot produce a successful fix; baseline failure classification still uses the retained suite transcript.
+  }catch{error='Verification evidence manifest or capture is invalid'}
+  return {exit:r.status,pass:!timedOut&&!error&&r.status===0&&last==='VERIFY: PASS',failing,timedOut,error,log,verification,tail:lines.slice(-TAIL_LINES).join('\n')}
 }
 
 // Prints `<KIND> F<n>: <reason>` then `<KIND>: <verdict> F<n>[ <extra>]`.
@@ -595,6 +643,7 @@ export function fix(stateDir, id, { timeoutMs = DEFAULT_TIMEOUT_MS, suiteTimeout
     writeFileSync(join(wt.dir, repro.testFile), repro.text)
   }
   const runs = []
+  const suiteExports=[]
   try {
     const tree = stagedTree(wt.dir, work)
     const files = changesOf(wt.dir, tree).map(c => c.path)
@@ -615,25 +664,28 @@ export function fix(stateDir, id, { timeoutMs = DEFAULT_TIMEOUT_MS, suiteTimeout
     // is ever committed).
     const suiteTime = () => Math.min(suiteTimeoutMs, time.left() - 5_000)
     if (suiteTime() < 30_000) return out('BLOCKED', 'no time is left in this check for the suite; the suite must fit in what the 9-minute check leaves', { tree }, runs)
-    const err = exportTree(intake.repo, tree, join(work, 'suite-fixed'))
-    if (err) return out('ERROR', err, { tree }, runs)
-    linkSuiteDeps(intake.repo, join(work, 'suite-fixed'))
-    const withFix = runSuite(join(work, 'suite-fixed'), work, 'suite-fixed', suiteTime())
-    runs.push({ arm: 'suite with the repair', sha: tree, exit: withFix.pass ? 0 : 1, timedOut: withFix.timedOut, marker: false, error: null, failing: withFix.failing, tail: withFix.tail })
+    const fixedExport=createSuiteExport({repo:intake.repo,tree});suiteExports.push(fixedExport)
+    linkSuiteDeps(intake.repo,fixedExport.directory)
+    const withFix=runSuite(fixedExport.directory,work,'suite-fixed',suiteTime())
+    runs.push({ arm: 'suite with the repair', sha: tree, exit: withFix.exit, timedOut: withFix.timedOut, marker: false, error: withFix.error, failing: withFix.failing, tail: withFix.tail,log:withFix.log,verification:withFix.verification })
+    if (withFix.error) return out('ERROR',withFix.error,{tree},runs)
+    if (withFix.pass&&!withFix.verification) return out('ERROR','Missing verification evidence manifest',{tree},runs)
     if (withFix.pass) return out('PASS', `${repro ? 'the reproduction passes with the repair and fails without it; ' : 'no reproduction proved this finding (the human approved it); '}the suite passes`, { tree, files }, runs)
     if (withFix.timedOut) return out('BLOCKED', 'the suite did not finish in the time this check allows', { tree }, runs)
     if (suiteTime() < 30_000) return out('BLOCKED', 'the suite fails with the repair, and no time is left to see whether it failed without it', { tree }, runs)
-    const baseErr = exportTree(intake.repo, wt.head, join(work, 'suite-base'))
-    if (baseErr) return out('ERROR', baseErr, { tree }, runs)
-    linkSuiteDeps(intake.repo, join(work, 'suite-base'))
-    const base = runSuite(join(work, 'suite-base'), work, 'suite-base', suiteTime())
-    runs.push({ arm: 'suite without the repair', sha: wt.head, exit: base.pass ? 0 : 1, timedOut: base.timedOut, marker: false, error: null, failing: base.failing, tail: base.tail })
+    const baseExport=createSuiteExport({repo:intake.repo,tree:wt.head});suiteExports.push(baseExport)
+    linkSuiteDeps(intake.repo,baseExport.directory)
+    const base=runSuite(baseExport.directory,work,'suite-base',suiteTime())
+    runs.push({ arm: 'suite without the repair', sha: wt.head, exit: base.exit, timedOut: base.timedOut, marker: false, error: base.error, failing: base.failing, tail: base.tail,log:base.log,verification:base.verification })
+    if(base.timedOut)return out('BLOCKED','the baseline suite without the repair timed out; comparison is incomplete',{tree},runs)
+    if(base.error)return out('ERROR',base.error,{tree},runs)
     const worse = withFix.failing.filter(step => !base.failing.includes(step))
     if (base.pass || worse.length) return out('FAIL', `the repair breaks the suite: ${worse.length ? worse.join('; ') : 'it passes without the repair and fails with it'}`, { tree }, runs)
     return out('BLOCKED', `the suite already fails without the repair, at ${base.failing.join('; ') || 'a step it could not name (no stack detected?)'}; a regression inside those steps cannot be told apart, so this repair is left for a human`, { tree }, runs)
   } catch (e) {
     return out('ERROR', `the check failed: ${e.message}`, {}, runs)
   } finally {
+    for(const exported of suiteExports)exported.cleanup()
     rmSync(work, { recursive: true, force: true })
   }
 }

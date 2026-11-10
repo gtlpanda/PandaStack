@@ -14,6 +14,13 @@ VERIFY_SCRIPT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/verify.sh"
 ROOT="${1:-.}"
 cd "$ROOT" || { echo "VERIFY: FAIL"; echo "  cannot cd to $ROOT"; exit 1; }
 
+RETENTION="$(dirname "$VERIFY_SCRIPT")/retention.mjs"
+if command -v node >/dev/null 2>&1; then CAPTURE_RUNNER=(node "$RETENTION"); else CAPTURE_RUNNER=(bash "$(dirname "$VERIFY_SCRIPT")/retention.sh"); fi
+CAPTURE="$("${CAPTURE_RUNNER[@]}" init "${VERIFY_EVIDENCE_DIR:-}" "${VERIFY_CAPTURE_SESSION:-}")" || { echo "VERIFY: FAIL"; exit 1; }
+
+export VERIFY_EVIDENCE_DIR="${VERIFY_EVIDENCE_DIR:-$(dirname "$CAPTURE")}"
+export VERIFY_CAPTURE_SESSION="${VERIFY_CAPTURE_SESSION:-$CAPTURE}"
+
 STEPS=()      # "exit|label"
 FAILED=0
 RAN=0
@@ -24,13 +31,20 @@ TAIL_FAIL="${VERIFY_TAIL_FAIL:-60}"
 run_step() {  # run_step <label> <cmd...>   (DISPLAY=<text> overrides the summary line)
   local label="$1"; shift
   local shown="${DISPLAY_CMD:-$*}"
-  local out; out="$(mktemp)"
+  local out rc
   echo "----- $label"
   echo "\$ $shown"
-  "$@" >"$out" 2>&1
-  local rc=$?
-  if [ "$rc" -eq 0 ]; then tail -n "$TAIL_OK" "$out"; else tail -n "$TAIL_FAIL" "$out"; FAILED=1; fi
-  rm -f "$out"
+  if declare -F "$1" >/dev/null; then
+    # shellcheck disable=SC2163 # Export the trusted function name, not its value.
+    export -f "$1"
+    out="$("${CAPTURE_RUNNER[@]}" step "$CAPTURE" "$label" -- bash -c '"$@"' bash "$@")"; rc=$?
+  else
+    out="$("${CAPTURE_RUNNER[@]}" step "$CAPTURE" "$label" -- "$@")"; rc=$?
+  fi
+  if [ -n "$out" ] && [ -f "$out" ]; then
+    if [ "$rc" -eq 0 ]; then tail -n "$TAIL_OK" "$out"; else tail -n "$TAIL_FAIL" "$out"; fi
+  fi
+  if [ "$rc" -ne 0 ]; then FAILED=1; fi
   echo "exit: $rc"
   STEPS+=("$rc|$shown")
   RAN=$((RAN + 1))
@@ -141,6 +155,8 @@ if [ "$TESTED" -eq 0 ] && [ "${2:-}" != "--leaf" ] && have node; then
 fi
 
 # ---------- Verdict ----------
+"${CAPTURE_RUNNER[@]}" finalize "$CAPTURE" "$VERIFY_CAPTURE_SESSION" || FAILED=1
+echo "VERIFY_EVIDENCE: $CAPTURE/manifest.json"
 echo
 if [ "$RAN" -eq 0 ]; then
   echo "  no stack detected in $(pwd) (looked for package.json, pyproject.toml, go.mod, *.tf, scripts/test.sh, scripts/validate.sh)"
