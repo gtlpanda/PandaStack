@@ -89,6 +89,21 @@
       "test": "acceptance/phase1/p1-06.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "P1-07",
+      "title": "Make default doctor inspection non-executing",
+      "description": "Follow spec/contracts/phase1-doctor-trust.md. Preserve existing gates; no exploit execution or blocked reproduction retry.",
+      "contract": "spec/contracts/phase1-doctor-trust.md",
+      "dependencies": [
+        "P1-06"
+      ],
+      "acceptance": [
+        "Default doctor resolves but never executes provider code; trusted injected probes remain explicit."
+      ],
+      "test": "acceptance/phase1/p1-07.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }

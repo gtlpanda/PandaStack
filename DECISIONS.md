@@ -29,3 +29,6 @@ Freeze selected-installation and close-error regressions before another bounded 
 
 - D23 (P1-06): Separate static managed defaults from the public lazy DEFAULTS getters. Explicit central configuration supplies all central-owned defaults without evaluating source-installation getters; default launcher reads and override precedence remain intact. Test missing/invalid source configuration using copied modules in a temporary installation.
 - D24 (P1-06): Clear ownership of the temporary descriptor before close, since close may release it and still report EIO. Always attempt anchored temporary-file removal independently of descriptor cleanup. Cover run/event publication and write-error cleanup with ordinary fault injection; no filesystem-race reproduction. Leave flags, commits, full gates and final completion to the external host.
+
+## P1-07: doctor execution trust and review depth
+Default read-only inspection will perform no provider execution; trusted injected evidence remains explicit. Regressions use a subprocess spy, not an exploit. Raise this bounded follow-up run to high effort to support complete changed-file review after medium-effort native hunters repeatedly left historical-file coverage partial. No gate or coverage requirement is weakened. Phase 2 remains prepared, not launched.

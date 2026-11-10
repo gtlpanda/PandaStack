@@ -8,7 +8,7 @@
   "probeModel": "gpt-6-luna",
   "maxConcurrentSubagents": 8,
   "codex": {
-    "reasoningEffort": "medium",
+    "reasoningEffort": "high",
     "sessionTimeoutMinutes": 30
   },
   "bughunt": true,
