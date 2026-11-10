@@ -1418,3 +1418,62 @@ Only the new records module/test and decision/progress logs changed. Frozen
 inputs, feature flags, Git control and prior implementation remain untouched.
 No full gates or live providers ran; staging, commits, full regression validation
 and final completion remain with the external host.
+
+## P2-02 — Transactional durable shared decision queue
+
+Added core/skills/decisions/queue.mjs and queue-storage.mjs implementing request,
+read/list, answer, delivery, explicit acknowledgment, cancellation, scope matching,
+close and a persistent random queue namespace. SQLite transactions preserve one
+winner and immutable replay. Stored snapshots, recipient/revision bindings, state
+relationships and precise UTC timestamps are validated before use. Errors expose
+only stable safe codes. Private Linux/WSL storage uses retained directory anchors,
+exclusive creation, ownership/mode/sidecar checks, bounded busy timeout and durable
+sync. Unknown/corrupt schemas fail closed. The documented trust boundary is one
+local OS user; actor text and scope matching confer no action execution authority.
+
+Shared existing pure record validators with the queue and closed the identifier
+final-newline edge without changing record shapes. Added
+tests/decision-queue.test.mjs with workflow-harness test() and aggregate totals:
+invalid commands/getters, detached snapshots, exact fractional expiry, persisted
+corruption, close behavior, unsafe permissions, replay after restart, commit-failure
+rollback, unknown databases, identifier edges and concurrent SQLite connections.
+D48-D51 document choices and the local process-output limitation.
+
+Exact focused validation:
+- Before implementation, `node acceptance/phase2/p2-02.test.mjs`: exit 1;
+  0 passed, 11 failed with ERR_MODULE_NOT_FOUND for decisions/queue.mjs.
+- Before implementation,
+  `node --input-type=module -e "await import('./tests/decision-queue.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1, ERR_MODULE_NOT_FOUND before loading the implementation tests.
+- After initial implementation, `node acceptance/phase2/p2-02.test.mjs`: exit 1;
+  9 passed, 2 failed. Process request contention failed at p2-02.test.mjs:106
+  because every child result was rejected; concurrent namespace initialization
+  failed at :195 with `SyntaxError: Unexpected end of JSON input`. No frozen
+  test was changed, and these two cases were not retried.
+- Inert process diagnostic:
+  `node --input-type=module -e 'import {spawn} from "node:child_process"; const p=spawn(process.execPath,["-e","console.log(JSON.stringify({ok:true}))"]); let out="",err="";p.stdout.on("data",x=>out+=x);p.stderr.on("data",x=>err+=x);p.on("error",e=>console.log({code:e.code}));p.on("close",(status,signal)=>console.log(JSON.stringify({status,signal,out,err})))'`:
+  exit 0; printed `{"status":0,"signal":null,"out":"","err":""}`.
+  This verifies the local child-output limitation independently of queue code;
+  separate-process acceptance remains unverified here.
+- Final
+  `node --input-type=module -e "await import('./tests/decision-queue.test.mjs'); await import('./tests/decision-records.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; aggregate `{ pass: 15, fail: 0 }`. An earlier run had 14 pass/1 fail
+  because the new test Worker inherited module mode while using require; the
+  corrected ESM worker passes the exact original invocation. Concurrent namespace,
+  request, answer, delivery and acknowledgment coverage uses separate worker
+  isolates/connections, not separate OS processes.
+- `node --test-skip-pattern='independent processes|queue namespace survives' acceptance/phase2/p2-02.test.mjs`:
+  exit 0; 9 passed, 0 failed after the final storage changes. The two previously
+  failing child-process cases were excluded, not retried or waived.
+- `node acceptance/phase2/p2-01.test.mjs`: exit 0; 3 passed, 0 failed.
+- `bash scripts/check-secrets.sh`: exit 0, `check-secrets: clean` for tracked files.
+- `bash scripts/check-secrets.sh core/skills/decisions/queue.mjs core/skills/decisions/queue-storage.mjs tests/decision-queue.test.mjs`:
+  exit 0, `check-secrets: clean` for every new untracked source/test file.
+- `git diff --check`: exit 0.
+
+Read-only Explore audit: PASS for data flow, edge/error handling, security,
+consistency and completeness; no concrete implementation defects found. Its test
+runner robustness observation was fixed and verified by the parent. This is a
+bounded inspection result, not a full-gate pass. No frozen files, feature flags,
+Git control, staging or commits changed. No full gates or live providers ran;
+external host retains process acceptance, full regression gates and final review.

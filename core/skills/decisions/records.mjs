@@ -1,7 +1,7 @@
 import { isAbsolute, normalize } from 'node:path'
 
 const invalid = () => Object.assign(new Error('Invalid decision record'), { code: 'INVALID_DECISION' })
-const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(value)
+const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.exec(value)?.[0] === value
 const text = (value, max) => typeof value === 'string' && value.length <= max && value.trim().length > 0
 const path = value => typeof value === 'string' && !value.includes('\0') && isAbsolute(value)
 const fields = ['schemaVersion', 'id', 'runId', 'repo', 'revision', 'question', 'reason',
@@ -100,3 +100,6 @@ export function createDecision(input) {
   try { return snapshot(input) }
   catch { throw invalid() }
 }
+
+// Shared pure boundaries for the queue's command and persisted-state validators.
+export { id as validId, text as validText, record as exactRecord, timestamp as timestampKey }

@@ -160,3 +160,37 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   preserve frozen inputs and leave staging, pass flags, commits and full gates to
   the external host. Record evidence in PROGRESS.md rather than unrelated task,
   retrospective or changelog files.
+
+## P2-02 durable queue boundaries
+
+- D48 (P2-02): Implement only the selected synchronous queue API using native
+  SQLite, BEGIN IMMEDIATE mutations, read transactions, a five-second busy
+  timeout and synchronous=EXTRA rollback journaling. Persist the random namespace
+  and schema in the same initialization transaction. Reuse an interrupted empty
+  file initializer, but refuse nonempty unknown databases, schema changes and
+  unsupported journal modes. Validate full stored snapshots and state invariants
+  before use; never silently reset storage. Actor remains attribution, and scoped
+  authorize() bookkeeping never establishes authenticated human consent.
+- D49 (P2-02): Support Linux/WSL local POSIX storage with verified retained procfs
+  directory descriptors and no symlinks during traversal. Relative paths resolve
+  from the caller's cwd; lexical dot components normalize before traversal.
+  Shared parent directories are permitted; require a current-user-owned 0700
+  leaf and 0600 regular, single-link database/sidecar files. Reject unsafe existing
+  files without chmod or truncation. Exclusive database creation and directory
+  fsync protect publication; connections own descriptor cleanup. SQLite may
+  canonicalize its filename internally, so this is explicitly a trusted same-OS-
+  user boundary, not a hostile concurrent replacement guarantee. No shell locks,
+  shell commands, remote services, provider calls or fallback are introduced.
+- D50 (P2-02): Export existing pure record shape/text/timestamp helpers for queue
+  command validation, preserving precise fractional UTC ordering. Require an
+  identifier match to consume the entire string: JavaScript's dollar anchor can
+  otherwise accept a final newline. Add a queue-boundary regression for that
+  grammar edge and rerun the unchanged P2-01 acceptance and implementation tests.
+- D51 (P2-02): The selected acceptance's two process-concurrency cases could not
+  obtain JSON from child stdout locally. An inert Node print-only child also
+  returned status0 with empty stdout/stderr. Do not bypass or retry that process
+  boundary. Add independent worker-isolate SQLite contention coverage and retain
+  the frozen process acceptance for the external host. Fix the new test's initial
+  inherited --input-type module mismatch with an ESM data-URL worker. Keep full
+  gates, flags, staging, commits and final completion host-owned; record bounded
+  evidence in PROGRESS.md only.
