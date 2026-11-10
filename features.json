@@ -1,223 +1,92 @@
 {
   "features": [
     {
-      "id": "P1-01",
-      "title": "Versioned safe run and event contracts",
-      "description": "Implement only this feature per spec/contracts/phase1.md. Add implementation tests; never edit frozen acceptance.",
-      "contract": "spec/contracts/phase1.md",
+      "id": "P2-01",
+      "title": "Validated revision-bound decision records",
+      "description": "Implement only this feature from spec/contracts/phase2.md. Preserve all frozen acceptance and prior phase behavior.",
+      "contract": "spec/contracts/phase2.md",
       "dependencies": [],
       "acceptance": [
-        "Validate malformed inputs, allowlist settings, preserve caller input and reject path-unsafe IDs."
+        "Pass the frozen independent acceptance for this feature and preserve prior phase regressions."
       ],
-      "test": "acceptance/phase1/p1-01.test.mjs",
+      "test": "acceptance/phase2/p2-01.test.mjs",
       "testKind": "node",
-      "passes": true
+      "passes": false
     },
     {
-      "id": "P1-02",
-      "title": "Durable idempotent run/event store",
-      "description": "Implement only this feature per spec/contracts/phase1.md. Add implementation tests; never edit frozen acceptance.",
-      "contract": "spec/contracts/phase1.md",
+      "id": "P2-02",
+      "title": "Transactional durable shared decision queue",
+      "description": "Implement only this feature from spec/contracts/phase2.md. Preserve all frozen acceptance and prior phase behavior.",
+      "contract": "spec/contracts/phase2.md",
       "dependencies": [
-        "P1-01"
+        "P2-01"
       ],
       "acceptance": [
-        "Prove cross-process publication, replay/conflict behavior, filtering, corruption detection and symlink refusal."
+        "Pass the frozen independent acceptance for this feature and preserve prior phase regressions."
       ],
-      "test": "acceptance/phase1/p1-02.test.mjs",
+      "test": "acceptance/phase2/p2-02.test.mjs",
       "testKind": "node",
-      "passes": true
+      "passes": false
     },
     {
-      "id": "P1-03",
-      "title": "Effective configuration doctor",
-      "description": "Implement only this feature per spec/contracts/phase1.md. Add implementation tests; never edit frozen acceptance.",
-      "contract": "spec/contracts/phase1.md",
+      "id": "P2-03",
+      "title": "CLI delivery, waiting and acknowledgments",
+      "description": "Implement only this feature from spec/contracts/phase2.md. Preserve all frozen acceptance and prior phase behavior.",
+      "contract": "spec/contracts/phase2.md",
       "dependencies": [
-        "P1-02"
+        "P2-02"
       ],
       "acceptance": [
-        "Prove real precedence, provenance, drift detection, tri-state evidence and read-only CLI behavior."
+        "Pass the frozen independent acceptance for this feature and preserve prior phase regressions."
       ],
-      "test": "acceptance/phase1/p1-03.test.mjs",
+      "test": "acceptance/phase2/p2-03.test.mjs",
       "testKind": "node",
-      "passes": true
+      "passes": false
     },
     {
-      "id": "P1-04",
-      "title": "Observe existing runners without changing execution",
-      "description": "Implement only this feature per spec/contracts/phase1.md. Add implementation tests; never edit frozen acceptance.",
-      "contract": "spec/contracts/phase1.md",
+      "id": "P2-04",
+      "title": "Opt-in autobuild decision gate",
+      "description": "Implement only this feature from spec/contracts/phase2.md. Preserve all frozen acceptance and prior phase behavior.",
+      "contract": "spec/contracts/phase2.md",
       "dependencies": [
-        "P1-03"
+        "P2-03"
       ],
       "acceptance": [
-        "Prove lifecycle and parent records with real runner entry points and fake providers, error preservation and docs/CI integration."
+        "Pass the frozen independent acceptance for this feature and preserve prior phase regressions."
       ],
-      "test": "acceptance/phase1/p1-04.test.mjs",
+      "test": "acceptance/phase2/p2-04.test.mjs",
       "testKind": "node",
-      "passes": true
+      "passes": false
     },
     {
-      "id": "P1-05",
-      "title": "Harden managed readiness and durable store operations",
-      "description": "Implement defensive post-review invariants in spec/contracts/phase1-hardening.md. Do not retry the blocked filesystem-race reproduction. Preserve all existing acceptance checks.",
-      "contract": "spec/contracts/phase1-hardening.md",
+      "id": "P2-05",
+      "title": "Native Codex active-turn delivery",
+      "description": "Implement only this feature from spec/contracts/phase2.md. Preserve all frozen acceptance and prior phase behavior.",
+      "contract": "spec/contracts/phase2.md",
       "dependencies": [
-        "P1-04"
+        "P2-04"
       ],
       "acceptance": [
-        "Doctor rejects managed-launch-invalid configurations using shared validation.",
-        "Normal store operations use verified retained directory descriptors, synchronize newly created directory parents, and close descriptors."
+        "Pass the frozen independent acceptance for this feature and preserve prior phase regressions."
       ],
-      "test": "acceptance/phase1/p1-05.test.mjs",
+      "test": "acceptance/phase2/p2-05.test.mjs",
       "testKind": "node",
-      "passes": true
+      "passes": false
     },
     {
-      "id": "P1-06",
-      "title": "Fix selected configuration isolation and close-error cleanup",
-      "description": "Implement spec/contracts/phase1-followup.md. Preserve every existing gate and frozen test. No exploit reproduction is requested.",
-      "contract": "spec/contracts/phase1-followup.md",
+      "id": "P2-06",
+      "title": "Managed context receipts and complete decision traces",
+      "description": "Implement only this feature from spec/contracts/phase2.md. Preserve all frozen acceptance and prior phase behavior.",
+      "contract": "spec/contracts/phase2.md",
       "dependencies": [
-        "P1-05"
+        "P2-05"
       ],
       "acceptance": [
-        "Doctor uses the selected central configuration without consulting source defaults.",
-        "Temporary records are cleaned up when close releases its descriptor then reports EIO; preserve safe IO_ERROR."
+        "Pass the frozen independent acceptance for this feature and preserve prior phase regressions."
       ],
-      "test": "acceptance/phase1/p1-06.test.mjs",
+      "test": "acceptance/phase2/p2-06.test.mjs",
       "testKind": "node",
-      "passes": true
-    },
-    {
-      "id": "P1-07",
-      "title": "Make default doctor inspection non-executing",
-      "description": "Follow spec/contracts/phase1-doctor-trust.md. Preserve existing gates; no exploit execution or blocked reproduction retry.",
-      "contract": "spec/contracts/phase1-doctor-trust.md",
-      "dependencies": [
-        "P1-06"
-      ],
-      "acceptance": [
-        "Default doctor resolves but never executes provider code; trusted injected probes remain explicit."
-      ],
-      "test": "acceptance/phase1/p1-07.test.mjs",
-      "testKind": "node",
-      "passes": true
-    },
-    {
-      "id": "P1-08",
-      "title": "Validate selected launch values and classify read failures",
-      "description": "Implement spec/contracts/phase1-edge-validation.md; preserve every existing frozen gate. Use ordinary injected failures only.",
-      "contract": "spec/contracts/phase1-edge-validation.md",
-      "dependencies": [
-        "P1-07"
-      ],
-      "acceptance": [
-        "Invalid effective binaries block doctor before probing; valid overrides preserve launcher precedence.",
-        "Selected null launch models fail shared validation while observational unknowns remain valid.",
-        "Operational reads return IO_ERROR; malformed stored content remains CORRUPT."
-      ],
-      "test": "acceptance/phase1/p1-08.test.mjs",
-      "testKind": "node",
-      "passes": true
-    },
-    {
-      "id": "P1-09",
-      "title": "Preserve selected configuration across doctor and child hooks",
-      "description": "Implement spec/contracts/phase1-launch-parity.md; preserve frozen checks and authorization. No live provider or blocked reproduction retry.",
-      "contract": "spec/contracts/phase1-launch-parity.md",
-      "dependencies": [
-        "P1-08"
-      ],
-      "acceptance": [
-        "Doctor validates winning model values without rejecting shadowed inputs.",
-        "Claude child hooks reload the actual selected CLI model and retain guard/gate enforcement.",
-        "Doctor resolves relative executable search prefixes against the target repository."
-      ],
-      "test": "acceptance/phase1/p1-09.test.mjs",
-      "testKind": "node",
-      "passes": true
-    },
-    {
-      "id": "P1-10",
-      "title": "Match managed executable search semantics in doctor",
-      "description": "Implement spec/contracts/phase1-path-parity.md without changing launcher behavior. Static inert filesystem fixtures only; no provider execution or blocked race reproduction.",
-      "contract": "spec/contracts/phase1-path-parity.md",
-      "dependencies": [
-        "P1-09"
-      ],
-      "acceptance": [
-        "Preserve empty/missing prefix filtering, inherited and explicit PATH distinctions, and selected home expansion.",
-        "Preserve kernel symlink/parent traversal for PATH components and explicit binaries from any inspector cwd."
-      ],
-      "test": "acceptance/phase1/p1-10.test.mjs",
-      "testKind": "node",
-      "passes": true
-    },
-    {
-      "id": "P1-11",
-      "title": "Preserve PATH serialization with colon-bearing repository names",
-      "description": "Implement spec/contracts/phase1-path-serialization.md; keep launcher semantics and every earlier frozen test. Inert fixtures only.",
-      "contract": "spec/contracts/phase1-path-serialization.md",
-      "dependencies": [
-        "P1-10"
-      ],
-      "acceptance": [
-        "Keep target-relative existence checks separate from PATH composition, preserving actual delimiter semantics.",
-        "Match managed discovery for colon and whitespace roots, relative/absolute prefixes, inherited/explicit PATH and explicit binary paths."
-      ],
-      "test": "acceptance/phase1/p1-11.test.mjs",
-      "testKind": "node",
-      "passes": true
-    },
-    {
-      "id": "P1-12",
-      "title": "Preserve the full accepted Claude launch context in child reloads",
-      "description": "Implement spec/contracts/phase1-child-context.md; preserve guards, gates, auth and all prior frozen tests. Only owned fake-provider fixtures; no live Claude calls.",
-      "contract": "spec/contracts/phase1-child-context.md",
-      "dependencies": [
-        "P1-11"
-      ],
-      "acceptance": [
-        "Child reloads retain accepted backend/main/subagent/probe models and selected binary after project environment merging.",
-        "Real hooks and mark-passed preserve ordinary writes, frozen/push denials, failing/passing gates and synthetic auth preservation."
-      ],
-      "test": "acceptance/phase1/p1-12.test.mjs",
-      "testKind": "node",
-      "passes": true
-    },
-    {
-      "id": "P1-13",
-      "title": "Keep managed run tracking outside project worktrees",
-      "description": "Implement spec/contracts/phase1-store-location.md. Preserve clean-tree checks and previous acceptance. Fail open before mutation for unsafe tracking placement; use only owned fake-provider fixtures.",
-      "contract": "spec/contracts/phase1-store-location.md",
-      "dependencies": [
-        "P1-12"
-      ],
-      "acceptance": [
-        "Reject stores in project/runner worktrees before filesystem mutation; preserve work result/error and generic warning.",
-        "Preserve exact Git tracking namespaces, linked-worktree defaults, external shared stores, direct-store API and actual clean/dirty runner behavior."
-      ],
-      "test": "acceptance/phase1/p1-13.test.mjs",
-      "testKind": "node",
-      "passes": true
-    },
-    {
-      "id": "P1-14",
-      "title": "Preserve exact Git paths and distinguish invalid discovery",
-      "description": "Implement spec/contracts/phase1-git-discovery.md. Keep P1-13 placement and all earlier frozen tests. Ordinary owned Git fixtures only; no provider or exploit calls.",
-      "contract": "spec/contracts/phase1-git-discovery.md",
-      "dependencies": [
-        "P1-13"
-      ],
-      "acceptance": [
-        "Preserve all pathname bytes except Git output terminator across target, runner and metadata paths.",
-        "Only genuine non-Git absence permits fallback; invalid metadata or indeterminate controlled discovery executes unrecorded before mutation."
-      ],
-      "test": "acceptance/phase1/p1-14.test.mjs",
-      "testKind": "node",
-      "passes": true
+      "passes": false
     }
   ]
 }

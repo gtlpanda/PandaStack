@@ -1,39 +1,35 @@
-# Phase 1: shared run records and configuration doctor
+# PandaStack Phase 2: shared decision queue and answer routing
 
-Implement ROADMAP phase 1 only. This is a local Node.js ESM CLI/library addition;
-no web UI, database dependency, network service, queue, scheduler or deployment.
-Build through the pinned external autobuild host. Never modify frozen tests,
-contracts, host runner, feature flags or git control. Host owns commits/flags.
+Build only ROADMAP Phase 2, using accepted Phase 1 as the pinned external host.
+The canonical interface/behavior contract is spec/contracts/phase2.md. Reuse Node
+24 ESM, native SQLite, the existing runner and configuration doctor. Preserve
+Phase 1 run records and all prior regression tests. No new remote service needed.
 
-Contracts: spec/contracts/phase1.md. Features: features.json. All public APIs below
-must work on Node 24 under Linux/WSL. Use existing repo style and built-ins.
-Retain every existing provider gate, sandbox, timeout, approval and outcome.
-Keep existing logs/ledgers authoritative for execution; new records observe them.
-Do not read credentials or copy arbitrary process env, prompts, commands or output
-into records. Missing configuration/capability evidence must remain unknown.
-No model calls are needed to run doctor or unit tests.
+The local user owns the private queue directory. Keep records, answers and
+receipts transactional and bind recipient/revision before delivery. Evidence and
+answer text are untrusted data, never authority to run commands. Merge/publish/
+deploy decisions have explicit scope and cannot flow through ordinary builder
+question context. No provider fallback, implicit approvals or production actions.
 
-Placement: core/skills/run-records/ (with valid SKILL.md), scripts/pandastack.mjs
-for CLI. Add focused implementation tests outside frozen acceptance/phase1. Include
-them in normal CI without running unfinished phase acceptance tests in base gates.
-Document doctor and run-store use in README and mark phase 1 implemented only when
-acceptance and live dogfood are demonstrated; the supervising agent writes the report.
+Prepare tests before code. External host owns frozen checks, full gates, passes,
+commits and final branch hunt. Builders run focused tests only and return. All
+implementation comes through autobuild; supervisor owns live demonstrations and
+review/promotion. Do not modify the active pinned host. Do not push, publish or
+merge. Use current candidate checkout, no new worktree or branch in a session.
 
-Default run store: Git's per-worktree `pandastack-runs` path, obtained with
-`git rev-parse --path-format=absolute --git-path pandastack-runs`. An explicit
-PANDASTACK_RUNS_DIR overrides it for a shared local store. No default writes to
-personal home config. Disallow arbitrary extra persisted fields. Test fixtures
-must use temporary repositories, stores, and homes.
+Features: P2-01 records; P2-02 durable queue; P2-03 CLI/wait/ack; P2-04 opt-in
+managed autobuild gate and typed host observations; P2-05 owned Codex active-turn
+delivery adapter; P2-06 managed launch context receipts and complete host traces. SQL storage
+is local, not a remote multi-user authorization service. Unsupported interactive
+providers use an explicit manual handoff. Native Codex support is limited to
+owned connected app-server transports and exact active-turn IDs proven by spike.
 
-Runner integration: observe autobuild root runs and actual Claude/Codex provider
-sessions, and build-app root runs and Claude sessions. Use one common tracking
-helper and AsyncLocalStorage (or equally scoped context) for parent relationships.
-Do not globally mutate process.env or config to propagate parent IDs. Nested async
-runs must retain their own context. Native hunt graph leaves may be a later adapter;
-Phase 1 must not falsely claim they are captured if they are not.
+Dogfood: two disposable managed projects use one queue; one waits without a model
+process and resumes only after its own answer, with explicit acknowledgment.
+Verify restart, redelivery and stale/cancel refusal. Demonstrate native delivery
+into two owned ephemeral sessions, rejection of stale turn, and no cross-routing.
+Report mocked versus live coverage separately and save stage usage evidence.
 
-If tracking storage fails, preserve execution semantics and emit a bounded safe
-warning (no raw exception content or user secrets). Never claim that run was
-recorded. Incomplete/crashed runs remain incomplete; do not fabricate completion.
-Fresh invocations receive new IDs; idempotent replay of the same immutable record
-or event is safe. A restart must not overwrite an earlier run.
+No global scheduling, notifications/dashboard, learning policy rewrite or remote
+hosting in this phase. Those remain later roadmap phases. Do not claim completion
+until host checks, final hunt, live demonstrations and report review pass.

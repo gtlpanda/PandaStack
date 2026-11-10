@@ -1,6 +1,6 @@
 {
   "backend": "codex",
-  "branch": "codex/phase1-run-records",
+  "branch": "codex/phase2-decisions",
   "featuresFile": "features.json",
   "progressFile": "PROGRESS.md",
   "model": "gpt-6-astra",
@@ -12,9 +12,9 @@
     "sessionTimeoutMinutes": 30
   },
   "bughunt": true,
-  "bughuntBase": "codex/phase1-baseline",
+  "bughuntBase": "518f8ef208fdf1ba9a6ac1facf236fd2015f4564",
   "limits": {
-    "maxIterations": 12,
+    "maxIterations": 16,
     "noProgressLimit": 2,
     "reviewEvery": 4,
     "finalReview": true,
@@ -36,6 +36,10 @@
     {
       "name": "native hunt regressions",
       "command": "node --test graphs/hunt/test-native/*.test.mjs"
+    },
+    {
+      "name": "Phase 1 acceptance",
+      "command": "node --test acceptance/phase1/p1-*.test.mjs"
     }
   ],
   "preflight": [
@@ -43,6 +47,11 @@
       "name": "Node 24",
       "command": "node -e 'if(Number(process.versions.node.split(\".\")[0])<24)process.exit(1)'",
       "hint": "Use Node 24+"
+    },
+    {
+      "name": "SQLite runtime",
+      "command": "node --input-type=module -e 'import {DatabaseSync} from \"node:sqlite\"; const d=new DatabaseSync(\":memory:\"); d.close()'",
+      "hint": "Use Node 24 with node:sqlite support"
     }
   ],
   "frozen": [
@@ -54,6 +63,28 @@
     "ROADMAP.md",
     "SPEC.md",
     "acceptance",
+    "acceptance/phase1/p1-01.test.mjs",
+    "acceptance/phase1/p1-02.test.mjs",
+    "acceptance/phase1/p1-03.test.mjs",
+    "acceptance/phase1/p1-04.test.mjs",
+    "acceptance/phase1/p1-05.test.mjs",
+    "acceptance/phase1/p1-06.test.mjs",
+    "acceptance/phase1/p1-07.test.mjs",
+    "acceptance/phase1/p1-08-binary.cases.mjs",
+    "acceptance/phase1/p1-08-model.cases.mjs",
+    "acceptance/phase1/p1-08-store.cases.mjs",
+    "acceptance/phase1/p1-08.test.mjs",
+    "acceptance/phase1/p1-09-hooks.cases.mjs",
+    "acceptance/phase1/p1-09-path.cases.mjs",
+    "acceptance/phase1/p1-09-precedence.cases.mjs",
+    "acceptance/phase1/p1-09-support.mjs",
+    "acceptance/phase1/p1-09.test.mjs",
+    "acceptance/phase1/p1-10.test.mjs",
+    "acceptance/phase1/p1-11.test.mjs",
+    "acceptance/phase1/p1-12.test.mjs",
+    "acceptance/phase1/p1-13.test.mjs",
+    "acceptance/phase1/p1-14.test.mjs",
+    "acceptance/phase1/support.mjs",
     "agent-config.json",
     "graphs/autobuild/tool/test-fixtures/fake-claude.mjs",
     "graphs/autobuild/tool/test-fixtures/fake-codex.mjs",
@@ -207,6 +238,7 @@
     "graphs/security-audit/tests/verdict-fixtures.mjs",
     "graphs/seo/tests/seo-check.test.mjs",
     "scripts/agent-config.mjs",
+    "scripts/check-refs.mjs",
     "scripts/check-secrets.sh",
     "scripts/configure-agents.mjs",
     "scripts/test-autobuild.sh",
@@ -247,6 +279,7 @@
     "tests/run-doctor.test.mjs",
     "tests/run-edge-validation.test.mjs",
     "tests/run-followup.test.mjs",
+    "tests/run-git-discovery.test.mjs",
     "tests/run-hardening.test.mjs",
     "tests/run-launch-parity.test.mjs",
     "tests/run-path-parity.test.mjs",
@@ -270,8 +303,8 @@
       "CI": "1"
     }
   },
-  "prompt": "Read SPEC.md, spec/contracts/phase1.md, features.json and PROGRESS.md. Implement the next failing feature with tests, respecting frozen inputs. Use the existing Node stack. Do not push or open PRs; host owns commits and passes flags. New tests under tests/ must use scripts/workflow-harness.mjs test() if ending .test.mjs; acceptance/phase1 uses node:test separately. Do not mark the roadmap phase complete; supervisor owns live evidence. Inside the sandbox run the selected acceptance file and focused implementation tests only; do not run the entire scripts/test.sh or scripts/test-workflow.mjs suite. The external host runs every full gate authoritatively after your session. Report targeted evidence and return promptly; never wait on a known sandbox-only localhost permission failure.",
+  "prompt": "Read SPEC.md, spec/contracts/phase2.md, features.json and PROGRESS.md. Implement only the host-selected failing feature. Preserve all frozen inputs and prior phase behavior. New tests under tests/ use scripts/workflow-harness.mjs test() and aggregate summary for focused runs; acceptance/phase2 uses node:test. Add a ## <feature ID> \u2014 <title> progress entry with exact focused validation. Do not stage, commit, change pass flags, push or open PRs. The external host owns full gates, commits and final review. Run selected acceptance and focused implementation checks only; do not run full scripts/test.sh or test-workflow inside the sandbox. Return promptly with evidence. No provider fallback or live provider calls inside the builder. Before returning, run the existing secret scanner on tracked files and explicitly on each new untracked source/test file; the tracked scan alone does not include new implementation files. Keep scanner rules unchanged; use its documented annotation only for clearly synthetic fixtures.",
   "review": {
-    "prompt": "Review changes in {since}..HEAD in two passes: (1) compare behavior to SPEC.md and all feature contracts; (2) check correctness, concurrency, durability, error handling, configuration provenance and compatibility. Review the prior PROGRESS.md findings and record a disposition with file:line evidence. Do not execute exploit reproductions or retry the previously blocked reproduction. Run only focused existing acceptance/implementation tests when useful. Do not invoke bare autobuild or full scripts/test.sh/test-workflow suites inside the sandbox: the pinned external host performs mandatory full gates. Append findings as REVIEW {date}: DEFECT <file:line> <title> \u2014 <scenario; suggested fix; reproduced or reasoned> to PROGRESS.md, or record no drift/defects if supported. Only modify PROGRESS.md. Do not stage, commit, push, edit code/tests, or change pass flags; the host owns commits. Then return promptly."
+    "prompt": "Review {since}..HEAD in two passes: contract completeness and correctness/security/concurrency/error handling. Read SPEC.md, phase contracts and prior findings. Review changed files in full and trace applicable callers/callees; do not infer coverage from prior prose. Run focused checks only; external host owns full gates. Never invoke bare autobuild. Do not retry any previously blocked reproduction. Append REVIEW {date} findings or evidence-backed no-defects to PROGRESS.md only. No code/tests, commits, pass flags or provider calls. Return promptly."
   }
 }

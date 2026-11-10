@@ -1,0 +1,17 @@
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { join } from 'node:path';
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+export const ROOT=process.env.PANDASTACK_CANDIDATE_ROOT || fileURLToPath(new URL('../../',import.meta.url));
+export const modulePath=name=>join(ROOT,'core/skills/decisions',name+'.mjs');
+export const mod=name=>import(pathToFileURL(modulePath(name)).href);
+export const temp=()=>realpathSync(mkdtempSync(join(tmpdir(),'pandastack-p2-')));
+export const cleanup=p=>rmSync(p,{recursive:true,force:true});
+export const NOW='2026-11-10T12:00:00.000Z';
+export const REV='a'.repeat(40);
+export const decision=(patch={})=>({schemaVersion:1,id:'decision-1',runId:'run-1',repo:'/project/one',revision:REV,question:'Which mode?',reason:'The worker needs a choice.',options:[{id:'fast',label:'Fast'},{id:'careful',label:'Careful'}],recommendation:'careful',evidence:[{label:'Evidence',uri:'https://example.test/evidence'}],kind:'question',scope:null,createdAt:NOW,expiresAt:null,...patch});
+export const answer=(patch={})=>({answerId:'answer-1',value:'careful',actor:'user',at:NOW,revision:REV,...patch});
+export const recipient=(patch={})=>({repo:'/project/one',runId:'run-1',revision:REV,deliveryId:'delivery-1',...patch});
+export const approval=(patch={})=>decision({kind:'approval',options:[{id:'approve',label:'Approve'},{id:'reject',label:'Reject'}],recommendation:null,scope:{action:'merge',resource:'repo/pull/12',revision:REV},...patch});
+export const authority=(patch={})=>({repo:'/project/one',runId:'run-1',revision:REV,action:'merge',resource:'repo/pull/12',...patch});
+export const code=expected=>e=>e?.code===expected;
