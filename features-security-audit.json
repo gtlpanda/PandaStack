@@ -14,6 +14,58 @@
       "test": "acceptance/security-audit/sa-01-snapshot.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "SA-01b",
+      "title": "Reject static symlink ancestors in audit snapshot paths",
+      "description": "Close the independently reviewed exported inspector path gap under spec/contracts/security-audit-root-path.md. Preserve SA-01 and all existing tests. No race, capture, target execution or provider work.",
+      "contract": "spec/contracts/security-audit-root-path.md",
+      "dependencies": [
+        "SA-01"
+      ],
+      "acceptance": [
+        "Three reviewed static fixtures pass: ancestor symlink refusal, explicit dot component refusal, canonical trailing-separator control.",
+        "Inspect ancestors without following symlinks before subtree enumeration; preserve original init gating and diagnostic vocabulary."
+      ],
+      "test": "acceptance/security-audit/sa-01b-root-path.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "SA-02a",
+      "title": "Persist individual audit dispatch intent and returned results",
+      "description": "Implement the journal contract only; actual private ownership, per-row durable transitions and conservative unknown replay. Keep existing audit metadata and upstream validators unchanged. No providers, crash-lock takeover, process-race or capture reproduction.",
+      "contract": "spec/contracts/security-audit-journal.md",
+      "dependencies": [
+        "SA-01b"
+      ],
+      "acceptance": [
+        "Pass fourteen frozen ordinary journal cases and preserve all existing gates.",
+        "Persist dispatched state before callback and terminal result before returning; completed results replay without callback; uncertain calls stay held.",
+        "Finite per-record and aggregate bounds support more than 1 MiB combined payload; unsafe input/identity/path refuses without adoption.",
+        "Clearly retain lack of abnormal-process lock recovery until its later reviewed integration."
+      ],
+      "test": "acceptance/security-audit/sa-02a-journal.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "NR-01",
+      "title": "Preserve original workflow schemas through native JSON output",
+      "description": "Implement only the pure shared native schema contract. Preserve all six graph schemas, vendored validators and existing hunt converter. No runtime, provider, filesystem or installer changes.",
+      "contract": "spec/contracts/native-runtime-schema.md",
+      "dependencies": [
+        "SA-02a"
+      ],
+      "acceptance": [
+        "Pass fifteen frozen pure schema cases.",
+        "Preserve optional omission, explicit null unions and open records without coercion or field loss.",
+        "Reject unsupported schemas and unsafe non-JSON values before executing hooks or Proxy traps; bound bytes, depth and diagnostics.",
+        "Fixed strict JSON-string wire envelope decodes once and validates the original schema."
+      ],
+      "test": "acceptance/native-runtime/nr-01-schema.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }

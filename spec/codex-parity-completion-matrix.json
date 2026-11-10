@@ -1,0 +1,2001 @@
+{
+  "schemaVersion": 1,
+  "status": "PROPOSED_COMPLETION_MATRIX_NOT_IMPLEMENTED",
+  "at": "2026-11-10T22:38:38.663231+00:00",
+  "inventorySha256": "a7c3e748655ca3c588c7d436402a025ec7c270a7b0ad09f61e12749b2de13262",
+  "batches": [
+    {
+      "id": "CP-00",
+      "title": "Security priority completion",
+      "dependsOn": [],
+      "offerings": [
+        "security-audit"
+      ],
+      "scope": "Finish the eight independently scoped security machinery repairs and native source-only runner before other port implementation. Preserve upstream and independent challenge; SA01 permission bits are only a prerequisite."
+    },
+    {
+      "id": "CP-01",
+      "title": "Capability catalog and native-only installation",
+      "dependsOn": [
+        "CP-00"
+      ],
+      "offerings": [],
+      "scope": "Introduce one reviewed catalog used by installer, doctor/preflight and native entry resolution; expand installation only as entries meet declared availability."
+    },
+    {
+      "id": "CP-02",
+      "title": "Shared graph host and native role transport",
+      "dependsOn": [
+        "CP-01"
+      ],
+      "offerings": [
+        "workflow-state"
+      ],
+      "scope": "Extract/reuse proven native seams without changing graph stage logic; support agent and nested workflow operations, semantic schemas, bounded execution and per-agent checkpoints."
+    },
+    {
+      "id": "CP-03",
+      "title": "Shared references and host helpers",
+      "dependsOn": [
+        "CP-01"
+      ],
+      "offerings": [
+        "backlog",
+        "bug-lenses",
+        "decisions",
+        "default-stack",
+        "findings",
+        "gtm-brief",
+        "harness-review",
+        "knowledge-map",
+        "run-records",
+        "verify"
+      ],
+      "scope": "Relocatable references/helpers, same contracts and host enforcement; no fabricated graph for reference text."
+    },
+    {
+      "id": "CP-04",
+      "title": "Blueprint interview/design/backlog",
+      "dependsOn": [
+        "CP-02",
+        "CP-03"
+      ],
+      "offerings": [
+        "blueprint"
+      ],
+      "scope": "Native graph entry through binding interview, independent design/backlog gates, exact approval and documentation writes."
+    },
+    {
+      "id": "CP-05",
+      "title": "QA and loop",
+      "dependsOn": [
+        "CP-02",
+        "CP-03"
+      ],
+      "offerings": [],
+      "scope": "Port shared harness-repair workflow and loop entry before nested dev integration; preserve stuck signatures and bounded fixing."
+    },
+    {
+      "id": "CP-06",
+      "title": "Dev implementation graph",
+      "dependsOn": [
+        "CP-04",
+        "CP-05"
+      ],
+      "offerings": [
+        "dev"
+      ],
+      "scope": "Native planner/advisor/scout/implementer/checker/acceptance/triage plus nested QA; preserve saved plan semantics."
+    },
+    {
+      "id": "CP-07",
+      "title": "Build-app driver",
+      "dependsOn": [
+        "CP-06"
+      ],
+      "offerings": [
+        "build-app"
+      ],
+      "scope": "Explicit provider dispatch and native probes/sessions throughout driver, including lifecycle, locks, per-slice gates, final QA/hunt and controlled PR flow."
+    },
+    {
+      "id": "CP-08",
+      "title": "Release graph",
+      "dependsOn": [
+        "CP-02",
+        "CP-03",
+        "CP-05"
+      ],
+      "offerings": [
+        "release-pr"
+      ],
+      "scope": "Exact-head docs/readiness/approval/merge/deploy state machine through native leaves; offline remote adapters for proof."
+    },
+    {
+      "id": "CP-09",
+      "title": "Existing native offerings parity regression",
+      "dependsOn": [
+        "CP-02",
+        "CP-03",
+        "CP-05"
+      ],
+      "offerings": [
+        "autobuild",
+        "bughunt"
+      ],
+      "scope": "Retain working native entrypoints and same graph/gates; full matrix of stage failure, capability limits and no Claude fallback."
+    },
+    {
+      "id": "CP-10",
+      "title": "Project bootstrap and provider configuration",
+      "dependsOn": [
+        "CP-01",
+        "CP-03"
+      ],
+      "offerings": [
+        "init-agents",
+        "init-claude",
+        "init-ci",
+        "init-env",
+        "init-monorepo",
+        "init-tasks",
+        "init-tests",
+        "scaffold-app"
+      ],
+      "scope": "Provider-neutral entry instructions and explicit provider outputs; compatibility aliases and generated config fixtures."
+    },
+    {
+      "id": "CP-11",
+      "title": "Engineering guided workflows",
+      "dependsOn": [
+        "CP-01",
+        "CP-03"
+      ],
+      "offerings": [
+        "deep",
+        "deep-fix",
+        "dry",
+        "error-audit",
+        "security",
+        "logging",
+        "dockerize",
+        "frontend-design",
+        "build-bot-integration",
+        "build-scraper",
+        "fix-scraper"
+      ],
+      "scope": "Supported native delegation for deep workflows; representative scoped code/data fixtures for guided protocols without demanding a process for plain prose."
+    },
+    {
+      "id": "CP-12",
+      "title": "Git, documentation and read-only service tools",
+      "dependsOn": [
+        "CP-01",
+        "CP-03"
+      ],
+      "offerings": [
+        "commit",
+        "clean-gone",
+        "release",
+        "render"
+      ],
+      "scope": "Provider-neutral invocation, destructive action boundaries, exact intended Git changes and service read-only behavior."
+    },
+    {
+      "id": "CP-13",
+      "title": "Marketing and SEO",
+      "dependsOn": [
+        "CP-01",
+        "CP-03"
+      ],
+      "offerings": [
+        "copywriting",
+        "vendor-lens",
+        "seo",
+        "seo-check"
+      ],
+      "scope": "All offerings includes marketing: same content protocols, truthful claims, correct runtime helper installation and representative outputs."
+    },
+    {
+      "id": "CP-14",
+      "title": "Full-install and cross-offering conformance",
+      "dependsOn": [
+        "CP-07",
+        "CP-08",
+        "CP-09",
+        "CP-10",
+        "CP-11",
+        "CP-12",
+        "CP-13"
+      ],
+      "offerings": [],
+      "scope": "Clean Codex-only installation and composed workflows, catalog coverage, no hidden Claude runtime, honest documented unsupported presentation limits."
+    }
+  ],
+  "offeringChecks": [
+    {
+      "offering": "backlog",
+      "batch": "CP-03",
+      "entry": "core/skills/backlog",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "The format",
+        "The ledger and the next step"
+      ],
+      "outputs": [
+        "The format"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Validate valid/invalid backlog, dependencies and slice extraction; same ledger next-state output.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "bug-lenses",
+      "batch": "CP-03",
+      "entry": "core/skills/bug-lenses",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "The bar every finding clears",
+        "Never report these",
+        "Untrusted content",
+        "The lenses"
+      ],
+      "outputs": [
+        "Never report these"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Load all six lens references with unchanged finding bar; representative finding requires trigger/path/result/evidence and rejects speculative style commentary.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "decisions",
+      "batch": "CP-03",
+      "entry": "core/skills/decisions",
+      "existingClassification": "provider-neutral-core-plus-Codex-specific-delivery",
+      "stages": [
+        "decision records",
+        "SQLite queue",
+        "routing",
+        "config",
+        "host observations",
+        "Codex app-server delivery"
+      ],
+      "outputs": [
+        "queue records",
+        "host trace events"
+      ],
+      "recovery": [
+        "queue durability",
+        "uncertain dispatch manual"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Record/queue/routing expiry, revision, recipient and approval separation; actual bounded delivery ack/context trace and uncertain dispatch behavior remain intact.",
+      "negativeFixture": [
+        "Not a standalone command; include dependency resolution for every native consumer",
+        "Interactive Claude delivery not assumed from shared queue"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "default-stack",
+      "batch": "CP-03",
+      "entry": "core/skills/default-stack",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [],
+      "outputs": [],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Representative plan uses current default stack; departure count and explicit decisions preserved.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "findings",
+      "batch": "CP-03",
+      "entry": "core/skills/findings",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "A finding",
+        "Ids that survive a re-run",
+        "Status moves",
+        "Disposition"
+      ],
+      "outputs": [],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Transition/replay/conflict and report fixtures preserve independent evidence ownership and exact-head disposition.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "gtm-brief",
+      "batch": "CP-03",
+      "entry": "core/skills/gtm-brief",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "The format",
+        "Product",
+        "Customer",
+        "Positioning",
+        "Voice",
+        "Proof",
+        "Never claim",
+        "Compliance",
+        "Checking a brief",
+        "Rules for agents"
+      ],
+      "outputs": [
+        "The format"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Valid/invalid brief helper and copy task follow persona/proof/never-claim constraints without inventing testimonials.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "harness-review",
+      "batch": "CP-03",
+      "entry": "core/skills/harness-review",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "1. Get the diff",
+        "2. What to look for",
+        "3. Report format"
+      ],
+      "outputs": [
+        "3. Report format"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Representative diff produces only scoped supported findings, including clean/unresolved controls; no unsupported execution claims.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "knowledge-map",
+      "batch": "CP-03",
+      "entry": "core/skills/knowledge-map",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "The test",
+        "Without a map",
+        "When knowledge gets an owner",
+        "Anti-patterns",
+        "The map: `docs/knowledge-map.json`",
+        "By role"
+      ],
+      "outputs": [],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Plan fixture identifies single ownership and valid K IDs; duplicate ownership/invalid mapping fails same gate.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "run-records",
+      "batch": "CP-03",
+      "entry": "core/skills/run-records",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [],
+      "outputs": [],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Native child/parent lifecycle, selected safe settings, unknown capability/cost, stale/corrupt storage and no secret persistence.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "verify",
+      "batch": "CP-03",
+      "entry": "core/skills/verify",
+      "existingClassification": "provider-neutral-helper-install-gap",
+      "stages": [
+        "What it does",
+        "After it runs"
+      ],
+      "outputs": [],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Real owning verification on inert pass/fail projects; stack/toolchain detection, full retained logs, precise exits and no silent skipped gate; no forbidden capture repro.",
+      "negativeFixture": [
+        "Resolve script without CLAUDE_SKILL_DIR/~/.claude fallback",
+        "Same complete stdout/stderr retention, timeout and nonzero exit behavior in native callers"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "workflow-state",
+      "batch": "CP-02",
+      "entry": "core/skills/workflow-state",
+      "existingClassification": "provider-neutral-injector-Claude-Workflow-consumer",
+      "stages": [],
+      "outputs": [],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Exact injected state bytes, duplicate input refusal, size limits, nested native dispatch, unknown agent/tool rejection and schema-validation feedback.",
+      "negativeFixture": [
+        "Native workflow runner for emitted script; injection CLI alone is not runtime parity",
+        "Same duplicate-args/input size/refusal tests with native consumer"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "build-bot-integration",
+      "batch": "CP-11",
+      "entry": "kit/skills/build-bot-integration",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Protocol",
+        "Phase 1: Reconnaissance",
+        "Phase 2: Determine Scope",
+        "Phase 3: Build Monitor Parser",
+        "Phase 4: Build ATC + Checkout (if applicable)",
+        "Phase 5: Wire Into Engine",
+        "Named Store Pattern (Smoke & Mirrors, etc.)",
+        "Phase 6: Verify",
+        "Integration Checklist",
+        "Shopify Store Shortcut"
+      ],
+      "outputs": [
+        "Phase 6: Verify",
+        "Integration Checklist"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Offline sample site payload to monitor/registry/cart wiring with declared scope; no real purchase/anti-bot bypass activity for port proof.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "build-scraper",
+      "batch": "CP-11",
+      "entry": "kit/skills/build-scraper",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Quick Reference",
+        "Gold+ = 10/10 Dimensions",
+        "BaseAdapter Helpers (call these, never reimplement)",
+        "Critical Patterns (most common failures)",
+        "Key Files"
+      ],
+      "outputs": [],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Offline county payload maps required fields and registry/scorecard; no real site crawl needed for adapter port fixture.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "clean-gone",
+      "batch": "CP-12",
+      "entry": "kit/skills/clean-gone",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Your Task",
+        "Commands to Execute",
+        "Expected Behavior"
+      ],
+      "outputs": [],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Disposable branches fixture removes only approved gone branches/worktrees, preserving active/unmerged/unrelated paths; explicit scope review.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "commit",
+      "batch": "CP-12",
+      "entry": "kit/skills/commit",
+      "existingClassification": "partial-Claude-tool-or-output-dependency",
+      "stages": [
+        "Context",
+        "Your task"
+      ],
+      "outputs": [],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Owned disposable Git fixture commits only intended changes; no stage-all surprise or copied Claude tool-expression dependency.",
+      "negativeFixture": [
+        "Translate specific Agent run_in_background/frontmatter/optional Claude setup semantics through supported native owner",
+        "Offline per-stage output and failed-subagent behavior tests; no implicit optional Claude integration parity"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "copywriting",
+      "batch": "CP-13",
+      "entry": "kit/skills/copywriting",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Core Philosophy",
+        "The SB7 Framework",
+        "Element 1: CHARACTER (The Customer as Hero)",
+        "Element 2: PROBLEM (The Hook)",
+        "Element 3: GUIDE (Your Brand)",
+        "Element 4: PLAN (Remove Cognitive Dissonance)",
+        "Element 5: CALL TO ACTION (Be Bold)",
+        "Element 6: FAILURE (The Stakes)",
+        "Element 7: SUCCESS (Paint the Picture)",
+        "Bonus Element: TRANSFORMATION",
+        "Protocol: How to Execute",
+        "Phase 0: Gather Context",
+        "Phase 1: Build the BrandScript (if not already done)",
+        "StoryBrand BrandScript",
+        "CHARACTER",
+        "PROBLEM",
+        "GUIDE",
+        "PLAN",
+        "CALLS TO ACTION",
+        "FAILURE (Stakes)",
+        "SUCCESS",
+        "TRANSFORMATION",
+        "CONTROLLING IDEA",
+        "Phase 2: Write the Copy",
+        "Phase 3: Apply the Grunt Test",
+        "Phase 4: Self-Edit",
+        "Deliverable Templates",
+        "One-Liner",
+        "Landing Page (8-Section Wireframe)",
+        "Email Nurture Sequence",
+        "Hero Section / Above-the-Fold Copy",
+        "Tagline",
+        "Testimonial Collection Questions",
+        "Referral Copy",
+        "Anti-Patterns \u2014 Never Do These",
+        "Writing Voice Rules",
+        "Quality Checklist (Run Before Delivering)"
+      ],
+      "outputs": [
+        "Bonus Element: TRANSFORMATION",
+        "TRANSFORMATION",
+        "Quality Checklist (Run Before Delivering)"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Representative brief-to-BrandScript-to-landing copy with tone/claim constraints and grunt-test checklist; fixture grading criteria declared independently of generated copy.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "deep",
+      "batch": "CP-11",
+      "entry": "kit/skills/deep",
+      "existingClassification": "partial-Claude-tool-or-output-dependency",
+      "stages": [
+        "Protocol",
+        "Phase 1: Decompose",
+        "Decomposition",
+        "Phase 2: Validate with Subagents",
+        "Phase 3: Synthesize",
+        "Synthesis",
+        "[Component 1 Name] \u2713",
+        "[Component 2 Name] \u2713",
+        "Cross-Cutting Concerns",
+        "Final Answer",
+        "Rules"
+      ],
+      "outputs": [],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Selected orchestrator/advisor/worker/probe config reaches actual owning leaf; model/effort availability never inferred from a label",
+        "Explicit unsupported controls rejected or honestly reported; no invented dollar budgets or nested-cap enforcement"
+      ],
+      "representativeProof": "Independent component delegation, bounded parallel results, disagreement handling and final synthesis; one failed child cannot be reported verified.",
+      "negativeFixture": [
+        "Translate specific Agent run_in_background/frontmatter/optional Claude setup semantics through supported native owner",
+        "Offline per-stage output and failed-subagent behavior tests; no implicit optional Claude integration parity"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "deep-fix",
+      "batch": "CP-11",
+      "entry": "kit/skills/deep-fix",
+      "existingClassification": "partial-Claude-tool-or-output-dependency",
+      "stages": [
+        "Protocol",
+        "Phase 1: Investigate (Decompose + Parallel Research)",
+        "Investigation Decomposition",
+        "[Track Name] Investigation",
+        "Finding",
+        "Related Observations",
+        "Phase 2: Fix (Synthesize + Implement)",
+        "Diagnosis",
+        "Root Cause",
+        "Mechanism",
+        "Contributing Factors",
+        "Phase 3: Verify (Prove Correctness)",
+        "Verification Report",
+        "Fix Correctness",
+        "Code Quality",
+        "Verdict: SHIP / REVISE / BLOCK",
+        "Deep Fix Complete",
+        "Symptom",
+        "Root Cause",
+        "Fix",
+        "Tests",
+        "Verification",
+        "Rules"
+      ],
+      "outputs": [
+        "Phase 3: Verify (Prove Correctness)",
+        "Verification Report"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Selected orchestrator/advisor/worker/probe config reaches actual owning leaf; model/effort availability never inferred from a label",
+        "Explicit unsupported controls rejected or honestly reported; no invented dollar budgets or nested-cap enforcement"
+      ],
+      "representativeProof": "Read-only investigations then single owning fix then independent verification; failed/unknown verifier blocks success.",
+      "negativeFixture": [
+        "Translate specific Agent run_in_background/frontmatter/optional Claude setup semantics through supported native owner",
+        "Offline per-stage output and failed-subagent behavior tests; no implicit optional Claude integration parity"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "dockerize",
+      "batch": "CP-11",
+      "entry": "kit/skills/dockerize",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Protocol",
+        "Phase 1: Detect Stack",
+        "Phase 2: Generate Dockerfile",
+        "Phase 3: Add .dockerignore",
+        "Phase 4: Verify",
+        "Rules"
+      ],
+      "outputs": [
+        "Phase 4: Verify"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Representative single service and multistage recipe checks entrypoint/dependencies/nonroot/secrets; image build not required merely to read guidance, but required before claiming runnable image.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "dry",
+      "batch": "CP-11",
+      "entry": "kit/skills/dry",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Core Philosophy",
+        "DRY Workflow",
+        "Phase 1: Discovery \u2014 Find Every Duplicate",
+        "Phase 2: Classify \u2014 What Kind of Duplication?",
+        "Phase 3: Prioritize \u2014 Highest Impact First",
+        "Phase 4: Refactor \u2014 Eliminate With Minimum Abstraction",
+        "Phase 5: Verify \u2014 Prove Nothing Broke",
+        "Refactoring Decision Framework",
+        "1. Is it actually the same knowledge?",
+        "2. How often does it change?",
+        "3. What's the blast radius of a missed update?",
+        "4. How complex is the right abstraction?",
+        "5. Are we below the Rule of Three?",
+        "Common Anti-Patterns to Catch",
+        "Premature Abstraction",
+        "Abstraction Gravity",
+        "DRY at the Wrong Level",
+        "Incomplete Replacement",
+        "Output Format",
+        "1. Duplication Inventory",
+        "2. Refactoring Plan",
+        "3. Code Changes",
+        "4. Verification Report",
+        "Additional Resources"
+      ],
+      "outputs": [
+        "Phase 5: Verify \u2014 Prove Nothing Broke",
+        "Output Format",
+        "4. Verification Report"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Fixture with duplicate policy selects one owner and preserves behavior, plus unrelated similarity not falsely unified.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "error-audit",
+      "batch": "CP-11",
+      "entry": "kit/skills/error-audit",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Protocol",
+        "Phase 1: Scope the Audit",
+        "Phase 2: Scan for Each Error Class",
+        "Phase 3: Produce Report",
+        "Error Handling Audit Report",
+        "Summary",
+        "Critical \u2014 Fix Before Deploy",
+        "High \u2014 Fix This Sprint",
+        "Medium \u2014 Schedule Fix",
+        "Low \u2014 Tech Debt",
+        "Patterns Found",
+        "Clean Areas",
+        "Phase 4: Fix (if requested)",
+        "Rules"
+      ],
+      "outputs": [
+        "Phase 3: Produce Report",
+        "Error Handling Audit Report",
+        "Summary"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Fixture swallowed error/cleanup defect yields scoped evidence; no fix mutation when audit-only requested.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "fix-scraper",
+      "batch": "CP-11",
+      "entry": "kit/skills/fix-scraper",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Gold+ Standard (the target)",
+        "When to Use This Skill",
+        "Phase 1: Diagnose",
+        "Step 1: Check current grade",
+        "Step 2: Check adapter registry",
+        "Step 3: Check city zoning coverage",
+        "Step 4: Check APN format",
+        "Step 5: Check city detection",
+        "Step 6: Identify the gap category",
+        "Phase 2: Fix",
+        "Fix A: Missing City Zoning (most common)",
+        "Fix B: APN Format",
+        "Fix C: Broken URLs",
+        "Fix D: Missing Zone Standards",
+        "Fix E: City Detection",
+        "Phase 3: Verify",
+        "Step 1: End-to-End Test",
+        "Step 2: Score Against Gold+ Dimensions",
+        "Step 3: Update SCRAPER-MASTER.md",
+        "Step 4: Data Completeness Checklist",
+        "Key File Paths",
+        "Architecture: City Zoning Fallback Chain"
+      ],
+      "outputs": [
+        "Step 4: Check APN format",
+        "Fix B: APN Format",
+        "Phase 3: Verify",
+        "Step 4: Data Completeness Checklist"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Broken offline parcel/zoning fixture fixed with actual field assertions and honest missing-source handling.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "frontend-design",
+      "batch": "CP-11",
+      "entry": "kit/skills/frontend-design",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Design Thinking",
+        "Frontend Aesthetics Guidelines"
+      ],
+      "outputs": [],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Representative page implements requested interaction and accessible layout; real browser check required for UI behavior claims, not screenshot alone.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "init-agents",
+      "batch": "CP-10",
+      "entry": "kit/skills/init-agents",
+      "existingClassification": "Claude-specific-output-partial",
+      "stages": [
+        "Protocol",
+        "Phase 1: Identify Domains",
+        "Phase 2: Create Directory Structure",
+        "Phase 3: Generate Agent Definitions",
+        "Role",
+        "Context",
+        "Knowledge Base",
+        "{Section 1 \u2014 e.g., \"Supported API Calls\"}",
+        "{Section 2 \u2014 e.g., \"Common Patterns\"}",
+        "{Section 3 \u2014 e.g., \"Anti-Patterns\"}",
+        "Requirements",
+        "Output Format",
+        "Phase 4: Generate Agent Memory",
+        "Decisions Made",
+        "Patterns Established",
+        "Known Issues",
+        "Phase 5: Generate Settings",
+        "Phase 6: Update CLAUDE.md",
+        "Agent Routing",
+        "How to Consult Agents",
+        "Phase 7: Verify",
+        "Rules"
+      ],
+      "outputs": [
+        "Output Format",
+        "Phase 7: Verify"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Selected orchestrator/advisor/worker/probe config reaches actual owning leaf; model/effort availability never inferred from a label",
+        "Explicit unsupported controls rejected or honestly reported; no invented dollar budgets or nested-cap enforcement"
+      ],
+      "representativeProof": "Generate native roles/routing from requested domains; test actual role discovery and selected permissions/models, preserve Claude mode output.",
+      "negativeFixture": [
+        "Define Codex AGENTS/agent configuration counterpart while preserving requested Claude output compatibility",
+        "Verify actual native discovery/routing/permissions; do not translate frontmatter into presumed capability"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "init-ci",
+      "batch": "CP-10",
+      "entry": "kit/skills/init-ci",
+      "existingClassification": "partial-Claude-tool-or-output-dependency",
+      "stages": [
+        "Protocol",
+        "Phase 1: Detect Requirements",
+        "Phase 2: Generate Workflows",
+        "Phase 3: Verify",
+        "Rules"
+      ],
+      "outputs": [
+        "Phase 3: Verify"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Node/Go fixture CI remains equivalent; optional Claude PR integration remains explicit; native counterpart separately chosen, never silently install Claude action for Codex request.",
+      "negativeFixture": [
+        "Translate specific Agent run_in_background/frontmatter/optional Claude setup semantics through supported native owner",
+        "Offline per-stage output and failed-subagent behavior tests; no implicit optional Claude integration parity"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "init-claude",
+      "batch": "CP-10",
+      "entry": "kit/skills/init-claude",
+      "existingClassification": "Claude-specific-output-partial",
+      "stages": [
+        "Protocol",
+        "Phase 1: Detect Project Type",
+        "Phase 2: Generate CLAUDE.md",
+        "Project Overview",
+        "Architecture",
+        "Key Modules",
+        "Key Technologies",
+        "Development Setup",
+        "Prerequisites",
+        "Installation",
+        "Development Commands",
+        "Agent Routing (if applicable)",
+        "Planning Workflow",
+        "Implementation Workflow",
+        "QA Checklist",
+        "Code Standards",
+        "Key Design Constraints",
+        "File Conventions",
+        "Dependencies",
+        "Quick Commands",
+        "Phase 3: Adapt by Project Type",
+        "Phase 4: Verify",
+        "Rules"
+      ],
+      "outputs": [
+        "QA Checklist",
+        "Phase 4: Verify"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Existing name still generates CLAUDE.md; new init-codex alias or explicit init-agent --provider codex generates AGENTS.md and supported native config with same project facts, no duplicated contradictory rules.",
+      "negativeFixture": [
+        "Define Codex AGENTS/agent configuration counterpart while preserving requested Claude output compatibility",
+        "Verify actual native discovery/routing/permissions; do not translate frontmatter into presumed capability"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "init-env",
+      "batch": "CP-10",
+      "entry": "kit/skills/init-env",
+      "existingClassification": "partial-Claude-tool-or-output-dependency",
+      "stages": [
+        "Protocol",
+        "Phase 1: Discover Environment Variables",
+        "Phase 2: Generate .env.example",
+        "Phase 3: Verify .gitignore",
+        "Phase 4: Generate Settings Permissions (Optional)",
+        "Phase 5: Document for Deployment",
+        "Phase 6: Produce Summary",
+        "Environment Variables",
+        "Rules"
+      ],
+      "outputs": [
+        "Phase 3: Verify .gitignore",
+        "Phase 6: Produce Summary"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Same env.example discovery/redaction/ignore rules; native permission guidance uses supported native controls, not copied settings.local.json authority.",
+      "negativeFixture": [
+        "Translate specific Agent run_in_background/frontmatter/optional Claude setup semantics through supported native owner",
+        "Offline per-stage output and failed-subagent behavior tests; no implicit optional Claude integration parity"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "init-monorepo",
+      "batch": "CP-10",
+      "entry": "kit/skills/init-monorepo",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Protocol",
+        "Phase 1: Gather Requirements",
+        "Phase 2: Scaffold Structure",
+        "Phase 3: Scaffold Apps",
+        "Phase 4: Wire Dependencies",
+        "Phase 5: Initialize and Verify",
+        "Rules"
+      ],
+      "outputs": [
+        "Phase 5: Initialize and Verify"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Small requested app set yields valid pnpm/Turbo dependency wiring and documented checks, no unsolicited apps.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "init-tasks",
+      "batch": "CP-10",
+      "entry": "kit/skills/init-tasks",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Protocol",
+        "Phase 1: Check Existing State",
+        "Phase 2: Create Task System",
+        "In Progress: {Feature/Task Name}",
+        "{Category or Phase}",
+        "Backlog",
+        "{Future Feature}",
+        "Import & Dependency Management",
+        "1. {Lesson title}",
+        "Error Handling",
+        "Testing Patterns",
+        "Architecture Decisions",
+        "Deployment & CI",
+        "Performance",
+        "Security",
+        "{Date} \u2014 {Feature Name}",
+        "1. {One-line summary of what shipped}",
+        "Core Feature: {Feature Name}",
+        "Primary changes",
+        "Dependencies (out-of-scope changes required)",
+        "QA fixes",
+        "Tests",
+        "Files changed",
+        "Phase 3: Add .gitkeep",
+        "Phase 4: Verify",
+        "Rules"
+      ],
+      "outputs": [
+        "1. {One-line summary of what shipped}",
+        "Phase 4: Verify"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Idempotent tracker/lessons/retro/changelog generation preserves existing user entries.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "init-tests",
+      "batch": "CP-10",
+      "entry": "kit/skills/init-tests",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Protocol",
+        "Phase 1: Detect Stack",
+        "Phase 2: Set Up Framework",
+        "Phase 3: Create Directory Structure",
+        "Phase 4: Create Test Helpers",
+        "Phase 5: Create Example Tests",
+        "Phase 6: Verify",
+        "Rules"
+      ],
+      "outputs": [
+        "Phase 6: Verify"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Two representative stack fixtures produce meaningful executable tests and helper setup; no passing placeholder assertions.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "logging",
+      "batch": "CP-11",
+      "entry": "kit/skills/logging",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Protocol",
+        "Phase 0: Detect Mode",
+        "Phase 1: Bootstrap (New Logging Setup)",
+        "Phase 2: Upgrade (Audit Existing Logging)",
+        "Logging Audit",
+        "Current State",
+        "Gaps Found",
+        "Phase 3: Verify",
+        "Rules"
+      ],
+      "outputs": [
+        "Phase 3: Verify"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Bootstrap/upgrade fixtures preserve logging conventions, redact secrets and emit correlated errors without raw credentials.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "release",
+      "batch": "CP-12",
+      "entry": "kit/skills/release",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Protocol",
+        "Phase 1: Gather Context",
+        "Phase 2: Update Task Tracker",
+        "Phase 3: Capture Lessons",
+        "Phase 4: Write Retro Entry",
+        "{Date} \u2014 {Feature Name}",
+        "{N}. {One-line summary}",
+        "Phase 5: Update Changelog",
+        "Core Feature: {Feature Name}",
+        "Primary changes",
+        "Dependencies (out-of-scope changes required)",
+        "QA fixes",
+        "Tests",
+        "Files changed",
+        "Phase 6: Stage and Summarize",
+        "Release Summary",
+        "Feature: {name}",
+        "Numbers",
+        "Documentation Updated",
+        "Ready to commit",
+        "Rules"
+      ],
+      "outputs": [
+        "{N}. {One-line summary}",
+        "Release Summary"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Tracker/lessons/retro/changelog edits and staged summary preserve requested commit boundary; distinct from release-pr remote merge.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "render",
+      "batch": "CP-12",
+      "entry": "kit/skills/render",
+      "existingClassification": "provider-neutral-helper-install-gap",
+      "stages": [
+        "Setup (one-time)",
+        "Commands",
+        "`render services`",
+        "`render logs <service-name-or-id> [options]`",
+        "`render deploys <service>`",
+        "`render env <service>`",
+        "How to invoke from Claude",
+        "Implementation",
+        "Adding new commands",
+        "Why not MCP?"
+      ],
+      "outputs": [],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Mock HTTP services/logs/deploys/env-name responses; only allowed read methods, safe errors/redaction and relocatable wrapper; never transmit during inventory.",
+      "negativeFixture": [
+        "Relocatable Bash/curl/jq wrapper and credential path review",
+        "Read-only API fake transport tests; no remote calls during port proof"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "scaffold-app",
+      "batch": "CP-10",
+      "entry": "kit/skills/scaffold-app",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Stack (Non-Negotiable)",
+        "Protocol",
+        "Phase 1: Gather Requirements",
+        "Phase 2: Scaffold Root Config",
+        "Phase 3: Scaffold Backend (`server/`)",
+        "Phase 4: Scaffold Frontend (`client/`)",
+        "Phase 5: Generate CLAUDE.md",
+        "Project Overview",
+        "Architecture",
+        "Key Technologies",
+        "Development Commands",
+        "Environment Variables",
+        "Code Patterns",
+        "Phase 6: Install and Verify",
+        "Rules"
+      ],
+      "outputs": [
+        "Phase 6: Install and Verify"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Representative auth/workspace flow and chosen optional module wire correctly; actual local API/UI acceptance later, no production assurance from templates.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "security",
+      "batch": "CP-11",
+      "entry": "kit/skills/security",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Core Philosophy",
+        "Security Review Workflow",
+        "Phase 1: Map the Attack Surface",
+        "Phase 2: Threat Model",
+        "Phase 3: Vulnerability Hunt",
+        "Phase 4: Rate and Report",
+        "Critical Vulnerability Patterns",
+        "Injection (CWE-89, CWE-78, CWE-094)",
+        "Broken Access Control (CWE-285, CWE-639)",
+        "Authentication Failures (CWE-287, CWE-307)",
+        "Cryptographic Failures (CWE-327, CWE-312)",
+        "XSS (CWE-79)",
+        "Security Misconfiguration",
+        "Severity Rating",
+        "Security Headers Checklist",
+        "Additional Resources",
+        "Reference Files"
+      ],
+      "outputs": [
+        "Phase 4: Rate and Report",
+        "Security Headers Checklist"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Threat-model and source finding fixture preserves evidence/authorization boundaries; distinguish this guided review from full security-audit graph.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "seo",
+      "batch": "CP-13",
+      "entry": "kit/skills/seo",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Product-Led SEO Philosophy (Eli Schwartz)",
+        "Core Mindset",
+        "Five Strategy Validation Questions",
+        "Internal Linking: The Southwest Airlines Model",
+        "Content Strategy Principles",
+        "Measurement Framework",
+        "Common Mistakes to Avoid",
+        "Protocol",
+        "Phase 0: Detect Mode",
+        "Phase 1: Core HTML Meta Tags",
+        "Phase 2: Open Graph (Facebook, LinkedIn, Discord, Slack)",
+        "Phase 3: Twitter Cards",
+        "Phase 4: Structured Data (JSON-LD)",
+        "Phase 5: Technical SEO Files",
+        "Phase 6: Internal Linking Audit",
+        "Phase 7: Framework Integration",
+        "Phase 8: Audit Mode (Upgrade)",
+        "SEO Audit",
+        "Current State",
+        "Gaps Found",
+        "Validation",
+        "Phase 9: Verify",
+        "Rules",
+        "Technical Rules",
+        "Strategic Rules (Product-Led SEO)"
+      ],
+      "outputs": [
+        "Phase 9: Verify"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Representative SSR/static metadata, sitemap/robots and structured data fixture checks real output; strategy claims retain evidence limits.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "vendor-lens",
+      "batch": "CP-13",
+      "entry": "kit/skills/vendor-lens",
+      "existingClassification": "provider-neutral-guidance-unverified-install",
+      "stages": [
+        "Mode selection",
+        "Shared mindset (both personas)",
+        "The buy \u2192 sell funnel (11 stages, both personas)",
+        "Persona 1 \u2014 Climbing Vendor (DEFAULT)",
+        "Persona 2 \u2014 Veteran 6-Fig Vendor (north-star)",
+        "Shared review protocol",
+        "1. What I just read",
+        "2. Funnel mapping",
+        "3. What's right",
+        "4. What's broken",
+        "5. Reframe",
+        "6. 9am Monday test",
+        "Tone (both personas)",
+        "Anti-patterns (both personas)",
+        "When the answer is \"this is good, ship it\"",
+        "Args",
+        "Reference"
+      ],
+      "outputs": [],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Default/explicit persona selection, evidence-grounded funnel critique and concrete action; no persona or unsupported metric substitution.",
+      "negativeFixture": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "autobuild",
+      "batch": "CP-09",
+      "entry": "graphs/autobuild/skills/autobuild",
+      "existingClassification": "native-supported-with-explicit-limits",
+      "stages": [
+        "config/preflight",
+        "feature selection",
+        "builder",
+        "host frozen/full/progress gate",
+        "commit",
+        "limit probe/wait/retry",
+        "final review",
+        "native bughunt"
+      ],
+      "outputs": [
+        "host logs",
+        "feature flags",
+        "run lifecycle",
+        "Codex token usage; dollars unknown",
+        "hunt ledger/report"
+      ],
+      "recovery": [
+        "completed feature resume",
+        "bounded provider-limit wait",
+        "signals/timeouts",
+        "failed gate feedback"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Selected orchestrator/advisor/worker/probe config reaches actual owning leaf; model/effort availability never inferred from a label",
+        "Explicit unsupported controls rejected or honestly reported; no invented dollar budgets or nested-cap enforcement"
+      ],
+      "representativeProof": "Actual native adapter runs every declared stage/gate, including refusal/error/recovery fixtures; preserve exact owning contracts.",
+      "negativeFixture": [
+        "Keep native role/model/environment/auth parity regression matrix; tool-hook semantics differ explicitly; do not claim dollar/tool-turn cap equivalence",
+        "Full offering install/uninstall without Claude dependency remains broader installer work"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "blueprint",
+      "batch": "CP-04",
+      "entry": "graphs/blueprint/skills/blueprint",
+      "existingClassification": "Claude-Workflow-only",
+      "stages": [
+        "extract",
+        "question/interview",
+        "human answers",
+        "design",
+        "advisor gate/revise",
+        "slice backlog",
+        "advisor backlog gate",
+        "one approval",
+        "write docs"
+      ],
+      "outputs": [
+        "approved design",
+        "backlog",
+        "decisions",
+        "saved ledgers"
+      ],
+      "recovery": [
+        "saved request/state/run1/run2/run3",
+        "gate revision loop",
+        "needs-human/escalate"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Selected orchestrator/advisor/worker/probe config reaches actual owning leaf; model/effort availability never inferred from a label",
+        "Explicit unsupported controls rejected or honestly reported; no invented dollar budgets or nested-cap enforcement"
+      ],
+      "representativeProof": "Actual native adapter runs every declared stage/gate, including refusal/error/recovery fixtures; preserve exact owning contracts.",
+      "negativeFixture": [
+        "Native graph adapter preserving interview pause/resume and exactly one approval",
+        "Actual saved-state CLI tests through every stage/error plus immutable-input validation"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "build-app",
+      "batch": "CP-07",
+      "entry": "graphs/build/skills/build-app",
+      "existingClassification": "Claude-only-launcher-with-provider-neutral-ledger",
+      "stages": [
+        "backlog preflight",
+        "isolated integration checkout",
+        "per-slice dev session",
+        "driver checks/commit",
+        "final QA",
+        "bughunt fix",
+        "push/PR"
+      ],
+      "outputs": [
+        "status.json",
+        "ledger",
+        "session logs",
+        "PR"
+      ],
+      "recovery": [
+        "status/stop/resume/unblock",
+        "persisted build ledger",
+        "usage wait/probes"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Selected orchestrator/advisor/worker/probe config reaches actual owning leaf; model/effort availability never inferred from a label",
+        "Explicit unsupported controls rejected or honestly reported; no invented dollar budgets or nested-cap enforcement"
+      ],
+      "representativeProof": "Actual native adapter runs every declared stage/gate, including refusal/error/recovery fixtures; preserve exact owning contracts.",
+      "negativeFixture": [
+        "Explicit backend dispatch: session.mjs runClaude/Claude hooks/Haiku probe must receive native equivalent",
+        "Depends on native dev+nested QA; no fallback to Claude; full driver stop/resume/PR gates tests"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "dev",
+      "batch": "CP-06",
+      "entry": "graphs/dev/skills/dev",
+      "existingClassification": "Claude-Workflow-only",
+      "stages": [
+        "planner",
+        "advisor plan gate",
+        "scout",
+        "implementer",
+        "host check",
+        "acceptance auditor",
+        "triage",
+        "nested QA"
+      ],
+      "outputs": [
+        "plan",
+        "acceptance evidence",
+        "ledger",
+        "commit/result summary"
+      ],
+      "recovery": [
+        "saved approved plan/ledger",
+        "resume",
+        "needs-human",
+        "escalation/stuck signature"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Selected orchestrator/advisor/worker/probe config reaches actual owning leaf; model/effort availability never inferred from a label",
+        "Explicit unsupported controls rejected or honestly reported; no invented dollar budgets or nested-cap enforcement"
+      ],
+      "representativeProof": "Actual native adapter runs every declared stage/gate, including refusal/error/recovery fixtures; preserve exact owning contracts.",
+      "negativeFixture": [
+        "Native adapter must support nested workflow() in addition to agent()",
+        "Fake CLI end-to-end plan/resume/QA/failure tests and native tooling permission parity"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "bughunt",
+      "batch": "CP-09",
+      "entry": "graphs/hunt/skills/bughunt",
+      "existingClassification": "native-supported-with-unverified-runtime-edges",
+      "stages": [
+        "impact",
+        "lens hunters",
+        "blind skeptic",
+        "referee",
+        "reproduction/evidence",
+        "repair",
+        "independent fix verification",
+        "full comparison",
+        "recheck/landing"
+      ],
+      "outputs": [
+        "native result",
+        "coverage entries",
+        "findings ledger",
+        "markdown report",
+        "evidence records"
+      ],
+      "recovery": [
+        "persisted ledger/evidence",
+        "bounded repair attempts",
+        "unknown/blocked manual disposition"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Selected orchestrator/advisor/worker/probe config reaches actual owning leaf; model/effort availability never inferred from a label",
+        "Explicit unsupported controls rejected or honestly reported; no invented dollar budgets or nested-cap enforcement"
+      ],
+      "representativeProof": "Actual native adapter runs every declared stage/gate, including refusal/error/recovery fixtures; preserve exact owning contracts.",
+      "negativeFixture": [
+        "Native support does not prove every reproduction/cleanup boundary; preserve current explicit prohibited scenarios",
+        "Graph schema adapter optional-field parity and per-leaf checkpoint tests; no clean-verdict promise"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "release-pr",
+      "batch": "CP-08",
+      "entry": "graphs/release/skills/release-pr",
+      "existingClassification": "Claude-Workflow-only",
+      "stages": [
+        "docs",
+        "ready",
+        "human exact-head approval",
+        "land",
+        "verify deploy",
+        "advisor recommendation"
+      ],
+      "outputs": [
+        "docs/changelog",
+        "release ledger",
+        "deploy evidence",
+        "rollback recommendation"
+      ],
+      "recovery": [
+        "saved ledger/approval",
+        "bounded verify rounds",
+        "stale approval",
+        "unknown merge no retry"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Selected orchestrator/advisor/worker/probe config reaches actual owning leaf; model/effort availability never inferred from a label",
+        "Explicit unsupported controls rejected or honestly reported; no invented dollar budgets or nested-cap enforcement"
+      ],
+      "representativeProof": "Actual native adapter runs every declared stage/gate, including refusal/error/recovery fixtures; preserve exact owning contracts.",
+      "negativeFixture": [
+        "Native adapter plus explicit approval boundary, no inferred consent",
+        "Offline gh/deploy fake tests matching exact-head, unknown, resume, notification authorization; real remote actions not part of port proof by default"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "security-audit",
+      "batch": "CP-00",
+      "entry": "graphs/security-audit/skills/security-audit",
+      "existingClassification": "Claude-Workflow-only-with-provider-neutral-host-helpers",
+      "stages": [
+        "init committed snapshot",
+        "four recon researchers",
+        "synthesize",
+        "seed",
+        "plan waves",
+        "hunters",
+        "merge",
+        "coverage critic",
+        "mint/apply critic",
+        "consolidate",
+        "validate",
+        "write findings",
+        "independent Phase5 verification",
+        "report"
+      ],
+      "outputs": [
+        "REPORT.md",
+        "FINDINGS-DETAIL.md",
+        "NEEDS-VALIDATION.md",
+        "coverage ledger",
+        "findings",
+        "remediation export"
+      ],
+      "recovery": [
+        "stage-state/next",
+        "stage result apply idempotency",
+        "bounded malformed-result retry",
+        "prior-run carry",
+        "individual checkpoint gap"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Selected orchestrator/advisor/worker/probe config reaches actual owning leaf; model/effort availability never inferred from a label",
+        "Explicit unsupported controls rejected or honestly reported; no invented dollar budgets or nested-cap enforcement"
+      ],
+      "representativeProof": "Actual native adapter runs every declared stage/gate, including refusal/error/recovery fixtures; preserve exact owning contracts.",
+      "negativeFixture": [
+        "Priority eight repairs first, including true optional-schema handling, per-agent checkpoint/resume and partial reports",
+        "Native source-reader transport/tool enforcement, capability preflight, same upstream gates; do not merely symlink skill"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    },
+    {
+      "offering": "seo-check",
+      "batch": "CP-13",
+      "entry": "graphs/seo/skills/seo-check",
+      "existingClassification": "provider-neutral-helper-install-gap",
+      "stages": [
+        "built HTML scan",
+        "metadata/link/schema/sitemap checks",
+        "safe report"
+      ],
+      "outputs": [
+        "text or JSON check result"
+      ],
+      "recovery": [
+        "rerunnable CLI; no agent ledger"
+      ],
+      "permissions": [
+        "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+        "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+      ],
+      "modelConfig": [
+        "Provider-neutral content/helper; no mandatory spawned model process. If delegation is used, shared native model policy applies."
+      ],
+      "representativeProof": "Built HTML good/bad fixtures exercise exact CLI checks and JSON/nonzero statuses, no unexecuted check counted as pass.",
+      "negativeFixture": [
+        "Resolve own installed path without ~/.claude",
+        "Codex installer and CLI success/failure fixtures"
+      ],
+      "completion": "Implemented + independently reviewed + applicable offline/native flow proof + catalog updated; not satisfied by symlink or prose assertion"
+    }
+  ],
+  "sharedChecks": {
+    "entry": [
+      "Clean Codex-only HOME/skill root resolves owning entry and local dependencies",
+      "No accidental ~/.claude lookup or Claude fallback; explicit unsupported prerequisite fails before dispatch"
+    ],
+    "permissions": [
+      "Use supported native tools and scopes; role prompt cannot grant tool authorization",
+      "No extra remote sends/merge/deploy/purchase; preserve existing approval boundaries"
+    ],
+    "modelConfig": [
+      "Selected orchestrator/advisor/worker/probe config reaches actual owning leaf; model/effort availability never inferred from a label",
+      "Explicit unsupported controls rejected or honestly reported; no invented dollar budgets or nested-cap enforcement"
+    ],
+    "recovery": [
+      "Persisted graph state and valid completed siblings retained; in-flight uncertainty cannot cause blind replay",
+      "Guidance-only flow preserves written artifacts and explains interrupted/partial work; no invented durable process promise"
+    ],
+    "outputs": [
+      "Structured outputs pass unchanged owning validators; error/partial stays distinguishable from success",
+      "Readable reports reflect current evidence/generation and retain source-only/unknown limitations"
+    ]
+  },
+  "nonSkillOfferings": {
+    "loop": "CP-05 standalone loop plus shared QA graph",
+    "aws-arch-review": "CP-13 advisory architecture command alias; six-pillar representative assessment, source-grounded claims; no AWS mutation",
+    "founding-sales": "CP-13 marketing command alias; representative narrative/pricing/outreach plan, no auto-send",
+    "statusline": "CP-14 supported native status presentation or documented unsupported UI; cannot assert native statusLine config exists",
+    "agents": "CP-02 graph role bindings; CP-11 standalone consultant-role invocation fixtures; all 37 installed agent definitions remain inventoried",
+    "globalInstructions": "CP-01 portable discoverability; CP-10 provider-specific generated project instructions"
+  },
+  "noRuntimeExecuted": true,
+  "providerConstraintClarification": "Parity is equivalent stages/outcomes/assurance/recovery, not invented provider native hooks or dollar/turn caps. Configured unsupported controls must preflight-refuse, never silently ignore.",
+  "observabilityRegressions": [
+    {
+      "id": "codex-unknown-dollar-total",
+      "batches": [
+        "CP-09",
+        "CP-14"
+      ],
+      "observation": "Pinned autobuild P214 terminal log prints estimated total $0.00 despite Codex dollar cost unknown",
+      "historicalPolicy": "Keep raw logs and pinned host unchanged",
+      "expected": "Unknown dollars and actual observed token counters; unknown counters are not zero",
+      "fixtures": [
+        "Known Codex tokens without dollars: unknown terminal/JSON dollars and no estimated zero",
+        "Missing usage: unknown counters",
+        "Failed completed attempts retain actual counters",
+        "Genuine applicable zero distinguished from unavailable",
+        "Unsupported configured dollar/turn limit: explicit preflight refusal and zero dispatch"
+      ]
+    }
+  ]
+}
