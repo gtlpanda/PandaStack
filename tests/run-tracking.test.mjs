@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync, symlinkSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { test } from '../scripts/workflow-harness.mjs'
 import { withTrackedRun, currentRunId } from '../core/skills/run-records/tracking.mjs'
@@ -12,10 +12,12 @@ import { runCodex } from '../graphs/autobuild/tool/lib/codex.mjs'
 import { loadConfig } from '../graphs/autobuild/tool/lib/config.mjs'
 
 async function fixture(work) {
-  const repo = mkdtempSync(join(tmpdir(), 'tracking-'))
-  const storeDir = join(repo, 'store')
+  const base = mkdtempSync(join(tmpdir(), 'tracking-'))
+  const repo = join(base, 'repo')
+  mkdirSync(repo)
+  const storeDir = join(base, 'store')
   const options = { repo, runnerRoot, storeDir, workflow: 'autobuild', backend: 'codex', settings: {} }
-  try { await work(options, createRunStore(storeDir)) } finally { rmSync(repo, { recursive: true, force: true }) }
+  try { await work(options, createRunStore(storeDir)) } finally { rmSync(base, { recursive: true, force: true }) }
 }
 await test('tracking isolates concurrent parents, assigns fresh IDs and preserves terminal codes', () => fixture(async (o, store) => {
   await Promise.all(['a', 'b'].map(runId => withTrackedRun({ ...o, runId }, async () => {
@@ -44,7 +46,7 @@ await test('conflicts leave existing records/events unchanged; errors retain ide
   assert.ok(!JSON.stringify(s.readEvents('throws')).includes(error.message))
 }))
 await test('storage failure executes once, preserves errors and bounds safe warnings', () => fixture(async o => {
-  const file = join(o.repo, 'file'); writeFileSync(file, 'not a directory')
+  const file = join(dirname(o.storeDir), 'file'); writeFileSync(file, 'not a directory')
   const original = process.stderr.write
   const messages = []
   process.stderr.write = text => { messages.push(text); return true }

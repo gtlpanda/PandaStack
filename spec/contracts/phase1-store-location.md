@@ -52,3 +52,5 @@ Direct store API remains usable inside a caller-chosen project directory.
 
 
 Pre-freeze evidence: native hunt 20261110T114537Z-1794312301456 reproduced the clean-build regression at 4edd0b612341e33f3a62d4f865da8703e9d2492c (head exit 1 with marker; baseline 18eabde206c5041e098102b939877c8e4c99fb85 exit 0). The independently reviewed 20-case acceptance matrix had 4 passing controls and 16 expected behavioral failures before implementation. No provider calls or race-exploit tests are part of acceptance.
+
+Legacy fixture correction: the existing run-tracking implementation tests use an external sibling store under the same disposable outer directory. Their assertions remain unchanged. The regular-file storage-failure fixture is external too, preserving I/O failure coverage. This corrects the fixture layout for the explicit placement policy; it does not relax parentage, retry, outcome, warning, or provider assertions.
