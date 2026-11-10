@@ -35,3 +35,9 @@ Default read-only inspection will perform no provider execution; trusted injecte
 
 - D25 (P1-07): Remove default provider execution entirely, preserving managed binary/PATH resolution and executable availability checks. Default reports keep version null and all controls unknown, explicitly stating that execution was not performed. This supersedes D14's default version command; earlier live version outputs reflect prior behavior. Explicit trusted callbacks retain their existing context, normalization, safe errors, and explicit-path availability checks.
 - D26 (P1-07): Verify both providers, binary selection sources, PATH sources, unavailable/nonexecutable selections, injected evidence, and CLI output through in-process subprocess spies and inert temporary executable files. Use the existing workflow harness and automatic test discovery. Run only P1-07 acceptance and focused doctor implementation tests; leave full gates, commits, pass flags, live evidence, and phase completion to the external host.
+
+## P1-08 follow-up and review input completeness
+
+The supervisor stopped run 20261110T084044Z after repeated isolated repair suite failures caused by the known export environment. Owned processes and exact dead-owner locks were cleared; retained repairs and evidence were preserved. No repair was treated as verified. The three confirmed edge defects now have frozen ordinary regression tests in a normal autobuild batch; all full gates and a fresh native hunt remain mandatory.
+
+For the next hunt, an external CLI forwarding helper supplies complete committed historical and downstream source files to hunter stdin, avoiding tool-output truncation of retro.md. It preserves real CLI execution, source lens instructions, schemas and host evidence checks; it does not edit the ledger or waive coverage. Other provider roles are forwarded unchanged. Helper: /tmp/pandastack-review-full-source-codex.py.

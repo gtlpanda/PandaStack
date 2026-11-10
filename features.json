@@ -104,6 +104,23 @@
       "test": "acceptance/phase1/p1-07.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "P1-08",
+      "title": "Validate selected launch values and classify read failures",
+      "description": "Implement spec/contracts/phase1-edge-validation.md; preserve every existing frozen gate. Use ordinary injected failures only.",
+      "contract": "spec/contracts/phase1-edge-validation.md",
+      "dependencies": [
+        "P1-07"
+      ],
+      "acceptance": [
+        "Invalid effective binaries block doctor before probing; valid overrides preserve launcher precedence.",
+        "Selected null launch models fail shared validation while observational unknowns remain valid.",
+        "Operational reads return IO_ERROR; malformed stored content remains CORRUPT."
+      ],
+      "test": "acceptance/phase1/p1-08.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
