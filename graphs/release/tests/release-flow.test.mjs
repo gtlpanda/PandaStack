@@ -54,7 +54,7 @@ await test('helpers marked shared are identical to harness-repair.js', () => {
     assert.equal(blockOf(src, start), blockOf(qa, start), `shared block drifted: ${start}`)
   }
 })
-await test('every node pins agentType + model + effort at high, matching the agent files and meta.phases', async () => {
+await test('every node pins agentType + model + configured effort, matching the agent files and meta.phases', async () => {
   const declared = Object.fromEntries(meta.phases.map(p => [p.title, p.model]))
   const runs = [
     await run(fn, { 'release-checker': [snapOf()], scribe: [DOCS] }, A('docs')),
@@ -65,7 +65,6 @@ await test('every node pins agentType + model + effort at high, matching the age
   for (const c of runs.flatMap(r => r.calls)) {
     assert.equal(c.model, agentField(c.agentType, 'model'), `${c.agentType}: model drift`)
     assert.equal(c.effort, agentField(c.agentType, 'effort'), `${c.agentType}: effort drift`)
-    assert.equal(c.effort, 'high')
     assert.equal(c.model, declared[c.phase], `phase ${c.phase}: meta says ${declared[c.phase]}, node runs ${c.model}`)
     assert.ok(c.schema && c.schema.type === 'object')
     seen.add(c.agentType)

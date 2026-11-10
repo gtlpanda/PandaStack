@@ -85,7 +85,7 @@ await test('the shared block sits between its markers and is the whole of the ve
   const inner = src.slice(src.indexOf('\n', a) + 1, b)
   for (const piece of inner.split(/\n\n(?=\/\/|function|async|let)/).map(s => s.trim()).filter(Boolean)) assert.ok(qa.includes(piece), `not in harness-repair.js: ${piece.slice(0, 50)}`)
 })
-await test('every node pins agentType, model, effort high and a schema, and matches its agent file', async () => {
+await test('every node pins agentType, model, configured effort and a schema, and matches its agent file', async () => {
   const facts = await go({ 'audit-researcher': allResearchers() }, FACTS_INPUT())
   const synth = await go({ 'audit-synthesizer': [SYNTH()] }, SYNTH_INPUT())
   const calls = [...facts.calls, ...synth.calls]
@@ -95,7 +95,6 @@ await test('every node pins agentType, model, effort high and a schema, and matc
     const file = agentFile(c.agentType).fields
     assert.equal(c.model, file.model, `${c.agentType}: model drift`)
     assert.equal(c.effort, file.effort, `${c.agentType}: effort drift`)
-    assert.equal(c.effort, 'high')
   }
 })
 await test('every schema is a root object whose required list is a subset of its properties (the runtime throws on an unsatisfiable one)', async () => {

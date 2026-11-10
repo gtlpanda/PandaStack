@@ -47,6 +47,7 @@ function deny(reason) {
 
 // The kit itself (lib/, hooks/): a session never rewrites the tool that checks it.
 const KIT_HOME = path.resolve(import.meta.dirname, "..");
+const TOOL_PATHS = [KIT_HOME, path.resolve(KIT_HOME, "../../../agent-config.json"), path.resolve(KIT_HOME, "../../../scripts/agent-config.mjs")];
 const TEMP_DIRS = [...new Set(["/tmp", tmpdir()].map((dir) => path.resolve(dir)))];
 
 function globToRegExp(pattern) {
@@ -84,7 +85,7 @@ function isFrozenAt(absolute, root) {
   const rel = path.relative(root, absolute).split(path.sep).join("/");
   // The project's git dir: a hook or config written there runs on every later commit, the owner's too.
   if (rel === ".git" || rel.startsWith(".git/")) return true;
-  if (absolute === KIT_HOME || absolute.startsWith(`${KIT_HOME}/`)) return true;
+  if (TOOL_PATHS.some(file => absolute === file || absolute.startsWith(`${file}/`))) return true;
   if (rel.startsWith("..") || path.isAbsolute(rel)) return !TEMP_DIRS.some((dir) => absolute === dir || absolute.startsWith(`${dir}/`));
   if (role === "review") return rel !== config.progressFile;
   if (WRITABLE.some((pattern) => pattern.test(rel))) return false;
@@ -210,7 +211,7 @@ if (tool === "Bash") {
   const mutating = /(^|[\s;&|(])(sed\s+-[^\s]*i|perl\s+-[^\s]*i|mv|cp|rm|unlink|truncate|chmod|chown|ln|touch|dd|install|patch|rsync)(\s|$)/;
   const scripting = /(^|[\s;&|(])(node\s+(-e|--eval|-p|--print)|python3?|ruby|perl\s+-e)(\s|$)/;
   const frozenNames = config.frozen.map((entry) => entry.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*"));
-  const frozenAnywhere = new RegExp(`(${[...frozenNames, KIT_HOME.replace(/[.+^${}()|[\]\\]/g, "\\$&"), "\\.claude/"].join("|")})`);
+  const frozenAnywhere = new RegExp(`(${[...frozenNames, ...TOOL_PATHS.map(file => file.replace(/[.+^${}()|[\]\\]/g, "\\$&")), "\\.claude/"].join("|")})`);
   if (scripting.test(command) && frozenAnywhere.test(command)) deny("inline scripts that reference frozen files are not allowed.");
   const mentionsFrozen = command.split(/[\s;&|()]+/).some((token) => frozenTarget(token));
   // In-place edits, whatever flags come first (sed -E -i, sed -e s/a/b/ -i, perl -pi).

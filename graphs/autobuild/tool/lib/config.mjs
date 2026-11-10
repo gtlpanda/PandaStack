@@ -6,6 +6,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
+import { readAgentConfig, validateConcurrency } from "../../../../scripts/agent-config.mjs";
+
 export const CONFIG_FILE = "autobuild.json";
 
 export const DEFAULTS = {
@@ -16,9 +18,11 @@ export const DEFAULTS = {
   branch: null,
   prompt: "Read CLAUDE.md, SPEC.md, features.json, PROGRESS.md. Build the next feature.",
   systemPrompt: null,
-  model: "claude-opus-5-5",
-  subagentModel: "claude-sonnet-5-5",
-  subagentModelForce: true,
+  // Read lazily so guard hooks can catch invalid config and deny, rather than crash at import.
+  get model() { return readAgentConfig().claude.orchestrator.model; },
+  get subagentModel() { return readAgentConfig().claude.subagents.model; },
+  subagentModelForce: false,
+  get maxConcurrentSubagents() { return readAgentConfig().maxConcurrentSubagents; },
   probeModel: "claude-haiku-5-5",
   claudeBin: "claude",
   backend: "claude",
@@ -120,10 +124,13 @@ export function loadConfig(root = findProjectRoot(), env = process.env, override
   if (env.AUTOBUILD_PROBE_MODEL) config.probeModel = env.AUTOBUILD_PROBE_MODEL;
   if (overrides.model) config.model = overrides.model;
   if (config.backend === "codex") {
+    if (raw.model === undefined && !env.AUTOBUILD_MODEL && !env.MODEL && !overrides.model) config.model = "opus";
+    if (raw.subagentModel === undefined && !env.AUTOBUILD_SUBAGENT_MODEL && !env.SUBAGENT_MODEL) config.subagentModel = "sonnet";
     for (const key of ["model", "subagentModel", "probeModel"]) config[key] = codexModel(config[key]);
     if (!Number.isFinite(config.codex.sessionTimeoutMinutes) || config.codex.sessionTimeoutMinutes <= 0) throw new Error("codex.sessionTimeoutMinutes must be positive");
     if (config.limits.totalBudgetUsd != null) throw new Error("Codex does not report dollar cost; remove totalBudgetUsd and use maxIterations/sessionTimeoutMinutes instead");
   }
+  validateConcurrency(config.maxConcurrentSubagents);
   if (env.EXPECTED_BRANCH) config.branch = env.EXPECTED_BRANCH;
   config.env.pathPrepend = (config.env.pathPrepend ?? []).map(expandHome);
   config.env.ldLibraryPath = (config.env.ldLibraryPath ?? []).map(expandHome);

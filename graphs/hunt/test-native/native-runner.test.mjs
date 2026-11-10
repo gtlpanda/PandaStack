@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from 'nod
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { runNativeHunt, runNativeProcess, nativeLeafArgs, schemaProblems, codexOutputSchema, withNativeRepoLock } from '../skills/bughunt/native-runner.mjs';
+import { agentGate, runNativeHunt, runNativeProcess, nativeLeafArgs, schemaProblems, codexOutputSchema, withNativeRepoLock } from '../skills/bughunt/native-runner.mjs';
 import { prepareHunt } from '../skills/bughunt/land.mjs';
 import { reviewStatus } from '../skills/bughunt/review-status.mjs';
 import { DEFAULTS, codexModel } from '../../autobuild/tool/lib/config.mjs';
@@ -164,4 +164,48 @@ test('legacy target lock refuses before a preparation callback can alter retaine
     await assert.rejects(withNativeRepoLock(f.repo, async () => { prepared = true; }), /Existing hunt lock/);
     assert.equal(prepared, false); assert.equal(readFileSync(sentinel, 'utf8'), 'keep');
   } finally { f.close(); }
+});
+
+test('shared leaf gate bounds concurrent work and releases permits after failures', async () => {
+  for (const limit of [1, 2, 4]) {
+    const gate = agentGate(limit);
+    let active = 0, peak = 0;
+    const results = await Promise.allSettled(Array.from({ length: 9 }, (_, i) => gate(async () => {
+      active++; peak = Math.max(peak, active);
+      try { await new Promise(resolve => setTimeout(resolve, 5)); if (i === 2) throw new Error('leaf failed'); return i; }
+      finally { active--; }
+    })));
+    assert.equal(peak, limit);
+    assert.equal(active, 0);
+    assert.equal(results.filter(r => r.status === 'rejected').length, 1);
+    assert.equal(await gate(async () => 'next run'), 'next run');
+  }
+  for (const value of [0, -1, 1.5, '2', null]) assert.throws(() => agentGate(value), /positive safe integer/);
+});
+
+test('native hunt honors a one-worker cap across the actual graph fan-out', async () => {
+  const f = repoFixture();
+  try {
+    f.config.maxConcurrentSubagents = 1;
+    const base = leaves('clean', []);
+    let active = 0, peak = 0;
+    const processRunner = async (bin, argv, opts) => {
+      if (!opts.env.PANDASTACK_HUNT_ROLE) return base(bin, argv, opts);
+      active++; peak = Math.max(peak, active);
+      try { await new Promise(resolve => setTimeout(resolve, 5)); return await base(bin, argv, opts); }
+      finally { active--; }
+    };
+    const result = await runNativeHunt({ repo: f.repo, tree: join(f.prep.stateDir, 'tree'), stateDir: f.prep.stateDir, config: f.config, mode: 'discover', processRunner });
+    assert.equal(result.code, 0);
+    assert.equal(peak, 1);
+  } finally { f.close(); }
+});
+
+test('Claude role customization does not change native Codex role models or effort', () => {
+  const config = { model: 'gpt-6-astra', subagentModel: 'gpt-6.1-sol', codex: { reasoningEffort: 'medium' } };
+  for (const agentType of ['advisor', 'hunter']) {
+    const args = nativeLeafArgs(config, { agentType, model: 'claude-custom', effort: 'max' }, { schema: '/tmp/s', output: '/tmp/o' });
+    assert.equal(args[args.indexOf('--model') + 1], agentType === 'advisor' ? config.model : config.subagentModel);
+    assert.ok(args.includes('model_reasoning_effort="medium"'));
+  }
 });

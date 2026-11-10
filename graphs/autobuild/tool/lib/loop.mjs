@@ -15,6 +15,7 @@
 // Once every feature passes (and the final review ran), lib/bughunt.mjs runs /bughunt --fix over
 // the branch and lands its verified fixes before the loop reports done.
 
+import { claudeAgentSettings, readAgentConfig, validateConcurrency } from "../../../../scripts/agent-config.mjs";
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, linkSync, mkdirSync, openSync, closeSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -460,6 +461,9 @@ When the feature is done: mark it passing (\`autobuild mark-passed ${feature.id}
 
 /** Settings injected into loop sessions: the hooks the project doesn't own, plus deny rules for frozen paths. */
 export function sessionSettings(config) {
+  const agents = readAgentConfig();
+  const native = claudeAgentSettings(agents);
+  const concurrent = String(validateConcurrency(config.maxConcurrentSubagents ?? agents.maxConcurrentSubagents));
   const hook = (file, timeout, extra = {}) => [{ hooks: [{ type: "command", command: `node "${path.join(HOME, "hooks", file)}"`, timeout, ...extra }] }];
   const hooks = { StopFailure: hook("stop-failure.mjs", 30) };
   if (config.hooks === "inject") {
@@ -474,8 +478,8 @@ export function sessionSettings(config) {
     .flatMap((entry) => (writable.some((file) => file.startsWith(`${entry}/`)) ? [`Edit(/${entry})`] : [`Edit(/${entry})`, `Edit(/${entry}/**)`]));
   // The subagent model lives here, not in the process env: a user's ~/.claude/settings.json `env`
   // overrides the process env, and these --settings override the user's.
-  const env = { CLAUDE_CODE_SUBAGENT_MODEL: config.subagentModel, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: config.subagentModelForce === false ? "0" : "1", CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL: config.subagentModel };
-  return { env, hooks, permissions: { deny: [...deny, "Bash(git push)", "Bash(git push *)", "Bash(rm -rf *)", "Bash(curl *)", "Bash(wget *)", "Bash(npx *)"] } };
+  const env = { ...native.env, CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: concurrent, CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS: concurrent, CLAUDE_CODE_SUBAGENT_MODEL: config.subagentModel, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: config.subagentModelForce === false ? "0" : "1", CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL: config.subagentModelForce === false ? "" : config.subagentModel };
+  return { ...native, model: config.model ?? native.model, env, hooks, permissions: { deny: [...deny, "Bash(git push)", "Bash(git push *)", "Bash(rm -rf *)", "Bash(curl *)", "Bash(wget *)", "Bash(npx *)"] } };
 }
 
 async function runClaude(config, { role, prompt, appendSystemPrompt, maxTurns, maxBudgetUsd, allowedTools, logFile }) {

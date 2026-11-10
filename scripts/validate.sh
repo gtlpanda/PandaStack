@@ -20,6 +20,10 @@ fm_get() { frontmatter "$1" | awk -v k="$2" -F': *' '$1==k{sub(/^[^:]*: */,""); 
 # optionally quoted).
 fm_list() { frontmatter "$1" | awk -v k="$2" '$0==k":"{on=1; next} on && /^ *- /{sub(/^ *- */,""); gsub(/^["\x27]|["\x27] *$/,""); print; next} on{exit}'; }
 
+# ---- Central agent configuration ----
+if node scripts/configure-agents.mjs check; then ok "central agent configuration is synchronized"
+else bad "central agent configuration is invalid or stale"; fi
+
 # ---- JSON ----
 if python3 -c 'import json,sys; json.load(open(sys.argv[1]))' settings.json 2>/dev/null; then ok "settings.json is valid JSON"
 else bad "settings.json is not valid JSON"; fi

@@ -58,8 +58,7 @@ await test('every node pins agentType + model + effort, and both match the agent
     seen.add(c.agentType)
   }
   assert.deepEqual([...seen].sort(), ['advisor', 'checker', 'fixer', 'qa-auditor', 'reviewer'])
-  assert.equal(calls.find(c => c.agentType === 'advisor').model, 'fable')
-  for (const c of calls) assert.equal(c.effort, 'high', `${c.agentType}: effort ${c.effort}, the graph runs every node at high`)
+  assert.equal(calls.find(c => c.agentType === 'advisor').model, agentField('advisor', 'model'))
 })
 await test('MEDIUM/LOW findings only -> done, findings noted, no fix', async () => {
   const { result, calls } = await run(fn, { checker: [pass_()], reviewer: [review([finding('MEDIUM', 'm'), finding('LOW', 'l')])], 'qa-auditor': [review([])] }, ARGS)

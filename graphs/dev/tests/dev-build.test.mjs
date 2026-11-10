@@ -73,7 +73,7 @@ await test('helpers marked shared are identical to harness-repair.js', () => {
   }
   assert.ok(src.includes("const where = `Repo: ${REPO}. cd there before anything else.`"))
 })
-await test('every node pins agentType + model + effort at high, matching the agent files', async () => {
+await test('every node pins agentType + model + configured effort, matching the agent files', async () => {
   const { calls } = await run(fn, { planner: [PLAN()], advisor: [approve], ...BUILD_OK() }, ARGS)
   const seen = new Set()
   for (const c of calls.filter(c => !c.agentType.startsWith('workflow:'))) {
@@ -81,7 +81,6 @@ await test('every node pins agentType + model + effort at high, matching the age
     assert.ok(c.schema && c.schema.type === 'object', `call without schema: ${c.label}`)
     assert.equal(c.model, agentField(c.agentType, 'model'), `${c.agentType}: model drift`)
     assert.equal(c.effort, agentField(c.agentType, 'effort'), `${c.agentType}: effort drift`)
-    assert.equal(c.effort, 'high', `${c.agentType}: every node runs at high`)
     seen.add(c.agentType)
   }
   assert.deepEqual([...seen].sort(), ['acceptance-auditor', 'advisor', 'checker', 'implementer', 'planner', 'scout'])
@@ -588,7 +587,7 @@ await test('every unplanned change kept: no rework, no second audit; the plan, l
   assert.equal(result.status, 'done')
   assert.ok(types(calls).endsWith(`acceptance-auditor,advisor,${QA}`))
   const triage = calls.find(c => c.label === 'triage: unplanned changes')
-  assert.deepEqual([triage.phase, triage.model, triage.effort], ['Triage', agentField('advisor', 'model'), 'high'])
+  assert.deepEqual([triage.phase, triage.model, triage.effort], ['Triage', agentField('advisor', 'model'), agentField('advisor', 'effort')])
   assert.deepEqual(result.keptChanges.map(k => [k.change, k.serves]), [['409 marks the row', 'AC2'], ['poll stops on unmount', 'goal']])
   assert.equal(result.plan.behavior_changes.length, 3)
   assert.match(result.plan.behavior_changes[1], /^409 marks the row \(kept by the advisor; serves AC2: because 1\) \[src\/a.js:4\]$/)

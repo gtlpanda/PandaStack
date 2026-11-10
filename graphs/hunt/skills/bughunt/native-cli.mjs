@@ -26,7 +26,7 @@ export async function main(argv) {
   const config = existsSync(join(repo, 'autobuild.json'))
     ? loadConfig(repo, process.env, { backend: 'codex' })
     : { ...structuredClone(DEFAULTS), root: repo, backend: 'codex', codexBin: process.env.AUTOBUILD_CODEX_BIN || DEFAULTS.codexBin,
-      model: codexModel(DEFAULTS.model), subagentModel: codexModel(DEFAULTS.subagentModel), probeModel: codexModel(DEFAULTS.probeModel) };
+      model: codexModel('opus'), subagentModel: codexModel('sonnet'), probeModel: codexModel(DEFAULTS.probeModel) };
   if (opts['codex-bin']) config.codexBin = opts['codex-bin'];
   const base = opts.base || config.bughuntBase || defaultBase(repo);
   let stateDir, fixBranch;

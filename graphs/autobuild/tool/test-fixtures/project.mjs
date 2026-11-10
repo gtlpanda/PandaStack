@@ -8,9 +8,9 @@ import path from "node:path";
 export const KIT = path.resolve(import.meta.dirname, "..");
 const REPO = path.resolve(KIT, "..", "..", "..");
 
-/** A copy of the PandaStack layout the kit imports from (core/ and graphs/) at `root`; returns the copied kit. */
+/** A copy of the PandaStack layout the kit imports from (including shared configuration) at `root`; returns the copied kit. */
 export function copyKit(root) {
-  for (const dir of ["core", "graphs"]) cpSync(path.join(REPO, dir), path.join(root, dir), { recursive: true });
+  for (const dir of ["core", "graphs", "scripts", "agent-config.json"]) cpSync(path.join(REPO, dir), path.join(root, dir), { recursive: true });
   return path.join(root, "graphs", "autobuild", "tool");
 }
 export const CLI = path.join(KIT, "lib", "cli.mjs");

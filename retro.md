@@ -3141,3 +3141,27 @@ Self-review caught inherited command-display labels and symlink entrypoint
 detection; independent review caught the forced-loader CJS incompatibility.
 Independent re-audit passed after the compatibility fix and independently reran
 all eight fixtures successfully.
+
+## 44. Central agent configuration (2026-11-09)
+
+Added agent-config.json: a shared concurrency default of 8 and separate Claude
+orchestrator, advisor and worker model/effort settings, with named Haiku checker
+overrides. configure-agents.mjs sync materializes native Claude settings, agent
+frontmatter, workflow nodes and phase labels; check rejects drift. Explicit Claude
+and Codex launchers apply the config without replacing personal configuration.
+Autobuild and build-app consume the central defaults; project overrides remain.
+Codex's native hunt pool now uses the same configurable limit and isolates its
+model/effort routing from Claude workflow pins. Autobuild defaults to retaining
+advisor pins rather than forcing every worker onto one model.
+
+Verification: full validation, installer (138), secrets (22), and workflow (1430)
+checks passed. The first autobuild run found three copied-kit fixture failures:
+the copies lacked the new config dependency. Added the dependency and protection
+for shared config files; the complete autobuild rerun passed 107/107, including invalid central-config fail-closed behavior. Native hunt
+suite passed 18/18, including bounded fan-out and permit release after failures.
+Five central-config tests cover invalid inputs, distinct roles, drift/idempotence,
+project precedence and fake-CLI launch/exit behavior. Installed CLI version smoke
+checks passed (Codex 0.167.0, Claude 2.1.321); no paid model sessions were run.
+Self-review checked data flow, invalid inputs, preservation of tools/permissions,
+configuration precedence, generated metadata and both native execution paths.
+The final affected routing/configuration rerun passed 272/272.

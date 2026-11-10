@@ -20,6 +20,65 @@
 >
 > Install: `git clone https://github.com/gtlpanda/PandaStack.git && cd PandaStack && ./install.sh`
 
+
+## Engineering roadmap
+
+See [ROADMAP.md](ROADMAP.md) for the phased coordination, evaluation, and reliability
+roadmap. Each phase will be built and validated using PandaStack autobuild, with
+frozen acceptance tests, a branch bug hunt, and a recorded dogfood demonstration.
+Implementation has not started.
+
+## Central agent settings
+
+Edit `agent-config.json` in this checkout, then run:
+
+```sh
+node scripts/configure-agents.mjs sync
+node scripts/configure-agents.mjs check
+```
+
+`maxConcurrentSubagents` defaults to **8** for both providers. Claude has separate
+`claude.orchestrator`, `claude.advisor`, and `claude.subagents` objects, each with
+`model` and `effort`. Defaults are Opus/high, Fable/high, and Sonnet/high.
+`claude.agentOverrides` keeps checker, runner, and release-checker on Haiku; remove
+an override to make that agent use the worker default. Effort accepts `low`,
+`medium`, `high`, `xhigh`, or `max`; the selected model must support the value.
+
+Sync updates Claude settings, graph agent frontmatter, workflow nodes, and phase
+labels together. Tools and permissions stay unchanged. Workflow scripts cannot
+read configuration files at runtime, so their pins are generated; `validate.sh`
+rejects drift. The standalone `kit/agents` catalog keeps its own definitions.
+
+Autobuild and `/build-app` read the central defaults when started. Existing
+`autobuild.json` model overrides still win; `maxConcurrentSubagents` can also be
+overridden there. `subagentModelForce` now defaults to `false`, preserving the
+advisor and checker pins; an existing explicit `true` still forces one model.
+Codex native hunts use the configured worker pool and Codex models/effort, separate
+from the generated Claude workflow pins.
+
+For interactive sessions launched with the central settings explicitly applied:
+
+```sh
+node /path/to/PandaStack/scripts/configure-agents.mjs claude
+node /path/to/PandaStack/scripts/configure-agents.mjs codex
+```
+
+The Claude launcher syncs the definitions and injects native settings. Install the
+PandaStack agents/workflows with `./install.sh` first. Existing installations that
+symlink settings see synced changes; the installer preserves existing values in a
+user-owned settings file, so use the launcher to apply the central settings over
+those values. Explicit trailing CLI options can override launcher defaults.
+The Codex launcher passes the concurrency setting without changing your personal
+Codex config. Plain `codex` and already-running desktop chats keep their own config.
+
+Concurrency is per session/pool, not a machine-wide or lifetime quota. Claude uses
+`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` and
+`CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS` (verified in installed CLI 2.1.321);
+workflow-local pools, such as security-audit's `--max-parallel`, may be lower.
+Codex uses [`agents.max_concurrent_threads_per_session`](https://learn.chatgpt.com/docs/config-file/config-reference),
+which counts spawned threads and excludes the primary thread. Older CLI releases
+may not support these controls; this does not change host-imposed limits.
+
 ## What drives it
 
 - **Code routes, agents are leaves.** Each graph is a workflow script that
@@ -32,7 +91,7 @@
 - **The right model for each job.** An Opus orchestrator owns state, commits,
   and your approvals; a Fable advisor is called only at decision points
   (confirm a finding, gate a plan, unstick a loop, diagnose a failed deploy);
-  Sonnet and Haiku subagents do the focused work. Every node is configured for high effort.
+  Sonnet and Haiku subagents do the focused work. Every node defaults to high effort.
 - **Nothing unreviewed reaches a PR.** The review gate, a hook in every repo,
   refuses `gh pr create` until a finished `/bughunt` covers the head, and
   `gh pr merge` until that hunt passes. It also refuses pushes straight to the

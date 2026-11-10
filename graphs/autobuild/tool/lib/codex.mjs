@@ -1,4 +1,5 @@
 // Codex sessions use the saved CLI login. No Claude flags, hooks or API fallback.
+import { codexConcurrencyArgs } from "../../../../scripts/agent-config.mjs";
 import { spawn } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync } from "node:fs";
 import { buildEnv } from "./proc.mjs";
@@ -9,6 +10,7 @@ export function codexArgs(config, { prompt, appendSystemPrompt = "", role = "bui
     "-c", 'approval_policy="never"', "--model", probe ? config.probeModel : config.model,
     "-c", `model_reasoning_effort=${JSON.stringify(probe ? "high" : config.codex.reasoningEffort)}`,
     "-c", `agents.default_subagent_model=${JSON.stringify(config.subagentModel)}`];
+  args.push(...codexConcurrencyArgs(config.maxConcurrentSubagents));
   if (outputFile) args.push("--output-last-message", outputFile);
   if (schemaFile) args.push("--output-schema", schemaFile);
   const rules = probe ? "Do not use tools. Reply OK." : [

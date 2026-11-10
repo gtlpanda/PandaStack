@@ -44,7 +44,7 @@ test("Codex maps all Claude tiers; explicit OpenAI model and backend overrides w
   const config = loadConfig(root, env);
   assert.deepEqual([config.model, config.subagentModel, config.probeModel], ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"]);
   assert.equal(loadConfig(root, { ...env, AUTOBUILD_MODEL: "gpt-6.1-terra" }).model, "gpt-6.1-terra");
-  assert.equal(loadConfig(root, env, { backend: "claude" }).model, "claude-opus-5-5");
+  assert.equal(loadConfig(root, env, { backend: "claude" }).model, "opus");
   const { args } = codexArgs(config, { prompt: "build" });
   assert.ok(args.includes('agents.default_subagent_model="gpt-6.1-sol"'));
   assert.ok(!args.includes("--max-budget-usd"));

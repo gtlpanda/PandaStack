@@ -1,5 +1,6 @@
 // Execute the same hunt graph outside Claude's Workflow tool. Models are leaves;
 // intake, routing, evidence, ledger persistence and landing remain host-owned.
+import { readAgentConfig, validateConcurrency } from '../../../../scripts/agent-config.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, openSync, closeSync, existsSync, symlinkSync, lstatSync, realpathSync, rmSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -15,6 +16,23 @@ const ROOT = resolve(HERE, '../../../..');
 const GRAPH = resolve(HERE, '../../workflows/bughunt-flow.js');
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const ROLES = new Set(['impact-mapper', 'hunter', 'skeptic', 'advisor', 'reproducer', 'repairer', 'fix-verifier']);
+
+// A permit belongs to one running leaf, never to a parent awaiting other leaves.
+export function agentGate(max) {
+  validateConcurrency(max);
+  let active = 0;
+  const waiting = [];
+  return async work => {
+    if (active >= max) await new Promise(resolve => waiting.push(resolve));
+    else active++;
+    try { return await work(); }
+    finally {
+      const next = waiting.shift();
+      if (next) next();
+      else active--;
+    }
+  };
+}
 
 // JSON-schema subset used by the shared graph. CLI structured output is checked
 // again on the host; a syntactically valid but incomplete response is no verdict.
@@ -61,12 +79,12 @@ export function codexOutputSchema(schema) {
 
 export function nativeLeafArgs(config, opts, paths) {
   const writing = ['reproducer', 'repairer', 'fix-verifier'].includes(opts.agentType);
-  const models = { sonnet: config.subagentModel, fable: config.model, opus: config.model, haiku: config.probeModel };
-  const model = models[opts.model];
+  // Claude workflow pins may be customized independently of the Codex models.
+  const model = opts.agentType === 'advisor' ? config.model : config.subagentModel;
   if (!model || !ROLES.has(opts.agentType)) throw new Error(`Unsupported hunt node ${opts.agentType}/${opts.model}`);
   return ['exec', '--json', '--color', 'never', '--sandbox', writing ? 'workspace-write' : 'read-only',
     '--skip-git-repo-check', '-c', 'approval_policy="never"', '--model', model,
-    '-c', `model_reasoning_effort=${JSON.stringify(opts.effort || config.codex.reasoningEffort)}`,
+    '-c', `model_reasoning_effort=${JSON.stringify(config.codex.reasoningEffort)}`,
     '--output-schema', paths.schema, '--output-last-message', paths.output, '-'];
 }
 
@@ -243,18 +261,13 @@ async function runPreparedHunt({ repo, tree, configDir, stateDir, mode = 'fix', 
       return value;
     } catch (e) { noteFailure(12, `Native hunt ${opts.label}: invalid structured result (${e.message})`); return null; }
   };
-  const agent = async (prompt, opts) => {
+  const gate = agentGate(config.maxConcurrentSubagents ?? readAgentConfig().maxConcurrentSubagents);
+  const agent = (prompt, opts) => gate(async () => {
     try { return await leaf(prompt, opts); }
     catch (e) { noteFailure(12, `Native hunt ${opts.label} could not run: ${e.message}`); return null; }
-  };
-  // Bounded concurrency keeps independent specialists fresh without unbounded spend.
-  const parallel = async thunks => {
-    const results = new Array(thunks.length); let next = 0;
-    await Promise.all(Array.from({ length: Math.min(3, thunks.length) }, async () => {
-      for (;;) { const n = next++; if (n >= thunks.length) return; results[n] = await thunks[n](); }
-    }));
-    return results;
-  };
+  });
+  // All parallel branches share the leaf gate, including nested fan-out.
+  const parallel = thunks => Promise.all(thunks.map(thunk => thunk()));
   const pipeline = (items, ...stages) => parallel(items.map((item, i) => async () => {
     let value = item;
     for (const stage of stages) { try { value = await stage(value, item, i); } catch { return null; } }

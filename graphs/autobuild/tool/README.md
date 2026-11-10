@@ -83,14 +83,15 @@ Dollar figures in logs are Claude Code's list-price estimates. On a subscription
 
 ## autobuild.json
 
-See `templates/autobuild.json`. Defaults are in `lib/config.mjs`.
+See `templates/autobuild.json`. Agent defaults come from the root `agent-config.json`; other defaults are in `lib/config.mjs`. Run `node scripts/configure-agents.mjs sync` from the PandaStack checkout after changing Claude roles.
 
 | Key | Meaning |
 |---|---|
 | `featuresFile`, `progressFile`, `stateDir` (`.harness`), `logsDir` (`logs`) | Where things live. |
 | `branch` | The loop refuses to run on any other branch. |
 | `prompt`, `systemPrompt` | The session prompt, and extra appended system text. |
-| `model`, `subagentModel`, `subagentModelForce`, `probeModel` | Models. `subagentModel` is set through the injected settings, which override a subagent model pinned in `~/.claude/settings.json`. With `subagentModelForce: true` (default) every subagent runs on it; with `false` it is the default, and a session may pass `model` (`"sonnet"`, `"opus"`) on a single Agent call. |
+| `model`, `subagentModel`, `subagentModelForce`, `probeModel` | Models. `subagentModel` is set through the injected settings, which override a subagent model pinned in `~/.claude/settings.json`. With `subagentModelForce: true` every subagent runs on it (including advisors); with `false` (default) it is the default, and a session may pass `model` (`"sonnet"`, `"opus"`) on a single Agent call. |
+| `maxConcurrentSubagents` | Positive integer override of the central concurrency limit (default 8). Applied to Claude Agent and Workflow gates, Codex spawned threads, and the native Codex hunt pool. |
 | `hooks` | `"inject"` (default) or `"project"` (the project's settings own the guard and Stop gate). |
 | `limits` | `maxIterations`, `maxTurns`, `maxBudgetUsd` (per session), `totalBudgetUsd`, `noProgressLimit`, `reviewEvery`, `finalReview`, `reviewMaxTurns`, `reviewBudgetUsd`, `maxStopBlocks`, `maxLimitWaitHours`, `limitMarginMinutes`, `probeEveryMinutes`, `transientWaitMinutes`, `maxTransientRetries`, `watchdogMaxWaitMs`. Env overrides: `MAX_ITERATIONS`, `MAX_TURNS`, `MAX_BUDGET_USD`, `TOTAL_BUDGET_USD`, `NO_PROGRESS_LIMIT`, `REVIEW_EVERY` (or `AUTOBUILD_*`). |
 | `env` | `pathPrepend`, `ldLibraryPath` (`~` expanded) and `vars` for every command and session. |
