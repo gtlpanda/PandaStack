@@ -275,3 +275,11 @@ two pure modules, retaining every assertion and the trusted capability fixture.
 Independent inventory identified these two partial-copy fixtures; full-tree and
 original-module imports need no change. The first amended baseline passed; this
 second fixture was exposed by the subsequent 252/253 Phase 1 acceptance result.
+
+
+## Additive final-review corrections
+
+P2-07: spec/contracts/phase2-review-corrections.md governs observation completion
+and safe manual handoff. P2-08: spec/contracts/phase2-lazy-import.md governs lazy
+storage loading. Each adds seven independent cases. All preceding requirements,
+existing tests, authorization and uncertainty boundaries remain unchanged.

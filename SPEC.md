@@ -33,3 +33,9 @@ Report mocked versus live coverage separately and save stage usage evidence.
 No global scheduling, notifications/dashboard, learning policy rewrite or remote
 hosting in this phase. Those remain later roadmap phases. Do not claim completion
 until host checks, final hunt, live demonstrations and report review pass.
+
+
+P2-07 is governed by spec/contracts/phase2-review-corrections.md and P2-08 by
+spec/contracts/phase2-lazy-import.md, in addition to spec/contracts/phase2.md.
+These additive corrections preserve every prior requirement and acceptance gate.
+Final review, native hunt and live demonstrations remain mandatory.

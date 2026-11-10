@@ -87,6 +87,39 @@
       "test": "acceptance/phase2/p2-06.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "P2-07",
+      "title": "Reliable observation completion and safe manual handoff",
+      "description": "Implement spec/contracts/phase2-review-corrections.md while preserving all existing Phase 1 and Phase 2 requirements. Correct synchronous closing-sink replay, asynchronous stdout errors, finite CLI backpressure and MANUAL_HANDOFF redaction without changing decision authorization or workflow outcomes.",
+      "contract": "spec/contracts/phase2-review-corrections.md",
+      "dependencies": [
+        "P2-06"
+      ],
+      "acceptance": [
+        "Pass all seven frozen P2-07 cases, including the unchanged four original cases and three transport cases.",
+        "Preserve all prior acceptance, regression gates, queue uncertainty and no-resend semantics.",
+        "Bound output completion and owned cleanup; do not fabricate complete coverage or change workflow outcomes on observation failure."
+      ],
+      "test": "acceptance/phase2/p2-07.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "P2-08",
+      "title": "Load decision storage only for enabled gate work",
+      "description": "Implement the additive lazy-storage boundary in spec/contracts/phase2-lazy-import.md without changing existing decision APIs or prior acceptance.",
+      "contract": "spec/contracts/phase2-lazy-import.md",
+      "dependencies": [
+        "P2-07"
+      ],
+      "acceptance": [
+        "Pass all seven independent lazy-import cases and preserve all prior acceptance and regression gates.",
+        "Keep unavailable-SQLite simulation distinct from real older-Node runtime validation."
+      ],
+      "test": "acceptance/phase2/p2-08.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
