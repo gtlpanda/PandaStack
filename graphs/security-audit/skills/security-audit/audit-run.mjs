@@ -37,6 +37,7 @@ import { fileURLToPath } from 'node:url'
 import { buildEnv, git as rawGit, tail } from '../../../build/skills/build-app/driver/proc.mjs'
 import { VENDOR_DIR, isSafeRelativePath, validateFindingsFile, validateLedgerFile } from './upstream.mjs'
 import { PROFILES, QUICK_DEFERRED, rulesOf } from './audit-profile.mjs'
+import { inspectSnapshotProtection } from './snapshot-protection.mjs'
 
 // Every git call here runs without the target's hooks or fsmonitor: both are config a repo may set with a
 // relative path, which resolves inside the checkout, the code under audit. A local copy of the flags in
@@ -676,6 +677,10 @@ export function init(opts) {
   try {
     const gate = budgetGate(opts.profile, opts.budget)   // before any snapshot or agent: a run that cannot be funded does no work
     const snapshot = gate.ok ? exportTree(f.top, f.commit, join(runDir, 'tree')) : null
+    if (gate.ok) {
+      const protection = inspectSnapshotProtection(join(runDir, 'tree'))
+      if (!protection.ok) refuse('snapshot permission inspection failed: audit initialization refused')
+    }
     const priors = gate.ok ? discoverPriors([[join(f.common, 'security-audit'), 'default'], ...(opts.out ? [[dirname(runDir), 'beside --out']] : [])], runDir, opts.prior, f.repo) : null
     const pin = JSON.parse(readFileSync(join(VENDOR_DIR, 'UPSTREAM.json'), 'utf8'))
     const metadata = {

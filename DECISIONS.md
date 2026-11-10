@@ -459,3 +459,24 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   No fallback; local static review does not replace independent host review of
   wiring, EEXIST-only handling and authority. Native F3 ERROR and refused F4
   evidence limits remain unchanged. Host owns full gates, flags and commits.
+
+- D87 (SA-01): Implement only the host-selected snapshot permission prerequisite.
+  Inspect actual lstat mode bits after export and before prior discovery or any
+  run publication. Keep budget refusal and init-owned cleanup unchanged. Use
+  read-only traversal with relative, deterministic diagnostics; reject symlinks
+  and special entries without reading their contents. Add workflow-harness tests
+  before implementation, including synthetic I/O failures without a public
+  injected filesystem authority. No target execution or blocked reproduction.
+  Follow the final backend instructions: host owns flags, staging, commits and
+  full gates. Permission-bit evidence does not establish denied writes, ACLs,
+  hostile same-user containment or native tool restrictions.
+- D88 (SA-01 evidence): Keep the mounted acceptance failure explicit: its owned
+  mkdtemp returned EROFS before inspection. Do not substitute a Linux parent,
+  skip it, or claim mounted-filesystem proof. The standard node --test invocation
+  exposed only a file-level failure; direct execution of the unchanged acceptance
+  file ran all six cases and reported five passes and that one failure. A focused
+  legacy profile test returned two passes and one missing-metadata failure; a
+  diagnostic of its CLI fixture returned status 0 with empty stdout/stderr, with
+  cause unknown. Separate that from ten passing direct implementation cases.
+  The requested Explore model gpt-6.1-sol was unavailable; no fallback was used.
+  Local review does not replace independent host review or the remaining gates.

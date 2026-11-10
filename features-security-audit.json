@@ -13,7 +13,7 @@
       ],
       "test": "acceptance/security-audit/sa-01-snapshot.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     }
   ]
 }
