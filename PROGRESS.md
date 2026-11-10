@@ -805,3 +805,82 @@ Read-only Explore sanity audit: PASS for data flow, edge/error handling, securit
 consistency and missing pieces; no concrete defects found in the scoped diff.
 This is static review only; execution evidence is the targeted verification above.
 Final `git diff --check`: exit 0 after documentation updates.
+
+## P1-11 two-pass review — 2026-11-10
+
+Reviewed 759ba555b2621e722f16ab50d70ff0f9781f5d79..9d7f9a98bd46a5f10bb1949cdc58c800e191cd25
+against AGENTS.md, CLAUDE.md, SPEC.md, all eight spec/contracts/phase1*.md
+contracts and prior PROGRESS.md findings. Pass 1 compared behavior, feature
+metadata and acceptance additions with the contracts. Pass 2 checked correctness,
+concurrency, durability, error handling, configuration provenance and compatibility,
+including unchanged surrounding code needed to assess earlier findings.
+
+REVIEW 2026-11-10: No specification drift or additional defects found in the reviewed diff. Doctor preserves expanded prefix bytes during PATH serialization at core/skills/run-records/doctor.mjs:90-93, anchors candidates after splitting at :96, and retains kernel traversal at :82. Selected-only model validation and provenance use the shared owner at doctor.mjs:38-39 and graphs/autobuild/tool/lib/config.mjs:169-186. Claude's selected model reaches session settings, child environment and provider arguments at graphs/autobuild/tool/lib/loop.mjs:490, :513 and :520. Existing test discovery includes the implementation additions at scripts/test-workflow.mjs:10-14. Focused tests below passed; this is not a full-gate or live-provider readiness claim.
+
+Prior findings dispositions (current file:line evidence):
+- Colon-containing repository PATH serialization: addressed at
+  core/skills/run-records/doctor.mjs:90-96. Only existence checks receive the
+  repository prefix before serialization; actual PATH delimiters remain intact.
+  Existing P1-11 and implementation fixtures passed for both providers, colon
+  and whitespace roots, explicit binary paths and target/unrelated cwd.
+- Empty prefixes, relative-prefix inspector-cwd dependence and symlink/parent
+  lexical collapse: remain addressed at doctor.mjs:82, :85, :90-96. Existing
+  P1-10 and implementation cases passed, including inherited versus explicit
+  empty PATH components and the shared resolver's home expansion.
+- Shadowed malformed models, including P1-09 native F1: addressed at
+  doctor.mjs:13-17 and :38-39, with selected validation and winning-source
+  attribution at graphs/autobuild/tool/lib/config.mjs:169-186. Existing model
+  precedence, invalid-selected and non-model rejection checks passed.
+- Lost CLI model context in Claude hooks: addressed in the inspected propagation
+  path at graphs/autobuild/tool/lib/loop.mjs:490, :513 and :520; child extras win
+  at graphs/autobuild/tool/lib/proc.mjs:26. The existing session-settings/reload
+  test passed and hook/permission construction remains at loop.mjs:473-491.
+  Actual hook acceptance was excluded after the historical git-spawn EPERM;
+  native F2's evidence ERROR remains historical, not promoted to execution proof.
+- Doctor/launcher rejection mismatch: remains addressed by doctor.mjs:38 and
+  shared budget/timeout/hooks validation at config.mjs:127-148 (config.mjs is
+  graphs/autobuild/tool/lib/config.mjs). Selected/non-model tests passed;
+  timeout/budget paths were inspected rather than separately rerun here.
+- Directory symlink replacement race: remains addressed by retained no-follow
+  directory descriptors at core/skills/run-records/store.mjs:28-66, anchored
+  reads at :79, exclusive publication at :120 and :128, cleanup at :139 and
+  enumeration at :148. Inspection only; no exploit or blocked reproduction retry.
+- Missing parent-directory durability barriers: remains addressed at
+  store.mjs:56-63, file sync at :122, publication sync at :132 and replay sync
+  at :113. Inspection only in this review; no physical power-loss claim.
+- Selected central configuration/source-checkout dependency, including older
+  BUGHUNT F1: remains addressed at graphs/autobuild/tool/lib/config.mjs:114-119;
+  public lazy getters remain at :73-77. Doctor reads the selected owner at
+  doctor.mjs:109 and passes it at :38. Absent-source behavior was inspected,
+  not reproduced in this review.
+- Close-after-release EIO cleanup: ownership is cleared before close at
+  store.mjs:124-126, with independent temporary-file removal at :134-139.
+  Remains addressed by inspection; close fault-injection tests were not rerun.
+- Default provider execution/trust boundary: remains addressed at
+  doctor.mjs:104 and :129-137. Existing trust tests passed for nonexecution,
+  unavailable executables, injected evidence normalization and safe failures.
+- Operational read classification, falsy selected binaries and null selected
+  launch models: remain addressed at store.mjs:88-95 and :20-23, and
+  graphs/autobuild/tool/lib/config.mjs:134-137 and :169-175. Existing edge tests
+  passed, including safe IO_ERROR/CORRUPT distinction, recovery, valid overrides
+  and observational null compatibility.
+- Earlier event ordering and adapter corrections remain at store.mjs:11-17
+  and adapters.mjs:18-19, :36-52 (inspection only). Null effort rejection and
+  explicit-path prerequisites remain at doctor.mjs:20 and :135; focused doctor
+  tests passed. Unqualified doctor/store/adapters paths above are under
+  core/skills/run-records/.
+- Historical manual_review, interrupted/failed gates and revision-specific live
+  evidence retain their recorded limits. This review does not change ledgers,
+  feature passes or host-owned final completion.
+
+Focused verification:
+- `node --test --test-reporter=dot acceptance/phase1/p1-09-precedence.cases.mjs acceptance/phase1/p1-09-path.cases.mjs acceptance/phase1/p1-10.test.mjs acceptance/phase1/p1-11.test.mjs`:
+  exit 0; output `....` (four passing file entries). Hook cases were excluded.
+- `node --input-type=module -e "await import('./tests/run-path-parity.test.mjs'); await import('./tests/run-launch-parity.test.mjs'); await import('./tests/run-edge-validation.test.mjs'); await import('./tests/run-doctor-trust.test.mjs'); await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; 29 passed, 0 failed.
+- `git diff --check`: exit 0 before this append.
+
+Only PROGRESS.md was modified. No full suite, bare autobuild, provider call,
+exploit reproduction, blocked reproduction retry, code/test edit, staging,
+commit, push, branch change, git-control edit or feature-pass change was performed.
+Mandatory full gates and final completion remain with the pinned external host.
