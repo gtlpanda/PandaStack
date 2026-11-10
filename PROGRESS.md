@@ -1711,3 +1711,66 @@ found. This is bounded review and focused evidence, not full-gate or live delive
 verification. Frozen inputs, scanner rules, feature flags and Git control remain
 unchanged. No staging, commits, full gates or live provider calls; the external
 host retains final review and completion.
+
+## Two-pass Phase 2 review — 2026-11-10
+
+Reviewed 4c409ae789acc56bbec94b15d4db56850d9f3e21..
+d3a42c8f1a56c808bfbc6ef186707577fb90f3ee. Read AGENTS.md, CLAUDE.md,
+SPEC.md, all phase contracts, DECISIONS.md and prior progress findings. Inspected
+changed source and tests in full, configuration, documentation and retained
+Phase 1 evidence; traced the CLI, shared config/doctor, feature selection,
+tracking, queue transactions and both managed provider launch paths.
+
+REVIEW 2026-11-10: No contract drift or concrete introduced defects found in the implemented P2-01 through P2-04 scope after contract-completeness and correctness/security/concurrency/error-handling passes. This is a bounded review with focused evidence, not full-gate acceptance or phase completion.
+
+Pass 1 — contract completeness:
+- records.mjs validates exact detached request/approval shapes; queue.mjs exposes
+  the contracted transitions and persisted namespace; routing.mjs and
+  scripts/decision-cli.mjs retain explicit acknowledgment and safe JSON errors.
+  The shared config validator is pure and reaches doctor through the existing
+  resolver. Both amended Phase 1 copy fixtures include its pure dependency
+  closure without deleting assertions.
+- graphs/autobuild/tool/lib/decisions.mjs:39-86 binds canonical repo, logical
+  retry identity, feature, request and revision, rejects approval handoff before
+  acknowledgment, checks HEAD before ack, and rechecks receipts/HEAD at launch.
+  loop.mjs:237-278 checks feature completion/selection before entering the gate;
+  context is supplied only to the targeted builder at :293. The actual checks
+  reach the Claude spawn at :571 and Codex spawn at codex.mjs:43.
+- P2-05 native delivery and P2-06 context receipts/trace closure remain explicitly
+  pending in features.json and the contract. Their missing implementation is not
+  reported as a regression in the completed features. Historical Phase 1 dogfood
+  and the documented primitive spike are not evidence of shipped Phase 2 delivery.
+
+Pass 2 — correctness, security, concurrency and errors:
+- queue-storage.mjs:29-153 retains directory anchors, private ownership/mode and
+  sidecar checks, exclusive creation, transactional schema/namespace setup,
+  bounded SQLite contention, rollback and safe error normalization. queue.mjs
+  validates persisted snapshots and recipient/revision/live-state invariants;
+  authorize() remains scope bookkeeping with no action-execution caller.
+- Focused checks exercised competing worker connections, durable replay,
+  corruption, commit-failure rollback, expiry/cancellation, routing isolation,
+  timeout/abort cleanup, approval refusal and HEAD changes. Provider-boundary
+  tests replace all process functions with synthetic mocks; no provider ran.
+- observations.mjs retains detached terminal replay, monotonic durations and
+  swallowed sink failures. Queue failures stop work; observation failure does
+  not grant authority or replace provider outcomes in the exercised paths.
+- Prior findings were compared with current code rather than treated as coverage:
+  tracking still preserves Git pathname bytes and rejects indeterminate discovery;
+  doctor still uses selected shared validation and nonexecuting binary lookup;
+  accepted Claude child settings remain pinned through sessionConfigEnv;
+  run-store anchors, parent sync and independent close-error cleanup remain.
+  These historical paths are unchanged by this range except the shared pure
+  config import. No historical blocked reproduction was retried or reclassified.
+
+Exact focused verification:
+- `node --input-type=module -e "for (const name of ['records','queue','routing','managed','observations','launch']) await import('./tests/decision-'+name+'.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; `{ pass: 45, fail: 0 }`.
+- `node --input-type=module -e "await import('./tests/run-doctor.test.mjs'); await import('./tests/run-followup.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; `{ pass: 9, fail: 0 }`.
+
+Only PROGRESS.md was modified. Process-based acceptance, live delivery, physical
+power-loss behavior and full gates were not tested here. Previously denied
+process/CLI, runner-entry and filesystem-race reproductions were not retried.
+No autobuild invocation, provider call, code/test change, staging, commit, flag,
+branch, Git-control or pinned-host change. The external host retains full gates,
+final review disposition and completion.
