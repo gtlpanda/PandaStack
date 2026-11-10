@@ -1774,3 +1774,65 @@ process/CLI, runner-entry and filesystem-race reproductions were not retried.
 No autobuild invocation, provider call, code/test change, staging, commit, flag,
 branch, Git-control or pinned-host change. The external host retains full gates,
 final review disposition and completion.
+
+## P2-05 — Native Codex active-turn delivery
+
+Added deliverToCodex() for a caller-owned connected app-server RPC transport and
+explicit thread/active-turn IDs. It sends turn/steer with expectedTurnId and the
+delivery identity, and only escaped, delimited untrusted question/selected-answer
+data. Approvals require manual handoff. The queue durably reserves each dispatch
+before RPC, validates the matching turn receipt, and commits receipt plus ack in
+one transaction after rechecking live state. An optional strictly validated
+internal snapshot field preserves existing SQLite tables and public queue shapes.
+
+Inflight is also the durable uncertainty marker: overlapping calls, interruption,
+transport/receipt failure and changed targets cannot resend automatically.
+Ordinary ack cannot bypass an inflight reservation; ordinary prior acknowledgment
+is not a native receipt. Identical acknowledged native delivery/target replay
+sends nothing. No raw RPC errors or extra response metadata are stored. README
+documents the bounded adapter, manual reconciliation, unsupported Claude delivery
+and separate supervisor-owned live smoke. D62-D64 record the decisions.
+
+New tests use workflow-harness test() and aggregate summary. Nine groups cover
+strict inert inputs/accessors, delimiter escaping and mutation isolation, pending/
+approval/ordinary-ack refusal, overlapping connections, uncertain receipts across
+reopen, expiry/cancellation, commit rollback, persisted corruption, and concurrent
+worker/interrupted-worker dispatch. Worker isolates are separate connections,
+not a claim of separate-process acceptance or live-provider delivery.
+
+Exact focused validation:
+- Baseline `node acceptance/phase2/p2-05.test.mjs`: exit 1; 0 passed, 7 failed,
+  all ERR_MODULE_NOT_FOUND for decisions/codex-delivery.mjs.
+- Tests prepared before implementation:
+  `node --input-type=module -e "await import('./tests/decision-codex-delivery.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1, ERR_MODULE_NOT_FOUND. After implementation this same command exited 0
+  with `{ pass: 7, fail: 0 }`; corruption and worker groups were then added.
+- Post-implementation `node acceptance/phase2/p2-05.test.mjs`: exit 1; 5 passed,
+  2 failed. The separate-dispatcher case at :102 reported
+  `AssertionError: [{"status":"rejected","reason":{}},{"status":"rejected","reason":{}}]`;
+  the interruption case reported `SyntaxError: Unexpected end of JSON input`
+  at the child stdout parser (:92). Those two cases were not retried or waived.
+- Inert process diagnostic:
+  `node --input-type=module -e 'import {spawn} from "node:child_process"; const p=spawn(process.execPath,["-e","console.log(JSON.stringify({ok:true}))"]); let out="",err=""; p.stdout.on("data",x=>out+=x);p.stderr.on("data",x=>err+=x);p.on("error",e=>console.log({code:e.code}));p.on("close",(status,signal)=>console.log(JSON.stringify({status,signal,out,err})))'`:
+  exit 0; output `{"status":0,"signal":null,"out":"","err":""}`. This independently
+  demonstrates missing child stdout in this environment; it does not establish
+  the outcome of either process-based acceptance case.
+- Final focused implementation and queue/routing/managed compatibility run:
+  `node --input-type=module -e "for (const name of ['codex-delivery','queue','routing','managed']) await import('./tests/decision-'+name+'.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; aggregate `{ pass: 33, fail: 0 }` (9 native, 9 queue, 7 routing, 8 managed).
+  Before the two additional native groups, this aggregate passed 31/0.
+- `node scripts/check-refs.mjs`: exit 0; `check-refs: 267 references, all resolve`.
+- `bash scripts/check-secrets.sh`: exit 0; `check-secrets: clean` (tracked files).
+- `bash scripts/check-secrets.sh core/skills/decisions/codex-delivery.mjs tests/decision-codex-delivery.test.mjs`:
+  exit 0; `check-secrets: clean` (both new untracked source/test files). Scanner
+  rules are unchanged; no fixture annotations were needed.
+- `git diff --check`: exit 0.
+
+Read-only Explore audit and parent inspection: bounded PASS for data flow,
+concurrency/durability, edge/error handling, security, consistency, compatibility
+and completeness; no concrete defect found. This is focused evidence and static
+review, not a full-gate pass, remote exactly-once guarantee or live smoke result.
+Changed only the native adapter, queue implementation/error allowlist, new test,
+README and decision/progress logs. Frozen inputs, feature flags, staging, commits,
+Git control and the pinned host remain untouched. No full gates or providers ran.
+The external host retains process acceptance, full gates, live smoke and review.

@@ -514,3 +514,19 @@ stop the builder; observational failures preserve queue and work behavior.
 Native active-session delivery is not supplied by this gate. Unsupported
 interactive adapters, including Claude, require explicit manual handoff; terminal
 session resume is a separate capability. There is no provider fallback.
+
+The separate [Codex delivery adapter](core/skills/decisions/codex-delivery.mjs)
+accepts a caller-owned connected app-server transport and exact thread/active-turn
+IDs. It reserves an ordinary question's dispatch durably before `turn/steer`, sends
+only delimited untrusted question/selected-answer data, and commits the validated
+turn receipt with queue acknowledgment. Identical acknowledged delivery/target
+replay sends nothing. It never discovers or attaches to arbitrary sessions.
+
+An interrupted or uncertain dispatch, mismatched receipt, or changed target
+requires `MANUAL_HANDOFF`; there is no automatic resend or reset API. Reconcile
+against the owned session before choosing further work. Ordinary queue ack cannot
+clear an inflight native reservation. This is not an exactly-once remote-effects
+guarantee, model-consumption proof, or merge/publish/deploy permission. Claude
+interactive delivery remains unsupported. Adapter tests use synthetic owned
+transports; the supervisor owns the final ephemeral-session live smoke and full
+gates. Native receipts are separate from managed-launch trace receipts.

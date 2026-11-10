@@ -6,7 +6,7 @@ import { validId } from './records.mjs'
 
 export const queueError = code => Object.assign(new Error(`Decision queue: ${code}`), { code })
 const codes = new Set(['INVALID_DECISION', 'CONFLICT', 'NOT_FOUND', 'WRONG_RECIPIENT', 'STALE',
-  'EXPIRED', 'CANCELLED', 'NOT_READY', 'CORRUPT', 'IO_ERROR'])
+  'EXPIRED', 'CANCELLED', 'NOT_READY', 'CORRUPT', 'IO_ERROR', 'MANUAL_HANDOFF'])
 export function guarded(work) {
   try { return work() } catch (error) {
     const code = codes.has(error?.code) ? error.code : [11, 26].includes(error?.errcode & 255) ? 'CORRUPT' : 'IO_ERROR'

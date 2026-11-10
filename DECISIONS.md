@@ -270,3 +270,24 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   No additional code change is justified by these results. Preserve frozen
   inputs and leave process-based P2-04 acceptance, full gates and Git mutations
   to the host; scan tracked files and all six untracked source/test files.
+
+- D62 (P2-05): Implement only the selected owned Codex active-turn adapter. Keep
+  the existing SQLite schema and public snapshots/states; add an optional,
+  strictly validated internal codexDispatch snapshot field. Reserve its random
+  dispatch identity and exact target in the existing write transaction before
+  any RPC. Commit only the matching turn receipt and queue ack together after
+  checking current live state. Existing snapshots need no migration.
+- D63 (P2-05): Persist inflight as both the reservation and uncertainty marker.
+  No retry, reset, session discovery, provider launch or fallback is exposed.
+  Only an identical acknowledged native target replays without sending; an
+  ordinary ack is not a native receipt, and ordinary ack cannot clear inflight
+  state. Suppress raw RPC errors/metadata; all post-dispatch uncertainty requires
+  manual reconciliation. Target/recipient copies remain detached across await.
+- D64 (P2-05 validation): Prepare workflow-harness tests before implementation.
+  The first post-implementation acceptance run passed five cases and failed
+  both process cases (rejected child results and empty JSON). Do not weaken or
+  retry those cases; host retains process acceptance. Add independent worker
+  connection/interruption checks as focused implementation coverage, explicitly
+  distinct from separate-process and live-provider evidence. Preserve all frozen
+  inputs, pass flags, staging and commits; later backend instructions override
+  the generic mark-passed/commit/Stop-hook procedure.

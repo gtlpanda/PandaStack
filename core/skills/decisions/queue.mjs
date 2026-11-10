@@ -1,5 +1,6 @@
 import { isAbsolute, normalize } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
+import { randomUUID } from 'node:crypto'
 import { createDecision, validId, validText, exactRecord, timestampKey } from './records.mjs'
 import { guarded, queueError, openQueueStorage } from './queue-storage.mjs'
 
@@ -18,6 +19,23 @@ function recipient(value) {
   const result = exactRecord(value, recipientKeys)
   requireValid(validId(result.deliveryId) && validId(result.runId) && validRepo(result.repo) && validRevision(result.revision))
   return result
+}
+function codexTarget(value) {
+  const result = exactRecord(value, ['threadId', 'turnId'])
+  requireValid(Object.values(result).every(id => validText(id, 256) && !/[\u0000-\u001f\u007f-\u009f]/.test(id)))
+  return result
+}
+function storedDispatch(value) {
+  const dispatch = exactRecord(value.codexDispatch, ['dispatchId', 'target', 'state', 'receipt'])
+  requireValid(validId(dispatch.dispatchId) && ['inflight', 'acknowledged'].includes(dispatch.state))
+  dispatch.target = codexTarget(dispatch.target)
+  requireValid(value.decision.kind === 'question' && value.delivery !== null)
+  if (dispatch.state === 'inflight') requireValid(dispatch.receipt === null && value.ack === null)
+  else {
+    dispatch.receipt = exactRecord(dispatch.receipt, ['turnId'])
+    requireValid(dispatch.receipt.turnId === dispatch.target.turnId && value.ack !== null)
+  }
+  return dispatch
 }
 function answerInput(value) {
   const result = exactRecord(value, ['answerId', 'value', 'actor', 'at', 'revision'])
@@ -41,7 +59,12 @@ function validAnswer(decision, answer) {
 function stored(row) {
   if (!row) return null
   try {
-    const value = exactRecord(JSON.parse(row.snapshot), ['decision', 'state', 'answer', 'delivery', 'ack', 'cancellation'])
+    const parsed = JSON.parse(row.snapshot)
+    const keys = ['decision', 'state', 'answer', 'delivery', 'ack', 'cancellation']
+    // Existing version 1 snapshots need no rewrite. Native dispatch is an
+    // optional internal extension; the public queue snapshot stays unchanged.
+    if (parsed && Object.hasOwn(parsed, 'codexDispatch')) keys.push('codexDispatch')
+    const value = exactRecord(parsed, keys)
     value.decision = createDecision(value.decision)
     requireValid(value.decision.id === row.id && states.includes(value.state))
     if (value.answer !== null) {
@@ -68,6 +91,7 @@ function stored(row) {
       case 'acknowledged': requireValid(value.ack !== null); break
       case 'cancelled': requireValid(value.ack === null); break
     }
+    if (Object.hasOwn(value, 'codexDispatch')) value.codexDispatch = storedDispatch(value)
     return value
   } catch { throw queueError('CORRUPT') }
 }
@@ -187,8 +211,53 @@ export function createDecisionQueue(directory, options = {}) {
           live(stored, currentTime())
           if (stored.delivery === null) throw queueError('NOT_READY')
           if (!isDeepStrictEqual(stored.delivery, target)) throw queueError('CONFLICT')
+          if (stored.codexDispatch?.state === 'inflight') throw queueError('MANUAL_HANDOFF')
           if (stored.ack !== null) return { created: false }
           stored.ack = target; stored.state = 'acknowledged'
+          return { created: true }
+        })
+      },
+      // Both operations share the same transaction/locking and durable snapshot
+      // as ordinary delivery. No database transaction is held across the RPC.
+      reserveCodexDispatch(id, value, targetInput) {
+        const delivery = input(() => recipient(value))
+        const target = input(() => codexTarget(targetInput))
+        return update(id, stored => {
+          matchingRecipient(stored.decision, delivery)
+          live(stored, currentTime())
+          if (stored.decision.kind !== 'question') throw queueError('MANUAL_HANDOFF')
+          if (stored.answer === null) throw queueError('NOT_READY')
+          if (stored.codexDispatch) {
+            if (!isDeepStrictEqual(stored.delivery, delivery) || !isDeepStrictEqual(stored.codexDispatch.target, target) ||
+                stored.codexDispatch.state !== 'acknowledged') throw queueError('MANUAL_HANDOFF')
+            return null
+          }
+          // An ordinary ack is not evidence that this native target received it.
+          if (stored.ack !== null) throw queueError('MANUAL_HANDOFF')
+          if (stored.delivery !== null && !isDeepStrictEqual(stored.delivery, delivery)) throw queueError('CONFLICT')
+          const dispatchId = randomUUID()
+          stored.delivery = delivery; stored.state = 'delivered'
+          stored.codexDispatch = { dispatchId, target, state: 'inflight', receipt: null }
+          return { dispatchId, target, snapshot: publicSnapshot(stored) }
+        })
+      },
+      completeCodexDispatch(id, value) {
+        const receipt = input(() => {
+          const result = exactRecord(value, ['dispatchId', 'recipient', 'turnId'])
+          requireValid(validId(result.dispatchId))
+          result.recipient = recipient(result.recipient)
+          return result
+        })
+        return update(id, stored => {
+          matchingRecipient(stored.decision, receipt.recipient)
+          live(stored, currentTime())
+          const dispatch = stored.codexDispatch
+          if (!dispatch || dispatch.state !== 'inflight' || dispatch.dispatchId !== receipt.dispatchId ||
+              !isDeepStrictEqual(stored.delivery, receipt.recipient) || receipt.turnId !== dispatch.target.turnId) {
+            throw queueError('MANUAL_HANDOFF')
+          }
+          dispatch.state = 'acknowledged'; dispatch.receipt = { turnId: receipt.turnId }
+          stored.ack = receipt.recipient; stored.state = 'acknowledged'
           return { created: true }
         })
       },
