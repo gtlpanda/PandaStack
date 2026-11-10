@@ -60,3 +60,32 @@ commits, feature flags, live dogfood, and roadmap completion remain owned by the
 external host; no full gate or later-phase acceptance was run this iteration.
 Final Explore re-review: PASS for data flow, edge/error handling, security,
 consistency, and missing pieces; both ordering findings confirmed resolved.
+
+## P1-03 implementation — 2026-11-09
+
+Implemented effective configuration doctor and CLI with shared managed model
+precedence, provider-specific role/effort provenance, safe configuration errors,
+read-only generated drift detection, tri-state capability evidence, managed binary
+selection/PATH, bounded version-only probing, strict CLI parsing, and exit mapping.
+Added seven workflow-harness implementation test groups, automatically discovered
+by normal CI. README and run-records skill document scope and limitations.
+
+Targeted evidence on Node v24.21.0:
+- `node --input-type=module -e "await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const result=summary(); console.log(result); process.exitCode=result.fail ? 1 : 0"`: exit 0; 7 passed, 0 failed.
+- `node acceptance/phase1/p1-03.test.mjs`: exit 1; 2 API tests passed,
+  CLI subprocess test failed with `SyntaxError: Unexpected end of JSON input` at
+  p1-03.test.mjs:46. A direct spawnSync reproduction reported `EPERM`, status 2,
+  and empty stdout/stderr for the Node child. No acceptance pass claimed; host
+  must rerun outside these sandbox process restrictions.
+- In-process CLI tests verify malformed arguments, JSON output, and paths with
+  spaces without relying on subprocess permission. No full gate was run.
+
+Read-only Explore review: model precedence, Claude effort/force semantics, drift,
+safe errors, bounded probing, evidence normalization, and CLI parsing passed.
+Review caught explicit null Codex effort being defaulted incorrectly; it now fails
+validation, with regression coverage. Review also caught missing explicit binaries
+being masked by injected evidence; explicit paths now fail the prerequisite even
+with an injected probe, with regression coverage. Bare-name injected probes own
+discovery as required for isolated acceptance fixtures; default probes always
+resolve executables locally. No provider/model calls, frozen input edits, feature
+flags, commits, or roadmap completion. Supervisor owns live evidence and full gates.

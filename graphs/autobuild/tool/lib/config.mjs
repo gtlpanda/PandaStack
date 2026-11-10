@@ -115,18 +115,12 @@ export function loadConfig(root = findProjectRoot(), env = process.env, override
     const name = names.find((candidate) => env[candidate] !== undefined && env[candidate] !== "");
     if (name) config.limits[key] = Number(env[name]);
   }
-  if (env.AUTOBUILD_MODEL || env.MODEL) config.model = env.AUTOBUILD_MODEL || env.MODEL;
-  if (env.AUTOBUILD_SUBAGENT_MODEL || env.SUBAGENT_MODEL) config.subagentModel = env.AUTOBUILD_SUBAGENT_MODEL || env.SUBAGENT_MODEL;
-  if (env.AUTOBUILD_CLAUDE_BIN) config.claudeBin = env.AUTOBUILD_CLAUDE_BIN;
   config.backend = overrides.backend || env.AUTOBUILD_BACKEND || config.backend;
   if (!["claude", "codex"].includes(config.backend)) throw new Error('backend must be "claude" or "codex"');
+  Object.assign(config, resolveManagedModels({ backend: config.backend, central: readAgentConfig(), project: raw, env, overrides }).values);
+  if (env.AUTOBUILD_CLAUDE_BIN) config.claudeBin = env.AUTOBUILD_CLAUDE_BIN;
   if (env.AUTOBUILD_CODEX_BIN) config.codexBin = env.AUTOBUILD_CODEX_BIN;
-  if (env.AUTOBUILD_PROBE_MODEL) config.probeModel = env.AUTOBUILD_PROBE_MODEL;
-  if (overrides.model) config.model = overrides.model;
   if (config.backend === "codex") {
-    if (raw.model === undefined && !env.AUTOBUILD_MODEL && !env.MODEL && !overrides.model) config.model = "opus";
-    if (raw.subagentModel === undefined && !env.AUTOBUILD_SUBAGENT_MODEL && !env.SUBAGENT_MODEL) config.subagentModel = "sonnet";
-    for (const key of ["model", "subagentModel", "probeModel"]) config[key] = codexModel(config[key]);
     if (!Number.isFinite(config.codex.sessionTimeoutMinutes) || config.codex.sessionTimeoutMinutes <= 0) throw new Error("codex.sessionTimeoutMinutes must be positive");
     if (config.limits.totalBudgetUsd != null) throw new Error("Codex does not report dollar cost; remove totalBudgetUsd and use maxIterations/sessionTimeoutMinutes instead");
   }
@@ -151,4 +145,24 @@ export function codexModel(model) {
   if (/^(?:claude-)?haiku(?:-|$)/i.test(model)) return "gpt-6-luna";
   if (/^claude-/i.test(model)) throw new Error(`No Codex equivalent for ${model}; set an explicit OpenAI model`);
   return model;
+}
+
+// Shared launch precedence with provenance for read-only configuration inspection.
+export function resolveManagedModels({ backend, central, project = {}, env = {}, overrides = {} }) {
+  const values = {}, sources = {};
+  const choose = (key, candidates) => {
+    const [value, source] = candidates.find(([value]) => value !== undefined);
+    values[key] = backend === "codex" ? codexModel(value) : value;
+    sources[key] = source;
+  };
+  choose("model", [
+    [overrides.model || undefined, "cli"], [env.AUTOBUILD_MODEL || env.MODEL || undefined, "env"],
+    [project.model, "project"], [backend === "codex" ? "opus" : central.claude.orchestrator.model, backend === "codex" ? "default" : "central"],
+  ]);
+  choose("subagentModel", [
+    [env.AUTOBUILD_SUBAGENT_MODEL || env.SUBAGENT_MODEL || undefined, "env"], [project.subagentModel, "project"],
+    [backend === "codex" ? "sonnet" : central.claude.subagents.model, backend === "codex" ? "default" : "central"],
+  ]);
+  choose("probeModel", [[env.AUTOBUILD_PROBE_MODEL || undefined, "env"], [project.probeModel, "project"], [DEFAULTS.probeModel, "default"]]);
+  return { values, sources };
 }

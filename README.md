@@ -441,3 +441,22 @@ scripts/check-secrets.sh  # the scanner itself (prints "check-secrets: clean" or
 ```
 
 The test scripts end with an explicit `PASS`/`FAIL` line.
+
+### Managed configuration doctor
+
+Run `node scripts/pandastack.mjs doctor --repo "/absolute/project path" --backend codex --json`
+(or `--backend claude`; omit `--json` for human output). `--model MODEL` applies the
+same main-model override as managed autobuild launches. Doctor reads central and
+project configuration, checks generated agent files without updating them, and
+reports effective settings with their sources. It does not inspect credentials or
+make model calls. Exit codes are 0 for ready, 2 for degraded/blocked, and 1 for
+invalid invocation or unexpected failure.
+
+The default probe checks executable availability using the managed PATH and runs
+only a bounded `--version` command. Version alone does not prove model, effort, or
+concurrency controls, so those controls remain unknown and the report is degraded
+until a trusted capability probe supplies evidence. The library's injected probe
+is a trusted integration/testing boundary, not evidence read from project files;
+for bare executable names it supplies discovery evidence as well. Explicit binary
+paths are checked locally even with injection. These reports describe managed
+launch configuration, not interactive sessions or account-level model access.
