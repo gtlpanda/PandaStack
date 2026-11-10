@@ -200,3 +200,33 @@ full gate, paid provider call, code/test edit, staging, commit, branch change or
 feature flag modification. Full gates and final completion remain host-owned.
 
 BUGHUNT 2026-11-10: changes_requested; fixed none; open F1 (F1); report /home/gtlpanda/code/PandaStack/.git/bughunt/codex-phase1-run-records-423431/report.md
+
+## P1-06 implementation — 2026-11-09
+
+Separated static managed defaults from the public lazy DEFAULTS compatibility
+getters. An explicit central configuration no longer consults source-installation
+configuration. Store publication relinquishes temporary descriptor ownership before
+close and independently attempts anchored unlink even if cleanup close fails.
+Added two workflow-harness test groups covering absent/invalid source configuration,
+Claude/Codex precedence, public defaults and normal launcher behavior, run/event
+close-after-release EIO, write failure followed by close EIO, safe errors, no close
+retry, descriptor closure, and removal of unpublished temporary records.
+
+Targeted verification:
+- Before implementation, `node acceptance/phase1/p1-06.test.mjs`: exit 1;
+  both frozen regressions failed (doctor blocked instead of ready; temporary file
+  remained after close EIO).
+- After implementation, `node acceptance/phase1/p1-06.test.mjs`: exit 0;
+  2 passed, 0 failed.
+- `node --input-type=module -e "await import('./tests/run-followup.test.mjs'); await import('./tests/run-hardening.test.mjs'); await import('./tests/run-store.test.mjs'); await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; 20 passed, 0 failed.
+- `git diff --check`: exit 0 before documentation append.
+
+No full suite, paid calls, filesystem-race reproduction, frozen-input changes,
+staging, commits, pass flags, branch changes or roadmap completion. External host
+owns authoritative full gates and final evidence. Decisions D23-D24 record scope
+and implementation choices.
+
+Read-only Explore sanity review: PASS for data flow, edge/error handling, security,
+consistency and completeness; no concrete defects found. Review was inspection
+only; test evidence is the targeted execution recorded above.

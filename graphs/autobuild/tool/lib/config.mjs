@@ -10,7 +10,7 @@ import { readAgentConfig, validateConcurrency } from "../../../../scripts/agent-
 
 export const CONFIG_FILE = "autobuild.json";
 
-export const DEFAULTS = {
+const STATIC_DEFAULTS = {
   featuresFile: "features.json",
   progressFile: "PROGRESS.md",
   stateDir: ".harness",
@@ -18,11 +18,7 @@ export const DEFAULTS = {
   branch: null,
   prompt: "Read CLAUDE.md, SPEC.md, features.json, PROGRESS.md. Build the next feature.",
   systemPrompt: null,
-  // Read lazily so guard hooks can catch invalid config and deny, rather than crash at import.
-  get model() { return readAgentConfig().claude.orchestrator.model; },
-  get subagentModel() { return readAgentConfig().claude.subagents.model; },
   subagentModelForce: false,
-  get maxConcurrentSubagents() { return readAgentConfig().maxConcurrentSubagents; },
   probeModel: "claude-haiku-5-5",
   claudeBin: "claude",
   backend: "claude",
@@ -72,6 +68,15 @@ export const DEFAULTS = {
   review: { prompt: null },
 };
 
+// Preserve lazy public defaults without consulting this installation when a caller
+// supplies the central configuration belonging to another installation.
+export const DEFAULTS = {
+  ...STATIC_DEFAULTS,
+  get model() { return readAgentConfig().claude.orchestrator.model; },
+  get subagentModel() { return readAgentConfig().claude.subagents.model; },
+  get maxConcurrentSubagents() { return readAgentConfig().maxConcurrentSubagents; },
+};
+
 const LEGACY_ENV = {
   maxIterations: ["AUTOBUILD_MAX_ITERATIONS", "MAX_ITERATIONS"],
   maxTurns: ["AUTOBUILD_MAX_TURNS", "MAX_TURNS"],
@@ -108,7 +113,7 @@ export function loadConfig(root = findProjectRoot(), env = process.env, override
 // Shared, read-only managed launch validation for the launcher and doctor.
 export function resolveManagedConfig({ project: raw = {}, env = {}, overrides = {}, root, central = readAgentConfig() } = {}) {
   const config = {
-    ...DEFAULTS,
+    ...STATIC_DEFAULTS,
     model: central.claude.orchestrator.model,
     subagentModel: central.claude.subagents.model,
     maxConcurrentSubagents: central.maxConcurrentSubagents,

@@ -26,3 +26,6 @@
 ## P1-06: independently confirmed final-review defects
 
 Freeze selected-installation and close-error regressions before another bounded autobuild session. The native hunt proposed configuration repair remains unlanded after an inconclusive suite comparison; do not override its result. Fix both confirmed behaviors through the ordinary external host gates and repeat branch review.
+
+- D23 (P1-06): Separate static managed defaults from the public lazy DEFAULTS getters. Explicit central configuration supplies all central-owned defaults without evaluating source-installation getters; default launcher reads and override precedence remain intact. Test missing/invalid source configuration using copied modules in a temporary installation.
+- D24 (P1-06): Clear ownership of the temporary descriptor before close, since close may release it and still report EIO. Always attempt anchored temporary-file removal independently of descriptor cleanup. Cover run/event publication and write-error cleanup with ordinary fault injection; no filesystem-race reproduction. Leave flags, commits, full gates and final completion to the external host.

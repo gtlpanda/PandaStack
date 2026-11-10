@@ -118,7 +118,10 @@ function publish(dir, value, validate, expected) {
       fd = openSync(temp, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
       writeFileSync(fd, JSON.stringify(value) + '\n')
       fsyncSync(fd)
-      closeSync(fd); fd = undefined
+      // close may release the descriptor before reporting an error; never retry it.
+      const closing = fd
+      fd = undefined
+      closeSync(closing)
       // link is exclusive across processes, and publishes only complete bytes.
       try { linkSync(temp, target) } catch (e) {
         if (e.code === 'EEXIST') return replay()
@@ -127,8 +130,12 @@ function publish(dir, value, validate, expected) {
       fsyncSync(dirFd)
       return { created: true }
     } finally {
-      if (fd !== undefined) closeSync(fd)
-      try { unlinkSync(temp) } catch (e) { if (e.code !== 'ENOENT') throw e }
+      try {
+        if (fd !== undefined) closeSync(fd)
+      } finally {
+        // Removal is independent of descriptor cleanup, including a failed close.
+        try { unlinkSync(temp) } catch (e) { if (e.code !== 'ENOENT') throw e }
+      }
     }
   })
 }
