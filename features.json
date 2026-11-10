@@ -57,6 +57,22 @@
       "test": "acceptance/phase1/p1-04.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "P1-05",
+      "title": "Harden managed readiness and durable store operations",
+      "description": "Implement defensive post-review invariants in spec/contracts/phase1-hardening.md. Do not retry the blocked filesystem-race reproduction. Preserve all existing acceptance checks.",
+      "contract": "spec/contracts/phase1-hardening.md",
+      "dependencies": [
+        "P1-04"
+      ],
+      "acceptance": [
+        "Doctor rejects managed-launch-invalid configurations using shared validation.",
+        "Normal store operations use verified retained directory descriptors, synchronize newly created directory parents, and close descriptors."
+      ],
+      "test": "acceptance/phase1/p1-05.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
