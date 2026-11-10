@@ -1004,3 +1004,7 @@ commit, push, branch change, git-control edit or feature-pass change was perform
 Mandatory full gates and final completion remain with the pinned external host.
 
 Review documentation check: `git diff --check`: exit 0.
+
+## P1-13 independent acceptance freeze
+
+Native hunt 20261110T114537Z-1794312301456 covered all six lenses: five clean; regression finding F1 reproduced at 4edd0b6 versus baseline18eabde at12:19:38UTC. In-worktree tracking dirtied clean build-app input. Supervisor stopped owned host35112 at Repair, preserving evidence and retained repair state, rather than rerunning the known isolated-suite setup failures. No ledger waiver. Independent20-case matrix:4 passing controls/16 expected failures; syntax and independent review clear. Frozen placement contract includes linked metadata, static aliases, non-Git and both fake-provider entry points. Prior implementation tests are now also frozen.

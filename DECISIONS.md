@@ -87,3 +87,7 @@ Independent fake-Claude tests exercised actual guard/stop-gate/mark-passed and r
 
 - D37 (P1-12): Share a five-field sessionConfigEnv mapping between Claude child process extras and injected settings. Pin accepted backend, main/subagent/probe models and selected provider binary after project environment merging. Preserve ordinary environment/auth behavior and existing guard/gate authority. Keep partial sessionSettings callers compatible with their Claude default; actual launches still require shared config validation.
 - D38 (P1-12): Add workflow-harness regressions for both hook modes, valid/invalid/legacy/empty/combined shadows, independent invocation contexts, parent immutability, synthetic auth preservation, invalid parent rejection and partial settings compatibility. Selected acceptance fails at fixture setup with spawnSync git EPERM in this sandbox; do not retry or bypass it. Host owns actual fake-provider hook confirmation, full gates, staging, commits, feature flags and final completion.
+
+## P1-13 tracking placement
+
+Managed observation must not create worktree content before clean checks or staging. Reject selected stores inside target/runner working trees (including ignored paths), preserving only trusted Git pandastack-runs namespaces and external stores. Resolve placement read-only before any mkdir; direct store API remains unchanged. This bounded compatibility rule avoids changing ignore/staging/clean-check behavior.

@@ -186,6 +186,22 @@
       "test": "acceptance/phase1/p1-12.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "P1-13",
+      "title": "Keep managed run tracking outside project worktrees",
+      "description": "Implement spec/contracts/phase1-store-location.md. Preserve clean-tree checks and previous acceptance. Fail open before mutation for unsafe tracking placement; use only owned fake-provider fixtures.",
+      "contract": "spec/contracts/phase1-store-location.md",
+      "dependencies": [
+        "P1-12"
+      ],
+      "acceptance": [
+        "Reject stores in project/runner worktrees before filesystem mutation; preserve work result/error and generic warning.",
+        "Preserve exact Git tracking namespaces, linked-worktree defaults, external shared stores, direct-store API and actual clean/dirty runner behavior."
+      ],
+      "test": "acceptance/phase1/p1-13.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
