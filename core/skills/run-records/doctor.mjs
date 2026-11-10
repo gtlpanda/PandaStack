@@ -11,12 +11,10 @@ const controls = ['model', 'effort', 'concurrency']
 const efforts = new Set(['low', 'medium', 'high', 'xhigh', 'max', 'ultra', 'minimal', 'none'])
 function validateProject(project, env, overrides) {
   if (![project, env, overrides].every(object) || Object.keys(overrides).some(k => k !== 'model')) throw Error('Invalid configuration')
-  for (const key of ['model', 'subagentModel', 'probeModel', 'maxConcurrentSubagents', 'subagentModelForce']) {
+  // Model validation belongs to the shared resolver after precedence selection;
+  // shadowed project/environment values are not managed launch inputs.
+  for (const key of ['maxConcurrentSubagents', 'subagentModelForce']) {
     if (Object.hasOwn(project, key)) sanitizeSettings({ [key]: project[key] })
-  }
-  if (Object.hasOwn(overrides, 'model')) sanitizeSettings({ model: overrides.model })
-  for (const key of ['AUTOBUILD_MODEL', 'MODEL', 'AUTOBUILD_SUBAGENT_MODEL', 'SUBAGENT_MODEL', 'AUTOBUILD_PROBE_MODEL']) {
-    if (env[key] !== undefined && env[key] !== '') sanitizeSettings({ model: env[key] })
   }
   if (project.codex !== undefined && !object(project.codex)) throw Error('Invalid configuration')
   if (project.codex && Object.hasOwn(project.codex, 'reasoningEffort') && !efforts.has(project.codex.reasoningEffort)) throw Error('Invalid configuration')
@@ -79,10 +77,10 @@ function normalizeRuntime(input) {
   return result
 }
 
-function effectivePath(project, env, pandaRoot) {
+function effectivePath(project, env, pandaRoot, repo) {
   const vars = project.env?.vars ?? {}
   if (Object.hasOwn(vars, 'PATH')) return vars.PATH
-  const prepend = (project.env?.pathPrepend ?? []).map(expandHome).filter(p => existsSync(p))
+  const prepend = (project.env?.pathPrepend ?? []).map(p => resolve(repo, expandHome(p))).filter(p => existsSync(p))
   const inherited = (env.PATH ?? '').split(delimiter).filter(Boolean)
   const kit = join(pandaRoot, 'graphs/autobuild/tool/bin')
   return [...prepend, ...(inherited.includes(kit) ? [] : [kit]), ...inherited].join(delimiter)
@@ -106,7 +104,7 @@ export async function inspectDoctor({ repo, backend = 'codex', pandaRoot = ROOT,
     catch (error) { if (error.code === 'ENOENT') project = {}; else throw error }
     const resolved = resolveInspection({ backend, central, project, env, overrides })
     result.settings = resolved.settings
-    path = effectivePath(project, env, pandaRoot)
+    path = effectivePath(project, env, pandaRoot, repo)
     bin = resolved.config[`${backend}Bin`]
     check('configuration', 'pass', 'Managed launch configuration is valid.')
     const rendered = renderAgentConfig(pandaRoot, central)

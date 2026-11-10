@@ -485,6 +485,9 @@ export function sessionSettings(config) {
   // The subagent model lives here, not in the process env: a user's ~/.claude/settings.json `env`
   // overrides the process env, and these --settings override the user's.
   const env = { ...native.env, CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: concurrent, CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS: concurrent, CLAUDE_CODE_SUBAGENT_MODEL: config.subagentModel, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: config.subagentModelForce === false ? "0" : "1", CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL: config.subagentModelForce === false ? "" : config.subagentModel };
+  // Hooks and mark-passed reload configuration without the original CLI args.
+  // Pin the selected model in --settings as well as the child process environment.
+  env.AUTOBUILD_MODEL = config.model;
   return { ...native, model: config.model ?? native.model, env, hooks, permissions: { deny: [...deny, "Bash(git push)", "Bash(git push *)", "Bash(rm -rf *)", "Bash(curl *)", "Bash(wget *)", "Bash(npx *)"] } };
 }
 
@@ -507,6 +510,7 @@ async function runClaudeWork(config, { role, prompt, appendSystemPrompt, maxTurn
     AUTOBUILD_ROLE: role,
     HARNESS_ROLE: role,
     AUTOBUILD_HOME: HOME,
+    AUTOBUILD_MODEL: config.model,
     CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
     CLAUDE_CODE_RETRY_WATCHDOG: "1",
     CLAUDE_CODE_RETRY_WATCHDOG_MAX_WAIT_MS: String(config.limits.watchdogMaxWaitMs),

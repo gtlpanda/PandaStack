@@ -475,3 +475,67 @@ Focused verification:
 Only PROGRESS.md was modified. No full suite, bare autobuild, provider execution,
 exploit reproduction, blocked reproduction retry, code/test edit, staging,
 commit, push, branch change, git-control edit or pass-flag change was performed.
+
+## P1-09 implementation — 2026-11-10
+
+Doctor now delegates model validation to the shared managed resolver after
+precedence selection, so malformed shadowed values do not reject valid selected
+models. Non-model checks and the override allowlist remain intact. Relative
+pathPrepend entries are expanded and resolved against the target repository before
+existence checks. Claude sessions carry the resolved main model in both the child
+environment and injected settings for hook/mark-passed reloads. Decisions D29-D30
+record the implementation and sandbox limitation.
+
+Added tests/run-launch-parity.test.mjs using workflow-harness test(), discovered
+by the existing normal CI runner. Three test groups cover role selection and
+provenance for both providers, invalid selected/non-model inputs, CLI model reload
+through session settings, retained hook/permission policy, parent config/environment
+immutability, target-relative PATH sources and subprocess-free doctor inspection.
+
+Targeted verification:
+- Before implementation, `node acceptance/phase1/p1-09.test.mjs`: exit 1;
+  8 passed, 15 failed. Model-precedence and relative-PATH assertions failed;
+  three hook cases failed during temporary fixture setup with `spawnSync git EPERM`.
+- After implementation, `node acceptance/phase1/p1-09.test.mjs`: exit 1;
+  20 passed, 3 failed. All remaining failures are `Error: spawnSync git EPERM`
+  at graphs/autobuild/tool/test-fixtures/project.mjs:22 during
+  `git init -q -b autobuild`. No fake provider or hook assertion ran in those cases;
+  end-to-end hook/gate behavior is unverified here and requires the host gate.
+- `node --input-type=module -e "await import('./tests/run-launch-parity.test.mjs'); await import('./tests/run-edge-validation.test.mjs'); await import('./tests/run-doctor-trust.test.mjs'); await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; 19 passed, 0 failed.
+
+Changed implementation: core/skills/run-records/doctor.mjs and
+graphs/autobuild/tool/lib/loop.mjs; added focused tests and updated PROGRESS.md
+and DECISIONS.md. No frozen input, host, git control, staging, commit, pass flag,
+branch or roadmap change. No full suite or live provider call. The outer host
+owns authoritative full gates, end-to-end hook evidence and final completion.
+
+Read-only Explore sanity audit: PASS for data flow, edge/error handling, security,
+consistency and missing pieces; no concrete defects found. This is static review,
+not execution evidence for the blocked hook fixtures. `git diff --check`: exit 0
+after documentation updates.
+
+## P1-09 resumed validation — 2026-11-10
+
+Read the project rules, SPEC.md, phase1 contracts, features.json and prior progress.
+Retained the existing doctor precedence/PATH changes, Claude child model propagation
+and workflow-harness tests. The supervisor's recorded frozen-fixture correction
+is already present: both successful hook scenarios use maxIterations:2. No product
+exit-code or iteration-limit change is warranted by the supplied older cap-one
+feedback. Decision D31 records this scope; this session changed documentation only.
+
+Targeted verification:
+- `node acceptance/phase1/p1-09.test.mjs`: exit 1; 20 passed, 3 failed.
+  All three failures report `Error: spawnSync git EPERM` from fixture creation at
+  graphs/autobuild/tool/test-fixtures/project.mjs:22 (`git init -q -b autobuild`).
+  No hook assertions ran for these cases. No retry or sandbox bypass was attempted.
+- `node --input-type=module -e "await import('./tests/run-launch-parity.test.mjs'); await import('./tests/run-edge-validation.test.mjs'); await import('./tests/run-doctor-trust.test.mjs'); await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; 19 passed, 0 failed.
+
+No full suite, frozen-input edits, provider calls, staging, commits, pass flags,
+branch changes or roadmap completion. Actual fake-provider hook verification and
+all authoritative full gates remain with the external host.
+
+Read-only Explore audit: PASS for data flow, edge/error handling, security,
+consistency and missing pieces, with no concrete defects found. Static inspection
+does not establish actual hook execution. `git diff --check`: exit 0.
