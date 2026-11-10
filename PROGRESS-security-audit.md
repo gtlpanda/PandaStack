@@ -79,3 +79,71 @@ performed or established. Prior F3 ERROR/F4 refusal and all capture/orphan/overf
 and filesystem-race restrictions remain unchanged. Frozen acceptance, baseline,
 vendor, validator, schema and host files are untouched. Full gates, feature pass
 flags, staging, commits and final review remain with the outer host.
+
+## SA-01b — Reject static symlink ancestors in audit snapshot paths
+
+Updated `graphs/security-audit/skills/security-audit/snapshot-protection.mjs`
+to reject explicit dot/dotdot components before filesystem access and lstat
+ancestors from the filesystem root downward before inspecting the addressed
+subtree. Static ancestor/root symlinks return only root-relative `SYMLINK`;
+ancestor lookup failures return only root-relative `IO_ERROR`. Canonical paths
+with trailing separators still pass. Parent write bits do not become snapshot
+permission problems. Root-file `NOT_DIRECTORY`, descendant inspection, ordering,
+init gating and cleanup remain unchanged.
+
+Added `graphs/security-audit/tests/snapshot-root-path.test.mjs` using the existing
+workflow harness. Five cases cover no-access dot rejection, static-link early
+refusal (including absent children), missing/nondirectory ancestors, safe ancestor
+I/O failure, canonical/trailing-separator roots and unchanged inert bytes/modes.
+The I/O test injects a synchronous test-only stat failure; observation wrappers
+are restored before fixture verification/cleanup. No target code executes.
+
+Selected unchanged acceptance command:
+
+```sh
+node acceptance/security-audit/sa-01b-root-path.test.mjs
+```
+
+Before repair: exit 1, **1 passed, 2 failed** (ancestor symlink and explicit dot
+paths incorrectly returned success). After repair: exit 0, **3 passed, 0 failed,
+0 skipped**. These are the three host-selected ordinary static fixtures.
+
+The new implementation file alone initially reported exit 1, **2 passed,
+3 failed** (dot, ancestor symlink and ancestor error checks). Final focused run:
+
+```sh
+node --input-type=module -e 'await import("./graphs/security-audit/tests/snapshot-root-path.test.mjs"); await import("./graphs/security-audit/tests/snapshot-protection.test.mjs"); await import("./graphs/security-audit/tests/snapshot-init.test.mjs"); const {summary} = await import("./scripts/workflow-harness.mjs"); const result = summary(); console.log(result); process.exitCode = result.fail ? 1 : 0'
+```
+
+Exit 0, **15 passed, 0 failed**: five new cases and ten unchanged inspector/init
+regressions, including exact export, refusal before publication and budget bypass.
+No prior acceptance, baseline test, vendor, validator, schema or frozen file was
+modified. Only the inspector, new test, decision log and this progress log changed.
+
+Local static sanity review: data flow PASS (validation before ancestor lookup,
+ancestors before subtree enumeration); error handling PASS (early safe root
+diagnostics, existing descendant failures retained); security PASS within static
+scope (only lstat/readdir in inspector, no raw errors); consistency PASS (existing
+API, codes and init unchanged); completeness PASS for selected implementation.
+The required independent Explore request failed with `Unknown model
+gpt-6.1-sol`; no fallback was attempted. Independent review remains with the host.
+
+Limits: this proves ordinary static path handling only, not concurrent replacement,
+same-user containment, ACLs, denied writes, mounted filesystem behavior or native
+tool isolation. The prior SA-01 mounted-fixture limitation is not reclassified by
+these tests. No target application changes/execution, live or fallback providers,
+capture/orphan/overflow or filesystem-race reproduction occurred. Prior blocked
+statuses and evidence limits remain unchanged. Full gates, flags, staging, commits
+and final acceptance remain owned by the outer host.
+
+Unchanged secret scanner commands both exited 0 with `check-secrets: clean`:
+
+```sh
+bash scripts/check-secrets.sh
+bash scripts/check-secrets.sh graphs/security-audit/tests/snapshot-root-path.test.mjs
+```
+
+The first scans tracked files; the second explicitly scans the sole new untracked
+source/test file. `git diff --check` exited 0. Final changed tree contains only
+`DECISIONS.md`, `PROGRESS-security-audit.md`, the inspector and the new root-path
+test file. No staging, commit or feature-pass flag mutation was performed.

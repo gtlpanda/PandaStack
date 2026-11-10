@@ -29,7 +29,7 @@
       ],
       "test": "acceptance/security-audit/sa-01b-root-path.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SA-02a",

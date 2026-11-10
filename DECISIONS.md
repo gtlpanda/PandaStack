@@ -480,3 +480,19 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   cause unknown. Separate that from ten passing direct implementation cases.
   The requested Explore model gpt-6.1-sol was unavailable; no fallback was used.
   Local review does not replace independent host review or the remaining gates.
+
+- D89 (SA-01b): Limit this session to static root-path validation in the existing
+  snapshot inspector. Reject explicit dot components before any filesystem call,
+  then lstat ancestors in order before inspecting the root or enumerating its
+  subtree. Preserve init gating, mode checks and diagnostic vocabulary. Add
+  workflow-harness tests first, using inert temporary fixtures and synchronous
+  test-only observation/fault injection; no concurrent replacement or target
+  execution. Run selected acceptance and focused regression checks only. The
+  outer host retains full gates, flags, staging, commits and independent review.
+- D90 (SA-01b evidence): Selected acceptance moved from 1 pass/2 failures to
+  3 passes; new implementation checks moved from 2 passes/3 failures to 5 passes.
+  The combined focused run passes all 15 checks, including existing inspector
+  and init tests. These are static inert-path and test-only observation results,
+  not concurrent replacement or containment proof. The required Explore audit
+  request failed with `Unknown model gpt-6.1-sol`; no alternate model/provider
+  was used. Local review does not replace the outer host's independent review.
