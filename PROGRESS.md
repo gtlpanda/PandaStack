@@ -2100,3 +2100,59 @@ Changed only the managed gate import boundary, new implementation tests and
 DECISIONS.md/PROGRESS.md. Frozen inputs, pass flags, staging, commits, branches,
 Git control and the pinned host remain untouched. No full gates or live providers
 ran. The external host retains actual acceptance, full gates and final completion.
+
+## Two-pass review — 2026-11-10 (P2-07/P2-08 and verification corrections)
+
+Reviewed cb6f2d2e61441c2ef352299de3519e6a0481ba00..
+b5acc42d1edc87880cc978ab6a8c6767590f14ed. Read AGENTS.md, CLAUDE.md,
+SPEC.md, phase contracts and supplements, prior progress findings and the native
+Phase 2 hunt report. Parent and read-only reviewers read the changed files in full
+and traced applicable configuration, queue/native acknowledgment, observation,
+launch, installer, verification capture/export and repair callers/callees.
+
+REVIEW 2026-11-10: DEFECT [P1] core/skills/verify/retention.mjs:123 — Installed symlink skips the capture dispatcher. The entry guard compares lexical resolve(process.argv[1]) with Node's canonical import.meta.url. The existing installed /home/gtlpanda/.claude/skills/verify directory resolves to core/skills/verify, as created by install.sh:388 and documented by the verify skill. verify.sh:13-18 retains the logical installed path. Confirmed with harmless unsupported-operation probes: the installed helper exits 0 without product output, while the canonical helper exits 125 with "Verification evidence capture failed". Neither probe dispatches a payload or writes evidence. Downstream false PASS is an untested hypothesis supported by the caller path, not an executed verifier result: verify.sh:19 accepts empty successful init output; :40-51 accepts each skipped step's empty output/status 0 and increments RAN/TESTED; the skipped finalize also returns 0. Thus an installed invocation with a recognized test step can report success without running that step or retaining evidence. Canonicalize entrypoint identity and fail closed on empty/invalid capture initialization; cover the installed symlink path. No fix was made in this review.
+
+Pass 1 — contract completeness:
+- P2-07 degrades returned/cached closure on synchronous sink failure; default
+  output callbacks/listener handle asynchronous failure, and the owning CLI awaits
+  bounded output completion. MANUAL_HANDOFF survives CLI redaction while native
+  inflight acknowledgment remains refused.
+- P2-08 validates before skipping, then loads both queue and routing only for
+  an assigned incomplete gate. Denied-SQLite controls cover pure imports, imported
+  CLI help and skipped gates; the available-SQLite control reaches NOT_FOUND.
+  These controls do not establish Node 20 compatibility.
+- Added acceptance and gate entries preserve prior requirements. Hunt corrections
+  add retained manifests, bounded accounting, source exports and isolation checks;
+  the installed-entry defect above leaves their verification contract incomplete.
+  Prior prose was not treated as coverage or a hunt disposition change.
+
+Pass 2 — correctness/security/concurrency/error handling:
+- Checked detached close replay, shared-stream listeners, pending write failures,
+  bounded flush, safe errors and validation/import ordering. Queue acknowledgment
+  and launch checks remain authoritative; observations add no execution authority.
+  Actor/scope data remain attribution/bookkeeping, not human consent.
+- Traced retention manifests, nested capture budgets, export ownership/isolation,
+  timeout-before-baseline-comparison and cleanup paths. No additional concrete
+  introduced defect was established. Actual namespace/descendant settlement,
+  installed verifier execution and process transport remain unverified here.
+
+Focused evidence:
+- `node --input-type=module -e "for (const name of ['output','manual-handoff','lazy-storage','trace-close','observations','managed']) await import('./tests/decision-'+name+'.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0, `{ pass: 30, fail: 0 }`. The first invocation yielded before its summary;
+  the repeated invocation captured completion and exit status. Streams/transports
+  are synthetic, CLI help/ack are library calls, and SQLite denial uses fresh
+  workers. This is not actual CLI/pipe or live-provider evidence.
+- `node /home/gtlpanda/.claude/skills/verify/retention.mjs invalid-review-probe`:
+  exit 0, no product output. `node core/skills/verify/retention.mjs invalid-review-probe`:
+  exit 125, `Verification evidence capture failed`. A read-only realpath check
+  independently confirmed the differing entry paths. These are new harmless
+  dispatch diagnostics, not retries of blocked reproductions.
+- `git diff --check`: exit 0 before the append. A read-only reviewer also checked
+  isolation probe wiring with an in-memory synthetic control; no actual isolation
+  claim follows from that control.
+
+Only PROGRESS.md was changed. No code/tests, full gates, provider calls, autobuild
+invocation, pass flags, staging, commits, branches, Git control or pinned-host
+changes. Previously blocked process/CLI/pipe, filesystem-race and isolation
+reproductions were not retried or waived. External host owns disposition, full
+gates, live evidence and final completion.
