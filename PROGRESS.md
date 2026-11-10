@@ -164,3 +164,37 @@ Read-only Explore audit: PASS for data flow, edge/error handling, security,
 consistency and completeness. Its replay-sync concern was addressed with a
 publication-sync failure/retry regression test before final verification.
 `git diff --check`: exit 0.
+
+## Post-hardening two-pass review — 2026-11-10
+
+Reviewed 0f6ed166030f946369e837dc8a4ae3f7efa9c401..HEAD against SPEC.md and both
+feature contracts (phase1.md and phase1-hardening.md), then reviewed correctness,
+concurrency, durability, error handling, configuration provenance and compatibility.
+The added hardening contract/acceptance and host configuration changes are consistent
+with supervisor decisions D19-D20. No edits to those inputs were made in this review.
+
+Prior findings dispositions:
+- Doctor/launcher rejection mismatch: addressed by doctor.mjs:37 calling the shared
+  validator; graphs/autobuild/tool/lib/config.mjs:122-141 applies budget aliases,
+  Codex timeout/budget checks and hooks validation. Existing focused tests passed
+  for invalid inputs, safe diagnostics, valid Claude behavior and provenance.
+- Directory symlink replacement race: addressed by retained no-follow directory
+  traversal at core/skills/run-records/store.mjs:28-66, anchored record reads at
+  :79, publication/cleanup at :105-133, enumeration at :136-145 and readRun at
+  :154. Ordinary-operation instrumentation passed. This disposition is based on
+  code inspection and invariant tests; no exploit reproduction was attempted.
+- Missing parent-directory durability barriers: addressed at
+  core/skills/run-records/store.mjs:56-63 (mkdir and parent sync), :120 (file sync),
+  :127 (publication sync), and :111 (replay sync). Existing sync-ordering and
+  failure/retry tests passed; physical power-loss behavior was not reproduced.
+
+REVIEW 2026-11-10: DEFECT graphs/autobuild/tool/lib/config.mjs:111 Explicit doctor central configuration still depends on the source checkout configuration — When inspectDoctor targets a valid alternate pandaRoot but the source checkout agent-config.json is missing or invalid, spreading DEFAULTS invokes its readAgentConfig() getters (:22-25) before the supplied central values replace them (:112-114). That default reader uses the module-relative CONFIG_URL (scripts/agent-config.mjs:3,30), so doctor.mjs:110-113 can read the requested configuration successfully and nevertheless report blocked because of an unrelated checkout. Avoid evaluating central-reading DEFAULTS getters when central is explicitly supplied; derive those defaults solely from the selected central owner. Reasoned from code (untested hypothesis); no new reproduction executed.
+
+No additional drift or defects identified within the reviewed diff. Verification:
+- `node acceptance/phase1/p1-05.test.mjs`: exit 0; 2 passed, 0 failed.
+- `node --input-type=module -e "await import('./tests/run-hardening.test.mjs'); await import('./tests/run-store.test.mjs'); await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`: exit 0; 18 passed, 0 failed.
+- `git diff --check`: exit 0 before this append.
+
+Only PROGRESS.md changed. No exploit reproduction, blocked reproduction retry,
+full gate, paid provider call, code/test edit, staging, commit, branch change or
+feature flag modification. Full gates and final completion remain host-owned.
