@@ -927,3 +927,80 @@ branches, git control or roadmap completion were changed. The outer host retains
 full gates, review disposition, live evidence and final completion.
 
 Final `git diff --check`: exit 0 after documentation updates.
+
+## P1-12 two-pass review — 2026-11-10
+
+Reviewed 75fcf6ceb6d5883b4f43d6ece95b277e74d02e23..48fa1d194898ecf2570879e5a843ebf44a44c3a2
+against AGENTS.md, CLAUDE.md, SPEC.md and all nine spec/contracts/phase1*.md
+contracts. Pass 1 compared behavior, acceptance additions and feature metadata
+with the contracts. Pass 2 checked correctness, concurrency, durability, error
+handling, configuration provenance and compatibility, including unchanged code
+needed to assess prior PROGRESS.md findings.
+
+REVIEW 2026-11-10: No specification drift or additional defects found in the reviewed diff. The five accepted fields are copied into a fresh object at graphs/autobuild/tool/lib/proc.mjs:12-21, applied after project environment at :39, and pinned in both Claude settings and process extras at graphs/autobuild/tool/lib/loop.mjs:490 and :513. The provider argument remains the same selected model at :520. No global environment/config mutation, new action authority or storage publication change was introduced. Hook/permission construction remains at loop.mjs:473-491; existing test discovery includes the new implementation file at scripts/test-workflow.mjs:10-14. Focused checks passed; actual hook/gate execution and full gates are not claimed.
+
+Prior findings dispositions (current file:line evidence):
+- Lost selected backend and related child-context shadows, plus the earlier lost
+  CLI model context: addressed in the inspected propagation path at
+  graphs/autobuild/tool/lib/proc.mjs:12-21 and :39, and
+  graphs/autobuild/tool/lib/loop.mjs:490 and :513. Guard, stop-gate and CLI reloads
+  consume that environment at graphs/autobuild/tool/hooks/guard.mjs:31,
+  graphs/autobuild/tool/hooks/stop-gate.mjs:29 and
+  graphs/autobuild/tool/lib/cli.mjs:55. Both hook-mode implementation matrices
+  passed, including legacy, invalid and empty shadows, independent contexts,
+  auth preservation and invalid parent rejection. Partial-settings compatibility
+  and frozen-path exceptions passed. P1-12 actual fake-provider acceptance was
+  deliberately not retried after the recorded fixture git-spawn EPERM; historical
+  native F2 evidence ERROR and later native F1 evidence retain their original scope.
+- Doctor/launcher validation mismatch and shadowed malformed models (including
+  older native F1): remain addressed at core/skills/run-records/doctor.mjs:13-25
+  and :38-39, with effective selection/provenance at
+  graphs/autobuild/tool/lib/config.mjs:169-186 and budget/timeout/hooks validation
+  at :127-148. Selected-model and non-model implementation checks passed;
+  timeout/budget paths were inspected rather than separately rerun.
+- Colon PATH serialization, empty prefixes, inspector-cwd dependence and
+  symlink/parent lexical collapse: remain addressed at
+  core/skills/run-records/doctor.mjs:82 and :85-96. Target-relative PATH checks
+  passed; the wider colon/symlink matrix was inspected, not rerun here.
+- Directory replacement race: retained no-follow directory descriptors remain
+  at core/skills/run-records/store.mjs:28-66, with anchored reads at :79,
+  exclusive publication at :120 and :128, cleanup at :139 and enumeration at
+  :148. Addressed by inspection; no exploit or blocked reproduction was run.
+- Missing parent-directory durability barriers: remain addressed at
+  core/skills/run-records/store.mjs:56-63, file sync at :122, publication sync
+  at :132 and replay sync at :113. Inspection only; no power-loss claim.
+- Selected central configuration/source-checkout dependency, including the
+  older BUGHUNT F1: remains addressed at graphs/autobuild/tool/lib/config.mjs:114-119,
+  preserving public lazy getters at :73-77. Doctor selects central at
+  core/skills/run-records/doctor.mjs:109 and passes it at :38. Inspection only.
+- Close-after-release EIO cleanup: ownership is cleared before close at
+  core/skills/run-records/store.mjs:124-126 and unlink remains independent at
+  :134-139. Addressed by inspection; close-failure injection was not rerun.
+- Default provider execution/trust boundary: remains addressed at
+  core/skills/run-records/doctor.mjs:104 and :129-137. Nonexecution in the
+  target-PATH test passed; other trust cases were inspected rather than rerun.
+- Operational read classification, falsy binaries and null selected models:
+  remain addressed at core/skills/run-records/store.mjs:20-23 and :88-95, and
+  graphs/autobuild/tool/lib/config.mjs:134-137 and :169-175. Focused edge tests
+  passed for safe IO_ERROR/CORRUPT distinction, recovery, valid overrides and
+  observational null compatibility.
+- Earlier ordering and adapter corrections remain at
+  core/skills/run-records/store.mjs:11-17 and
+  core/skills/run-records/adapters.mjs:18-19 and :36-52. Null effort rejection
+  and explicit-path prerequisites remain at core/skills/run-records/doctor.mjs:20
+  and :135. These dispositions are inspection-only in this review.
+- Historical manual_review, failed/interrupted gates and revision-specific live
+  evidence remain qualified; this review does not promote them to full passes.
+
+Focused verification:
+- `node --input-type=module -e "await import('./tests/run-child-context.test.mjs'); await import('./tests/run-launch-parity.test.mjs'); await import('./tests/run-edge-validation.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; 13 passed, 0 failed.
+- `node --test graphs/autobuild/tool/test/settings.test.mjs graphs/autobuild/tool/test/settings-writable-in-frozen.test.mjs`:
+  exit 0; two passing file entries, zero failures.
+
+Only PROGRESS.md was modified. No full suite, bare autobuild, provider call,
+exploit reproduction, blocked reproduction retry, code/test edit, staging,
+commit, push, branch change, git-control edit or feature-pass change was performed.
+Mandatory full gates and final completion remain with the pinned external host.
+
+Review documentation check: `git diff --check`: exit 0.
