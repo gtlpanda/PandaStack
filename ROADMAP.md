@@ -1,6 +1,6 @@
 # PandaStack engineering roadmap
 
-Status: planned; implementation has not started. Updated: 2026-11-09.
+Status: Phase 1 implemented and tested; manual review pending. Updated: 2026-11-10.
 
 This roadmap combines the Brian Armstrong-inspired shared queue, chief-of-staff
 interface, and learning loop with the engineering review's configuration,
@@ -99,7 +99,7 @@ coverage and demonstrated live capability must be labeled separately.
 
 | Phase | Deliverable | Depends on | Status |
 |---|---|---|---|
-| 1 | Shared run records and configuration doctor | Bootstrap gate | Planned |
+| 1 | Shared run records and configuration doctor | Bootstrap gate | Implemented/tested; manual review pending |
 | 2 | Shared decision queue and answer routing | 1 | Planned |
 | 3 | Telemetry, real-task evaluations, and decision learning | 1-2 | Planned |
 | 4 | Global scheduling and resource controls | 1-3 | Planned |
@@ -113,6 +113,13 @@ permission to launch phases concurrently. Split an oversized phase into separate
 reviewable autobuild batches while retaining its completion gate.
 
 ### Phase 1 — Shared run records and configuration doctor
+
+Implementation and dogfood evidence are in [the Phase 1 report](docs/dogfood/phase-01.md).
+All six feature tasks, 17 frozen acceptance tests, full host gates, and two live
+Codex project demonstrations passed. Final hunt found zero defects but returned
+manual_review for incomplete historical-prose and downstream hunt/benchmark
+coverage. This is not full phase acceptance. Keep the pinned baseline active;
+review the named gaps and report before merge/promotion or starting Phase 2.
 
 Build a versioned run/event contract and adapters for autobuild and build-app.
 Add a doctor command that reports configuration provenance, effective role models
