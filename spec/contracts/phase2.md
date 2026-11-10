@@ -283,3 +283,13 @@ P2-07: spec/contracts/phase2-review-corrections.md governs observation completio
 and safe manual handoff. P2-08: spec/contracts/phase2-lazy-import.md governs lazy
 storage loading. Each adds seven independent cases. All preceding requirements,
 existing tests, authorization and uncertainty boundaries remain unchanged.
+
+
+### Installer fixture-copy correction
+
+The supervisor-reviewed fixture amendment excludes only the owning top-level .git
+before copying the source fixtures in scripts/test-install.sh. Those fixtures
+already removed that metadata after copying; traversing live Git lock files caused
+a transient baseline failure. All existing assertions remain byte-for-byte intact.
+Other source content, nested .git entries, modes and symlinks remain in the fixtures.
+No implementation behavior, scanner rule, acceptance criterion or gate is waived.
