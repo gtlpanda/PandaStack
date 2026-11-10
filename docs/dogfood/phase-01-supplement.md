@@ -1,5 +1,8 @@
 # Phase 1 supplemental coverage inspection
 
+Historical inspection only. The final fresh native hunt passed; see
+[the final report](phase-01.md) and [evidence snapshot](phase-01-evidence.md).
+
 User authorized continuing the entire roadmap on 2026-11-10. This supplemental
 read-only review addresses the prior native hunt's three named coverage gaps;
 it does not replace the native graph ledger or grant a review waiver.

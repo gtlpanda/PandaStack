@@ -1,185 +1,172 @@
 # Phase 1 dogfood report
 
-Status: implemented and tested; manual review pending. No promotion approved.
-Updated: 2026-11-10 (timestamps below are UTC).
+2026-11-10, UTC. P1-01 through P1-14 are implemented. The external host completed
+successfully at 13:42:28; all 253 frozen acceptance tests and 22 focused implementation
+groups passed. Final native hunt covered six lenses with zero findings and a pass.
+Fresh two-project live promotion smoke also passed on the clean tested revision.
 
-## Revisions and scope
+## Revision-bound result
 
-Pinned external host: `18eabde206c5041e098102b939877c8e4c99fb85`, branch
-`codex/phase1-baseline`, checkout `/home/gtlpanda/code/PandaStack`.
-Candidate: `codex/phase1-run-records`, checkout
-`/home/gtlpanda/autobuild/wt-pandastack-phase1`.
-Implementation tested by live smoke: `d3eca8a8a4b9e96be5aa37fd870aae577333e13d`.
-The candidate never replaced the active host. No push, PR, merge, deployment,
-runner promotion, or Phase 2 run was performed.
+- Original immutable build host/baseline: 18eabde206c5041e098102b939877c8e4c99fb85.
+- P1-14 implementation: 2ad0aa438623d235195a78e67cf6719f9374db5f.
+- Reviewed/hunted implementation head: 4c409ae789acc56bbec94b15d4db56850d9f3e21.
+- Final tested head: 518f8ef208fdf1ba9a6ac1facf236fd2015f4564.
+  Its only subsequent change from hunted head was PROGRESS.md; saved review-status
+  explicitly permits that documentation-only commit and retains disposition pass.
+- Native run: 20261110T130322Z-1794316934926; feature gate 13:13:12,
+  review/full gates 13:22:14, hunt finding summary 13:35:25,
+  post-hunt host completion 13:42:28.
+- The accompanying documentation-only commit is recorded in Git history.
+  The tested revision remains 518f8ef; documentation does not establish testing
+  of a new code change. Promotion occurs when the next phase uses this immutable
+  runner. No push, remote merge or deployment occurred.
 
-Delivered versioned allowlisted run/event records, durable idempotent storage,
-configuration doctor, and observation adapters for autobuild and build-app.
-P1-01 through P1-04 supplied the planned functionality. P1-05 and P1-06 fixed
-review findings using additional contracts and tests frozen before implementation.
-Existing acceptance/regression tests and gate commands were not weakened.
+Delivered scope is central agent controls, effective-configuration doctor,
+versioned immutable run/event records and managed autobuild/build-app observation.
+Hard global scheduling, decision inbox and evaluation workflows belong later phases.
 
-Platform: Ubuntu 24.04 under WSL, Node 24.21.0, ShellCheck 0.9.0-1.
-Actual login-shell provider probes: Codex 0.167.0 and Claude Code 2.1.321.
-Codex was the sole live build provider; no Claude fallback was launched.
-Configured builder/reviewer: gpt-6-astra, effort medium; subagent default:
-gpt-6.1-sol; probe: gpt-6-luna; per-session concurrency 8. Bounded settings:
-30-minute sessions, 12 iterations, no-progress limit 2, hunt timeout 120 minutes.
-These are configured values, not proof of native provider enforcement.
+## Verification and final live evidence
 
-## Validation
+Full required gates include bash scripts/test.sh and
+node --test graphs/hunt/test-native/*.test.mjs. Host acceptance 253/253 had
+0 failures/skips/cancellations; focused workflow summary 22/22. This replaces the
+earlier 179/194/214/250 snapshots without erasing their revision-specific meaning.
 
-- Pinned host selftest: 107 passed.
-- Clean bootstrap regression gate: passed (400 seconds); native hunt gate passed.
-- One-feature dry run: P1-01 committed as `47b3876`; all host gates passed;
-  deliberate one-iteration stop. Builder wall time 217 seconds.
-- P1-02 `ca2f864`, P1-03 `3b81d8a`, P1-04 `3eaff1f`, P1-05 `b0d73740`,
-  P1-06 `d3eca8a8`: host acceptance, frozen-input checks and full gates passed.
-- Full gates: `bash scripts/test.sh` and
-  `node --test graphs/hunt/test-native/*.test.mjs`.
-- Final combined acceptance: `node --test acceptance/phase1/p1-*.test.mjs`,
-  exit 0, 17 passed, zero failed/skipped.
-- Final P1-06 focused implementation checks: 20 passed. Its final review found
-  no additional defects or contract drift; full gate passed; hunt disposition is manual_review as detailed below.
+Promotion smoke ran 13:45:24.919675–13:45:51.205809 on 518f8ef, reconstructing pristine
+fixtures from original Git blobs into new private disposable projects. Both exit 0;
+exact output/frozen checks passed. Shared store contains 4 records and 8 events:
+2 outer invocations and 2 child sessions, all terminal finished/0, correct parentage,
+distinct project revisions and overlapping child lifetimes. No cleanup failures;
+runner remained clean at the same SHA. One earlier request pinned 4c409ae was
+refused before launch because the host had committed 518f8ef; no provider ran for
+that refusal.
 
-Both provider adapters and two repositories are covered with fake provider
-executables through actual runner entry points, including build-app. Live
-provider execution below is Codex only. Tests cover invalid inputs, allowlisting,
-cross-process publication, replay/conflicts, corruption, storage failure,
-configuration precedence/provenance, drift, and supported/unsupported/unknown
-capability fixtures. Durability checks instrument ordinary filesystem calls;
-no physical power-loss simulation is claimed.
+|Project|Root run|Child session|Child start → finish UTC|
+|---|---|---|---|
+|alpha|44f07de0-67a2-48b7-b881-8e1ce2e35ae1|8550671f-daaa-442d-93a3-84ce5c99d86c|13:45:25.085 →13:45:49.690|
+|beta|5df9fbda-5426-4168-9159-b46aaf37237f|40923aaf-aa79-407e-8b20-8ae97c420141|13:45:25.089 →13:45:50.803|
 
-## Review findings and interventions
+Input revisions: alpha 2acaf479d7f2ddd24546cf3abb52000985836ac7,
+beta dcd3c8021ca56087de166a7d7c5582f8ed22a587.
+Smoke retained Astra/medium, Sol subagent model, configured cap 8 and unknown
+subagent effort. Candidate builds/reviews used high main effort since P1-07;
+do not rewrite earlier/smoke medium settings as high. Codex supplied live sessions;
+both backends have fake-adapter coverage, but no Claude live parity claim.
 
-Initial review found launcher/doctor validation drift, unstable path-based store
-operations, and missing parent-directory synchronization. P1-05 shares managed
-configuration validation, retains no-follow directory descriptors, and syncs
-new directory parents. The first hunt's filesystem-race reproduction was blocked
-by the provider's cybersecurity safeguard. It was not retried or routed to a
-different provider. Defensive invariants were tested on ordinary temporary files.
+Neutral doctor refreshed on 518f8ef at 13:46:12.991450. Both backends exit 2/degraded:
+configuration/definitions/binary presence pass, providerExecuted=false,
+runtime.version=null, native model/effort/concurrency support unknown. This is
+honest non-executing diagnosis, not failed configuration validation or native
+capability proof. Neutral Claude roles resolve opus/high, fable/high, sonnet/high;
+Codex central main/advisor medium differs from the project override noted above.
 
-Second review found source DEFAULTS getters consulted even with explicit selected
-configuration. The hunt reproduced this but did not land its proposed repair:
-its suite comparison failed and the baseline comparison timed out. A retained
-isolated diagnostic found two environmental failures: a chmod-permission test
-runs as mapped root in the repair sandbox; a Git-attributes test has no Git
-metadata in the exported tree. Validation, affected tests, installer and secrets
-checks passed separately. The failed hunt result was not overridden.
+## What dogfooding found and how it was handled
 
-The hunt also reported close-error cleanup as not reproduced, although its
-assertion failed: the custom workflow harness was invoked directly with node:test
-and returned exit 0. Supervisor reproduced it with a node:test regression that
-returned exit 1. P1-06 froze both failing regressions, then autobuild fixed source
-configuration isolation and independent temporary-file cleanup on close failure.
+P1-05..12 repaired launch/doctor precedence and attribution, selected falsy inputs,
+operational IO_ERROR versus corruption, retained directory descriptors/durability,
+close-after-release cleanup, path resolution/serialization, and complete accepted
+child launch context. Default doctor stopped executing selected binaries. Each
+bounded follow-up used frozen regressions and the pinned external host.
 
-Environment interventions: repaired desktop-created Windows/WSL worktree Git
-registration, verified content-preserving CRLF normalization, set per-worktree
-core.filemode=false, and moved the same checkout to native WSL. Ten Node starts
-measured 0.301s there versus 2.162s on the mounted Windows filesystem. A slow
-initial gate was stopped and rerun unchanged. Installed missing ShellCheck into
-user-local tools. A review invoked an unrelated bare autobuild from PATH and
-hung sandboxed hook tests; only its verified redundant process tree was stopped.
-The review prompt now requires focused checks and the external pinned host owns
-full gates. Sandbox-only localhost permission failures were not treated as code
-regressions or test passes.
+P1-13 addressed tracking writes inside clean project/runner trees before preflight,
+including ignored/nested paths, with a narrow genuine Git tracking-namespace
+exception. Native hunt 20261110T114537Z-1794312301456 reproduced the regression
+at 4edd0b6 versus baseline 18eabde; the host was stopped before repeating the known
+broken isolated-repair environment. A legacy test fixture conflicted with the new
+policy: commit 3d33626f029c4401ad8eac44af0c865536ab8f82 moved its store to a sibling
+under an outer temp root and its regular-file failure to dirname(storeDir)/file.
+Every assertion remained unchanged, including explicit-store precedence.
 
-## Live doctor and run capture
+P1-14 preserved exact Git path bytes and distinguished invalid metadata/discovery
+from genuine absence. Its initial 36 cases had 3 passing controls/33 expected
+failures. A further owned-config probe showed that a malformed config filename
+containing "not a git repository" fooled substring-based error classification.
+Three cases were appended: misleading malformed filename, ordinary malformed
+filename, valid empty config. Original 36 bytes/assertions stayed unchanged;
+expanded 39 had 38 pass/1 expected failure before the final correction. Freeze
+clarification commit 1a2bb818fbb5a63d8199f06cbd0eaa9c16ab5aa1 retained implementation
+work; the resumed builder and final host gates supplied 253/253 and 22/22 evidence.
 
-Live doctor on a neutral disposable project returned exit 2 / degraded for both
-providers. Configuration, generated definitions and binary probes pass. Native
-model, effort and concurrency capabilities remain unknown because version-only
-probes do not establish them. Claude effective central settings: orchestrator
-opus/high, advisor fable/high, subagents sonnet/high, cap 8. Codex resolves Astra,
-Sol, Luna with medium main effort and cap 8; subagent effort remains unknown.
+Historical unsuccessful evidence remains historical:
+- A filesystem-race reproduction was provider-blocked and was not retried or
+  routed through another provider. Ordinary defensive invariants/fault tests
+  supplied subsequent evidence.
+- Isolated exports lacked .git, chmod checks encountered mapped root, and baseline
+  comparisons timed out. These were setup/inconclusive outcomes, not verified
+  repairs. Sandbox git-spawn EPERM and an existing sandbox /tmp/.git also prevented
+  some local checks; root-host proofs passed without weakening those assertions.
+- Interrupted gates are not passes. Old F1 labels can retain unrelated repair
+  rows; bind findings to run/revision/evidence identity. A custom test harness once
+  printed failures with exit 0, so authoritative summaries are checked as well.
+- P1-09's hook fixture maxIterations changed 1→2 to allow the existing completion
+  iteration; assertions remained. P1-10 used the documented line-local annotation
+  for a synthetic fixture token; scanner rules were not relaxed.
+- Full-source forwarding fixed truncated review input while retaining native
+  instructions, schema and ledger gates; it was not a coverage waiver.
+- Historical d3eca8a live alpha first failed at the outer run for a missing progress
+  heading, then succeeded on resume;6 records/12 events retain that failure.
+  The later 970953 smoke passed 4 records/8 events and remains separate from final 518f evidence.
 
-Two disposable Git projects ran fresh candidate processes against one explicit
-PANDASTACK_RUNS_DIR. Each generated an exact deterministic output checked by a
-frozen node:test acceptance. Alpha's first provider session succeeded but its
-host stopped with exit 2 because the progress heading was missing. A normal
-resume consumed that failure feedback and passed, without changing tests or
-configuration. Beta passed on its first attempt. The fixture alone disables
-final review/hunt; the Phase 1 candidate retains both mandatory gates.
+## Measured usage, with limits
 
-The store contains six distinct immutable records and twelve events: three
-root autobuild invocations and three child provider sessions. Assertions verified
-both project identities, parent isolation, start/terminal event pairs, runner
-revision, one failed root, five successful records, and preservation of the failed
-attempt after retry. Exact IDs and timestamps are recorded below.
+Final reconciliation at 13:46:21.118857 covers 154 fingerprinted source files and
+127 observed completed turns, including completed turns from interrupted stages.
 
-## Limits and follow-ups
-
-Storage currently supports Linux/WSL descriptor anchoring through /proc/self/fd.
-Other platforms fail closed for recording; work continues with a safe warning.
-Probe/native-hunt leaves are not tracked in this phase. Abrupt process termination
-can leave a started record; this phase does not reconcile crashes into terminal
-states or provide global scheduling. Native capability support remains unknown.
-
-Dogfood improvements to prioritize: preflight required CI tools; prefer native
-WSL worktrees; stream full-gate progress and retain complete failure logs; pin
-review executables; avoid redundant full checks when unchanged coverage is proven;
-use correct test-harness exit semantics in reproductions; make repair exports
-compatible with repository-dependent suites; classify a timed-out baseline
-comparison as inconclusive rather than proof that a repair caused a regression;
-include the host's required progress-entry format in tiny fixture prompts.
-
-Retain the pinned baseline until normal review and merge/promotion approval.
-
-## Final branch hunt
-
-Hunted head: `baa4d0040eee517de829be883c746d019e9d5386` against pinned baseline
-`18eabde206c5041e098102b939877c8e4c99fb85`. Native run
-`20261110T074652Z-1794297837140`: 08:03:57 to 08:13:08 UTC, 552 seconds,
-seven completed provider turns, six lenses, zero new findings, no repairs needed.
-Ledger status is done, with disposition `manual_review`, not clear/pass.
-Post-hunt host gates completed successfully, then autobuild stopped with exit 12
-at 08:20:07 UTC. A `review-status.mjs status` check confirmed the hunted revision
-and retained manual_review on the subsequent documentation-only host commit
-`77f4c05ff05896200deb8d2a5f75aacaa0ce172e`.
-
-The final hunt's unexamined areas were:
-- Regression: unchanged historical retro.md content; its added entry/diff was read.
-- Security: complete downstream benchmark and hunt internals beyond caller traces.
-- Errors: complete historical retro.md and PROGRESS.md prose.
-
-Logic, contract and concurrency lenses are covered. Regression, security and
-errors lenses are partial. Zero findings does not erase these gaps. No ledger
-was rewritten, no coverage waiver was assumed, and the runner remains unpromoted.
-The autobuild playbook's exit-12 instruction says the hunt needs the user.
-Normal manual review must resolve/accept the named gaps before calling the phase
-complete or accepting this runner for Phase 2.
-
-Local ledger: `/home/gtlpanda/code/PandaStack/.git/bughunt/codex-phase1-run-records-423431/ledger.json`.
-Raw logs stay untracked; their names identify the run without publishing prompts.
-
-## Live run identities
-
-All times below are UTC on 2026-11-10. Project revisions are the immutable inputs
-at invocation start; each output feature was committed by its host afterward.
-
-| Project / workflow | Run ID | Parent ID | Start | End | Outcome / exit |
-|---|---|---|---|---|---|
-| alpha / autobuild | `4de6764d-eebf-4269-9e7f-381a2a6cb6b2` | `none` | 07:58:10.497Z | 07:58:39.762Z | finished / 0 |
-| alpha / session | `5f414dc6-0bb2-409d-b4d3-9bad6700a662` | `d2a71230-bbbe-4f40-8f12-7658aaa884be` | 07:56:22.594Z | 07:56:49.774Z | finished / 0 |
-| alpha / session | `b07a73ff-2b4d-4061-9ac2-8c33892ec4cc` | `4de6764d-eebf-4269-9e7f-381a2a6cb6b2` | 07:58:10.576Z | 07:58:39.545Z | finished / 0 |
-| alpha / autobuild | `d2a71230-bbbe-4f40-8f12-7658aaa884be` | `none` | 07:56:22.496Z | 07:56:49.911Z | failed / 2 |
-| beta / session | `d919ef6a-f0ee-4f88-95a3-adaab699b90c` | `ffcd2042-cf06-4cac-a4ad-61e642bfeb08` | 07:56:50.056Z | 07:57:13.218Z | finished / 0 |
-| beta / autobuild | `ffcd2042-cf06-4cac-a4ad-61e642bfeb08` | `none` | 07:56:49.973Z | 07:57:13.422Z | finished / 0 |
-
-## CLI-reported usage
-
-Cached input is a subset of input; do not add it again. Reasoning output is
-reported separately as supplied by the CLI. These totals include only observed
-completed turns, not unreported failed-turn usage or this supervising chat.
-All stages used Codex. No dollar cost is asserted.
-
-| Stage | Completed turns | Input tokens | Cached input | Output tokens | Reasoning output |
+|Stage|Turns|Input tokens|Cached input subset|Output tokens|Reasoning output|
 |---|---:|---:|---:|---:|---:|
-| builders | 6 | 4413637 | 4177792 | 43606 | 3815 |
-| reviews | 3 | 4193942 | 4026880 | 11319 | 3756 |
-| live-smoke | 3 | 309586 | 267136 | 1362 | 0 |
-| Hunt 1 | 11 | 6028062 | 5021440 | 31584 | 6908 |
-| Hunt 2 | 13 | 8318041 | 7135872 | 38336 | 11029 |
-| Hunt 3 | 7 | 9115506 | 7845504 | 32350 | 9450 |
+|Builders|18|13,335,698|12,488,320|109,450|11,680|
+|Reviews|11|8,637,396|7,941,888|39,778|6,862|
+|Native hunts|91|199,122,887|183,431,808|443,975|169,079|
+|Historical live|3|309,586|267,136|1,362|0|
+|970953 live|2|175,536|154,880|813|0|
+|518f promotion live|2|175,735|145,152|895|0|
+|Observed total|127|221,756,838|204,429,184|596,273|187,621|
 
-Hunt 1 additionally had one blocked failed turn whose usage is unknown.
+Cached input is already included in input. Reasoning counters are retained as
+reported, not assumed additive. These are top-level completed-turn observations,
+not all account usage: failed/incomplete turns without counters, unobserved
+contributors and supervisor chat remain unknown/excluded. No dollar estimate or
+cost-saving claim. All observed completed-turn fields had measurements; this
+does not imply complete coverage of unsuccessful attempts.
+
+## Evidence retention and limitations
+
+Local authoritative artifacts:
+- pandastack-phase 1-p114-expanded-all-acceptance.log;
+  pandastack-phase 1-p114-expanded-focused.log.
+- pandastack-phase 1-git-discovery-resume.log;
+  pandastack-phase 1-final-hunt-status.json.
+- pandastack-phase 1-promotion-2cmdyc41/{matching-stem-manifest.json,
+  matching-stem-results.json}, plus owned records/events.
+- pandastack-phase 1-final-doctor-provenance.json and both doctor JSONs.
+- pandastack-phase 1-final-usage.json.
+Raw originals reside under /tmp. Durable sanitized counterpart:
+[phase-01-evidence.md](phase-01-evidence.md), retaining tested revision, hunt disposition/
+documentation exemption, host gate excerpts, 253/22 counts, 4 run identities/settings
+and 8 events, doctor status/hashes, usage totals and all 154 source fingerprints.
+Independent comparison matched those fields to the originals and found no home or
+temporary-directory paths in the snapshot. Historical supplement remains explicitly
+historical. No raw provider/tool transcript is included.
+
+Redaction preserves source hashes but changes the projection's own bytes; do not
+label the redacted snapshot with an original raw-file hash. Hashes bind identity,
+not source availability or independent truth. The report and durable snapshot
+preserve the measured outcome without publishing raw prompts, environment, actor/
+credential information or provider traces. Raw logs remain local evidence.
+
+Content hashes binding this report's inspected inputs:
+- Acceptance: 22bf4dc46afcedae0c2ea7e76c0bf2f5c637821b7b7d4b5f784bfa0dd7f21a81.
+- Focused groups: 3c377f35bc0cc81a40c0b1e5c7ed3dd815ed91765b8ca23c46244606036adbac.
+- Hunt status: ff85ac1a88ace42533efbf20a5877dc4b2080c0c1543529e91c4fb76159151db.
+- Final host log: ca9f4fe7dfaa458513dd1ea92c9628f4807f6c27df409a1b55f717bb5395eeca.
+- Promotion results: 4acbcd8d5c0202ad521465034eb364e8278def4d544b8a889a90ab25a57fbc94.
+- Doctor provenance: 62de55b60c2f59f6c8ec145e372e88168efe16eb11a497398796c2a21dde7d84.
+- Usage: 5a355f6f8b6e6dd7328dc836eb851f6bec1b53959e65c6d6e5bcd4361255ad7f.
+
+Recording relies on Linux/WSL procfs anchoring; unsupported recording safely warns
+while authorized work continues. No physical power-loss test, crash reconciliation,
+hard global/nested-worker enforcement or observed external-session cap is claimed.
+Configured concurrency 8 is not an enforcement proof. Probe/native-hunt sessions
+are outside Phase 1 recording coverage. Abrupt termination can leave incomplete
+starts. The next phase must use the accepted immutable runner and preserve these
+limits; plans for Phases 2–8 are not evidence those phases shipped.
