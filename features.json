@@ -121,6 +121,23 @@
       "test": "acceptance/phase1/p1-08.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "P1-09",
+      "title": "Preserve selected configuration across doctor and child hooks",
+      "description": "Implement spec/contracts/phase1-launch-parity.md; preserve frozen checks and authorization. No live provider or blocked reproduction retry.",
+      "contract": "spec/contracts/phase1-launch-parity.md",
+      "dependencies": [
+        "P1-08"
+      ],
+      "acceptance": [
+        "Doctor validates winning model values without rejecting shadowed inputs.",
+        "Claude child hooks reload the actual selected CLI model and retain guard/gate enforcement.",
+        "Doctor resolves relative executable search prefixes against the target repository."
+      ],
+      "test": "acceptance/phase1/p1-09.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
