@@ -539,3 +539,78 @@ all authoritative full gates remain with the external host.
 Read-only Explore audit: PASS for data flow, edge/error handling, security,
 consistency and missing pieces, with no concrete defects found. Static inspection
 does not establish actual hook execution. `git diff --check`: exit 0.
+
+## Launch-parity two-pass review — 2026-11-10
+
+Reviewed 759ba555b2621e722f16ab50d70ff0f9781f5d79..970953b71ebad8706b51097d389cf6c7cd652986
+after reading AGENTS.md, CLAUDE.md and prior PROGRESS.md findings. Pass 1 compared
+the diff against SPEC.md and all six contracts: phase1.md, phase1-hardening.md,
+phase1-followup.md, phase1-doctor-trust.md, phase1-edge-validation.md and
+phase1-launch-parity.md. Pass 2 checked correctness, concurrency, durability,
+error handling, configuration provenance and compatibility. The host-owned
+acceptance/feature additions and fixture correction agree with the recorded
+P1-09 decisions; this review did not change them.
+
+REVIEW 2026-11-10: DEFECT core/skills/run-records/doctor.mjs:83 Empty PATH prefix introduces a directory the launcher omits — With project env.pathPrepend:[""], no explicit project PATH, and a selected bare-name executable present only in the repository root, resolve(repo, "") converts the empty entry into an existing directory. Doctor then reports the binary prerequisite pass (and degraded rather than blocked under default inspection), although the managed launcher filters the original empty entry with existsSync(dir) at graphs/autobuild/tool/lib/proc.mjs:21 and cannot find that executable when inherited PATH excludes the repository. Empty strings are accepted by doctor.mjs:24-25 and retained by config.mjs:144. Preserve launcher filtering semantics for empty prefixes before target-relative resolution and add a focused parity case; reasoned from code, untested hypothesis, no reproduction executed.
+
+No additional specification drift or defects identified in this diff. Model
+selection now reaches the shared validator at doctor.mjs:38-39, with precedence
+and provenance at graphs/autobuild/tool/lib/config.mjs:169-186. Non-model checks
+remain at doctor.mjs:13-25. Claude's selected main model reaches both session
+settings and child environment at graphs/autobuild/tool/lib/loop.mjs:490 and :513,
+matching its provider argument at :520 without mutating the parent environment.
+Existing hook/permission construction remains at :473-491; child environment
+overrides are applied last at graphs/autobuild/tool/lib/proc.mjs:26. New tests are
+included by existing discovery at scripts/test-workflow.mjs:10-14.
+
+Prior findings dispositions (current file:line evidence):
+- Doctor/launcher rejection mismatch: remains addressed by
+  core/skills/run-records/doctor.mjs:38 and shared validation at
+  graphs/autobuild/tool/lib/config.mjs:127-148. Selected-model and non-model
+  rejection tests passed; shadowed malformed models now preserve winning-source
+  provenance. The empty-prefix exception is recorded above.
+- Directory symlink replacement race: retained no-follow descriptors and procfs
+  traversal remain at core/skills/run-records/store.mjs:28-66, anchored reads at
+  :79, publication at :120 and :128, cleanup at :139 and enumeration at :148.
+  Addressed by inspection; no exploit or blocked reproduction was retried.
+- Missing parent-directory durability barriers: parent sync remains at
+  core/skills/run-records/store.mjs:56-63, file sync at :122, publication sync at
+  :132 and replay sync at :113. Addressed by inspection; no new durability test
+  or physical power-loss claim.
+- Selected central configuration/source-checkout dependency, including historical
+  BUGHUNT F1: remains addressed at graphs/autobuild/tool/lib/config.mjs:114-119,
+  preserving lazy public getters at :73-77. Doctor selects central configuration
+  at core/skills/run-records/doctor.mjs:102 and passes it at :38. Inspection only
+  for the absent-source scenario in this review.
+- Close-after-release EIO cleanup: ownership is cleared before close at
+  core/skills/run-records/store.mjs:124-126, with independent unlink at :134-139.
+  Remains addressed by inspection; close fault-injection tests were not rerun.
+- Default provider execution/trust boundary: remains addressed at
+  core/skills/run-records/doctor.mjs:97 and :122-132. Focused trust tests passed
+  for nonexecution, unavailable binaries, injected evidence and safe failures.
+- P1-08 operational read classification, falsy binaries and null launch models:
+  remain addressed at core/skills/run-records/store.mjs:88-95 and :20-23, and
+  graphs/autobuild/tool/lib/config.mjs:134-137 and :169-175. Existing edge tests
+  passed, including safe errors, recovery and observational null compatibility.
+- Earlier ordering and adapter corrections remain at
+  core/skills/run-records/store.mjs:11-17 and adapters.mjs:18-19, :36-52
+  (inspection only). Null effort rejection and explicit-path prerequisites remain
+  at doctor.mjs:20 and :128; focused doctor tests passed. These filenames are
+  under core/skills/run-records.
+- P1-09 lost CLI model context in hooks: addressed in the inspected propagation
+  path at graphs/autobuild/tool/lib/loop.mjs:490, :513 and :520; the existing
+  session-settings/reload test passed. Actual hook fixtures were deliberately
+  not rerun after the recorded git-spawn EPERM. Historical native F2 evidence
+  ERROR, manual_review and other failed/limited checks remain historical; this
+  review does not promote them to passes or claim end-to-end hook execution.
+
+Focused verification:
+- `node --test acceptance/phase1/p1-09-precedence.cases.mjs acceptance/phase1/p1-09-path.cases.mjs`:
+  exit 0; two passing file entries, zero failures. Hook cases were excluded.
+- `node --input-type=module -e "await import('./tests/run-launch-parity.test.mjs'); await import('./tests/run-edge-validation.test.mjs'); await import('./tests/run-doctor-trust.test.mjs'); await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; 19 passed, zero failed. These tests do not cover the empty-prefix defect.
+
+Only PROGRESS.md was modified. No exploit reproduction, blocked reproduction
+retry, full suite, bare autobuild, provider call, code/test edit, staging, commit,
+push, branch change, git-control edit or pass-flag change. Full gates, actual
+hook acceptance, review disposition and final completion remain host-owned.

@@ -138,6 +138,22 @@
       "test": "acceptance/phase1/p1-09.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "P1-10",
+      "title": "Match managed executable search semantics in doctor",
+      "description": "Implement spec/contracts/phase1-path-parity.md without changing launcher behavior. Static inert filesystem fixtures only; no provider execution or blocked race reproduction.",
+      "contract": "spec/contracts/phase1-path-parity.md",
+      "dependencies": [
+        "P1-09"
+      ],
+      "acceptance": [
+        "Preserve empty/missing prefix filtering, inherited and explicit PATH distinctions, and selected home expansion.",
+        "Preserve kernel symlink/parent traversal for PATH components and explicit binaries from any inspector cwd."
+      ],
+      "test": "acceptance/phase1/p1-10.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
