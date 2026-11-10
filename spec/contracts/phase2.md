@@ -254,3 +254,16 @@ P2-04 inspection boundary clarification:
   stays unknown/degraded absent separately supplied trusted evidence. Configuration
   validity is not a claim of queue operational readiness. Stateful queue access
   begins only when the actual managed decision gate executes.
+
+
+## Reviewed fixture dependency closure amendment (2026-11-10)
+
+P2-04 adds pure decision configuration validation to the existing configuration
+loader. The Phase 1 copied-source isolation fixture must include
+core/skills/decisions/config.mjs and records.mjs alongside its original two files.
+This adds only the required import closure: every original assertion, absent and
+malformed source-default case, precedence/backend/environment check, and cleanup
+test remains unchanged. Neither new module initializes a queue/provider or reads
+source defaults. The full host diagnostic reproduced exactly this fixture import
+failure (1549 workflow checks passed); independent review cleared the copy-list
+correction. Scanner/gate rules and implementation requirements are unchanged.

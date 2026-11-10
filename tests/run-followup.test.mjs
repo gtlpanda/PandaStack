@@ -13,7 +13,8 @@ async function fixture(work) {
 }
 
 await test('explicit central config is isolated from absent and invalid source defaults with precedence intact', () => fixture(async root => {
-  for (const file of ['graphs/autobuild/tool/lib/config.mjs', 'scripts/agent-config.mjs']) {
+  for (const file of ['graphs/autobuild/tool/lib/config.mjs', 'scripts/agent-config.mjs',
+    'core/skills/decisions/config.mjs', 'core/skills/decisions/records.mjs']) {
     const target = join(root, file)
     fs.mkdirSync(dirname(target), { recursive: true })
     fs.copyFileSync(new URL(`../${file}`, import.meta.url), target)
