@@ -2423,3 +2423,53 @@ claims are not established by this review. External host retains disposition,
 full gates and final completion.
 
 BUGHUNT 2026-11-10: changes_requested; fixed none; open F1, F2, F3, F4 (F1, F2, F3, F4); report /home/gtlpanda/code/PandaStack/.git/bughunt/codex-phase2-decisions-b483da/report.md
+
+## P2-12 — Preserve finite control-byte observation at capture decisions
+
+Updated only the four decision reads in co_root: use the empty Bash delimiter,
+retain nonempty partial reads on failure, and clear message before each read.
+Existing read deadlines, 16-character bounds, stop reasons, grant ordering,
+root-local signal targets, normal settlement and both postfailure drains remain
+unchanged. Added tests/verify-control-read.test.mjs using workflow-harness test()
+for static call-site binding, immediate resets, predicate structure and preserved
+bounds/reasons. These static checks do not execute extracted source or the owner
+and do not establish finite-input behavior or lifecycle safety. D81-D82 record
+scope and outstanding evidence limits.
+
+Exact focused validation:
+- `node acceptance/phase2/p2-12.test.mjs`: exit 1 before implementation;
+  0 passed, 2 failed, 0 skipped. Both cases failed at the spawn assertion with
+  `Error: spawnSync /bin/bash EPERM` (observed at p2-12.test.mjs:28-29), before
+  any primitive behavior assertion. No retry, reroute or fixture change was made;
+  acceptance execution remains unverified and host-owned.
+- Before implementation,
+  `node --input-type=module -e "await import('./tests/verify-control-read.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1; `{ pass: 1, fail: 2 }`. Immediate message reset and NUL/partial-read
+  predicate assertions failed; existing bounds/reasons passed.
+- After implementation, the identical focused aggregate command: exit 0;
+  `{ pass: 3, fail: 0 }`. Static source checks only.
+- `bash -n core/skills/verify/capture-owner.sh && node --check tests/verify-control-read.test.mjs && git diff --check`:
+  exit 0.
+- `shellcheck -S warning core/skills/verify/capture-owner.sh`: exit 0,
+  no diagnostics.
+- `bash scripts/check-secrets.sh`: exit 0; `check-secrets: clean` for tracked
+  files, including changed implementation and documentation.
+- `bash scripts/check-secrets.sh tests/verify-control-read.test.mjs`: exit 0;
+  `check-secrets: clean` for the only new untracked source/test file. Scanner
+  rules unchanged; no fixture annotations needed.
+- Final `git diff --check`: exit 0.
+
+Local static review: bounded PASS for data flow (all four decisions retain their
+failure branches), edge/error handling (reset and partial-data predicates),
+security (signal identities untouched), consistency (same predicate shape at all
+sites) and completeness within the selected scope. The required independent
+Explore audit could not start: spawn_agent rejected the user-requested model
+with `Unknown model gpt-6.1-sol`. No model/provider fallback was attempted. Local
+review does not replace that outstanding independent audit or behavioral gates.
+
+No full gates, provider sessions, blocked reproductions, later-feature work,
+frozen-input edits, feature flags, staging, commits, branch/Git-control changes
+or pinned-host modifications. Native F3 ERROR and refused F4 evidence limits
+remain unchanged; no owner/lifecycle or hostile-containment proof is claimed.
+External host retains acceptance execution, independent review, full gates,
+commits and final completion.

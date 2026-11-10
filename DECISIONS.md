@@ -412,3 +412,19 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   all runtime ownership behavior. Add executable-access coverage and assert the
   exposed scope ID in the existing pure parser test. Keep frozen gates/scanner
   rules unchanged; only selected acceptance and focused checks run here.
+
+- D81 (P2-12): Treat the explicit host selection as activation of the frozen
+  four-control-read correction. Use Bash's empty delimiter so an observed NUL
+  completes a read, and test nonempty partial data even when read fails. Clear
+  message immediately before each decision read. Preserve time/character bounds,
+  reasons, root-local signal authority, grant ordering and both postfailure
+  drains. Add static call-site regression checks before changing implementation;
+  the frozen acceptance owns finite-stdin behavioral evidence.
+- D82 (P2-12 validation limits): The selected acceptance failed before primitive
+  execution with spawnSync /bin/bash EPERM. Do not retry or reroute that check;
+  leave primitive validation to the host. No owner/lifecycle or blocked scenario
+  is executed or claimed. The required Explore audit was requested with the
+  user's exact gpt-6.1-sol model, but the tool rejected that unavailable model.
+  No alternate model/provider was used; local static review is not an independent
+  audit. Preserve these outstanding evidence limits for host review. Backend
+  instructions leave flags, staging, commits and full gates to the host.

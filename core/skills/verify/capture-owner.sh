@@ -204,13 +204,16 @@ co_root() {
   while :; do
     if co_proc "$LOCAL_ANCHOR_PID" && co_start "$CO_PROC_START" && [[ ! ${LOCAL_ANCHOR_START:-} || $CO_PROC_START == "$LOCAL_ANCHOR_START" ]] && [[ $CO_PROC_PGID == "$LOCAL_PGID" && $CO_PROC_PARENT == "$LOCAL_OWNER_PID" ]] && co_live; then LOCAL_ANCHOR_START=$CO_PROC_START; break; fi
     if ((SECONDS >= deadline)); then co_stop_local anchor-admission; return 125; fi
-    IFS= read -r -t 0.02 -u "$STOP_FD" -n 16 message && { co_stop_local stop-before-grant; return 125; }
+    # NUL terminates successfully; other partial bytes count even on read failure.
+    message=''
+    if IFS= read -r -d '' -t 0.02 -u "$STOP_FD" -n 16 message || [[ $message ]]; then co_stop_local stop-before-grant; return 125; fi
   done
   printf '1\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$scope" "$boot" "$LOCAL_OWNER_PID" "$LOCAL_OWNER_START" "$LOCAL_ANCHOR_PID" "$LOCAL_ANCHOR_START" "$LOCAL_PGID" > "$leaf/scope-v1.tsv" || { co_stop_local record-write; return 125; }
   chmod 600 -- "$leaf/scope-v1.tsv" || { co_stop_local record-mode; return 125; }
   trap 'co_stop_local interrupted; exit 125' TERM INT HUP
   # Any pending message, including malformed/partial input, closes admission.
-  if IFS= read -r -t 0.01 -u "$STOP_FD" -n 16 message || [[ $message ]]; then co_stop_local stop-before-grant; return 125; fi
+  message=''
+  if IFS= read -r -d '' -t 0.01 -u "$STOP_FD" -n 16 message || [[ $message ]]; then co_stop_local stop-before-grant; return 125; fi
   if [[ -e $leaf/.closing ]]; then co_stop_local closing; return 125; fi
   co_can_grant && co_local_anchor || { co_stop_local grant-denied; return 125; }
   printf 'GO\n' >&"$GRANT_FD" || { co_stop_local grant-write; return 125; }
@@ -218,7 +221,7 @@ co_root() {
   while :; do
     if [[ -e $leaf/.closing ]]; then co_stop_local closing; return 125; fi
     message=''
-    if IFS= read -r -t 0.05 -u "$STOP_FD" -n 16 message || [[ $message ]]; then co_stop_local stop-request; return 125; fi
+    if IFS= read -r -d '' -t 0.05 -u "$STOP_FD" -n 16 message || [[ $message ]]; then co_stop_local stop-request; return 125; fi
     co_local_anchor || { co_stop_local anchor-lost; return 125; }
     if [[ -f $leaf/.status && ! -L $leaf/.status ]]; then
       IFS= read -r status < "$leaf/.status" || { co_stop_local invalid-status; return 125; }
@@ -232,7 +235,7 @@ co_root() {
           [[ $CO_PROC_START == "$LOCAL_ANCHOR_START" ]] || { co_mark_failure stale-anchor; return 125; }
           if ((SECONDS >= join_deadline)); then co_stop_local anchor-join; return 125; fi
           message=''
-          if IFS= read -r -t 0.02 -u "$STOP_FD" -n 16 message || [[ $message ]]; then co_stop_local stop-during-join; return 125; fi
+          if IFS= read -r -d '' -t 0.02 -u "$STOP_FD" -n 16 message || [[ $message ]]; then co_stop_local stop-during-join; return 125; fi
         done
         wait "$LOCAL_ANCHOR_PID"; local result=$?
         [[ $result == "$status" ]] || { co_mark_failure anchor-status; return 125; }
