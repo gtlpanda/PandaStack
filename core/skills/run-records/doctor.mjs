@@ -1,7 +1,6 @@
 // Read-only inspection of managed launches. Provider account availability is unknown.
 import { readFileSync, statSync, accessSync, constants, existsSync } from 'node:fs'
 import { resolve, join, isAbsolute, delimiter } from 'node:path'
-import { spawnSync } from 'node:child_process'
 import { readAgentConfig, validateAgentConfig } from '../../../scripts/agent-config.mjs'
 import { renderAgentConfig, ROOT } from '../../../scripts/configure-agents.mjs'
 import { resolveManagedModels, resolveManagedConfig, expandHome } from '../../../graphs/autobuild/tool/lib/config.mjs'
@@ -59,8 +58,8 @@ export function resolveSettings({ backend, central, project = {}, env = {}, over
   return { values: sanitizeSettings(values), sources }
 }
 
-const unknownRuntime = () => ({ version: null, controls: Object.fromEntries(controls.map(key => [key,
-  { status: 'unknown', evidence: 'No established native control evidence.' }])) })
+const unknownRuntime = (evidence = 'No established native control evidence.') => ({ version: null,
+  controls: Object.fromEntries(controls.map(key => [key, { status: 'unknown', evidence }])) })
 function normalizeRuntime(input) {
   const result = unknownRuntime()
   if (!object(input)) return result
@@ -91,18 +90,9 @@ function locateBinary(bin, path, repo) {
   }
   return null
 }
-function defaultProbe({ bin, repo, path }) {
-  // Version is informational. It cannot establish individual controls, and a generic
-  // --config flag is not evidence for a specific concurrency setting.
-  const result = spawnSync(bin, ['--version'], { cwd: repo, env: { PATH: path }, encoding: 'utf8', timeout: 3000, maxBuffer: 8192 })
-  if (result.error || result.status !== 0) throw Error('Probe failed')
-  const runtime = unknownRuntime()
-  runtime.version = /^(?:codex(?:-cli)?|claude(?: code)?)?\s*(\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?)(?:\s*\(Claude Code\))?\s*$/i.exec(result.stdout)?.[1] ?? null
-  return runtime
-}
-
 export async function inspectDoctor({ repo, backend = 'codex', pandaRoot = ROOT, env = process.env, overrides = {}, capabilityProbe } = {}) {
-  const result = { schemaVersion: 1, status: 'blocked', backend, settings: { values: {}, sources: {} }, runtime: unknownRuntime(), checks: [] }
+  const result = { schemaVersion: 1, status: 'blocked', backend, settings: { values: {}, sources: {} },
+    runtime: unknownRuntime(capabilityProbe ? undefined : 'Provider execution was not performed; native control support is unknown.'), checks: [] }
   const check = (id, status, message) => result.checks.push({ id, status, message })
   let project, path, bin
   try {
@@ -130,9 +120,12 @@ export async function inspectDoctor({ repo, backend = 'codex', pandaRoot = ROOT,
     const executable = capabilityProbe ? bin : locateBinary(bin, path, repo)
     if (!executable) check('binary', 'fail', 'Managed provider executable was not found.')
     else {
-      result.runtime = normalizeRuntime(await (capabilityProbe ?? defaultProbe)({ backend, bin: executable, repo, path }))
+      // Default inspection only checks presence. Executing even --version would
+      // cross the trust boundary into code selected by project or environment.
+      if (capabilityProbe) result.runtime = normalizeRuntime(await capabilityProbe({ backend, bin: executable, repo, path }))
       const missingPath = capabilityProbe && bin.includes('/') && !locateBinary(bin, path, repo)
-      check('binary', missingPath ? 'fail' : 'pass', missingPath ? 'Managed provider executable was not found.' : 'Managed provider probe completed.')
+      check('binary', missingPath ? 'fail' : 'pass', missingPath ? 'Managed provider executable was not found.' :
+        capabilityProbe ? 'Managed provider probe completed.' : 'Managed provider executable was found; execution was not performed.')
     }
   } catch { check('binary', 'fail', 'Managed provider probe failed.') }
   for (const key of controls) {

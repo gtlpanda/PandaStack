@@ -452,10 +452,13 @@ reports effective settings with their sources. It does not inspect credentials o
 make model calls. Exit codes are 0 for ready, 2 for degraded/blocked, and 1 for
 invalid invocation or unexpected failure.
 
-The default probe checks executable availability using the managed PATH and runs
-only a bounded `--version` command. Version alone does not prove model, effort, or
-concurrency controls, so those controls remain unknown and the report is degraded
-until a trusted capability probe supplies evidence. The library's injected probe
+Default inspection checks executable availability using the managed binary and
+PATH selection without executing provider code, including `--version`. It reports
+runtime version as null and model, effort, and concurrency controls as unknown,
+with explicit evidence that execution was not performed. Missing executables remain
+blocked; otherwise valid configuration is degraded until a trusted capability probe
+supplies evidence. Earlier live version outputs describe prior behavior; current
+default inspection deliberately leaves version unknown. The library's injected probe
 is a trusted integration/testing boundary, not evidence read from project files;
 for bare executable names it supplies discovery evidence as well. Explicit binary
 paths are checked locally even with injection. These reports describe managed

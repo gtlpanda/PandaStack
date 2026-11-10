@@ -280,3 +280,38 @@ retry, full suite, provider call, code/test edit, staging, commit, branch change
 or pass-flag change was performed.
 
 BUGHUNT 2026-11-10: manual_review; fixed none; open none (regression partly covered, security partly covered, errors partly covered); report /home/gtlpanda/code/PandaStack/.git/bughunt/codex-phase1-run-records-423431/report.md
+
+## P1-07 implementation — 2026-11-10
+
+Removed default doctor provider execution, including the former version command.
+Managed executable and PATH lookup remain read-only; unavailable executables still
+block readiness. Default version is null and all controls are unknown with explicit
+evidence that execution was not performed. Trusted injected probes retain callback
+context, normalization, safe errors and explicit-path availability checks. README
+and the run-records skill document the trust boundary and that earlier live version
+outputs describe prior behavior. Decisions D25-D26 record the scope and choices.
+
+Added four workflow-harness test groups discovered by existing CI. Subprocess spies
+cover both providers and project/environment binary selection, relative paths,
+project/inherited/prepended PATH, unavailable/nonexecutable selections, rejection of
+project-supplied evidence, trusted callback behavior and JSON/human CLI output.
+Fixtures use temporary directories and inert executable files; no provider code runs.
+
+Targeted verification:
+- Before implementation, `node acceptance/phase1/p1-07.test.mjs`: exit 1;
+  1 passed, 1 failed with `read-only inspection invoked a subprocess` (`1 !== 0`).
+- Before implementation, the new focused trust tests: exit 1; 1 passed, 3 failed
+  on default execution/nonexecution evidence assertions.
+- After implementation, `node acceptance/phase1/p1-07.test.mjs`: exit 0;
+  2 passed, 0 failed.
+- `node --input-type=module -e "await import('./tests/run-doctor-trust.test.mjs'); await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; 11 passed, 0 failed.
+
+No full suite, paid calls, exploit execution, filesystem-race reproduction, frozen
+input changes, staging, commits, pass flags, branch changes or roadmap completion.
+The external host retains authoritative full gates and final live evidence.
+
+Read-only Explore sanity audit: PASS for data flow, edge/error handling, security,
+consistency and missing pieces; no concrete P1-07 defects found. Audit inspected
+changed files and relevant callers without executing providers or modifying files.
+`git diff --check`: exit 0 after documentation updates.

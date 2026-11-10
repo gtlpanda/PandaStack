@@ -17,8 +17,14 @@ The record functions perform no filesystem writes or provider calls. Use
 `store.mjs` for immutable local run/event persistence and `doctor.mjs` for
 `resolveSettings` and read-only `inspectDoctor`. The CLI is
 `node scripts/pandastack.mjs doctor --repo PATH --backend codex [--json]`.
-Doctor checks generated drift and reports unknown controls without positive
-capability evidence; its default probe only runs a bounded version check.
+Doctor checks generated drift and resolves executable presence without executing
+provider code, including `--version`, regardless of binary or PATH source. Default
+runtime version is null and controls are unknown with explicit nonexecution evidence;
+missing executables remain blocked. Earlier live version outputs reflect prior
+behavior. Only an explicitly trusted caller-injected `capabilityProbe` can supply
+runtime evidence; project files cannot. Injected evidence is normalized and errors
+are reported safely. Bare-name discovery can be supplied by that callback; explicit
+binary paths still require local availability.
 Use `tracking.mjs` with `withTrackedRun(options, work)` for lifecycle observation;
 `currentRunId()` returns the async-scoped parent. Work returns its integer exit
 code unchanged; errors retain identity. Default storage is Git's per-worktree
