@@ -1008,3 +1008,94 @@ Review documentation check: `git diff --check`: exit 0.
 ## P1-13 independent acceptance freeze
 
 Native hunt 20261110T114537Z-1794312301456 covered all six lenses: five clean; regression finding F1 reproduced at 4edd0b6 versus baseline18eabde at12:19:38UTC. In-worktree tracking dirtied clean build-app input. Supervisor stopped owned host35112 at Repair, preserving evidence and retained repair state, rather than rerunning the known isolated-suite setup failures. No ledger waiver. Independent20-case matrix:4 passing controls/16 expected failures; syntax and independent review clear. Frozen placement contract includes linked metadata, static aliases, non-Git and both fake-provider entry points. Prior implementation tests are now also frozen.
+
+## P1-13 implementation — 2026-11-10
+
+Managed tracking now validates selected storage placement before creating the
+store or any directories. It protects complete Git project/runner working trees
+and canonical supplied non-Git directories, including ignored paths. The candidate
+is normalized with the store's lexical semantics and its existing ancestor is
+resolved read-only. Exact Git metadata pandastack-runs namespaces, linked-worktree
+defaults and external shared stores remain supported; source aliases, invalid
+ancestry and indeterminate Git failures execute work unrecorded with the existing
+bounded warning. Direct store behavior, runner gates, clean checks, staging and
+ignore rules are unchanged. Decisions D39-D40 record scope and host ownership.
+
+Added tests/run-placement.test.mjs using workflow-harness test(), automatically
+included by existing discovery. Eight groups cover full-root/ignored/non-Git
+refusal, environment/API precedence, exact error identity, pre-mutation snapshots,
+static aliases, lexical dot segments, missing suffixes, broken/looping/non-directory
+ancestry, invalid Git metadata, no-follow preservation, linked metadata namespaces,
+concurrent external parentage, nested refusal/context restoration, terminal events
+and the general direct-store API. README and run-records SKILL.md document placement.
+
+Targeted evidence:
+- Before implementation, `node acceptance/phase1/p1-13.test.mjs` output reported
+  20 tests, 3 passed and 17 failed. Captured at
+  /tmp/p1-13-acceptance-before.log. The surrounding capture command ended with
+  tail (exit 0); it did not preserve the test process exit code. Five actual
+  runner-entry cases reported permission errors: build-app cases showed
+  `Error: spawnSync /home/gtlpanda/.local/share/fnm/node-versions/v24.21.0/installation/bin/node EPERM`;
+  both autobuild fixtures showed `Error: spawnSync git EPERM` at project.mjs:21.
+  No retry or sandbox workaround for those cases was attempted.
+- After implementation,
+  `node --test-skip-pattern='actual build-app|actual autobuild' acceptance/phase1/p1-13.test.mjs`:
+  exit 0; 15 passed, 0 failed. This excludes the five blocked runner-entry cases
+  and is not a full selected-acceptance pass.
+- Final focused implementation command:
+  `node --input-type=module -e "await import('./tests/run-placement.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; 8 passed, 0 failed. An initial new-test syntax error was corrected
+  before these results; no implementation test failures remain.
+
+Read-only Explore audit: PASS for data flow, edge/errors, security, consistency
+and missing pieces; no implementation defects found. Parent inspection agrees.
+Audit evidence is static; actual fake-provider runner execution remains unverified
+after the permission errors above.
+
+Host action required for frozen-gate consistency: tests/run-tracking.test.mjs:14-18
+sets storeDir to repo/store inside a non-Git fixture, and its recording assertions
+(including the explicit override at line 72) conflict with P1-13's required refusal.
+This is an inspected contract/test incompatibility, not a claimed full-gate test
+result. The frozen file is untouched; no test-specific exception was introduced.
+
+Changed tracking.mjs, added run-placement.test.mjs, updated README/SKILL.md and
+decision/progress logs. No frozen inputs, full suites, real provider calls,
+staging, commits, flags, branches, git control or roadmap completion changed.
+The outer host retains all full gates, frozen-input disposition and completion.
+
+Final `git diff --check`: exit 0 after documentation updates.
+
+Supervisor P1-13 fixture correction: all214 frozen acceptance checks passed on the implementation, including actual fake-provider entry points. The existing run-tracking shared fixture conflicted with the newly frozen placement policy (focused2pass/4fail); independent review approved separating disposable project and storage directories without changing any assertions. Kept actual non-directory I/O coverage outside the project. Stopped owned host96414 after builder return; interrupted fullgate is not a pass. Resume normal host gates after freezing the fixture correction; builder code and evidence retained.
+
+## P1-13 resumed validation — 2026-11-10
+
+Retained the existing placement implementation, documentation and eight focused
+test groups. Read the revised placement contract and supervisor-corrected frozen
+tracking fixture; no additional product or test changes were needed. D41 records
+the decision to preserve that implementation and leave full gates to the host.
+
+Targeted verification in this session:
+- `node acceptance/phase1/p1-13.test.mjs`: exit 1; 20 tests, 15 passed,
+  5 failed. The three actual build-app cases report
+  `Error: spawnSync /home/gtlpanda/.local/share/fnm/node-versions/v24.21.0/installation/bin/node EPERM`
+  at acceptance/phase1/p1-13.test.mjs:60. The two actual autobuild cases report
+  `Error: spawnSync git EPERM` at graphs/autobuild/tool/test-fixtures/project.mjs:21.
+  Those checks remain unverified locally; no retry or sandbox workaround followed.
+- `node --input-type=module -e "await import('./tests/run-placement.test.mjs'); await import('./tests/run-tracking.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; output `{ pass: 14, fail: 0 }`. This includes the corrected external
+  fixture, parentage, exact error preservation and actual fake provider sessions.
+  These focused session tests do not substitute for blocked runner-entry checks.
+
+Read-only Explore audit and parent inspection found no concrete defect: static
+PASS for data flow, edge/error handling, security, consistency and missing pieces.
+Placement validation precedes store creation, retains the original no-follow
+store path and trusts only the literal metadata namespace. This is inspection
+evidence, not an additional runtime or full-gate pass.
+
+This session only appended decision/progress evidence to the retained working
+copy. No frozen inputs, full suites, live providers, staging, commits, feature
+flags, branches, git control or roadmap completion were changed. Historical host
+evidence above retains its original scope; full gates and completion remain with
+the external host.
+
+Final `git diff --check`: exit 0.

@@ -30,6 +30,12 @@ Use `tracking.mjs` with `withTrackedRun(options, work)` for lifecycle observatio
 code unchanged; errors retain identity. Default storage is Git's per-worktree
 `pandastack-runs`; `storeDir` overrides `PANDASTACK_RUNS_DIR`. Storage errors warn
 without blocking execution. A crash may leave an incomplete run.
+Managed stores must be outside both project and runner working trees, including
+ignored paths. Only the exact Git metadata `pandastack-runs` namespace and its
+descendants are excepted. Non-Git supplied directories are protected too. Placement
+is checked before writes; rejection runs work once with null tracking context and
+one generic warning, without a fallback store. Direct `createRunStore` callers
+retain their choice of directory.
 
 Managed autobuild Claude/Codex and build-app Claude sessions are observed with
 root parents. Availability probes and native hunt leaves are excluded. Settings

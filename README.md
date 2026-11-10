@@ -476,6 +476,12 @@ The default store is Git's per-worktree `pandastack-runs` path. Set
 `PANDASTACK_RUNS_DIR` to an absolute directory for a shared local store; library
 callers can override it with `storeDir`. Use `createRunStore(directory).listRuns()`
 and `readEvents(id)` from `core/skills/run-records/store.mjs` to inspect records.
+Managed tracking rejects stores inside either the project or runner working tree,
+including ignored directories, before creating any paths. The exact Git metadata
+`pandastack-runs` namespace and its descendants remain supported, including linked
+worktrees. For non-Git directories, the supplied canonical directories are protected.
+Choose an external shared store; rejected placement emits the usual tracking warning
+and executes work unrecorded. The direct `createRunStore` API has no placement restriction.
 Store operations require Linux/WSL with `/proc/self/fd` directory anchors and fail
 closed when those anchors are unavailable. Writes synchronize directory parents
 and the publication directory; immutable replay retries the publication sync.

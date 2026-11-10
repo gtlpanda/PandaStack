@@ -91,3 +91,24 @@ Independent fake-Claude tests exercised actual guard/stop-gate/mark-passed and r
 ## P1-13 tracking placement
 
 Managed observation must not create worktree content before clean checks or staging. Reject selected stores inside target/runner working trees (including ignored paths), preserving only trusted Git pandastack-runs namespaces and external stores. Resolve placement read-only before any mkdir; direct store API remains unchanged. This bounded compatibility rule avoids changing ignore/staging/clean-check behavior.
+
+- D39 (P1-13): Validate placement in the shared managed tracking wrapper before
+  constructing the store. Resolve complete Git working-tree roots, falling back
+  to canonical supplied directories only for an identified non-Git directory.
+  Resolve the candidate's existing ancestor read-only after the store's lexical
+  path normalization. Trust only the canonical Git metadata owner plus literal
+  pandastack-runs namespace; preserve the original no-follow store path. Refusal
+  uses the existing one-warning/null-context path and never chooses another store.
+- D40 (P1-13): Preserve frozen tests even where old in-project tracking fixtures
+  conflict with the new placement contract. Report that incompatibility to the
+  host; do not special-case tests or weaken the placement rule. Run selected
+  acceptance once, then exclude the five runner-entry cases that reported EPERM
+  while verifying the fix. Add workflow-harness implementation tests and document
+  placement. The external host owns full gates, frozen-input disposition, commits,
+  pass flags, live evidence and final completion.
+- D41 (P1-13 resumed validation): Retain the existing placement implementation
+  and focused tests after the supervisor's frozen fixture correction. The corrected
+  external tracking fixture passes locally without a product workaround. Run the
+  selected acceptance once and the two focused implementation files; do not retry
+  runner-entry spawn EPERM failures or run full gates. Leave frozen inputs,
+  staging, commits, pass flags and final completion to the outer host.
