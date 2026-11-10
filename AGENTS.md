@@ -11,3 +11,10 @@ harness conventions. Run focused tests only inside the session; host runs full
 gates. No live provider calls except explicitly launched supervisor dogfood.
 Never modify the pinned host checkout. Decision actor text is not authentication;
 ordinary answers and scope matches do not grant merge/publish/deploy permission.
+
+Supervisor-reviewed corrective scope: P2-09 may repair installed verification
+entrypoint dispatch in core/skills/verify; P2-10 may repair literal path handling
+in graphs/hunt/skills/bughunt/evidence.mjs. Follow only the selected contract.
+Do not run or recreate the nested-process reproduction rejected during the
+2026-11-10 second native hunt. No safety-filter retries, alternate-provider
+rerouting or review-gate waivers are authorized.

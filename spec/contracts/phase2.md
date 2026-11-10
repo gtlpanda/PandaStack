@@ -293,3 +293,13 @@ already removed that metadata after copying; traversing live Git lock files caus
 a transient baseline failure. All existing assertions remain byte-for-byte intact.
 Other source content, nested .git entries, modes and symlinks remain in the fixtures.
 No implementation behavior, scanner rule, acceptance criterion or gate is waived.
+
+## Second-hunt corrective freeze
+
+P2-09 follows phase2-installed-verify.md (three installed-dispatch cases).
+P2-10 follows phase2-export-paths.md (four literal-path export cases).
+All prior requirements and acceptance bytes remain unchanged. The second native
+hunt escalated when its nested-process reproduction was rejected by the native
+provider safety filter; that run is preserved, not a passing disposition. Do not
+retry that rejected reproduction. These two repairs concern separately permitted
+installed-path and benign Git-path checks, independently reviewed before freeze.

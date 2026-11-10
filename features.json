@@ -120,6 +120,38 @@
       "test": "acceptance/phase2/p2-08.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "P2-09",
+      "title": "Execute installed verifier through directory symlinks",
+      "description": "Implement only spec/contracts/phase2-installed-verify.md. Preserve all prior acceptance and capture/export contracts. Do not modify other open findings or reproduce blocked nested-process behavior.",
+      "contract": "spec/contracts/phase2-installed-verify.md",
+      "dependencies": [
+        "P2-08"
+      ],
+      "acceptance": [
+        "Pass all 3 frozen independent cases and preserve all prior gates.",
+        "Retain honest execution/evidence outcomes and existing ownership/isolation boundaries."
+      ],
+      "test": "acceptance/phase2/p2-09.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "P2-10",
+      "title": "Preserve literal source paths in isolated Git exports",
+      "description": "Implement only spec/contracts/phase2-export-paths.md. Preserve all prior acceptance and capture/export contracts. Do not modify other open findings or reproduce blocked nested-process behavior.",
+      "contract": "spec/contracts/phase2-export-paths.md",
+      "dependencies": [
+        "P2-09"
+      ],
+      "acceptance": [
+        "Pass all 4 frozen independent cases and preserve all prior gates.",
+        "Retain honest execution/evidence outcomes and existing ownership/isolation boundaries."
+      ],
+      "test": "acceptance/phase2/p2-10.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
