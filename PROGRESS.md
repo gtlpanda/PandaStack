@@ -230,3 +230,51 @@ and implementation choices.
 Read-only Explore sanity review: PASS for data flow, edge/error handling, security,
 consistency and completeness; no concrete defects found. Review was inspection
 only; test evidence is the targeted execution recorded above.
+
+## Follow-up two-pass review — 2026-11-10
+
+Reviewed 9d8dd77bf290a4be5a328de8576cb20f637e686f..HEAD. Pass 1 compared
+the changes against SPEC.md and all three feature contracts: phase1.md,
+phase1-hardening.md and phase1-followup.md. The added acceptance and feature
+definition match the follow-up contract and decisions D23-D24; this review did
+not modify those host-owned inputs. Pass 2 checked correctness, concurrency,
+durability, error handling, configuration provenance and compatibility.
+
+Prior findings dispositions (current file:line evidence):
+- Doctor/launcher rejection mismatch: remains addressed. Shared validation is
+  invoked at core/skills/run-records/doctor.mjs:37; environment budget aliases,
+  Codex timeout/budget checks and hook validation remain at
+  graphs/autobuild/tool/lib/config.mjs:127, :136 and :146. Focused hardening
+  tests passed for rejection parity and safe diagnostics.
+- Directory symlink replacement race: remains addressed by verified retained
+  directory descriptors at core/skills/run-records/store.mjs:28, anchored
+  record reads at :79, publication at :118 and :126, cleanup at :137, and
+  enumeration at :144. Ordinary anchored-operation and descriptor-closure
+  tests passed. No race exploit or previously blocked reproduction was run;
+  this disposition uses inspection and defensive invariant tests only.
+- Missing parent-directory durability barriers: remains addressed at
+  core/skills/run-records/store.mjs:56 and :63 (creation/parent sync), :120
+  (file sync), :130 (publication sync), and :111 (replay sync). Existing
+  sync-ordering and failure/retry tests passed; no physical power-loss claim.
+- Selected central configuration/source-checkout dependency, including the
+  prior BUGHUNT open F1: addressed at graphs/autobuild/tool/lib/config.mjs:114
+  and :116-119. Explicit central values bypass the default parameter reader
+  and lazy public getters; those getters remain available at :73-77.
+  Doctor passes the selected configuration at doctor.mjs:110 and :37.
+  Acceptance plus implementation tests passed with absent/invalid source
+  configuration and preserved Claude/Codex override precedence.
+- Close-after-release EIO cleanup finding described in P1-06 and its contract:
+  addressed at core/skills/run-records/store.mjs:122-124 (ownership cleared
+  before close) and :132-137 (unlink independent of cleanup close). Existing
+  tests passed for run/event publication, write failure followed by close
+  failure, safe IO_ERROR, exactly-once closure and no leftover temporary file.
+
+REVIEW 2026-11-10: No specification drift or additional defects found in the reviewed diff. The prior findings above are addressed within the inspected scope; full gates and final completion remain host-owned.
+
+Focused verification:
+- `node acceptance/phase1/p1-06.test.mjs`: exit 0; 2 passed, 0 failed.
+- `node --input-type=module -e "await import('./tests/run-followup.test.mjs'); await import('./tests/run-hardening.test.mjs'); await import('./tests/run-store.test.mjs'); await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`: exit 0; 20 passed, 0 failed.
+
+Only PROGRESS.md was modified. No exploit reproduction, blocked reproduction
+retry, full suite, provider call, code/test edit, staging, commit, branch change
+or pass-flag change was performed.
