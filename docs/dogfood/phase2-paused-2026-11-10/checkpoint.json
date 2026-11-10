@@ -1,0 +1,23 @@
+{
+  "at": "2026-11-10T22:28:31.825060+00:00",
+  "roadmapStatus": "paused",
+  "acceptedHead": "364cb2b7c29f245df053c66ba6a37161dfa131ad",
+  "acceptedFeature": "P2-14",
+  "passedFeatures": 14,
+  "remainingFeatures": [
+    "P2-15",
+    "P2-16"
+  ],
+  "hostExit": 7,
+  "hostGate": "PASS",
+  "clean": true,
+  "reviewHashes": {
+    "graphs/hunt/skills/bughunt/evidence.mjs": "3cea51837e513ca61c04e6aeadc7baca51918d8cbd22aed30eb1f928728afcc9",
+    "tests/capture-directories.test.mjs": "ddf285353511f20c331618f5a2082a446c5f00cde5566d39f5bf70f722eec26a"
+  },
+  "limits": [
+    "Sequential ordinary helper acceptance and static wiring only; no race reproduction or concurrency proof.",
+    "Prior native F3 ERROR and blocked F4 reproduction remain unchanged."
+  ],
+  "priority": "Eight security-audit execution/recovery repairs; no Terracotta application changes"
+}

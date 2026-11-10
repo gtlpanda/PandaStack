@@ -1,0 +1,19 @@
+{
+  "features": [
+    {
+      "id": "SA-01",
+      "title": "Reject unprotected audit snapshots before agent spend",
+      "description": "Implement only spec/contracts/security-audit-snapshot.md. Actual permission bits must be checked after export before metadata publication. Preserve source bytes, budget refusal, owned cleanup, all prior tests and source-only limits. No target code or provider execution.",
+      "contract": "spec/contracts/security-audit-snapshot.md",
+      "dependencies": [],
+      "acceptance": [
+        "Pass six frozen independent cases, including actual Linux and Windows-mounted mode observations.",
+        "Init refuses a snapshot that fails inspection before metadata/stage publication; exact export tree is checked.",
+        "No mode inspection result is represented as arbitrary same-user containment or tool isolation."
+      ],
+      "test": "acceptance/security-audit/sa-01-snapshot.test.mjs",
+      "testKind": "node",
+      "passes": false
+    }
+  ]
+}

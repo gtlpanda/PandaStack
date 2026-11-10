@@ -1,3 +1,15 @@
+# Active priority: security-audit repairs and full Codex workflow parity
+
+The user has paused Phase 2 expansion and prioritized security-audit execution
+and recovery repairs, followed by full Codex parity for every offering. Read
+spec/contracts/security-audit-priority.md and the host-selected feature contract.
+Only entries in features-security-audit.json are currently selected. The Phase 2
+instructions below remain preserved for later resumption and all execution
+restrictions remain binding. Do not implement P2-15/P2-16 during this priority.
+The external pinned host owns feature selection, frozen inputs, full gates,
+commits and completion. No provider fallback, target application changes or
+previously blocked reproduction is authorized by this priority.
+
 # Phase 2 autonomous build
 
 Read SPEC.md and spec/contracts/phase2.md. Implement only the next feature chosen

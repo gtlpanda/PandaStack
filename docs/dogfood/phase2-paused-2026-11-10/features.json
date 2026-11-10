@@ -1,0 +1,261 @@
+{
+  "features": [
+    {
+      "id": "P2-01",
+      "title": "Validated revision-bound decision records",
+      "description": "Implement only this feature from spec/contracts/phase2.md. Preserve all frozen acceptance and prior phase behavior.",
+      "contract": "spec/contracts/phase2.md",
+      "dependencies": [],
+      "acceptance": [
+        "Pass the frozen independent acceptance for this feature and preserve prior phase regressions."
+      ],
+      "test": "acceptance/phase2/p2-01.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "P2-02",
+      "title": "Transactional durable shared decision queue",
+      "description": "Implement only this feature from spec/contracts/phase2.md. Preserve all frozen acceptance and prior phase behavior.",
+      "contract": "spec/contracts/phase2.md",
+      "dependencies": [
+        "P2-01"
+      ],
+      "acceptance": [
+        "Pass the frozen independent acceptance for this feature and preserve prior phase regressions."
+      ],
+      "test": "acceptance/phase2/p2-02.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "P2-03",
+      "title": "CLI delivery, waiting and acknowledgments",
+      "description": "Implement only this feature from spec/contracts/phase2.md. Preserve all frozen acceptance and prior phase behavior.",
+      "contract": "spec/contracts/phase2.md",
+      "dependencies": [
+        "P2-02"
+      ],
+      "acceptance": [
+        "Pass the frozen independent acceptance for this feature and preserve prior phase regressions."
+      ],
+      "test": "acceptance/phase2/p2-03.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "P2-04",
+      "title": "Opt-in autobuild decision gate",
+      "description": "Implement only this feature from spec/contracts/phase2.md. Preserve all frozen acceptance and prior phase behavior.",
+      "contract": "spec/contracts/phase2.md",
+      "dependencies": [
+        "P2-03"
+      ],
+      "acceptance": [
+        "Pass the frozen independent acceptance for this feature and preserve prior phase regressions."
+      ],
+      "test": "acceptance/phase2/p2-04.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "P2-05",
+      "title": "Native Codex active-turn delivery",
+      "description": "Implement only this feature from spec/contracts/phase2.md. Preserve all frozen acceptance and prior phase behavior.",
+      "contract": "spec/contracts/phase2.md",
+      "dependencies": [
+        "P2-04"
+      ],
+      "acceptance": [
+        "Pass the frozen independent acceptance for this feature and preserve prior phase regressions."
+      ],
+      "test": "acceptance/phase2/p2-05.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "P2-06",
+      "title": "Managed context receipts and complete decision traces",
+      "description": "Implement only this feature from spec/contracts/phase2.md. Preserve all frozen acceptance and prior phase behavior.",
+      "contract": "spec/contracts/phase2.md",
+      "dependencies": [
+        "P2-05"
+      ],
+      "acceptance": [
+        "Pass the frozen independent acceptance for this feature and preserve prior phase regressions."
+      ],
+      "test": "acceptance/phase2/p2-06.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "P2-07",
+      "title": "Reliable observation completion and safe manual handoff",
+      "description": "Implement spec/contracts/phase2-review-corrections.md while preserving all existing Phase 1 and Phase 2 requirements. Correct synchronous closing-sink replay, asynchronous stdout errors, finite CLI backpressure and MANUAL_HANDOFF redaction without changing decision authorization or workflow outcomes.",
+      "contract": "spec/contracts/phase2-review-corrections.md",
+      "dependencies": [
+        "P2-06"
+      ],
+      "acceptance": [
+        "Pass all seven frozen P2-07 cases, including the unchanged four original cases and three transport cases.",
+        "Preserve all prior acceptance, regression gates, queue uncertainty and no-resend semantics.",
+        "Bound output completion and owned cleanup; do not fabricate complete coverage or change workflow outcomes on observation failure."
+      ],
+      "test": "acceptance/phase2/p2-07.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "P2-08",
+      "title": "Load decision storage only for enabled gate work",
+      "description": "Implement the additive lazy-storage boundary in spec/contracts/phase2-lazy-import.md without changing existing decision APIs or prior acceptance.",
+      "contract": "spec/contracts/phase2-lazy-import.md",
+      "dependencies": [
+        "P2-07"
+      ],
+      "acceptance": [
+        "Pass all seven independent lazy-import cases and preserve all prior acceptance and regression gates.",
+        "Keep unavailable-SQLite simulation distinct from real older-Node runtime validation."
+      ],
+      "test": "acceptance/phase2/p2-08.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "P2-09",
+      "title": "Execute installed verifier through directory symlinks",
+      "description": "Implement only spec/contracts/phase2-installed-verify.md. Preserve all prior acceptance and capture/export contracts. Do not modify other open findings or reproduce blocked nested-process behavior.",
+      "contract": "spec/contracts/phase2-installed-verify.md",
+      "dependencies": [
+        "P2-08"
+      ],
+      "acceptance": [
+        "Pass all 3 frozen independent cases and preserve all prior gates.",
+        "Retain honest execution/evidence outcomes and existing ownership/isolation boundaries."
+      ],
+      "test": "acceptance/phase2/p2-09.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "P2-10",
+      "title": "Preserve literal source paths in isolated Git exports",
+      "description": "Implement only spec/contracts/phase2-export-paths.md. Preserve all prior acceptance and capture/export contracts. Do not modify other open findings or reproduce blocked nested-process behavior.",
+      "contract": "spec/contracts/phase2-export-paths.md",
+      "dependencies": [
+        "P2-09"
+      ],
+      "acceptance": [
+        "Pass all 4 frozen independent cases and preserve all prior gates.",
+        "Retain honest execution/evidence outcomes and existing ownership/isolation boundaries."
+      ],
+      "test": "acceptance/phase2/p2-10.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "P2-11",
+      "title": "Keep cooperative nested verification in its owned capture group",
+      "description": "Implement spec/contracts/phase2-capture-ownership.md. Use only the frozen pure and ordinary-success acceptance plus previously permitted gates. Do not run or recreate the rejected nested-process negative reproduction. Preserve Node and no-Node paths, byte/receipt semantics, and root-local signal authority. No generic scheduler or broker.",
+      "contract": "spec/contracts/phase2-capture-ownership.md",
+      "dependencies": [
+        "P2-10"
+      ],
+      "acceptance": [
+        "Pass all six pure scope-record/join checks and the one ordinary immediate nested-success check.",
+        "Preserve all prior acceptance/gates, no-Node compatibility and bounded existing evidence semantics.",
+        "Root signal targets derive only from locally captured identity; nested captures never detach into separate groups.",
+        "Report untested runtime failure scenarios honestly; never claim the blocked reproduction was executed or waived."
+      ],
+      "test": "acceptance/phase2/p2-11.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "P2-12",
+      "title": "Preserve finite control-byte observation at capture decisions",
+      "description": "Conditional fallback only after supervisor reconciles terminal native-hunt result. Implement the narrow four-read-site contract; preserve root-local authority and existing bounds.",
+      "contract": "spec/contracts/phase2-control-read.md",
+      "dependencies": [
+        "P2-11"
+      ],
+      "acceptance": [
+        "Every finite inert input byte including NUL and partial EOF is observed at each of four decision predicates",
+        "Empty stdin is not a request",
+        "Existing ownership/grant/timeout behavior remains unchanged; no lifecycle proof claimed"
+      ],
+      "test": "acceptance/phase2/p2-12.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "P2-13",
+      "title": "Retain valid Bash evidence under literal backslash parents",
+      "description": "Conditional narrow normal-path correction after supervisor reconciles terminal native hunt; preserve strict path/hash/ownership validation.",
+      "contract": "spec/contracts/phase2-literal-evidence-parent.md",
+      "dependencies": [
+        "P2-12"
+      ],
+      "acceptance": [
+        "Ordinary private evidence parent remains successful",
+        "Literal backslash private parent publishes valid root and child JSON with exact hashes and bytes",
+        "No private-path, digest or lifecycle assertion is weakened"
+      ],
+      "test": "acceptance/phase2/p2-13.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "P2-14",
+      "title": "Prepare fixed capture directories idempotently",
+      "description": "Conditional defensive correction with sequential ordinary helper acceptance only; no blocked filesystem-race reproduction or concurrency proof.",
+      "contract": "spec/contracts/phase2-capture-directories.md",
+      "dependencies": [
+        "P2-13"
+      ],
+      "acceptance": [
+        "Fresh and sequential repeated preparation preserve fixed private allocation semantics",
+        "Static files and symlinks refuse before target mutation",
+        "Existing real0755 logs root hardens while evidence-parent policy stays unchanged",
+        "Independent static review verifies armCapture wiring, EEXIST-only handling and existing root authority"
+      ],
+      "test": "acceptance/phase2/p2-14.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "P2-15",
+      "title": "Export large Git trees and regular blobs without stdout-buffer failure",
+      "description": "Conditional large-source export correction; preserve source-only identity and owned cleanup. No capture or blocked reproduction work.",
+      "contract": "spec/contracts/phase2-large-suite-export.md",
+      "dependencies": [
+        "P2-14"
+      ],
+      "acceptance": [
+        "Exact bytes for 17 distinct 8 MiB files",
+        "Exact size, executable mode and SHA256 for a 129 MiB regular blob",
+        "Preserve literal paths, failed-export cleanup and existing gates without raising subprocess or gate bounds"
+      ],
+      "test": "acceptance/phase2/p2-15.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "P2-16",
+      "title": "Preserve source Git object format for full and abbreviated identifiers",
+      "description": "Conditional fallback after P215 and terminal native reconciliation; actual source query, no length inference.",
+      "contract": "spec/contracts/phase2-suite-object-format.md",
+      "dependencies": [
+        "P2-15"
+      ],
+      "acceptance": [
+        "SHA1 full and SHA256 full/40/48/63-character prefixes export exact source trees",
+        "Source format is queried explicitly, never inferred from supplied ID length",
+        "Preserve literal-path, byte/mode/cleanup controls and prior large-export behavior"
+      ],
+      "test": "acceptance/phase2/p2-16.test.mjs",
+      "testKind": "node",
+      "passes": false
+    }
+  ]
+}

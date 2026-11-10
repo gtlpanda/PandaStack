@@ -1,0 +1,11 @@
+{
+  "head": "364cb2b7c29f245df053c66ba6a37161dfa131ad",
+  "sha256": {
+    "AGENTS.md": "f542c71c254c0a9c6144c8f5e297cf7cf6ab0a5c8a0f2a26cc79c5a02445b027",
+    "SPEC.md": "6fa358cbd9888761e90dfa6fe3194a2009b2d234f3313d6165a700d6e0816509",
+    "autobuild.json": "aee518f80fcf931ce3890a20483c830ca2dd4da3d3f25f98ac4369b6cf002a29",
+    "features.json": "ae7929e70da31240aad783418ccc8471887c6b272c6481b681b943eea1c41faa",
+    "PROGRESS.md": "1f64bd72b23e9c08a29ff2511b9ba27d7c68d5f97e08f336cd58ff45fb694b2f",
+    "DECISIONS.md": "e09c3094c9ebc086b0ea1082ec5121a15f11d5c590db736cbab2cc7a2ca92659"
+  }
+}

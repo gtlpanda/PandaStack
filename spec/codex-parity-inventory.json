@@ -1,0 +1,3890 @@
+{
+  "capturedAt": "2026-11-10T22:33:06.299927+00:00",
+  "observedHead": "364cb2b7c29f245df053c66ba6a37161dfa131ad",
+  "scope": "Read-only source inventory; no runtime/provider parity certification",
+  "installerOwner": "install.sh list_targets/dest_of: Codex allowlist autobuild,bughunt only",
+  "skills": [
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "shared-reference-contract",
+      "stages": [
+        "The format",
+        "The ledger and the next step"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "The format"
+      ],
+      "owners": [
+        "core/skills/backlog/SKILL.md",
+        "core/skills/backlog/backlog.mjs"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "backlog",
+      "source": "core/skills/backlog",
+      "skillSha256": "9a3415be9a6e352e0a63847f131e81acd134c27304b21a61822d6573b79770da",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 16,
+          "text": "node ~/.claude/skills/backlog/backlog.mjs check docs/backlog.json"
+        },
+        {
+          "line": 24,
+          "text": "node ~/.claude/skills/backlog/backlog.mjs task docs/backlog.json S2 [build state dir]"
+        }
+      ],
+      "declaredSections": [
+        "The format",
+        "The ledger and the next step"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "shared-reference-contract",
+      "stages": [
+        "The bar every finding clears",
+        "Never report these",
+        "Untrusted content",
+        "The lenses"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Never report these"
+      ],
+      "owners": [
+        "core/skills/bug-lenses/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "bug-lenses",
+      "source": "core/skills/bug-lenses",
+      "skillSha256": "7ffdad25631a6855cb2e2cd2601f466d7c39d301c94fae2447de94aa5b8250c5",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "The bar every finding clears",
+        "Never report these",
+        "Untrusted content",
+        "The lenses"
+      ]
+    },
+    {
+      "name": "decisions",
+      "source": "core/skills/decisions",
+      "kind": "shared-library-no-entry-skill",
+      "classification": "provider-neutral-core-plus-Codex-specific-delivery",
+      "stages": [
+        "decision records",
+        "SQLite queue",
+        "routing",
+        "config",
+        "host observations",
+        "Codex app-server delivery"
+      ],
+      "gates": [
+        "expiry/revision/recipient",
+        "approval separation",
+        "ack/context delivery distinction"
+      ],
+      "recovery": [
+        "queue durability",
+        "uncertain dispatch manual"
+      ],
+      "reports": [
+        "queue records",
+        "host trace events"
+      ],
+      "owners": [
+        "core/skills/decisions/records.mjs",
+        "core/skills/decisions/queue.mjs",
+        "core/skills/decisions/routing.mjs",
+        "core/skills/decisions/output.mjs",
+        "core/skills/decisions/config.mjs",
+        "core/skills/decisions/codex-delivery.mjs",
+        "core/skills/decisions/queue-storage.mjs",
+        "core/skills/decisions/observations.mjs"
+      ],
+      "missing": [
+        "Not a standalone command; include dependency resolution for every native consumer",
+        "Interactive Claude delivery not assumed from shared queue"
+      ],
+      "evidence": []
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "shared-reference-contract",
+      "stages": [],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [],
+      "owners": [
+        "core/skills/default-stack/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "default-stack",
+      "source": "core/skills/default-stack",
+      "skillSha256": "4a0e12de638485fec8c51dadcdcb67f961921ba6ba7f6121e0b27d037682d130",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": []
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "shared-reference-contract",
+      "stages": [
+        "A finding",
+        "Ids that survive a re-run",
+        "Status moves",
+        "Disposition"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [],
+      "owners": [
+        "core/skills/findings/SKILL.md",
+        "core/skills/findings/findings.mjs"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "findings",
+      "source": "core/skills/findings",
+      "skillSha256": "5c1395055f810a1ab0f582f2e629aa443bd7436a253c3d0fe79500cdde2017ec",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 17,
+          "text": "node ~/.claude/skills/findings/findings.mjs check <ledger.json>"
+        },
+        {
+          "line": 18,
+          "text": "node ~/.claude/skills/findings/findings.mjs save <ledger.json> <intake.json> <result.json> [--repo <tree>]"
+        },
+        {
+          "line": 19,
+          "text": "node ~/.claude/skills/findings/findings.mjs report <ledger.json> [evidence dir]"
+        }
+      ],
+      "declaredSections": [
+        "A finding",
+        "Ids that survive a re-run",
+        "Status moves",
+        "Disposition"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "shared-reference-contract",
+      "stages": [
+        "The format",
+        "Product",
+        "Customer",
+        "Positioning",
+        "Voice",
+        "Proof",
+        "Never claim",
+        "Compliance",
+        "Checking a brief",
+        "Rules for agents"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "The format"
+      ],
+      "owners": [
+        "core/skills/gtm-brief/SKILL.md",
+        "core/skills/gtm-brief/gtm-brief.mjs"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "gtm-brief",
+      "source": "core/skills/gtm-brief",
+      "skillSha256": "a25824f9508b37c529da3b1d332f99647c1919e6b446a613e289199387b530a2",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 53,
+          "text": "node ~/.claude/skills/gtm-brief/gtm-brief.mjs check docs/gtm.md"
+        }
+      ],
+      "declaredSections": [
+        "The format",
+        "Product",
+        "Customer",
+        "Positioning",
+        "Voice",
+        "Proof",
+        "Never claim",
+        "Compliance",
+        "Checking a brief",
+        "Rules for agents"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "1. Get the diff",
+        "2. What to look for",
+        "3. Report format"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "3. Report format"
+      ],
+      "owners": [
+        "core/skills/harness-review/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "harness-review",
+      "source": "core/skills/harness-review",
+      "skillSha256": "23fbc36676dc8bc8618307fd04e77bef7f4b2dba5e177ef7979e5b0eb9c33875",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 4,
+          "text": "allowed-tools: Bash, Read, Grep, Glob"
+        }
+      ],
+      "declaredSections": [
+        "1. Get the diff",
+        "2. What to look for",
+        "3. Report format"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "shared-reference-contract",
+      "stages": [
+        "The test",
+        "Without a map",
+        "When knowledge gets an owner",
+        "Anti-patterns",
+        "The map: `docs/knowledge-map.json`",
+        "By role"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [],
+      "owners": [
+        "core/skills/knowledge-map/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "knowledge-map",
+      "source": "core/skills/knowledge-map",
+      "skillSha256": "b41c22f867d4fde4627f7520236c9695c647d77f70291372818894e2681b5815",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "The test",
+        "Without a map",
+        "When knowledge gets an owner",
+        "Anti-patterns",
+        "The map: `docs/knowledge-map.json`",
+        "By role"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "shared-reference-contract",
+      "stages": [],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [],
+      "owners": [
+        "core/skills/run-records/SKILL.md",
+        "core/skills/run-records/records.mjs",
+        "core/skills/run-records/tracking.mjs",
+        "core/skills/run-records/doctor.mjs",
+        "core/skills/run-records/adapters.mjs",
+        "core/skills/run-records/store.mjs"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "run-records",
+      "source": "core/skills/run-records",
+      "skillSha256": "e010ebcbc30f16942ae567cd43afd09beac250da9960fa84d59e4aae57d40101",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 19,
+          "text": "`node scripts/pandastack.mjs doctor --repo PATH --backend codex [--json]`."
+        }
+      ],
+      "declaredSections": []
+    },
+    {
+      "classification": "provider-neutral-helper-install-gap",
+      "kind": "guided-offering",
+      "stages": [
+        "What it does",
+        "After it runs"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [],
+      "owners": [
+        "core/skills/verify/SKILL.md",
+        "core/skills/verify/scope-record.mjs",
+        "core/skills/verify/retention.sh",
+        "core/skills/verify/retention.mjs",
+        "core/skills/verify/capture-owner.sh",
+        "core/skills/verify/packages.mjs",
+        "core/skills/verify/verify.sh"
+      ],
+      "missing": [
+        "Resolve script without CLAUDE_SKILL_DIR/~/.claude fallback",
+        "Same complete stdout/stderr retention, timeout and nonzero exit behavior in native callers"
+      ],
+      "name": "verify",
+      "source": "core/skills/verify",
+      "skillSha256": "d1097210c0ba1615dded62398c129c2e6c1520eabf44be773ae9985683c189a1",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 4,
+          "text": "allowed-tools: Bash, Read"
+        },
+        {
+          "line": 14,
+          "text": "bash \"${CLAUDE_SKILL_DIR}/verify.sh\""
+        },
+        {
+          "line": 17,
+          "text": "(`CLAUDE_SKILL_DIR` is set by Claude Code when a skill runs. Outside a skill"
+        },
+        {
+          "line": 18,
+          "text": "the script lives at `~/.claude/skills/verify/verify.sh`.) Pass a directory as"
+        }
+      ],
+      "declaredSections": [
+        "What it does",
+        "After it runs"
+      ]
+    },
+    {
+      "classification": "provider-neutral-injector-Claude-Workflow-consumer",
+      "kind": "guided-offering",
+      "stages": [],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [],
+      "owners": [
+        "core/skills/workflow-state/SKILL.md",
+        "core/skills/workflow-state/run-script.mjs"
+      ],
+      "missing": [
+        "Native workflow runner for emitted script; injection CLI alone is not runtime parity",
+        "Same duplicate-args/input size/refusal tests with native consumer"
+      ],
+      "name": "workflow-state",
+      "source": "core/skills/workflow-state",
+      "skillSha256": "5045607fcd3b9d003d44795c22170955e479edb5d6e8440cefbb758413729c8c",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 10,
+          "text": "runs the copy with the Workflow tool's `scriptPath`."
+        },
+        {
+          "line": 13,
+          "text": "node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/workflow-state/run-script.mjs\" <SEAM> <state.json> <workflow.js> <out.js>"
+        },
+        {
+          "line": 21,
+          "text": "- Pass the workflow by its installed path, `~/.claude/workflows/<name>.js`."
+        }
+      ],
+      "declaredSections": []
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Protocol",
+        "Phase 1: Reconnaissance",
+        "Phase 2: Determine Scope",
+        "Phase 3: Build Monitor Parser",
+        "Phase 4: Build ATC + Checkout (if applicable)",
+        "Phase 5: Wire Into Engine",
+        "Named Store Pattern (Smoke & Mirrors, etc.)",
+        "Phase 6: Verify",
+        "Integration Checklist",
+        "Shopify Store Shortcut"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Phase 6: Verify",
+        "Integration Checklist"
+      ],
+      "owners": [
+        "kit/skills/build-bot-integration/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "build-bot-integration",
+      "source": "kit/skills/build-bot-integration",
+      "skillSha256": "4a9e556e5d8b48685d8a619d7b182cb956a80283e0863c77f007b6b8fea07eea",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Protocol",
+        "Phase 1: Reconnaissance",
+        "Phase 2: Determine Scope",
+        "Phase 3: Build Monitor Parser",
+        "Phase 4: Build ATC + Checkout (if applicable)",
+        "Phase 5: Wire Into Engine",
+        "Named Store Pattern (Smoke & Mirrors, etc.)",
+        "Phase 6: Verify",
+        "Integration Checklist",
+        "Shopify Store Shortcut"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Quick Reference",
+        "Gold+ = 10/10 Dimensions",
+        "BaseAdapter Helpers (call these, never reimplement)",
+        "Critical Patterns (most common failures)",
+        "Key Files"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [],
+      "owners": [
+        "kit/skills/build-scraper/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "build-scraper",
+      "source": "kit/skills/build-scraper",
+      "skillSha256": "e279bea22c772774afe385ae1c42ea026e5c91a6b5a88b3bcef2ca486ad2203a",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Quick Reference",
+        "Gold+ = 10/10 Dimensions",
+        "BaseAdapter Helpers (call these, never reimplement)",
+        "Critical Patterns (most common failures)",
+        "Key Files"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Your Task",
+        "Commands to Execute",
+        "Expected Behavior"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [],
+      "owners": [
+        "kit/skills/clean-gone/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "clean-gone",
+      "source": "kit/skills/clean-gone",
+      "skillSha256": "00381a31b9ac72a0337e18a1a4974275f776d0b7216095cd21a5a0afe9772b9e",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Your Task",
+        "Commands to Execute",
+        "Expected Behavior"
+      ]
+    },
+    {
+      "classification": "partial-Claude-tool-or-output-dependency",
+      "kind": "guided-offering",
+      "stages": [
+        "Context",
+        "Your task"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [],
+      "owners": [
+        "kit/skills/commit/SKILL.md"
+      ],
+      "missing": [
+        "Translate specific Agent run_in_background/frontmatter/optional Claude setup semantics through supported native owner",
+        "Offline per-stage output and failed-subagent behavior tests; no implicit optional Claude integration parity"
+      ],
+      "name": "commit",
+      "source": "kit/skills/commit",
+      "skillSha256": "3017ce9d10808c2a387c36d98bdd56c69b049f7788151cbfd28905bd37367ba6",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 3,
+          "text": "allowed-tools: Bash(git add:*), Bash(git status:*), Bash(git commit:*)"
+        }
+      ],
+      "declaredSections": [
+        "Context",
+        "Your task"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Core Philosophy",
+        "The SB7 Framework",
+        "Element 1: CHARACTER (The Customer as Hero)",
+        "Element 2: PROBLEM (The Hook)",
+        "Element 3: GUIDE (Your Brand)",
+        "Element 4: PLAN (Remove Cognitive Dissonance)",
+        "Element 5: CALL TO ACTION (Be Bold)",
+        "Element 6: FAILURE (The Stakes)",
+        "Element 7: SUCCESS (Paint the Picture)",
+        "Bonus Element: TRANSFORMATION",
+        "Protocol: How to Execute",
+        "Phase 0: Gather Context",
+        "Phase 1: Build the BrandScript (if not already done)",
+        "StoryBrand BrandScript",
+        "CHARACTER",
+        "PROBLEM",
+        "GUIDE",
+        "PLAN",
+        "CALLS TO ACTION",
+        "FAILURE (Stakes)",
+        "SUCCESS",
+        "TRANSFORMATION",
+        "CONTROLLING IDEA",
+        "Phase 2: Write the Copy",
+        "Phase 3: Apply the Grunt Test",
+        "Phase 4: Self-Edit",
+        "Deliverable Templates",
+        "One-Liner",
+        "Landing Page (8-Section Wireframe)",
+        "Email Nurture Sequence",
+        "Hero Section / Above-the-Fold Copy",
+        "Tagline",
+        "Testimonial Collection Questions",
+        "Referral Copy",
+        "Anti-Patterns \u2014 Never Do These",
+        "Writing Voice Rules",
+        "Quality Checklist (Run Before Delivering)"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Bonus Element: TRANSFORMATION",
+        "TRANSFORMATION",
+        "Quality Checklist (Run Before Delivering)"
+      ],
+      "owners": [
+        "kit/skills/copywriting/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "copywriting",
+      "source": "kit/skills/copywriting",
+      "skillSha256": "1fc2dbd6fe392b593a402d8bfe136cd77c62f1d4117ac643c2dc3cd2fbdc4a7c",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Core Philosophy",
+        "The SB7 Framework",
+        "Element 1: CHARACTER (The Customer as Hero)",
+        "Element 2: PROBLEM (The Hook)",
+        "Element 3: GUIDE (Your Brand)",
+        "Element 4: PLAN (Remove Cognitive Dissonance)",
+        "Element 5: CALL TO ACTION (Be Bold)",
+        "Element 6: FAILURE (The Stakes)",
+        "Element 7: SUCCESS (Paint the Picture)",
+        "Bonus Element: TRANSFORMATION",
+        "Protocol: How to Execute",
+        "Phase 0: Gather Context",
+        "Phase 1: Build the BrandScript (if not already done)",
+        "StoryBrand BrandScript",
+        "CHARACTER",
+        "PROBLEM",
+        "GUIDE",
+        "PLAN",
+        "CALLS TO ACTION",
+        "FAILURE (Stakes)",
+        "SUCCESS",
+        "TRANSFORMATION",
+        "CONTROLLING IDEA",
+        "Phase 2: Write the Copy",
+        "Phase 3: Apply the Grunt Test",
+        "Phase 4: Self-Edit",
+        "Deliverable Templates",
+        "One-Liner",
+        "Landing Page (8-Section Wireframe)",
+        "Email Nurture Sequence",
+        "Hero Section / Above-the-Fold Copy",
+        "Tagline",
+        "Testimonial Collection Questions",
+        "Referral Copy",
+        "Anti-Patterns \u2014 Never Do These",
+        "Writing Voice Rules",
+        "Quality Checklist (Run Before Delivering)"
+      ]
+    },
+    {
+      "classification": "partial-Claude-tool-or-output-dependency",
+      "kind": "guided-offering",
+      "stages": [
+        "Protocol",
+        "Phase 1: Decompose",
+        "Decomposition",
+        "Phase 2: Validate with Subagents",
+        "Phase 3: Synthesize",
+        "Synthesis",
+        "[Component 1 Name] \u2713",
+        "[Component 2 Name] \u2713",
+        "Cross-Cutting Concerns",
+        "Final Answer",
+        "Rules"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [],
+      "owners": [
+        "kit/skills/deep/SKILL.md"
+      ],
+      "missing": [
+        "Translate specific Agent run_in_background/frontmatter/optional Claude setup semantics through supported native owner",
+        "Offline per-stage output and failed-subagent behavior tests; no implicit optional Claude integration parity"
+      ],
+      "name": "deep",
+      "source": "kit/skills/deep",
+      "skillSha256": "72dc7958bfbbdc433b05f6082594daa5a04397f7dfffd4bbceff2065989b87b6",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 38,
+          "text": "1. **Launch a background subagent** using the Agent tool with `run_in_background: true`"
+        }
+      ],
+      "declaredSections": [
+        "Protocol",
+        "Phase 1: Decompose",
+        "Decomposition",
+        "Phase 2: Validate with Subagents",
+        "Phase 3: Synthesize",
+        "Synthesis",
+        "[Component 1 Name] \u2713",
+        "[Component 2 Name] \u2713",
+        "Cross-Cutting Concerns",
+        "Final Answer",
+        "Rules"
+      ]
+    },
+    {
+      "classification": "partial-Claude-tool-or-output-dependency",
+      "kind": "guided-offering",
+      "stages": [
+        "Protocol",
+        "Phase 1: Investigate (Decompose + Parallel Research)",
+        "Investigation Decomposition",
+        "[Track Name] Investigation",
+        "Finding",
+        "Related Observations",
+        "Phase 2: Fix (Synthesize + Implement)",
+        "Diagnosis",
+        "Root Cause",
+        "Mechanism",
+        "Contributing Factors",
+        "Phase 3: Verify (Prove Correctness)",
+        "Verification Report",
+        "Fix Correctness",
+        "Code Quality",
+        "Verdict: SHIP / REVISE / BLOCK",
+        "Deep Fix Complete",
+        "Symptom",
+        "Root Cause",
+        "Fix",
+        "Tests",
+        "Verification",
+        "Rules"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Phase 3: Verify (Prove Correctness)",
+        "Verification Report"
+      ],
+      "owners": [
+        "kit/skills/deep-fix/SKILL.md"
+      ],
+      "missing": [
+        "Translate specific Agent run_in_background/frontmatter/optional Claude setup semantics through supported native owner",
+        "Offline per-stage output and failed-subagent behavior tests; no implicit optional Claude integration parity"
+      ],
+      "name": "deep-fix",
+      "source": "kit/skills/deep-fix",
+      "skillSha256": "a3c82fd55ec377da1fa52bdbf4a065fb4181e2cdd487c640e1d6936d8514e76a",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 44,
+          "text": "4. **Launch parallel subagents** \u2014 One per investigation track, all in a single message with `run_in_background: true`. Each subagent gets:"
+        },
+        {
+          "line": 108,
+          "text": "2. **Launch a verification subagent** with `run_in_background: true` to:"
+        }
+      ],
+      "declaredSections": [
+        "Protocol",
+        "Phase 1: Investigate (Decompose + Parallel Research)",
+        "Investigation Decomposition",
+        "[Track Name] Investigation",
+        "Finding",
+        "Related Observations",
+        "Phase 2: Fix (Synthesize + Implement)",
+        "Diagnosis",
+        "Root Cause",
+        "Mechanism",
+        "Contributing Factors",
+        "Phase 3: Verify (Prove Correctness)",
+        "Verification Report",
+        "Fix Correctness",
+        "Code Quality",
+        "Verdict: SHIP / REVISE / BLOCK",
+        "Deep Fix Complete",
+        "Symptom",
+        "Root Cause",
+        "Fix",
+        "Tests",
+        "Verification",
+        "Rules"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Protocol",
+        "Phase 1: Detect Stack",
+        "Phase 2: Generate Dockerfile",
+        "Phase 3: Add .dockerignore",
+        "Phase 4: Verify",
+        "Rules"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Phase 4: Verify"
+      ],
+      "owners": [
+        "kit/skills/dockerize/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "dockerize",
+      "source": "kit/skills/dockerize",
+      "skillSha256": "5694179ca9957a5a48c1497988ee8e912cb4cd6ccef295a13566afe17f55300a",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Protocol",
+        "Phase 1: Detect Stack",
+        "Phase 2: Generate Dockerfile",
+        "Phase 3: Add .dockerignore",
+        "Phase 4: Verify",
+        "Rules"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Core Philosophy",
+        "DRY Workflow",
+        "Phase 1: Discovery \u2014 Find Every Duplicate",
+        "Phase 2: Classify \u2014 What Kind of Duplication?",
+        "Phase 3: Prioritize \u2014 Highest Impact First",
+        "Phase 4: Refactor \u2014 Eliminate With Minimum Abstraction",
+        "Phase 5: Verify \u2014 Prove Nothing Broke",
+        "Refactoring Decision Framework",
+        "1. Is it actually the same knowledge?",
+        "2. How often does it change?",
+        "3. What's the blast radius of a missed update?",
+        "4. How complex is the right abstraction?",
+        "5. Are we below the Rule of Three?",
+        "Common Anti-Patterns to Catch",
+        "Premature Abstraction",
+        "Abstraction Gravity",
+        "DRY at the Wrong Level",
+        "Incomplete Replacement",
+        "Output Format",
+        "1. Duplication Inventory",
+        "2. Refactoring Plan",
+        "3. Code Changes",
+        "4. Verification Report",
+        "Additional Resources"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Phase 5: Verify \u2014 Prove Nothing Broke",
+        "Output Format",
+        "4. Verification Report"
+      ],
+      "owners": [
+        "kit/skills/dry/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "dry",
+      "source": "kit/skills/dry",
+      "skillSha256": "55b636a2b92507b69e20cb925510a7ba076615c52623debf90c91af540f3c2a0",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Core Philosophy",
+        "DRY Workflow",
+        "Phase 1: Discovery \u2014 Find Every Duplicate",
+        "Phase 2: Classify \u2014 What Kind of Duplication?",
+        "Phase 3: Prioritize \u2014 Highest Impact First",
+        "Phase 4: Refactor \u2014 Eliminate With Minimum Abstraction",
+        "Phase 5: Verify \u2014 Prove Nothing Broke",
+        "Refactoring Decision Framework",
+        "1. Is it actually the same knowledge?",
+        "2. How often does it change?",
+        "3. What's the blast radius of a missed update?",
+        "4. How complex is the right abstraction?",
+        "5. Are we below the Rule of Three?",
+        "Common Anti-Patterns to Catch",
+        "Premature Abstraction",
+        "Abstraction Gravity",
+        "DRY at the Wrong Level",
+        "Incomplete Replacement",
+        "Output Format",
+        "1. Duplication Inventory",
+        "2. Refactoring Plan",
+        "3. Code Changes",
+        "4. Verification Report",
+        "Additional Resources"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Protocol",
+        "Phase 1: Scope the Audit",
+        "Phase 2: Scan for Each Error Class",
+        "Phase 3: Produce Report",
+        "Error Handling Audit Report",
+        "Summary",
+        "Critical \u2014 Fix Before Deploy",
+        "High \u2014 Fix This Sprint",
+        "Medium \u2014 Schedule Fix",
+        "Low \u2014 Tech Debt",
+        "Patterns Found",
+        "Clean Areas",
+        "Phase 4: Fix (if requested)",
+        "Rules"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Phase 3: Produce Report",
+        "Error Handling Audit Report",
+        "Summary"
+      ],
+      "owners": [
+        "kit/skills/error-audit/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "error-audit",
+      "source": "kit/skills/error-audit",
+      "skillSha256": "e28ba220b022cec9a443f878ae4b117bf7c0c8acaed92a426506a01ef710d297",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Protocol",
+        "Phase 1: Scope the Audit",
+        "Phase 2: Scan for Each Error Class",
+        "Phase 3: Produce Report",
+        "Error Handling Audit Report",
+        "Summary",
+        "Critical \u2014 Fix Before Deploy",
+        "High \u2014 Fix This Sprint",
+        "Medium \u2014 Schedule Fix",
+        "Low \u2014 Tech Debt",
+        "Patterns Found",
+        "Clean Areas",
+        "Phase 4: Fix (if requested)",
+        "Rules"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Gold+ Standard (the target)",
+        "When to Use This Skill",
+        "Phase 1: Diagnose",
+        "Step 1: Check current grade",
+        "Step 2: Check adapter registry",
+        "Step 3: Check city zoning coverage",
+        "Step 4: Check APN format",
+        "Step 5: Check city detection",
+        "Step 6: Identify the gap category",
+        "Phase 2: Fix",
+        "Fix A: Missing City Zoning (most common)",
+        "Fix B: APN Format",
+        "Fix C: Broken URLs",
+        "Fix D: Missing Zone Standards",
+        "Fix E: City Detection",
+        "Phase 3: Verify",
+        "Step 1: End-to-End Test",
+        "Step 2: Score Against Gold+ Dimensions",
+        "Step 3: Update SCRAPER-MASTER.md",
+        "Step 4: Data Completeness Checklist",
+        "Key File Paths",
+        "Architecture: City Zoning Fallback Chain"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Step 4: Check APN format",
+        "Fix B: APN Format",
+        "Phase 3: Verify",
+        "Step 4: Data Completeness Checklist"
+      ],
+      "owners": [
+        "kit/skills/fix-scraper/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "fix-scraper",
+      "source": "kit/skills/fix-scraper",
+      "skillSha256": "806a0276e7c0556e2fc46dab15ce16c8edef1d45dbd1a2f01701a3dfece96ccf",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Gold+ Standard (the target)",
+        "When to Use This Skill",
+        "Phase 1: Diagnose",
+        "Step 1: Check current grade",
+        "Step 2: Check adapter registry",
+        "Step 3: Check city zoning coverage",
+        "Step 4: Check APN format",
+        "Step 5: Check city detection",
+        "Step 6: Identify the gap category",
+        "Phase 2: Fix",
+        "Fix A: Missing City Zoning (most common)",
+        "Fix B: APN Format",
+        "Fix C: Broken URLs",
+        "Fix D: Missing Zone Standards",
+        "Fix E: City Detection",
+        "Phase 3: Verify",
+        "Step 1: End-to-End Test",
+        "Step 2: Score Against Gold+ Dimensions",
+        "Step 3: Update SCRAPER-MASTER.md",
+        "Step 4: Data Completeness Checklist",
+        "Key File Paths",
+        "Architecture: City Zoning Fallback Chain"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Design Thinking",
+        "Frontend Aesthetics Guidelines"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [],
+      "owners": [
+        "kit/skills/frontend-design/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "frontend-design",
+      "source": "kit/skills/frontend-design",
+      "skillSha256": "d39adf3a983de7dafc75991590d54f091755f7e4163d5a5ed085ecd719157184",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Design Thinking",
+        "Frontend Aesthetics Guidelines"
+      ]
+    },
+    {
+      "classification": "Claude-specific-output-partial",
+      "kind": "guided-offering",
+      "stages": [
+        "Protocol",
+        "Phase 1: Identify Domains",
+        "Phase 2: Create Directory Structure",
+        "Phase 3: Generate Agent Definitions",
+        "Role",
+        "Context",
+        "Knowledge Base",
+        "{Section 1 \u2014 e.g., \"Supported API Calls\"}",
+        "{Section 2 \u2014 e.g., \"Common Patterns\"}",
+        "{Section 3 \u2014 e.g., \"Anti-Patterns\"}",
+        "Requirements",
+        "Output Format",
+        "Phase 4: Generate Agent Memory",
+        "Decisions Made",
+        "Patterns Established",
+        "Known Issues",
+        "Phase 5: Generate Settings",
+        "Phase 6: Update CLAUDE.md",
+        "Agent Routing",
+        "How to Consult Agents",
+        "Phase 7: Verify",
+        "Rules"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Output Format",
+        "Phase 7: Verify"
+      ],
+      "owners": [
+        "kit/skills/init-agents/SKILL.md"
+      ],
+      "missing": [
+        "Define Codex AGENTS/agent configuration counterpart while preserving requested Claude output compatibility",
+        "Verify actual native discovery/routing/permissions; do not translate frontmatter into presumed capability"
+      ],
+      "name": "init-agents",
+      "source": "kit/skills/init-agents",
+      "skillSha256": "55e136f46d7cb0f56971aa7f956d689d8a20c5136bbbcbd62a64045be5db95b5",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 63,
+          "text": "  <uses Agent tool with {agent-name}>"
+        },
+        {
+          "line": 67,
+          "text": "  <uses Agent tool with {agent-name}>\""
+        }
+      ],
+      "declaredSections": [
+        "Protocol",
+        "Phase 1: Identify Domains",
+        "Phase 2: Create Directory Structure",
+        "Phase 3: Generate Agent Definitions",
+        "Role",
+        "Context",
+        "Knowledge Base",
+        "{Section 1 \u2014 e.g., \"Supported API Calls\"}",
+        "{Section 2 \u2014 e.g., \"Common Patterns\"}",
+        "{Section 3 \u2014 e.g., \"Anti-Patterns\"}",
+        "Requirements",
+        "Output Format",
+        "Phase 4: Generate Agent Memory",
+        "Decisions Made",
+        "Patterns Established",
+        "Known Issues",
+        "Phase 5: Generate Settings",
+        "Phase 6: Update CLAUDE.md",
+        "Agent Routing",
+        "How to Consult Agents",
+        "Phase 7: Verify",
+        "Rules"
+      ]
+    },
+    {
+      "classification": "partial-Claude-tool-or-output-dependency",
+      "kind": "guided-offering",
+      "stages": [
+        "Protocol",
+        "Phase 1: Detect Requirements",
+        "Phase 2: Generate Workflows",
+        "Phase 3: Verify",
+        "Rules"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Phase 3: Verify"
+      ],
+      "owners": [
+        "kit/skills/init-ci/SKILL.md"
+      ],
+      "missing": [
+        "Translate specific Agent run_in_background/frontmatter/optional Claude setup semantics through supported native owner",
+        "Offline per-stage output and failed-subagent behavior tests; no implicit optional Claude integration parity"
+      ],
+      "name": "init-ci",
+      "source": "kit/skills/init-ci",
+      "skillSha256": "588f45c4f6bff7e4d9460c83f3a124719e2a12bb4f4fd9915f05582d16c829e3",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Protocol",
+        "Phase 1: Detect Requirements",
+        "Phase 2: Generate Workflows",
+        "Phase 3: Verify",
+        "Rules"
+      ]
+    },
+    {
+      "classification": "Claude-specific-output-partial",
+      "kind": "guided-offering",
+      "stages": [
+        "Protocol",
+        "Phase 1: Detect Project Type",
+        "Phase 2: Generate CLAUDE.md",
+        "Project Overview",
+        "Architecture",
+        "Key Modules",
+        "Key Technologies",
+        "Development Setup",
+        "Prerequisites",
+        "Installation",
+        "Development Commands",
+        "Agent Routing (if applicable)",
+        "Planning Workflow",
+        "Implementation Workflow",
+        "QA Checklist",
+        "Code Standards",
+        "Key Design Constraints",
+        "File Conventions",
+        "Dependencies",
+        "Quick Commands",
+        "Phase 3: Adapt by Project Type",
+        "Phase 4: Verify",
+        "Rules"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "QA Checklist",
+        "Phase 4: Verify"
+      ],
+      "owners": [
+        "kit/skills/init-claude/SKILL.md"
+      ],
+      "missing": [
+        "Define Codex AGENTS/agent configuration counterpart while preserving requested Claude output compatibility",
+        "Verify actual native discovery/routing/permissions; do not translate frontmatter into presumed capability"
+      ],
+      "name": "init-claude",
+      "source": "kit/skills/init-claude",
+      "skillSha256": "c32c6468e27a9f073e2d196ebb736475066d641656312f15d6980ed362d91953",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Protocol",
+        "Phase 1: Detect Project Type",
+        "Phase 2: Generate CLAUDE.md",
+        "Project Overview",
+        "Architecture",
+        "Key Modules",
+        "Key Technologies",
+        "Development Setup",
+        "Prerequisites",
+        "Installation",
+        "Development Commands",
+        "Agent Routing (if applicable)",
+        "Planning Workflow",
+        "Implementation Workflow",
+        "QA Checklist",
+        "Code Standards",
+        "Key Design Constraints",
+        "File Conventions",
+        "Dependencies",
+        "Quick Commands",
+        "Phase 3: Adapt by Project Type",
+        "Phase 4: Verify",
+        "Rules"
+      ]
+    },
+    {
+      "classification": "partial-Claude-tool-or-output-dependency",
+      "kind": "guided-offering",
+      "stages": [
+        "Protocol",
+        "Phase 1: Discover Environment Variables",
+        "Phase 2: Generate .env.example",
+        "Phase 3: Verify .gitignore",
+        "Phase 4: Generate Settings Permissions (Optional)",
+        "Phase 5: Document for Deployment",
+        "Phase 6: Produce Summary",
+        "Environment Variables",
+        "Rules"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Phase 3: Verify .gitignore",
+        "Phase 6: Produce Summary"
+      ],
+      "owners": [
+        "kit/skills/init-env/SKILL.md"
+      ],
+      "missing": [
+        "Translate specific Agent run_in_background/frontmatter/optional Claude setup semantics through supported native owner",
+        "Offline per-stage output and failed-subagent behavior tests; no implicit optional Claude integration parity"
+      ],
+      "name": "init-env",
+      "source": "kit/skills/init-env",
+      "skillSha256": "9ab66794eabe4a7837ca23b3b9ece0ce68df98703b4ad3cdfdf89b1d50e6074b",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Protocol",
+        "Phase 1: Discover Environment Variables",
+        "Phase 2: Generate .env.example",
+        "Phase 3: Verify .gitignore",
+        "Phase 4: Generate Settings Permissions (Optional)",
+        "Phase 5: Document for Deployment",
+        "Phase 6: Produce Summary",
+        "Environment Variables",
+        "Rules"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Protocol",
+        "Phase 1: Gather Requirements",
+        "Phase 2: Scaffold Structure",
+        "Phase 3: Scaffold Apps",
+        "Phase 4: Wire Dependencies",
+        "Phase 5: Initialize and Verify",
+        "Rules"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Phase 5: Initialize and Verify"
+      ],
+      "owners": [
+        "kit/skills/init-monorepo/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "init-monorepo",
+      "source": "kit/skills/init-monorepo",
+      "skillSha256": "16beb8adcc7e96202696d4f775990327402f0b01dbf2c19268e8f589726b3a4a",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Protocol",
+        "Phase 1: Gather Requirements",
+        "Phase 2: Scaffold Structure",
+        "Phase 3: Scaffold Apps",
+        "Phase 4: Wire Dependencies",
+        "Phase 5: Initialize and Verify",
+        "Rules"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Protocol",
+        "Phase 1: Check Existing State",
+        "Phase 2: Create Task System",
+        "In Progress: {Feature/Task Name}",
+        "{Category or Phase}",
+        "Backlog",
+        "{Future Feature}",
+        "Import & Dependency Management",
+        "1. {Lesson title}",
+        "Error Handling",
+        "Testing Patterns",
+        "Architecture Decisions",
+        "Deployment & CI",
+        "Performance",
+        "Security",
+        "{Date} \u2014 {Feature Name}",
+        "1. {One-line summary of what shipped}",
+        "Core Feature: {Feature Name}",
+        "Primary changes",
+        "Dependencies (out-of-scope changes required)",
+        "QA fixes",
+        "Tests",
+        "Files changed",
+        "Phase 3: Add .gitkeep",
+        "Phase 4: Verify",
+        "Rules"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "1. {One-line summary of what shipped}",
+        "Phase 4: Verify"
+      ],
+      "owners": [
+        "kit/skills/init-tasks/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "init-tasks",
+      "source": "kit/skills/init-tasks",
+      "skillSha256": "7d583ad8bb59442ceacad1fa242d0ffadcc30ccbf97988b2885e4e6be4f6512e",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Protocol",
+        "Phase 1: Check Existing State",
+        "Phase 2: Create Task System",
+        "In Progress: {Feature/Task Name}",
+        "{Category or Phase}",
+        "Backlog",
+        "{Future Feature}",
+        "Import & Dependency Management",
+        "1. {Lesson title}",
+        "Error Handling",
+        "Testing Patterns",
+        "Architecture Decisions",
+        "Deployment & CI",
+        "Performance",
+        "Security",
+        "{Date} \u2014 {Feature Name}",
+        "1. {One-line summary of what shipped}",
+        "Core Feature: {Feature Name}",
+        "Primary changes",
+        "Dependencies (out-of-scope changes required)",
+        "QA fixes",
+        "Tests",
+        "Files changed",
+        "Phase 3: Add .gitkeep",
+        "Phase 4: Verify",
+        "Rules"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Protocol",
+        "Phase 1: Detect Stack",
+        "Phase 2: Set Up Framework",
+        "Phase 3: Create Directory Structure",
+        "Phase 4: Create Test Helpers",
+        "Phase 5: Create Example Tests",
+        "Phase 6: Verify",
+        "Rules"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Phase 6: Verify"
+      ],
+      "owners": [
+        "kit/skills/init-tests/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "init-tests",
+      "source": "kit/skills/init-tests",
+      "skillSha256": "6907ae69bd9726fa972121fcd2efa7d7c6a56f672e46d4c0d7f08d1d60c4f1fa",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Protocol",
+        "Phase 1: Detect Stack",
+        "Phase 2: Set Up Framework",
+        "Phase 3: Create Directory Structure",
+        "Phase 4: Create Test Helpers",
+        "Phase 5: Create Example Tests",
+        "Phase 6: Verify",
+        "Rules"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Protocol",
+        "Phase 0: Detect Mode",
+        "Phase 1: Bootstrap (New Logging Setup)",
+        "Phase 2: Upgrade (Audit Existing Logging)",
+        "Logging Audit",
+        "Current State",
+        "Gaps Found",
+        "Phase 3: Verify",
+        "Rules"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Phase 3: Verify"
+      ],
+      "owners": [
+        "kit/skills/logging/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "logging",
+      "source": "kit/skills/logging",
+      "skillSha256": "7d9feeb80c3dfd2f728327dfa515a639a93bffe921c4c48cc994c328e25ea85b",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Protocol",
+        "Phase 0: Detect Mode",
+        "Phase 1: Bootstrap (New Logging Setup)",
+        "Phase 2: Upgrade (Audit Existing Logging)",
+        "Logging Audit",
+        "Current State",
+        "Gaps Found",
+        "Phase 3: Verify",
+        "Rules"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Protocol",
+        "Phase 1: Gather Context",
+        "Phase 2: Update Task Tracker",
+        "Phase 3: Capture Lessons",
+        "Phase 4: Write Retro Entry",
+        "{Date} \u2014 {Feature Name}",
+        "{N}. {One-line summary}",
+        "Phase 5: Update Changelog",
+        "Core Feature: {Feature Name}",
+        "Primary changes",
+        "Dependencies (out-of-scope changes required)",
+        "QA fixes",
+        "Tests",
+        "Files changed",
+        "Phase 6: Stage and Summarize",
+        "Release Summary",
+        "Feature: {name}",
+        "Numbers",
+        "Documentation Updated",
+        "Ready to commit",
+        "Rules"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "{N}. {One-line summary}",
+        "Release Summary"
+      ],
+      "owners": [
+        "kit/skills/release/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "release",
+      "source": "kit/skills/release",
+      "skillSha256": "f6506cfa468bff2e5e360aa28ee14f71b62585c2f4b110028fe947431abd957f",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Protocol",
+        "Phase 1: Gather Context",
+        "Phase 2: Update Task Tracker",
+        "Phase 3: Capture Lessons",
+        "Phase 4: Write Retro Entry",
+        "{Date} \u2014 {Feature Name}",
+        "{N}. {One-line summary}",
+        "Phase 5: Update Changelog",
+        "Core Feature: {Feature Name}",
+        "Primary changes",
+        "Dependencies (out-of-scope changes required)",
+        "QA fixes",
+        "Tests",
+        "Files changed",
+        "Phase 6: Stage and Summarize",
+        "Release Summary",
+        "Feature: {name}",
+        "Numbers",
+        "Documentation Updated",
+        "Ready to commit",
+        "Rules"
+      ]
+    },
+    {
+      "classification": "provider-neutral-helper-install-gap",
+      "kind": "guided-offering",
+      "stages": [
+        "Setup (one-time)",
+        "Commands",
+        "`render services`",
+        "`render logs <service-name-or-id> [options]`",
+        "`render deploys <service>`",
+        "`render env <service>`",
+        "How to invoke from Claude",
+        "Implementation",
+        "Adding new commands",
+        "Why not MCP?"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [],
+      "owners": [
+        "kit/skills/render/SKILL.md"
+      ],
+      "missing": [
+        "Relocatable Bash/curl/jq wrapper and credential path review",
+        "Read-only API fake transport tests; no remote calls during port proof"
+      ],
+      "name": "render",
+      "source": "kit/skills/render",
+      "skillSha256": "5d6e94e8d5b004af0b2a6c9c9aee5494451efb5af444e4d30a9ba950324535f4",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 9,
+          "text": "Read-only wrapper around the Render REST API (https://api.render.com/v1). Lives at user level (`~/.claude/skills/render/`) so it works in any project without per-project install."
+        },
+        {
+          "line": 28,
+          "text": "Run the wrapper by its full path, `~/.claude/skills/render/render`: it is not on PATH, and every Bash call starts a fresh shell, so an alias would not last. The examples below use that path."
+        },
+        {
+          "line": 34,
+          "text": "~/.claude/skills/render/render services"
+        },
+        {
+          "line": 52,
+          "text": "~/.claude/skills/render/render logs supple-picks --since 30m --grep \"EARLY_RETURN\""
+        },
+        {
+          "line": 53,
+          "text": "~/.claude/skills/render/render logs supple-picks --since 1h --level warn"
+        },
+        {
+          "line": 60,
+          "text": "~/.claude/skills/render/render deploys supple-picks"
+        },
+        {
+          "line": 68,
+          "text": "~/.claude/skills/render/render env supple-picks"
+        },
+        {
+          "line": 77,
+          "text": "1. Run `~/.claude/skills/render/render services` first to confirm the service exists + grab the canonical name/id."
+        },
+        {
+          "line": 78,
+          "text": "2. Run `~/.claude/skills/render/render logs <name>` with appropriate `--since` + `--grep` filters based on what they're debugging."
+        },
+        {
+          "line": 79,
+          "text": "3. If they need to see deploys (e.g., \"did my push deploy?\"), use `~/.claude/skills/render/render deploys`."
+        },
+        {
+          "line": 85,
+          "text": "The wrapper is `~/.claude/skills/render/render` (executable bash + curl + jq). Reads the API key, makes the appropriate `/v1/...` call, formats the response. No external dependencies beyond `curl` + `jq` (both standard on macOS)."
+        },
+        {
+          "line": 90,
+          "text": "1. Edit `~/.claude/skills/render/render` \u2014 add a case branch"
+        }
+      ],
+      "declaredSections": [
+        "Setup (one-time)",
+        "Commands",
+        "`render services`",
+        "`render logs <service-name-or-id> [options]`",
+        "`render deploys <service>`",
+        "`render env <service>`",
+        "How to invoke from Claude",
+        "Implementation",
+        "Adding new commands",
+        "Why not MCP?"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Stack (Non-Negotiable)",
+        "Protocol",
+        "Phase 1: Gather Requirements",
+        "Phase 2: Scaffold Root Config",
+        "Phase 3: Scaffold Backend (`server/`)",
+        "Phase 4: Scaffold Frontend (`client/`)",
+        "Phase 5: Generate CLAUDE.md",
+        "Project Overview",
+        "Architecture",
+        "Key Technologies",
+        "Development Commands",
+        "Environment Variables",
+        "Code Patterns",
+        "Phase 6: Install and Verify",
+        "Rules"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Phase 6: Install and Verify"
+      ],
+      "owners": [
+        "kit/skills/scaffold-app/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "scaffold-app",
+      "source": "kit/skills/scaffold-app",
+      "skillSha256": "f83eb3cf4b149df07950df6f5a10b9a20c9974f98675582e7582352f3d036285",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Stack (Non-Negotiable)",
+        "Protocol",
+        "Phase 1: Gather Requirements",
+        "Phase 2: Scaffold Root Config",
+        "Phase 3: Scaffold Backend (`server/`)",
+        "Phase 4: Scaffold Frontend (`client/`)",
+        "Phase 5: Generate CLAUDE.md",
+        "Project Overview",
+        "Architecture",
+        "Key Technologies",
+        "Development Commands",
+        "Environment Variables",
+        "Code Patterns",
+        "Phase 6: Install and Verify",
+        "Rules"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Core Philosophy",
+        "Security Review Workflow",
+        "Phase 1: Map the Attack Surface",
+        "Phase 2: Threat Model",
+        "Phase 3: Vulnerability Hunt",
+        "Phase 4: Rate and Report",
+        "Critical Vulnerability Patterns",
+        "Injection (CWE-89, CWE-78, CWE-094)",
+        "Broken Access Control (CWE-285, CWE-639)",
+        "Authentication Failures (CWE-287, CWE-307)",
+        "Cryptographic Failures (CWE-327, CWE-312)",
+        "XSS (CWE-79)",
+        "Security Misconfiguration",
+        "Severity Rating",
+        "Security Headers Checklist",
+        "Additional Resources",
+        "Reference Files"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Phase 4: Rate and Report",
+        "Security Headers Checklist"
+      ],
+      "owners": [
+        "kit/skills/security/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "security",
+      "source": "kit/skills/security",
+      "skillSha256": "227ea9895141d0197d3d1abca6f7ca318f2e37825201cdaa5658e8bc650e26e4",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Core Philosophy",
+        "Security Review Workflow",
+        "Phase 1: Map the Attack Surface",
+        "Phase 2: Threat Model",
+        "Phase 3: Vulnerability Hunt",
+        "Phase 4: Rate and Report",
+        "Critical Vulnerability Patterns",
+        "Injection (CWE-89, CWE-78, CWE-094)",
+        "Broken Access Control (CWE-285, CWE-639)",
+        "Authentication Failures (CWE-287, CWE-307)",
+        "Cryptographic Failures (CWE-327, CWE-312)",
+        "XSS (CWE-79)",
+        "Security Misconfiguration",
+        "Severity Rating",
+        "Security Headers Checklist",
+        "Additional Resources",
+        "Reference Files"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Product-Led SEO Philosophy (Eli Schwartz)",
+        "Core Mindset",
+        "Five Strategy Validation Questions",
+        "Internal Linking: The Southwest Airlines Model",
+        "Content Strategy Principles",
+        "Measurement Framework",
+        "Common Mistakes to Avoid",
+        "Protocol",
+        "Phase 0: Detect Mode",
+        "Phase 1: Core HTML Meta Tags",
+        "Phase 2: Open Graph (Facebook, LinkedIn, Discord, Slack)",
+        "Phase 3: Twitter Cards",
+        "Phase 4: Structured Data (JSON-LD)",
+        "Phase 5: Technical SEO Files",
+        "Phase 6: Internal Linking Audit",
+        "Phase 7: Framework Integration",
+        "Phase 8: Audit Mode (Upgrade)",
+        "SEO Audit",
+        "Current State",
+        "Gaps Found",
+        "Validation",
+        "Phase 9: Verify",
+        "Rules",
+        "Technical Rules",
+        "Strategic Rules (Product-Led SEO)"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [
+        "Phase 9: Verify"
+      ],
+      "owners": [
+        "kit/skills/seo/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "seo",
+      "source": "kit/skills/seo",
+      "skillSha256": "c7f2174a6b2c92ccdf65135af6cd6772913c4b6e3d09dde0dce64c3d0f540460",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Product-Led SEO Philosophy (Eli Schwartz)",
+        "Core Mindset",
+        "Five Strategy Validation Questions",
+        "Internal Linking: The Southwest Airlines Model",
+        "Content Strategy Principles",
+        "Measurement Framework",
+        "Common Mistakes to Avoid",
+        "Protocol",
+        "Phase 0: Detect Mode",
+        "Phase 1: Core HTML Meta Tags",
+        "Phase 2: Open Graph (Facebook, LinkedIn, Discord, Slack)",
+        "Phase 3: Twitter Cards",
+        "Phase 4: Structured Data (JSON-LD)",
+        "Phase 5: Technical SEO Files",
+        "Phase 6: Internal Linking Audit",
+        "Phase 7: Framework Integration",
+        "Phase 8: Audit Mode (Upgrade)",
+        "SEO Audit",
+        "Current State",
+        "Gaps Found",
+        "Validation",
+        "Phase 9: Verify",
+        "Rules",
+        "Technical Rules",
+        "Strategic Rules (Product-Led SEO)"
+      ]
+    },
+    {
+      "classification": "provider-neutral-guidance-unverified-install",
+      "kind": "guided-offering",
+      "stages": [
+        "Mode selection",
+        "Shared mindset (both personas)",
+        "The buy \u2192 sell funnel (11 stages, both personas)",
+        "Persona 1 \u2014 Climbing Vendor (DEFAULT)",
+        "Persona 2 \u2014 Veteran 6-Fig Vendor (north-star)",
+        "Shared review protocol",
+        "1. What I just read",
+        "2. Funnel mapping",
+        "3. What's right",
+        "4. What's broken",
+        "5. Reframe",
+        "6. 9am Monday test",
+        "Tone (both personas)",
+        "Anti-patterns (both personas)",
+        "When the answer is \"this is good, ship it\"",
+        "Args",
+        "Reference"
+      ],
+      "gates": [
+        "Own SKILL.md rules/checklists; not a persisted graph gate unless owning helper exists"
+      ],
+      "recovery": [
+        "No standalone durable agent resume interface declared; preserve repository files and explicit user flow"
+      ],
+      "reports": [],
+      "owners": [
+        "kit/skills/vendor-lens/SKILL.md"
+      ],
+      "missing": [
+        "Codex-visible installation/discovery and relative dependency resolution",
+        "Instruction/tool equivalence review and representative offline output/negative tests; no native workflow claimed by prose"
+      ],
+      "name": "vendor-lens",
+      "source": "kit/skills/vendor-lens",
+      "skillSha256": "f32d71134b646dca5adc6de623a5709d8397eb399173a48ace239b9c93a2461f",
+      "installerCodex": false,
+      "instructionEvidence": [],
+      "declaredSections": [
+        "Mode selection",
+        "Shared mindset (both personas)",
+        "The buy \u2192 sell funnel (11 stages, both personas)",
+        "Persona 1 \u2014 Climbing Vendor (DEFAULT)",
+        "Persona 2 \u2014 Veteran 6-Fig Vendor (north-star)",
+        "Shared review protocol",
+        "1. What I just read",
+        "2. Funnel mapping",
+        "3. What's right",
+        "4. What's broken",
+        "5. Reframe",
+        "6. 9am Monday test",
+        "Tone (both personas)",
+        "Anti-patterns (both personas)",
+        "When the answer is \"this is good, ship it\"",
+        "Args",
+        "Reference"
+      ]
+    },
+    {
+      "classification": "native-supported-with-explicit-limits",
+      "stages": [
+        "config/preflight",
+        "feature selection",
+        "builder",
+        "host frozen/full/progress gate",
+        "commit",
+        "limit probe/wait/retry",
+        "final review",
+        "native bughunt"
+      ],
+      "gates": [
+        "host controls flags/commit",
+        "frozen files",
+        "full test gates",
+        "noProgress/iteration/time bounds",
+        "no unsupported dollar caps"
+      ],
+      "recovery": [
+        "completed feature resume",
+        "bounded provider-limit wait",
+        "signals/timeouts",
+        "failed gate feedback"
+      ],
+      "reports": [
+        "host logs",
+        "feature flags",
+        "run lifecycle",
+        "Codex token usage; dollars unknown",
+        "hunt ledger/report"
+      ],
+      "owners": [
+        "graphs/autobuild/tool/lib/loop.mjs",
+        "graphs/autobuild/tool/lib/codex.mjs",
+        "graphs/autobuild/tool/lib/codex-gate.mjs"
+      ],
+      "missing": [
+        "Keep native role/model/environment/auth parity regression matrix; tool-hook semantics differ explicitly; do not claim dollar/tool-turn cap equivalence",
+        "Full offering install/uninstall without Claude dependency remains broader installer work"
+      ],
+      "kind": "executable-graph-or-cli",
+      "name": "autobuild",
+      "source": "graphs/autobuild/skills/autobuild",
+      "skillSha256": "b144ee45dc9954e0db83aae2433c360cb3f81c6e0faea81dff4a7305a49a90ef",
+      "installerCodex": true,
+      "instructionEvidence": [
+        {
+          "line": 17,
+          "text": "When running this skill in Codex, use `autobuild run --backend codex` (or `AUTOBUILD_BACKEND=codex`); never launch Claude as a fallback. In Claude Code, the default backend remains Claude. Existing project configs and completed features can be resume"
+        },
+        {
+          "line": 21,
+          "text": "Codex uses saved CLI authentication (`codex login status`). It runs in `workspace-write` with approvals set to `never`. Claude allowedTools/deny hooks, dollar budgets and maxTurns do not transfer. The host checks frozen files, full gates and progress"
+        }
+      ],
+      "declaredSections": [
+        "Choose the backend first",
+        "0. Is the project already set up?",
+        "1. Close out planning in ONE batch",
+        "2. Write the source of truth",
+        "3. Tests before code (frozen)",
+        "4. Harness config",
+        "5. Dry run",
+        "6. Run",
+        "7. Check on a run"
+      ]
+    },
+    {
+      "classification": "Claude-Workflow-only",
+      "stages": [
+        "extract",
+        "question/interview",
+        "human answers",
+        "design",
+        "advisor gate/revise",
+        "slice backlog",
+        "advisor backlog gate",
+        "one approval",
+        "write docs"
+      ],
+      "gates": [
+        "binding answers",
+        "design/backlog bounded rounds",
+        "max questions",
+        "knowledge ownership",
+        "default stack departures"
+      ],
+      "recovery": [
+        "saved request/state/run1/run2/run3",
+        "gate revision loop",
+        "needs-human/escalate"
+      ],
+      "reports": [
+        "approved design",
+        "backlog",
+        "decisions",
+        "saved ledgers"
+      ],
+      "owners": [
+        "graphs/blueprint/workflows/blueprint-design.js",
+        "graphs/blueprint/skills/blueprint/write-docs.mjs"
+      ],
+      "missing": [
+        "Native graph adapter preserving interview pause/resume and exactly one approval",
+        "Actual saved-state CLI tests through every stage/error plus immutable-input validation"
+      ],
+      "kind": "executable-graph-or-cli",
+      "name": "blueprint",
+      "source": "graphs/blueprint/skills/blueprint",
+      "skillSha256": "72b4513168007cb4e021314ed62eaea5f2399797c46ac3b5b6f646e49ea9843e",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 10,
+          "text": "the human. Invoking `/blueprint` is the user's opt-in to the Workflow tool for"
+        },
+        {
+          "line": 65,
+          "text": "Workflow tool with `name: \"blueprint-design\"` (if not found, `scriptPath` set"
+        },
+        {
+          "line": 66,
+          "text": "to the absolute path of `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/workflows/blueprint-design.js`; if that is"
+        },
+        {
+          "line": 174,
+          "text": "      `node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/blueprint/write-docs.mjs\" \"$S/run2.json\" \"$S/run3.json\" \"$REPO\"`."
+        }
+      ],
+      "declaredSections": [
+        "When to ask",
+        "1. Preflight",
+        "2. Run the interview graph",
+        "3. On `needs-human`: the interview",
+        "4. Design (run 2)",
+        "5. Backlog (run 3)",
+        "6. The one approval",
+        "7. On `escalate`",
+        "8. Report"
+      ]
+    },
+    {
+      "classification": "Claude-only-launcher-with-provider-neutral-ledger",
+      "stages": [
+        "backlog preflight",
+        "isolated integration checkout",
+        "per-slice dev session",
+        "driver checks/commit",
+        "final QA",
+        "bughunt fix",
+        "push/PR"
+      ],
+      "gates": [
+        "backlog/earlier dependencies",
+        "driver lock",
+        "own acceptance checks",
+        "final QA/hunt",
+        "PR publication policy"
+      ],
+      "recovery": [
+        "status/stop/resume/unblock",
+        "persisted build ledger",
+        "usage wait/probes"
+      ],
+      "reports": [
+        "status.json",
+        "ledger",
+        "session logs",
+        "PR"
+      ],
+      "owners": [
+        "graphs/build/skills/build-app/driver/driver.mjs",
+        "graphs/build/skills/build-app/driver/session.mjs"
+      ],
+      "missing": [
+        "Explicit backend dispatch: session.mjs runClaude/Claude hooks/Haiku probe must receive native equivalent",
+        "Depends on native dev+nested QA; no fallback to Claude; full driver stop/resume/PR gates tests"
+      ],
+      "kind": "executable-graph-or-cli",
+      "name": "build-app",
+      "source": "graphs/build/skills/build-app",
+      "skillSha256": "55aac327cfecb8fe55447e838a757cf4d54048df9db4eed27d41734fd999ae13",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 22,
+          "text": "`${CLAUDE_CONFIG_DIR:-$HOME/.claude}` out in every command, and put the"
+        },
+        {
+          "line": 25,
+          "text": "is `\"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/build-app/driver/driver.mjs\"`."
+        },
+        {
+          "line": 45,
+          "text": "     `node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/backlog/backlog.mjs\" check STATE/backlog.json`"
+        },
+        {
+          "line": 68,
+          "text": "   `$(command -v setsid) nohup node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/build-app/driver/driver.mjs\" run --repo REPO --app <app> [--no-pr|--pr] > STATE/logs/nohup.out 2>&1 < /dev/null &`"
+        }
+      ],
+      "declaredSections": [
+        "1. Which repo and which app",
+        "2. start",
+        "3. status",
+        "4. stop",
+        "5. resume",
+        "6. unblock S<n> <answer>",
+        "Exit codes"
+      ]
+    },
+    {
+      "classification": "Claude-Workflow-only",
+      "stages": [
+        "planner",
+        "advisor plan gate",
+        "scout",
+        "implementer",
+        "host check",
+        "acceptance auditor",
+        "triage",
+        "nested QA"
+      ],
+      "gates": [
+        "plan approval",
+        "bounded planning",
+        "acceptance criteria evidence",
+        "verification",
+        "nested QA result"
+      ],
+      "recovery": [
+        "saved approved plan/ledger",
+        "resume",
+        "needs-human",
+        "escalation/stuck signature"
+      ],
+      "reports": [
+        "plan",
+        "acceptance evidence",
+        "ledger",
+        "commit/result summary"
+      ],
+      "owners": [
+        "graphs/dev/workflows/dev-build.js",
+        "graphs/qa/workflows/harness-repair.js"
+      ],
+      "missing": [
+        "Native adapter must support nested workflow() in addition to agent()",
+        "Fake CLI end-to-end plan/resume/QA/failure tests and native tooling permission parity"
+      ],
+      "kind": "executable-graph-or-cli",
+      "name": "dev",
+      "source": "graphs/dev/skills/dev",
+      "skillSha256": "1e7d0b75fa3c85c6ec3b5161f979818d85bc0776b39635d0dc15db175dde5b7f",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 11,
+          "text": "Workflow tool for this task."
+        },
+        {
+          "line": 22,
+          "text": "Installed paths start with `${CLAUDE_CONFIG_DIR:-$HOME/.claude}`, where"
+        },
+        {
+          "line": 55,
+          "text": "   `node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/backlog/backlog.mjs\" task \"$REPO/docs/backlog.json\" S<n> \"$(git rev-parse --path-format=absolute --git-path harness-build)\" > \"$D/slice.json\"`"
+        },
+        {
+          "line": 70,
+          "text": "Workflow tool with `name: \"dev-build\"` (if not found, `scriptPath` set to the"
+        },
+        {
+          "line": 71,
+          "text": "absolute path of `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/workflows/dev-build.js`, expanded first). Args:"
+        },
+        {
+          "line": 85,
+          "text": "`node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/workflow-state/run-script.mjs\" INJECTED_PLAN \"$D/plan.json\" \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/workflows/dev-build.js\" \"$D/run.js\"`"
+        },
+        {
+          "line": 89,
+          "text": "the human to run `./install.sh` in their PandaStack checkout, then retry. Then call the Workflow tool with `scriptPath` set to that printed"
+        }
+      ],
+      "declaredSections": [
+        "When to ask",
+        "1. Preflight",
+        "2. Run the graph",
+        "3. On `plan-ready` (only with `--review`)",
+        "4. On `needs-human`",
+        "5. On `escalate`",
+        "6. On `done`"
+      ]
+    },
+    {
+      "classification": "native-supported-with-unverified-runtime-edges",
+      "stages": [
+        "impact",
+        "lens hunters",
+        "blind skeptic",
+        "referee",
+        "reproduction/evidence",
+        "repair",
+        "independent fix verification",
+        "full comparison",
+        "recheck/landing"
+      ],
+      "gates": [
+        "same graph/schema/ledger",
+        "partial coverage remains nonclean",
+        "exact head",
+        "independent evidence",
+        "safe blocked/incomplete comparisons"
+      ],
+      "recovery": [
+        "persisted ledger/evidence",
+        "bounded repair attempts",
+        "unknown/blocked manual disposition"
+      ],
+      "reports": [
+        "native result",
+        "coverage entries",
+        "findings ledger",
+        "markdown report",
+        "evidence records"
+      ],
+      "owners": [
+        "graphs/hunt/skills/bughunt/native-cli.mjs",
+        "graphs/hunt/skills/bughunt/native-runner.mjs",
+        "graphs/hunt/workflows/bughunt-flow.js"
+      ],
+      "missing": [
+        "Native support does not prove every reproduction/cleanup boundary; preserve current explicit prohibited scenarios",
+        "Graph schema adapter optional-field parity and per-leaf checkpoint tests; no clean-verdict promise"
+      ],
+      "kind": "executable-graph-or-cli",
+      "name": "bughunt",
+      "source": "graphs/hunt/skills/bughunt",
+      "skillSha256": "fe3ac74e59b89390f93d729c0812adbc053a0fa8b2cd6dcced6f9fdbb08b3916",
+      "installerCodex": true,
+      "instructionEvidence": [
+        {
+          "line": 32,
+          "text": "These instructions are the opt-in to the Workflow tool for this skill."
+        },
+        {
+          "line": 41,
+          "text": "node <resolved-skill-dir>/native-cli.mjs --repo <absolute-repo> --base <base-ref> --backend codex --mode discover"
+        },
+        {
+          "line": 74,
+          "text": "CONFIG=\"${CLAUDE_CONFIG_DIR:-$HOME/.claude}\""
+        },
+        {
+          "line": 142,
+          "text": "Workflow tool with `scriptPath` set to the absolute path that `run-script.mjs`"
+        }
+      ],
+      "declaredSections": [
+        "Codex runner",
+        "1. Resolve the target",
+        "1b. The fix worktree (`--propose`, `--fix` only)",
+        "2. Prepare the run",
+        "3. Run the graph",
+        "4. Save and report"
+      ]
+    },
+    {
+      "classification": "Claude-Workflow-only",
+      "stages": [
+        "docs",
+        "ready",
+        "human exact-head approval",
+        "land",
+        "verify deploy",
+        "advisor recommendation"
+      ],
+      "gates": [
+        "exact PR/head/base approval",
+        "fresh head/base read",
+        "match-head merge once",
+        "MERGED resume skip",
+        "UNKNOWN manual",
+        "merge-SHA deploy proof",
+        "two consecutive health failures"
+      ],
+      "recovery": [
+        "saved ledger/approval",
+        "bounded verify rounds",
+        "stale approval",
+        "unknown merge no retry"
+      ],
+      "reports": [
+        "docs/changelog",
+        "release ledger",
+        "deploy evidence",
+        "rollback recommendation"
+      ],
+      "owners": [
+        "graphs/release/workflows/release-flow.js"
+      ],
+      "missing": [
+        "Native adapter plus explicit approval boundary, no inferred consent",
+        "Offline gh/deploy fake tests matching exact-head, unknown, resume, notification authorization; real remote actions not part of port proof by default"
+      ],
+      "kind": "executable-graph-or-cli",
+      "name": "release-pr",
+      "source": "graphs/release/skills/release-pr",
+      "skillSha256": "0b5064d39a6d3b953b51c152445b68eeac2d5273cdbf0a43776012e354f34b6e",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 11,
+          "text": "`/release-pr` is the user's opt-in to the Workflow tool for this release."
+        },
+        {
+          "line": 25,
+          "text": "3. Run the workflow with the Workflow tool, `name: \"release-flow\"` (if not"
+        },
+        {
+          "line": 26,
+          "text": "   found, `scriptPath` set to the absolute path of `~/.claude/workflows/release-flow.js`),"
+        }
+      ],
+      "declaredSections": [
+        "Setup",
+        "1. Stage `docs`",
+        "2. Stage `ready`",
+        "3. Waiting on deploys",
+        "4. Approval",
+        "5. Stage `land`",
+        "6. Stage `verify`",
+        "Notifications"
+      ]
+    },
+    {
+      "classification": "Claude-Workflow-only-with-provider-neutral-host-helpers",
+      "stages": [
+        "init committed snapshot",
+        "four recon researchers",
+        "synthesize",
+        "seed",
+        "plan waves",
+        "hunters",
+        "merge",
+        "coverage critic",
+        "mint/apply critic",
+        "consolidate",
+        "validate",
+        "write findings",
+        "independent Phase5 verification",
+        "report"
+      ],
+      "gates": [
+        "explicit full audit",
+        "upstream validators/schema",
+        "source-only needs_validation",
+        "budget reserves",
+        "coverage completeness",
+        "independent challengers",
+        "no target execution"
+      ],
+      "recovery": [
+        "stage-state/next",
+        "stage result apply idempotency",
+        "bounded malformed-result retry",
+        "prior-run carry",
+        "individual checkpoint gap"
+      ],
+      "reports": [
+        "REPORT.md",
+        "FINDINGS-DETAIL.md",
+        "NEEDS-VALIDATION.md",
+        "coverage ledger",
+        "findings",
+        "remediation export"
+      ],
+      "owners": [
+        "graphs/security-audit/workflows/security-audit-flow.js",
+        "graphs/security-audit/skills/security-audit/audit-run.mjs",
+        "graphs/security-audit/skills/security-audit/audit-stage.mjs",
+        "graphs/security-audit/skills/security-audit/audit-report.mjs"
+      ],
+      "missing": [
+        "Priority eight repairs first, including true optional-schema handling, per-agent checkpoint/resume and partial reports",
+        "Native source-reader transport/tool enforcement, capability preflight, same upstream gates; do not merely symlink skill"
+      ],
+      "kind": "executable-graph-or-cli",
+      "name": "security-audit",
+      "source": "graphs/security-audit/skills/security-audit",
+      "skillSha256": "d2c11a01333337852c169e47bf89fe9971667023e37d8ebeba7a4090c6dfab9d",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 16,
+          "text": "These instructions are the opt-in to the Workflow tool for this skill."
+        },
+        {
+          "line": 84,
+          "text": "    `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/security-audit`. Never a"
+        },
+        {
+          "line": 143,
+          "text": "2. Call the Workflow tool with `scriptPath` set to that path and no `args`."
+        }
+      ],
+      "declaredSections": [
+        "1. When this skill runs, and when it does not",
+        "2. Usage",
+        "3. Start",
+        "4. The loop",
+        "5. Resume",
+        "6. Finish",
+        "Remediation is separate",
+        "Rules"
+      ]
+    },
+    {
+      "classification": "provider-neutral-helper-install-gap",
+      "stages": [
+        "built HTML scan",
+        "metadata/link/schema/sitemap checks",
+        "safe report"
+      ],
+      "gates": [
+        "actual built artifact assertions",
+        "nonzero failure"
+      ],
+      "recovery": [
+        "rerunnable CLI; no agent ledger"
+      ],
+      "reports": [
+        "text or JSON check result"
+      ],
+      "owners": [
+        "graphs/seo/skills/seo-check/seo-check.mjs"
+      ],
+      "missing": [
+        "Resolve own installed path without ~/.claude",
+        "Codex installer and CLI success/failure fixtures"
+      ],
+      "kind": "executable-graph-or-cli",
+      "name": "seo-check",
+      "source": "graphs/seo/skills/seo-check",
+      "skillSha256": "274016cab0c1235ab4049844161b4fb7c36189927970612e38a47cbf96939dc7",
+      "installerCodex": false,
+      "instructionEvidence": [
+        {
+          "line": 12,
+          "text": "node ~/.claude/skills/seo-check/seo-check.mjs check <built dir> --site https://example.com [--json]"
+        }
+      ],
+      "declaredSections": [
+        "What it checks",
+        "What it cannot see"
+      ]
+    }
+  ],
+  "workflows": [
+    {
+      "source": "graphs/blueprint/workflows/blueprint-design.js",
+      "sha256": "27d2341e13104d69a8f6a00a52c26b4b62d1812ce498fa7f92f8ee35896bd886",
+      "roles": [
+        "extractor",
+        "questioner",
+        "architect",
+        "slicer",
+        "advisor"
+      ],
+      "runtimeGlobals": [
+        "agent",
+        "log"
+      ],
+      "classification": "Workflow-runtime only; no matching production native adapter identified",
+      "nestedWorkflow": false,
+      "recovery": "See owning offering; stage ledgers are not individual-agent checkpoint proof"
+    },
+    {
+      "source": "graphs/dev/workflows/dev-build.js",
+      "sha256": "2ecd380fe46dd4372c935beaf3e7165a184dbfc019891fc0e9223f5b7fc7af64",
+      "roles": [
+        "planner",
+        "advisor",
+        "scout",
+        "implementer",
+        "checker",
+        "acceptance-auditor",
+        "advisor"
+      ],
+      "runtimeGlobals": [
+        "agent",
+        "workflow",
+        "log",
+        "phase"
+      ],
+      "classification": "Workflow-runtime only; no matching production native adapter identified",
+      "nestedWorkflow": true,
+      "recovery": "See owning offering; stage ledgers are not individual-agent checkpoint proof"
+    },
+    {
+      "source": "graphs/hunt/workflows/bughunt-flow.js",
+      "sha256": "624dc9fefd75b0cb938bf2a713ba2dfbcf404cc7d0249430e46b5076f08b84db",
+      "roles": [
+        "impact-mapper",
+        "hunter",
+        "skeptic",
+        "advisor",
+        "reproducer",
+        "runner",
+        "repairer",
+        "fix-verifier"
+      ],
+      "runtimeGlobals": [
+        "agent",
+        "log",
+        "phase"
+      ],
+      "classification": "native adapter exists for this graph",
+      "nestedWorkflow": false,
+      "recovery": "See owning offering; stage ledgers are not individual-agent checkpoint proof"
+    },
+    {
+      "source": "graphs/qa/workflows/harness-repair.js",
+      "sha256": "696413de1aadeb9c1dc550f490259854346ca33d3d602dc2105e0325f77423be",
+      "roles": [
+        "checker",
+        "fixer",
+        "reviewer",
+        "advisor",
+        "qa-auditor"
+      ],
+      "runtimeGlobals": [
+        "agent",
+        "log",
+        "phase"
+      ],
+      "classification": "Workflow-runtime only; no matching production native adapter identified",
+      "nestedWorkflow": false,
+      "recovery": "See owning offering; stage ledgers are not individual-agent checkpoint proof"
+    },
+    {
+      "source": "graphs/release/workflows/release-flow.js",
+      "sha256": "29b9529eb7657ab31c82bb8ddd68987997a963d20550f925ccf14bce3f480593",
+      "roles": [
+        "release-checker",
+        "scribe",
+        "merger",
+        "deploy-watcher",
+        "advisor"
+      ],
+      "runtimeGlobals": [
+        "agent",
+        "log",
+        "phase"
+      ],
+      "classification": "Workflow-runtime only; no matching production native adapter identified",
+      "nestedWorkflow": false,
+      "recovery": "See owning offering; stage ledgers are not individual-agent checkpoint proof"
+    },
+    {
+      "source": "graphs/security-audit/workflows/security-audit-flow.js",
+      "sha256": "f83182962b33c2bc99ed8ffaf4d897de87c7805f3d1635bb4578a0fd2636c196",
+      "roles": [
+        "audit-researcher",
+        "audit-synthesizer",
+        "audit-analyst",
+        "audit-researcher",
+        "audit-synthesizer",
+        "audit-synthesizer",
+        "audit-analyst",
+        "audit-researcher",
+        "audit-analyst"
+      ],
+      "runtimeGlobals": [
+        "agent",
+        "log",
+        "phase"
+      ],
+      "classification": "Workflow-runtime only; no matching production native adapter identified",
+      "nestedWorkflow": false,
+      "recovery": "See owning offering; stage ledgers are not individual-agent checkpoint proof"
+    }
+  ],
+  "otherInstallerAssets": [
+    {
+      "target": "agents/advisor.md",
+      "source": "core/agents/advisor.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "a69bf4226411a7c4b9be941beedbb83fa26c9052a6a5ac0cd2be52c0a7f5641b",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Senior judgment for the agent graphs, called only at decision points. Confirms or refutes blocking review and QA findings before anyone spends effort fixing them, referees the bug findings /bughunt's skeptic could not settle, triages behavior changes a build made that its plan did not list, and diagnoses a fix loop that is not making progress (retry with a different strategy, or escalate to a human). Gates plans and designs before anything is built. Also answers design and trade-off questions with one recommendation. Read-only.",
+        "model: fable",
+        "tools: Read, Grep, Glob, Bash",
+        "skills:"
+      ]
+    },
+    {
+      "target": "agents/checker.md",
+      "source": "core/agents/checker.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "c1fd96bc704dcec9a3d2c5cc67c3726d6b3e89e5fe009cfd0e88da02cc00768c",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Runs the verify skill against the current repo and reports the VERIFY block plus a short summary of any failures. Use after changes to get an independent pass/fail with proof. Read-only plus Bash; it never edits files.",
+        "model: haiku",
+        "tools: Read, Grep, Glob, Bash"
+      ]
+    },
+    {
+      "target": "bin/statusline.sh",
+      "source": "core/bin/statusline.sh",
+      "codexInstaller": false,
+      "kind": "bin",
+      "sha256": "2bd5ba3b1c7d4513fcba06c0d54679faa9db50df134da8a59301dac72e963bb4",
+      "classification": "Claude statusline integration",
+      "toolEvidence": []
+    },
+    {
+      "target": "agents/agentic-ux-reviewer.md",
+      "source": "kit/agents/agentic-ux-reviewer.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "e49ae33ebec3da5d88df2e0d997ddd12b2186ef6ba267f59dd448370399402f2",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: \"Use this agent when reviewing, designing, or evaluating any user-facing interface, flow, screen, component, or interaction pattern in the application \u2014 especially where AI-generated output, autonomous agent actions, approval gates, loading states, error states, empty states, or trust/confidence indicators are involved. This agent applies a rigorous 5-layer agentic UX framework (Intent, Comprehension, Trust, Control, Continuity) to identify issues and produce actionable redesign recommendations.\\\\n\\\\nExamples:\\\\n\\\\n- **Example 1: Reviewing a new component or view**\\\\n  user: \\\"I just built the drift detection results view. Can you review the UX?\\\"\\\\n  assistant: \\\"Let me launch the agentic UX reviewer to audit this view against the 5-layer framework.\\\"\\\\n  <uses Task tool to launch agentic-ux-reviewer agent with the relevant file paths and context>\\\\n\\\\n- **Example 2: Proactive review after building a feature**\\\\n  Context: The assistant just finished implementing a new approval gate flow for destructive Terraform operations.\\\\n  assistant: \\\"The approval gate flow is implemented. Let me run the agentic UX reviewer to make sure the trust and control layers are solid before we ship this.\\\"\\\\n  <uses Task tool to launch agentic-ux-reviewer agent to audit the new flow>\\\\n\\\\n- **Example 3: Evaluating an existing screen for improvements**\\\\n  user: \\\"The scan results page feels confusing. Users don't know what to do next.\\\"\\\\n  assistant: \\\"I'll use the agentic UX reviewer to do a full layer analysis of the scan results page and identify comprehension and intent issues.\\\"\\\\n  <uses Task tool to launch agentic-ux-reviewer agent>\\\\n\\\\n- **Example 4: Reviewing loading, error, or empty states**\\\\n  user: \\\"Can you check if our empty states and error handling are good enough?\\\"\\\\n  assistant: \\\"Let me launch the agentic UX reviewer \u2014 it specifically audits empty states, error states, and loading states against agentic UX best practices.\\\"\\\\n  <uses Task tool to launch agentic-ux-reviewer agent>\\\\n\\\\n- **Example 5: Proactive review after implementing AI-facing UI**\\\\n  Context: The assistant just built a component that displays AI-generated security findings with severity badges.\\\\n  assistant: \\\"Now that the security findings component is done, let me run the agentic UX reviewer to verify the trust layer \u2014 making sure AI judgment is visually distinct from verified facts and confidence levels are properly surfaced.\\\"\\\\n  <uses Task tool to launch agentic-ux-reviewer agent>\"",
+        "model: opus",
+        "memory: user"
+      ]
+    },
+    {
+      "target": "agents/cloudfront-invalidator.md",
+      "source": "kit/agents/cloudfront-invalidator.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "519ad7f025ddf6d664391c0fdd719ca8940c12fbcb9dafe61b7f72ae1621090f",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: \"Use this agent when the user needs to invalidate AWS CloudFront distributions, clear CDN caches, or sync deployed frontend/backend changes across edge locations. This includes after deployments, after pushing code to dev/staging/prod branches, or when the user explicitly asks to invalidate or clear CloudFront caches.\\\\n\\\\nExamples:\\\\n\\\\n- User: \\\"Can you invalidate our cloudfront in our dev environment using our aws profile terracotta-dev-admin\\\"\\\\n  Assistant: \\\"I'll use the cloudfront-invalidator agent to find and invalidate the CloudFront distributions in the dev environment.\\\"\\\\n  <uses Agent tool to launch cloudfront-invalidator>\\\\n\\\\n- User: \\\"I just pushed to main and the site isn't showing the latest changes\\\"\\\\n  Assistant: \\\"This sounds like a CDN caching issue. Let me use the cloudfront-invalidator agent to clear the CloudFront cache.\\\"\\\\n  <uses Agent tool to launch cloudfront-invalidator>\\\\n\\\\n- User: \\\"Clear the CDN cache for prod\\\"\\\\n  Assistant: \\\"I'll use the cloudfront-invalidator agent to invalidate the production CloudFront distributions.\\\"\\\\n  <uses Agent tool to launch cloudfront-invalidator>\\\\n\\\\n- Context: After a git push to dev/main completes successfully and frontend or backend changes were included.\\\\n  Assistant: \\\"The code has been pushed. Let me use the cloudfront-invalidator agent to invalidate CloudFront so the changes propagate to edge locations.\\\"\\\\n  <uses Agent tool to launch cloudfront-invalidator>\"",
+        "model: opus",
+        "memory: user"
+      ]
+    },
+    {
+      "target": "agents/design-lead.md",
+      "source": "kit/agents/design-lead.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "260b603b21cf47c184a06f780d6f06c8caf776046c3b6ff9ff800d8e42dfa66b",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: \"Use this agent when designing new views, flows, components, wireframes, or interaction patterns for Terracotta Surface. Trigger on phrases like 'design this', 'what should this look like', 'make this feel right', 'design the experience', 'how should this work', or when building any user-facing feature that needs UI/UX specification. Also invoke when evaluating existing UI patterns, redesigning screens, or when a new feature needs component hierarchy, visual specs, content specs, state handling, and interaction design.\\\\n\\\\nExamples:\\\\n\\\\n- user: \\\"Use the design-lead agent to design the State view for managing phase\\\"\\\\n  assistant: \\\"I'll use the design-lead agent to design the State view for the managing phase.\\\"\\\\n  <launches design-lead agent via Task tool>\\\\n\\\\n- user: \\\"Have the design-lead design the Variables tab experience\\\"\\\\n  assistant: \\\"Let me delegate this to the design-lead agent to create a full design specification for the Variables tab.\\\"\\\\n  <launches design-lead agent via Task tool>\\\\n\\\\n- user: \\\"design the empty state for Runs when a TF repo just connected\\\"\\\\n  assistant: \\\"This is a UI design task \u2014 I'll use the design-lead agent to design the empty state for the Runs view.\\\"\\\\n  <launches design-lead agent via Task tool>\\\\n\\\\n- user: \\\"What should the drift detection results look like?\\\"\\\\n  assistant: \\\"This needs a proper design specification. Let me use the design-lead agent to design the drift detection results experience.\\\"\\\\n  <launches design-lead agent via Task tool>\\\\n\\\\n- user: \\\"Build out the approval flow UI for managed workspaces\\\"\\\\n  assistant: \\\"Before building, I'll use the design-lead agent to design the approval flow experience, then implement from the spec.\\\"\\\\n  <launches design-lead agent via Task tool>\\\\n\\\\n- user: \\\"This screen feels off, can you make it feel right?\\\"\\\\n  assistant: \\\"Let me use the design-lead agent to audit and redesign this screen.\\\"\\\\n  <launches design-lead agent via Task tool>\"",
+        "model: opus",
+        "memory: project"
+      ]
+    },
+    {
+      "target": "agents/google-ads-strategist.md",
+      "source": "kit/agents/google-ads-strategist.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "fc6be97510f6214574edb67d8efb30c4f02ee892761e1b53d534887ff581f4eb",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: \"Use this agent when the user needs help with Google Ads strategy, campaign structure, ad copywriting, bidding strategies, quality score optimization, audience targeting, conversion tracking, or any digital advertising topic. This includes PPC campaign planning, keyword research methodology, ad group organization, landing page alignment, remarketing strategies, automation in advertising, Smart Bidding, Performance Max campaigns, or general paid search/display advertising guidance.\\\\n\\\\nExamples:\\\\n\\\\n- user: \\\"I need to set up a Google Ads campaign for my SaaS product\\\"\\\\n  assistant: \\\"Let me use the google-ads-strategist agent to help design an effective campaign structure for your SaaS product.\\\"\\\\n\\\\n- user: \\\"My cost per acquisition is too high on Google Ads, how do I fix it?\\\"\\\\n  assistant: \\\"I'll launch the google-ads-strategist agent to diagnose your high CPA and recommend optimization strategies.\\\"\\\\n\\\\n- user: \\\"Should I use broad match or exact match keywords?\\\"\\\\n  assistant: \\\"Let me use the google-ads-strategist agent to advise on match type strategy based on your campaign goals.\\\"\\\\n\\\\n- user: \\\"How should I structure my ad groups for an e-commerce store?\\\"\\\\n  assistant: \\\"I'll use the google-ads-strategist agent to design an optimal ad group architecture for your e-commerce campaigns.\\\"\\\\n\\\\n- user: \\\"What's the best bidding strategy for lead generation?\\\"\\\\n  assistant: \\\"Let me launch the google-ads-strategist agent to recommend the right bidding approach for your lead gen goals.\\\"\"",
+        "model: opus",
+        "memory: user"
+      ]
+    },
+    {
+      "target": "agents/icp-review.md",
+      "source": "kit/agents/icp-review.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "08f776f86a0c7eca086da9bab874a9c0d297a8fe6f494e84510346b237517098",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: \"Use this agent when asked to review a plan, design, feature spec, pricing decision, or UI from the customer perspective. Also invoke when the user says 'does this make sense for our ICP', 'review this as a customer', 'gut check this', 'poke holes in this', 'review from the user perspective', 'would an appraiser use this', or any variation asking for product feedback from the target user's point of view.\"",
+        "model: opus",
+        "memory: project"
+      ]
+    },
+    {
+      "target": "agents/qa-engineer.md",
+      "source": "kit/agents/qa-engineer.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "3ef9f8d163ab721ad1a4cd86cc5db170c87c95c0390256c79adcd0e6198244a2",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: \"Use this agent when you need to verify the correctness, reliability, and security of a feature, flow, or component. This includes after implementing a new feature, before merging to dev or main, when investigating a bug report, or when you want a thorough audit of a specific area of the codebase. This agent traces full data flows from UI to database and back, enumerates failure modes, identifies race conditions, checks authorization boundaries, and classifies findings by severity and blast radius.\\\\n\\\\nExamples:\\\\n\\\\n<example>\\\\nContext: The user just finished implementing a new MANAGE feature that allows users to trigger Terraform plan runs from the UI.\\\\nuser: \\\"I just finished implementing the plan runner feature. The flow goes from the RunsView \u2192 API \u2192 planRunner service \u2192 DB updates.\\\"\\\\nassistant: \\\"Let me use the QA engineer agent to thoroughly audit this feature for data integrity issues, race conditions, auth gaps, and failure modes.\\\"\\\\n<commentary>\\\\nSince a significant feature was just implemented that involves state mutations, external service calls (AWS/Terraform), and async operations, use the Task tool to launch the qa-engineer agent to perform a comprehensive QA audit before merging.\\\\n</commentary>\\\\n</example>\\\\n\\\\n<example>\\\\nContext: The user is about to merge a feature branch to dev and wants to make sure nothing is broken.\\\\nuser: \\\"I'm about to merge the generation-redesign branch to dev. Can you check it for issues?\\\"\\\\nassistant: \\\"I'll use the QA engineer agent to audit the generation redesign for state machine violations, missing error handling, authorization gaps, and integration seam issues.\\\"\\\\n<commentary>\\\\nSince the user is about to merge and wants a pre-merge quality check, use the Task tool to launch the qa-engineer agent to perform a thorough review of all changes in the branch.\\\\n</commentary>\\\\n</example>\\\\n\\\\n<example>\\\\nContext: The user reports a bug where workspace state gets corrupted.\\\\nuser: \\\"Users are reporting that sometimes their workspace gets stuck in 'planning' phase and never completes.\\\"\\\\nassistant: \\\"I'll use the QA engineer agent to trace the full state machine for the planning phase, identify where the transition can fail to complete, and find the root cause of the stuck state.\\\"\\\\n<commentary>\\\\nSince this is a state corruption bug that requires tracing async operations, failure modes, and race conditions, use the Task tool to launch the qa-engineer agent to investigate.\\\\n</commentary>\\\\n</example>\\\\n\\\\n<example>\\\\nContext: A new API endpoint was added and the user wants to verify it's secure.\\\\nuser: \\\"I added a new endpoint for deleting runs. Can you make sure it's secure?\\\"\\\\nassistant: \\\"I'll use the QA engineer agent to audit the new delete endpoint for authorization checks, ownership validation, input validation, and cascading deletion integrity.\\\"\\\\n<commentary>\\\\nSince a new API endpoint was added that performs destructive operations, use the Task tool to launch the qa-engineer agent to audit it for security and data integrity issues.\\\\n</commentary>\\\\n</example>\"",
+        "model: opus",
+        "memory: project"
+      ]
+    },
+    {
+      "target": "agents/terraform-staff-engineer.md",
+      "source": "kit/agents/terraform-staff-engineer.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "c63a17f2e969df465f5d60f69cb69e38cf7012bd9dbbb093a31ebd8d83549a1c",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: \"Use this agent when reviewing Terraform-related code, HCL generation logic, infrastructure decisions, state management patterns, plan analysis accuracy, or any code that produces, parses, or manages Terraform configurations. This includes reviewing LLM prompts that generate Terraform, validating resource definitions, checking security posture of generated infrastructure, auditing state backend configurations, and evaluating brownfield import logic.\\\\n\\\\nExamples:\\\\n\\\\n- Context: The user has written or modified code that generates HCL output for users.\\\\n  user: \\\"I just updated the ECS service generator to support capacity providers\\\"\\\\n  assistant: \\\"Let me review those changes for correctness and production-readiness.\\\"\\\\n  <commentary>\\\\n  Since the user modified Terraform generation logic, use the Task tool to launch the terraform-staff-engineer agent to review the generated HCL patterns, resource lifecycle behavior, and production safety.\\\\n  </commentary>\\\\n  assistant: \\\"Now let me use the terraform-staff-engineer agent to review the ECS generation changes.\\\"\\\\n\\\\n- Context: The user is working on plan analysis or review agent logic that interprets terraform plan output.\\\\n  user: \\\"I updated the plan review agent to detect security group changes\\\"\\\\n  assistant: \\\"I'll have the Terraform expert review the detection logic.\\\"\\\\n  <commentary>\\\\n  Since the user changed plan analysis code, use the Task tool to launch the terraform-staff-engineer agent to verify the analysis correctly identifies real security risks vs false positives and handles edge cases in plan output.\\\\n  </commentary>\\\\n  assistant: \\\"Let me launch the terraform-staff-engineer agent to validate the security group detection logic.\\\"\\\\n\\\\n- Context: The user has added or modified state management, drift detection, or import functionality.\\\\n  user: \\\"I added drift detection that compares the user's state file against their HCL\\\"\\\\n  assistant: \\\"That's a critical feature \u2014 let me get an expert review.\\\"\\\\n  <commentary>\\\\n  Since drift detection involves state management correctness, use the Task tool to launch the terraform-staff-engineer agent to verify the comparison logic handles partial state, missing resources, and state-vs-real-vs-code distinctions correctly.\\\\n  </commentary>\\\\n  assistant: \\\"Launching the terraform-staff-engineer agent to review the drift detection implementation.\\\"\\\\n\\\\n- Context: The user has written LLM prompts or system prompts that instruct an AI to generate Terraform.\\\\n  user: \\\"Here's the updated system prompt for our Terraform generation agent\\\"\\\\n  assistant: \\\"Let me have the Terraform expert evaluate whether this prompt will produce production-safe output.\\\"\\\\n  <commentary>\\\\n  Since the user is modifying prompts that control Terraform generation, use the Task tool to launch the terraform-staff-engineer agent to check that the prompt enforces correct HCL patterns, security defaults, and avoids known anti-patterns.\\\\n  </commentary>\\\\n  assistant: \\\"Using the terraform-staff-engineer agent to audit the generation prompt for correctness and safety.\\\"\\\\n\\\\n- Context: The user modifies backend configuration, workspace setup, or module structure code.\\\\n  user: \\\"I changed how we configure the S3 backend for new workspaces\\\"\\\\n  assistant: \\\"Backend configuration is critical \u2014 let me get that reviewed.\\\"\\\\n  <commentary>\\\\n  Since backend configuration directly affects state safety, use the Task tool to launch the terraform-staff-engineer agent to verify encryption, locking, versioning, and access control are all correctly configured.\\\\n  </commentary>\\\\n  assistant: \\\"Launching the terraform-staff-engineer agent to review the backend configuration changes.\\\"\"",
+        "model: opus",
+        "memory: project"
+      ]
+    },
+    {
+      "target": "agents/ui-design-reviewer.md",
+      "source": "kit/agents/ui-design-reviewer.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "9a2fa06a733412ebcd799764061ae3a5082014b72a5c619131973427efbdca73",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: \"Use this agent when the user asks for UI/UX design feedback, wants to improve the visual design of components, needs help with Tailwind CSS styling decisions, or requests a design review of their frontend code. This agent has internalized principles from Practical UI and Refactoring UI.\\\\n\\\\nExamples:\\\\n\\\\n- user: \\\"This card component looks off, can you help me improve it?\\\"\\\\n  assistant: \\\"Let me use the ui-design-reviewer agent to analyze the component and suggest improvements based on proven UI design principles.\\\"\\\\n\\\\n- user: \\\"Review the styling on the new dealer page\\\"\\\\n  assistant: \\\"I'll launch the ui-design-reviewer agent to review the dealer page's visual design and suggest refinements.\\\"\\\\n\\\\n- user: \\\"I'm building a new pricing table component\\\"\\\\n  assistant: \\\"Now that the component structure is in place, let me use the ui-design-reviewer agent to ensure the visual design follows best practices.\\\"\\\\n\\\\n- user: \\\"The homepage hero section feels bland\\\"\\\\n  assistant: \\\"I'll use the ui-design-reviewer agent to diagnose the visual issues and recommend concrete improvements.\\\"\"",
+        "model: opus",
+        "memory: user"
+      ]
+    },
+    {
+      "target": "agents/ux-ai-framework-advisor.md",
+      "source": "kit/agents/ux-ai-framework-advisor.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "9363e39a5d4fa97e86619ae2238e57086867f2c6b7d2ab5be14156bdb1de67a5",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: \"Use this agent when the user asks about UX design for AI products, AI-driven product design patterns, human-AI interaction frameworks, or needs guidance on designing user experiences around AI features. This includes questions about AI product design principles, conversational UI patterns, trust calibration, error handling in AI systems, progressive disclosure of AI capabilities, and user mental models for AI. Examples:\\\\n\\\\n- user: \\\"How should I design the onboarding flow for our AI feature?\\\"\\\\n  assistant: \\\"Let me use the UX AI framework advisor agent to provide research-backed guidance on AI onboarding design.\\\"\\\\n\\\\n- user: \\\"What's the best way to handle AI confidence levels in the UI?\\\"\\\\n  assistant: \\\"I'll use the UX AI framework advisor agent to recommend patterns for displaying AI confidence and uncertainty.\\\"\\\\n\\\\n- user: \\\"How do I build user trust in our AI recommendations?\\\"\\\\n  assistant: \\\"Let me consult the UX AI framework advisor agent for trust calibration frameworks and transparency patterns.\\\"\\\\n\\\\n- user: \\\"Should we show users how the AI made its decision?\\\"\\\\n  assistant: \\\"I'll use the UX AI framework advisor agent to advise on explainability and transparency design patterns.\\\"\\\\n\\\\n- user: \\\"I'm designing an AI chatbot interface, what are the best practices?\\\"\\\\n  assistant: \\\"Let me use the UX AI framework advisor agent to provide conversational AI design guidance.\\\"\"",
+        "model: opus",
+        "memory: user"
+      ]
+    },
+    {
+      "target": "agents/wiring-check.md",
+      "source": "kit/agents/wiring-check.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "59f623a94eb080a6ae634ac6b81db424c9f47ccb3e8fea273783aa31dbfb8597",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: \"Use this agent when a feature implementation is complete and you need to verify all connections between views, components, composables, routes, API endpoints, models, and nav state are properly wired. Also use when something 'should work but doesn't', when a feature was built but seems disconnected, when nav items don't unlock, when data doesn't appear where expected, when asked to 'check the wiring' or 'trace the connection', after any change to models/stores/Sidebar, after any new route or API endpoint is added, or before any demo or deploy.\\n\\nExamples:\\n\\n<example>\\nContext: The user just finished implementing a TfVars feature that added a new model field, a new API endpoint, a new component, and should gate the Plan step in the nav.\\nuser: \\\"I just finished implementing the TfVars panel. Let me know if everything looks good.\\\"\\nassistant: \\\"The implementation looks good. Now let me run the wiring-check agent to verify all the connections are properly wired \u2014 model fields are read/written correctly, the API endpoint is called from the frontend, and the nav locking reflects the new tfvarsComplete condition.\\\"\\n<commentary>\\nSince a multi-file feature was just implemented touching models, controllers, components, and potentially nav state, use the Task tool to launch the wiring-check agent to trace every connection end-to-end.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: The user reports that a button click doesn't seem to do anything \u2014 the API call succeeds but the UI doesn't update.\\nuser: \\\"I click Save on the promote step and nothing happens. The network tab shows a 200 but the UI doesn't change.\\\"\\nassistant: \\\"That sounds like a wiring issue \u2014 likely a disconnected emit or a stale store cache. Let me launch the wiring-check agent to trace the connection from the Save button through the emit, API call, Pinia store state, and back to the UI.\\\"\\n<commentary>\\nSince the user is describing a symptom of a broken connection (action succeeds but UI doesn't reflect it), use the Task tool to launch the wiring-check agent to diagnose the break in the data flow chain.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: The assistant just finished building a new feature with a new route, helper, model changes, and Vue components.\\nassistant: \\\"I've finished implementing the drift detection feature. Here's what I built: [summary of changes across 8 files]\\\"\\n<commentary>\\nSince a significant multi-file feature was just implemented that touches models, routes, helpers, Pinia stores, views, and potentially nav state, proactively use the Task tool to launch the wiring-check agent before marking the task complete. This catches disconnected pipes before the user discovers them.\\n</commentary>\\nassistant: \\\"Now let me run the wiring-check agent to verify all connections are properly wired before we call this done.\\\"\\n</example>\\n\\n<example>\\nContext: The user is about to demo or deploy and wants confidence that everything is connected.\\nuser: \\\"We're demoing this tomorrow. Can you check the wiring on the whole onboarding feature?\\\"\\nassistant: \\\"Absolutely. Let me launch the wiring-check agent to trace every connection \u2014 model fields, API endpoints, Pinia store state, route registration, sidebar nav entries, and cross-view dependencies.\\\"\\n<commentary>\\nSince the user explicitly asked to check the wiring before a demo, use the Task tool to launch the wiring-check agent for a comprehensive audit.\\n</commentary>\\n</example>\"",
+        "model: opus",
+        "memory: project"
+      ]
+    },
+    {
+      "target": "commands/aws-arch-review.md",
+      "source": "kit/commands/aws-arch-review.md",
+      "codexInstaller": false,
+      "kind": "commands",
+      "sha256": "2dc900371ccbac1cffd022ed3e44f1947e63d6b0213e46e68aba5752cae25068",
+      "classification": "provider-neutral advisory command; Codex alias missing",
+      "toolEvidence": []
+    },
+    {
+      "target": "commands/founding-sales.md",
+      "source": "kit/commands/founding-sales.md",
+      "codexInstaller": false,
+      "kind": "commands",
+      "sha256": "cca8c5b5f4ae80820762128a309680c584b94d4cdbefa11cf8d934edae630d5b",
+      "classification": "provider-neutral advisory command; Codex alias missing",
+      "toolEvidence": []
+    },
+    {
+      "target": "agents/architect.md",
+      "source": "graphs/blueprint/agents/architect.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "4026883a6c16240c297d1f3a531e1645aef0f92882c12765a601cdeb4334029f",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Designs an app or a feature from the /blueprint interview - modules with their responsibilities, two shapes for every new boundary, failure modes, ADRs, departures from the default stack, and the draft knowledge map - honoring every decision the human made. Read-only; it never edits files.",
+        "model: sonnet",
+        "tools: Read, Grep, Glob, Bash",
+        "skills:"
+      ]
+    },
+    {
+      "target": "agents/extractor.md",
+      "source": "graphs/blueprint/agents/extractor.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "e6f1545b53669ae2427a110818ab327f16e234652a898e8c1fc866b3485b9670",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Turns a design document, an architecture, a feature request, or a bare idea (plus the existing repo, when there is one) into a structured brief - numbered requirements with their source, decisions already made, gaps, and contradictions. Every claim about a document or the code cites file:line. Read-only; it never edits files.",
+        "model: sonnet",
+        "tools: Read, Grep, Glob, Bash"
+      ]
+    },
+    {
+      "target": "agents/questioner.md",
+      "source": "graphs/blueprint/agents/questioner.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "8dcafca223abf9e6f11df1203cad9c9e1ab4771c8755e30f87c3763326cb9a09",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Turns a brief into the interview for the human - only the decisions that are expensive to change later, ranked, each with options and a recommendation - plus everything a human must supply before an unattended build (keys, accounts, paid services) and the assumptions everything else will run on. Read-only; it never edits files.",
+        "model: sonnet",
+        "tools: Read, Grep, Glob, Bash",
+        "skills:"
+      ]
+    },
+    {
+      "target": "agents/slicer.md",
+      "source": "graphs/blueprint/agents/slicer.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "24207c80e91343637d4c0812b9fd8f92334b4e14bf244f3782b2d41aedfcd674",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Cuts an approved /blueprint design into the backlog - ordered slices that /dev can each build unattended in one run, with pass/fail acceptance criteria, earlier-only dependencies, and the slice that builds each knowledge owner - honoring every decision the human made. Read-only; it never edits files.",
+        "model: sonnet",
+        "tools: Read, Grep, Glob, Bash",
+        "skills:"
+      ]
+    },
+    {
+      "target": "workflows/blueprint-design.js",
+      "source": "graphs/blueprint/workflows/blueprint-design.js",
+      "codexInstaller": false,
+      "kind": "workflows",
+      "sha256": "27d2341e13104d69a8f6a00a52c26b4b62d1812ce498fa7f92f8ee35896bd886",
+      "classification": "workflow asset; see workflows",
+      "toolEvidence": []
+    },
+    {
+      "target": "agents/acceptance-auditor.md",
+      "source": "graphs/dev/agents/acceptance-auditor.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "c4c77e49a588bdc6ffdcff45110cd6949ac4b20f33d649add86fb41292cb295c",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Checks a built branch against its plan - for each acceptance criterion, finds the test that asserts it and confirms the test passes - and lists behavior changes the code makes that the plan never listed. Reports MET or UNMET per criterion with file:line evidence. Does not edit files.",
+        "model: sonnet",
+        "tools: Read, Grep, Glob, Bash"
+      ]
+    },
+    {
+      "target": "agents/implementer.md",
+      "source": "graphs/dev/agents/implementer.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "4dd144ccc13f52005216a9a6e9ec2f4927df42801e45977421076969ad5843e0",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Builds one planned component, tests first - writes the tests that prove its acceptance criteria, makes them pass with the smallest real change, runs verification, and reports what it changed with every claim backed by a command it ran. Never commits.",
+        "model: sonnet",
+        "tools: Read, Edit, Write, Grep, Glob, Bash"
+      ]
+    },
+    {
+      "target": "agents/planner.md",
+      "source": "graphs/dev/agents/planner.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "0ac9866ee2fc7238039e6f67031656c8a028abac97230835d9eb3654fc39e4aa",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Turns a development task into an executable plan - numbered pass/fail acceptance criteria and components in build order - after reading the code the task touches. Every claim about the codebase cites file:line. Read-only; it never edits files.",
+        "model: sonnet",
+        "tools: Read, Grep, Glob, Bash",
+        "skills:"
+      ]
+    },
+    {
+      "target": "agents/scout.md",
+      "source": "graphs/dev/agents/scout.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "861ca9242bc487081c46a7092505d4bc9f5190ea8198c682d9f0493ebd25c3ac",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Researches one planned component before it is built - existing code to reuse, behavior that must be preserved, interfaces to consume, edge cases, and the repo's test patterns - and returns a brief with file:line evidence. Read-only; it never edits files.",
+        "model: sonnet",
+        "tools: Read, Grep, Glob, Bash",
+        "skills:"
+      ]
+    },
+    {
+      "target": "workflows/dev-build.js",
+      "source": "graphs/dev/workflows/dev-build.js",
+      "codexInstaller": false,
+      "kind": "workflows",
+      "sha256": "2ecd380fe46dd4372c935beaf3e7165a184dbfc019891fc0e9223f5b7fc7af64",
+      "classification": "workflow asset; see workflows",
+      "toolEvidence": []
+    },
+    {
+      "target": "agents/fix-verifier.md",
+      "source": "graphs/hunt/agents/fix-verifier.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "5c0ffa07851e3377e66fe73cd9abb3b7185c6e5fd78ba0695b6073c8008e14f7",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Independent verifier for a /bughunt repair. Without the repairer's reasoning, checks that the uncommitted change in the fix worktree removes the finding's root cause, keeps callers and contracts intact, adds no unrelated change, and opens no new boundary failure - and writes up to five adversarial tests that a correct repair must pass, which evidence.mjs runs. Rejects counterfeit fixes. Never edits the worktree.",
+        "model: sonnet",
+        "tools: Read, Write, Grep, Glob, Bash"
+      ]
+    },
+    {
+      "target": "agents/hunter.md",
+      "source": "graphs/hunt/agents/hunter.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "5e403355b442ac1507893281a9f25c8d7a1160a186635a30c6b7e0b4bcd2df72",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Bug hunter for the /bughunt graph. Given one lens (logic, contract, concurrency, security, errors, or regression) and a pull request, finds real functional defects the change introduced through that lens - each with its trigger, the path that mishandles it, the observable wrong result, and evidence quoted from the code at file:line. Reports only what clears the bug-lenses bar; an empty list is a valid answer. Read-only; it never edits files or runs anything that changes state.",
+        "model: sonnet",
+        "tools: Read, Grep, Glob, Bash",
+        "skills:"
+      ]
+    },
+    {
+      "target": "agents/impact-mapper.md",
+      "source": "graphs/hunt/agents/impact-mapper.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "a5f29c60205457ccaf09cf861a9292378439ec0d24a78583674924c658a2d132",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: First node of the /bughunt graph. Reads a pull request's diff and the code around it, then maps what the change can affect - the changed symbols, their callers and downstream users, the data contracts and tests involved, the behavior the change must keep - and says which bug-hunting lenses are relevant and where each should look. Every claim cites file:line. Read-only; it never edits files or runs anything that changes state.",
+        "model: sonnet",
+        "tools: Read, Grep, Glob, Bash"
+      ]
+    },
+    {
+      "target": "agents/repairer.md",
+      "source": "graphs/hunt/agents/repairer.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "ca0a3a9962e1fa07bd224074ef25e751e1db7e52d48fc807ad902715b3d5f808",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Repairs one reproduced /bughunt finding in the isolated fix worktree - investigates the root cause first, then makes the smallest change that removes it, without touching the reproduction test, editing existing tests, refactoring, or changing a public interface the finding does not require. Never commits; evidence.mjs proves the repair (the reproduction passes with it, fails without it, and the suite is no worse) and commits only what it checked.",
+        "model: sonnet",
+        "tools: Read, Edit, Write, Grep, Glob, Bash"
+      ]
+    },
+    {
+      "target": "agents/reproducer.md",
+      "source": "graphs/hunt/agents/reproducer.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "8af9235066b5fc9b1e6b96a241997e1097ae59c334b4bc0e979447d316dd87be",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Writes the smallest automated test that reproduces one confirmed /bughunt finding - a new test file that fails at the head for the stated reason (its failure message carries the finding's marker) and will pass once the bug is fixed. Writes only under its own reproduction directory; the deterministic evidence.mjs runs the test at the head and the merge-base. Never edits the code under review.",
+        "model: sonnet",
+        "tools: Read, Write, Grep, Glob, Bash"
+      ]
+    },
+    {
+      "target": "agents/runner.md",
+      "source": "graphs/hunt/agents/runner.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "a20ee376e688d180c14572c6cfee72e88a5b5bb3488e9b531ccaee44e2dd1d9c",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Runs exactly one evidence.mjs command for the /bughunt graph and copies its full output verbatim, so the graph can gate on the script's own last line. Never runs anything else, never edits files, never interprets the result.",
+        "model: haiku",
+        "tools: Bash"
+      ]
+    },
+    {
+      "target": "agents/skeptic.md",
+      "source": "graphs/hunt/agents/skeptic.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "8ee8b79892076834bd39aa811bb40c0d5d588dad44bb7df8b22a53976c4cd736",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Adversarial verifier for the /bughunt graph. Gets one bug finding as a bare structured claim (never the hunter's reasoning), re-reads the code, and tries to disprove it - an unreachable path, a guard upstream, a misread callee, behavior that was already there before the change. Confirms only a finding with a concrete execution path that triggers the failure. Read-only; it never edits files or runs anything that changes state.",
+        "model: sonnet",
+        "tools: Read, Grep, Glob, Bash"
+      ]
+    },
+    {
+      "target": "workflows/bughunt-flow.js",
+      "source": "graphs/hunt/workflows/bughunt-flow.js",
+      "codexInstaller": false,
+      "kind": "workflows",
+      "sha256": "624dc9fefd75b0cb938bf2a713ba2dfbcf404cc7d0249430e46b5076f08b84db",
+      "classification": "workflow asset; see workflows",
+      "toolEvidence": []
+    },
+    {
+      "target": "agents/fixer.md",
+      "source": "graphs/qa/agents/fixer.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "1e21084ec3ac1fe4afee8b8cbe8b28057c2149cd38d9d20dd224660351ccbca1",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Implements fixes for findings reported by the checker or reviewer agents. Give it the finding (file:line, failure, suggested fix) and it makes the minimal change, re-runs verification, and reports the diff plus the VERIFY block.",
+        "model: sonnet",
+        "tools: Read, Edit, Write, Grep, Glob, Bash"
+      ]
+    },
+    {
+      "target": "agents/qa-auditor.md",
+      "source": "graphs/qa/agents/qa-auditor.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "1ba1f22d5c728db7cae0c643b279e4b0038891921b73ad95aefcb7c9ce583356",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Behavioral QA audit of a branch or a set of changed files. Traces data flows end to end, enumerates states and failure modes, and checks authorization, input validation, and integration seams across files. Reports only defects it can point to at file:line, with severity. Runs after the reviewer has passed the diff for line-level bugs. Read-only; it never edits files or runs anything that changes state.",
+        "model: sonnet",
+        "tools: Read, Grep, Glob, Bash"
+      ]
+    },
+    {
+      "target": "agents/reviewer.md",
+      "source": "graphs/qa/agents/reviewer.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "5858f4cbc9969d91215b87a0af60131d70a3bfeaf9e960e768debee6a85c28b4",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Code review. Reviews the current diff (or a named set of files) for bugs, security issues, and IaC misconfiguration and reports only real findings with severity and file:line. Read-only; it never edits files or runs anything that changes state. For judgment calls and stuck loops, use the advisor agent.",
+        "model: sonnet",
+        "tools: Read, Grep, Glob, Bash",
+        "skills:"
+      ]
+    },
+    {
+      "target": "workflows/harness-repair.js",
+      "source": "graphs/qa/workflows/harness-repair.js",
+      "codexInstaller": false,
+      "kind": "workflows",
+      "sha256": "696413de1aadeb9c1dc550f490259854346ca33d3d602dc2105e0325f77423be",
+      "classification": "workflow asset; see workflows",
+      "toolEvidence": []
+    },
+    {
+      "target": "agents/deploy-watcher.md",
+      "source": "graphs/release/agents/deploy-watcher.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "71abc8c177b5a2517eae08ccb62477c800c3e6df8fcca592f0a2bc14226e9695",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: After a merge, takes one snapshot of every deploy target in the repo's deploy configuration - evidence that the merge commit itself deployed (a workflow run for that commit, or a status command that prints it) and a health check - and reports each target's evidence and health with the command and output behind it. Read-only; it never deploys, reverts, or restarts anything.",
+        "model: sonnet",
+        "tools: Read, Grep, Glob, Bash"
+      ]
+    },
+    {
+      "target": "agents/merger.md",
+      "source": "graphs/release/agents/merger.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "8927385711175289eac4369d87cdbfc0b7a9231365e86e757c47e361ac4bb034",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Merges one approved pull request at one exact head commit with the repository's merge method, at most once, then reads the real state back from GitHub and reports MERGED, NOT_MERGED, or UNKNOWN with the merge commit. Never retries, never bypasses branch protection, never force-pushes.",
+        "model: sonnet",
+        "tools: Bash"
+      ]
+    },
+    {
+      "target": "agents/release-checker.md",
+      "source": "graphs/release/agents/release-checker.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "0a86bc6595c35278d69849ddddbaf02147b2c86dd2a997d1122a82e65a5d22ea",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Reads a pull request's release readiness from GitHub - state, head and base, GitHub's merge gate (mergeStateStatus, reviewDecision), and every check run on the exact head commit - plus the repo's deploy configuration, or a proposal for one when it is missing. Read-only; it never edits, comments, merges, or pushes.",
+        "model: haiku",
+        "tools: Read, Grep, Glob, Bash"
+      ]
+    },
+    {
+      "target": "agents/scribe.md",
+      "source": "graphs/release/agents/scribe.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "88079f8db8a1b5abe591973d80fd6def8edb67fe861ac95387c5dfeb7c2730bb",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Updates a pull request's release documentation in the repo's own existing conventions - dated changelog or CHANGELOG.md, retro, lessons, architecture docs, and README sections the diff makes wrong - with real numbers only, and drafts release notes for people outside the repo. Never creates a convention the repo does not have. Never commits.",
+        "model: sonnet",
+        "tools: Read, Edit, Write, Grep, Glob, Bash"
+      ]
+    },
+    {
+      "target": "workflows/release-flow.js",
+      "source": "graphs/release/workflows/release-flow.js",
+      "codexInstaller": false,
+      "kind": "workflows",
+      "sha256": "29b9529eb7657ab31c82bb8ddd68987997a963d20550f925ccf14bce3f480593",
+      "classification": "workflow asset; see workflows",
+      "toolEvidence": []
+    },
+    {
+      "target": "agents/audit-analyst.md",
+      "source": "graphs/security-audit/agents/audit-analyst.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "09ab87f989be85c09bd0c169fc243b4702db6b315ea0e43db3af299a5fffae0b",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Read-only analyst for the security-audit graph. As a hunter it reviews the coverage units it is assigned in a source snapshot and reports each unit's disposition with the paths it read and the checks it made, plus any candidate finding; as a verifier it re-derives one candidate from the source without seeing anyone else's conclusion. It never edits files or runs anything, and it returns only the schema object it is asked for.",
+        "model: sonnet",
+        "tools: Read, Grep, Glob"
+      ]
+    },
+    {
+      "target": "agents/audit-researcher.md",
+      "source": "graphs/security-audit/agents/audit-researcher.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "f1536be2d15ed9b446ea4fca98d007c0b7a126ac16c3f6072b2a60f6cb137d2f",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Read-only researcher for the security-audit graph. Reads one source snapshot and returns structured facts, each with a repository-relative file:line reference (reconnaissance), or tests one given claim against the source (coverage critique, record verification). It never edits files, runs anything, or writes the run's shared files, and it returns only the schema object it is asked for.",
+        "model: sonnet",
+        "tools: Read, Grep, Glob"
+      ]
+    },
+    {
+      "target": "agents/audit-synthesizer.md",
+      "source": "graphs/security-audit/agents/audit-synthesizer.md",
+      "codexInstaller": false,
+      "kind": "agents",
+      "sha256": "f238e0b1e8bcb564dec398e463496653f8ddd95ccd6a4eea271452e0efae118a",
+      "classification": "shared role definition; Claude frontmatter not native registration",
+      "toolEvidence": [
+        "description: Read-only synthesizer for the security-audit graph. Turns checked reconnaissance facts into the architecture summary and the coverage units the run will hunt, and turns accepted coverage gaps into units with source-derived canonical references. It has no say over any finding or verdict, never edits files or runs anything, and returns only the schema object it is asked for.",
+        "model: sonnet",
+        "tools: Read, Grep, Glob"
+      ]
+    },
+    {
+      "target": "workflows/security-audit-flow.js",
+      "source": "graphs/security-audit/workflows/security-audit-flow.js",
+      "codexInstaller": false,
+      "kind": "workflows",
+      "sha256": "f83182962b33c2bc99ed8ffaf4d897de87c7805f3d1635bb4578a0fd2636c196",
+      "classification": "workflow asset; see workflows",
+      "toolEvidence": []
+    }
+  ],
+  "fixedInstallerTargets": [
+    {
+      "target": "settings.json",
+      "source": "settings.json",
+      "classification": "Claude global configuration/instructions; native equivalents not installed"
+    },
+    {
+      "target": "CLAUDE.md",
+      "source": "CLAUDE.md",
+      "classification": "Claude global configuration/instructions; native equivalents not installed"
+    },
+    {
+      "target": "loop.md",
+      "source": "loop.md",
+      "classification": "Claude global configuration/instructions; native equivalents not installed"
+    },
+    {
+      "target": "local-bin/autobuild",
+      "source": "graphs/autobuild/tool/bin/autobuild",
+      "classification": "dual-backend CLI; intentionally not PATH-linked by --codex mode"
+    }
+  ],
+  "installerTargets": [
+    {
+      "target": "skills/backlog",
+      "source": "core/skills/backlog",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/bug-lenses",
+      "source": "core/skills/bug-lenses",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/decisions",
+      "source": "core/skills/decisions",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/default-stack",
+      "source": "core/skills/default-stack",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/findings",
+      "source": "core/skills/findings",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/gtm-brief",
+      "source": "core/skills/gtm-brief",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/harness-review",
+      "source": "core/skills/harness-review",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/knowledge-map",
+      "source": "core/skills/knowledge-map",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/run-records",
+      "source": "core/skills/run-records",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/verify",
+      "source": "core/skills/verify",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/workflow-state",
+      "source": "core/skills/workflow-state",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "agents/advisor.md",
+      "source": "core/agents/advisor.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/checker.md",
+      "source": "core/agents/checker.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "bin/statusline.sh",
+      "source": "core/bin/statusline.sh",
+      "codexInstaller": false,
+      "kind": "bin"
+    },
+    {
+      "target": "skills/build-bot-integration",
+      "source": "kit/skills/build-bot-integration",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/build-scraper",
+      "source": "kit/skills/build-scraper",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/clean-gone",
+      "source": "kit/skills/clean-gone",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/commit",
+      "source": "kit/skills/commit",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/copywriting",
+      "source": "kit/skills/copywriting",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/deep",
+      "source": "kit/skills/deep",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/deep-fix",
+      "source": "kit/skills/deep-fix",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/dockerize",
+      "source": "kit/skills/dockerize",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/dry",
+      "source": "kit/skills/dry",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/error-audit",
+      "source": "kit/skills/error-audit",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/fix-scraper",
+      "source": "kit/skills/fix-scraper",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/frontend-design",
+      "source": "kit/skills/frontend-design",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/init-agents",
+      "source": "kit/skills/init-agents",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/init-ci",
+      "source": "kit/skills/init-ci",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/init-claude",
+      "source": "kit/skills/init-claude",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/init-env",
+      "source": "kit/skills/init-env",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/init-monorepo",
+      "source": "kit/skills/init-monorepo",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/init-tasks",
+      "source": "kit/skills/init-tasks",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/init-tests",
+      "source": "kit/skills/init-tests",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/logging",
+      "source": "kit/skills/logging",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/release",
+      "source": "kit/skills/release",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/render",
+      "source": "kit/skills/render",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/scaffold-app",
+      "source": "kit/skills/scaffold-app",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/security",
+      "source": "kit/skills/security",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/seo",
+      "source": "kit/skills/seo",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/vendor-lens",
+      "source": "kit/skills/vendor-lens",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "agents/agentic-ux-reviewer.md",
+      "source": "kit/agents/agentic-ux-reviewer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/cloudfront-invalidator.md",
+      "source": "kit/agents/cloudfront-invalidator.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/design-lead.md",
+      "source": "kit/agents/design-lead.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/google-ads-strategist.md",
+      "source": "kit/agents/google-ads-strategist.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/icp-review.md",
+      "source": "kit/agents/icp-review.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/qa-engineer.md",
+      "source": "kit/agents/qa-engineer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/terraform-staff-engineer.md",
+      "source": "kit/agents/terraform-staff-engineer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/ui-design-reviewer.md",
+      "source": "kit/agents/ui-design-reviewer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/ux-ai-framework-advisor.md",
+      "source": "kit/agents/ux-ai-framework-advisor.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/wiring-check.md",
+      "source": "kit/agents/wiring-check.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "commands/aws-arch-review.md",
+      "source": "kit/commands/aws-arch-review.md",
+      "codexInstaller": false,
+      "kind": "commands"
+    },
+    {
+      "target": "commands/founding-sales.md",
+      "source": "kit/commands/founding-sales.md",
+      "codexInstaller": false,
+      "kind": "commands"
+    },
+    {
+      "target": "skills/autobuild",
+      "source": "graphs/autobuild/skills/autobuild",
+      "codexInstaller": true,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/blueprint",
+      "source": "graphs/blueprint/skills/blueprint",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "agents/architect.md",
+      "source": "graphs/blueprint/agents/architect.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/extractor.md",
+      "source": "graphs/blueprint/agents/extractor.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/questioner.md",
+      "source": "graphs/blueprint/agents/questioner.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/slicer.md",
+      "source": "graphs/blueprint/agents/slicer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/blueprint-design.js",
+      "source": "graphs/blueprint/workflows/blueprint-design.js",
+      "codexInstaller": false,
+      "kind": "workflows"
+    },
+    {
+      "target": "skills/build-app",
+      "source": "graphs/build/skills/build-app",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/dev",
+      "source": "graphs/dev/skills/dev",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "agents/acceptance-auditor.md",
+      "source": "graphs/dev/agents/acceptance-auditor.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/implementer.md",
+      "source": "graphs/dev/agents/implementer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/planner.md",
+      "source": "graphs/dev/agents/planner.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/scout.md",
+      "source": "graphs/dev/agents/scout.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/dev-build.js",
+      "source": "graphs/dev/workflows/dev-build.js",
+      "codexInstaller": false,
+      "kind": "workflows"
+    },
+    {
+      "target": "skills/bughunt",
+      "source": "graphs/hunt/skills/bughunt",
+      "codexInstaller": true,
+      "kind": "skills"
+    },
+    {
+      "target": "agents/fix-verifier.md",
+      "source": "graphs/hunt/agents/fix-verifier.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/hunter.md",
+      "source": "graphs/hunt/agents/hunter.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/impact-mapper.md",
+      "source": "graphs/hunt/agents/impact-mapper.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/repairer.md",
+      "source": "graphs/hunt/agents/repairer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/reproducer.md",
+      "source": "graphs/hunt/agents/reproducer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/runner.md",
+      "source": "graphs/hunt/agents/runner.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/skeptic.md",
+      "source": "graphs/hunt/agents/skeptic.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/bughunt-flow.js",
+      "source": "graphs/hunt/workflows/bughunt-flow.js",
+      "codexInstaller": false,
+      "kind": "workflows"
+    },
+    {
+      "target": "agents/fixer.md",
+      "source": "graphs/qa/agents/fixer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/qa-auditor.md",
+      "source": "graphs/qa/agents/qa-auditor.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/reviewer.md",
+      "source": "graphs/qa/agents/reviewer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/harness-repair.js",
+      "source": "graphs/qa/workflows/harness-repair.js",
+      "codexInstaller": false,
+      "kind": "workflows"
+    },
+    {
+      "target": "skills/release-pr",
+      "source": "graphs/release/skills/release-pr",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "agents/deploy-watcher.md",
+      "source": "graphs/release/agents/deploy-watcher.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/merger.md",
+      "source": "graphs/release/agents/merger.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/release-checker.md",
+      "source": "graphs/release/agents/release-checker.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/scribe.md",
+      "source": "graphs/release/agents/scribe.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/release-flow.js",
+      "source": "graphs/release/workflows/release-flow.js",
+      "codexInstaller": false,
+      "kind": "workflows"
+    },
+    {
+      "target": "skills/security-audit",
+      "source": "graphs/security-audit/skills/security-audit",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "agents/audit-analyst.md",
+      "source": "graphs/security-audit/agents/audit-analyst.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/audit-researcher.md",
+      "source": "graphs/security-audit/agents/audit-researcher.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/audit-synthesizer.md",
+      "source": "graphs/security-audit/agents/audit-synthesizer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/security-audit-flow.js",
+      "source": "graphs/security-audit/workflows/security-audit-flow.js",
+      "codexInstaller": false,
+      "kind": "workflows"
+    },
+    {
+      "target": "skills/seo-check",
+      "source": "graphs/seo/skills/seo-check",
+      "codexInstaller": false,
+      "kind": "skills"
+    }
+  ],
+  "exclusions": [
+    "Vendored Cloudflare SKILL.md is upstream dependency, not separate installer-visible offering",
+    "Internal tests/toy agents are evidence fixtures, not installed offerings"
+  ],
+  "globalGaps": [
+    "Native graph runtime for security first, then blueprint/dev/QA/release; build-app launcher depends on native dev/QA",
+    "Installer native discoverability does not establish execution parity",
+    "Shared native model/effort/tools/environment mapping, authorization, lifecycle/cancel/checkpoint/error/result schema parity required",
+    "Every stage/gate/recovery/report needs actual native adapter acceptance; no skipped or invented equivalent gate",
+    "Reference-only skills need accessible content/helper paths, not fabricated agent workflows"
+  ],
+  "counts": {
+    "installerSkillEntries": 45,
+    "workflows": 6,
+    "otherDirectoryAssets": 46,
+    "fixedTargets": 4,
+    "codexSkillAllowlist": 2
+  }
+}

@@ -1,8 +1,8 @@
 {
   "backend": "codex",
   "branch": "codex/phase2-decisions",
-  "featuresFile": "features.json",
-  "progressFile": "PROGRESS.md",
+  "featuresFile": "features-security-audit.json",
+  "progressFile": "PROGRESS-security-audit.md",
   "model": "gpt-6-astra",
   "subagentModel": "gpt-6.1-sol",
   "probeModel": "gpt-6-luna",
@@ -12,9 +12,9 @@
     "sessionTimeoutMinutes": 30
   },
   "bughunt": true,
-  "bughuntBase": "518f8ef208fdf1ba9a6ac1facf236fd2015f4564",
+  "bughuntBase": "364cb2b7c29f245df053c66ba6a37161dfa131ad",
   "limits": {
-    "maxIterations": 16,
+    "maxIterations": 1,
     "noProgressLimit": 2,
     "reviewEvery": 4,
     "finalReview": true,
@@ -52,6 +52,10 @@
     {
       "name": "Hunt capture descendant acceptance",
       "command": "node --test acceptance/harness/capture-descendant.test.mjs"
+    },
+    {
+      "name": "Accepted Phase 2 regression acceptance",
+      "command": "node --test acceptance/phase2/p2-01.test.mjs acceptance/phase2/p2-02.test.mjs acceptance/phase2/p2-03.test.mjs acceptance/phase2/p2-04.test.mjs acceptance/phase2/p2-05.test.mjs acceptance/phase2/p2-06.test.mjs acceptance/phase2/p2-07.test.mjs acceptance/phase2/p2-08.test.mjs acceptance/phase2/p2-09.test.mjs acceptance/phase2/p2-10.test.mjs acceptance/phase2/p2-11.test.mjs acceptance/phase2/p2-12.test.mjs acceptance/phase2/p2-13.test.mjs acceptance/phase2/p2-14.test.mjs"
     }
   ],
   "preflight": [
@@ -322,11 +326,16 @@
     "acceptance/phase2/p2-16.test.mjs",
     "acceptance/phase2/p2-16-original.cases.mjs",
     "acceptance/phase2/p2-16-source.cases.mjs",
-    "spec/contracts/phase2-suite-object-format.md"
+    "spec/contracts/phase2-suite-object-format.md",
+    "spec/contracts/security-audit-priority.md",
+    "spec/contracts/security-audit-snapshot.md",
+    "docs/dogfood/phase2-paused-2026-11-10",
+    "docs/roadmap/security-audit-priority.md"
   ],
   "writable": [
     "PROGRESS.md",
-    "DECISIONS.md"
+    "DECISIONS.md",
+    "PROGRESS-security-audit.md"
   ],
   "env": {
     "pathPrepend": [],
@@ -335,8 +344,10 @@
       "CI": "1"
     }
   },
-  "prompt": "Read SPEC.md, spec/contracts/phase2.md, features.json and PROGRESS.md. Implement only the host-selected failing feature. Preserve all frozen inputs and prior phase behavior. New tests under tests/ use scripts/workflow-harness.mjs test() and aggregate summary for focused runs; acceptance/phase2 uses node:test. Add a ## <feature ID> \u2014 <title> progress entry with exact focused validation. Do not stage, commit, change pass flags, push or open PRs. The external host owns full gates, commits and final review. Run selected acceptance and focused implementation checks only; do not run full scripts/test.sh or test-workflow inside the sandbox. Return promptly with evidence. No provider fallback or live provider calls inside the builder. Before returning, run the existing secret scanner on tracked files and explicitly on each new untracked source/test file; the tracked scan alone does not include new implementation files. Keep scanner rules unchanged; use its documented annotation only for clearly synthetic fixtures.",
+  "prompt": "Read SPEC.md, spec/contracts/security-audit-priority.md, features-security-audit.json and the selected feature contract. Implement only the host-selected security-audit priority feature. The broader roadmap is paused. Preserve every prior acceptance, baseline test, vendor, validator and schema. No target application changes, target execution, live providers, fallback providers or blocked reproductions. Add meaningful implementation tests using scripts/workflow-harness.mjs conventions. Run selected acceptance and focused tests only; external host owns full gates, flags, staging, commits and final review. Add a ## <feature ID> \u2014 <title> progress entry in PROGRESS-security-audit.md with exact evidence and limits. Before returning run the unchanged secret scanner on tracked files and explicitly on new untracked source/test files. Do not modify frozen files or pinned host.",
   "review": {
-    "prompt": "Review {since}..HEAD in two passes: contract completeness and correctness/security/concurrency/error handling. Read SPEC.md, phase contracts and prior findings. Review changed files in full and trace applicable callers/callees; do not infer coverage from prior prose. Run focused checks only; external host owns full gates. Never invoke bare autobuild. Do not retry, reconstruct, translate or reroute any previously blocked reproduction, including the nested-capture orphan/overflow reproduction and the filesystem-race reproduction. Do not use another tool, agent, provider, payload or later-phase fixture to perform the same blocked action. This execution restriction persists across phases; a new phase or passing unrelated test does not revoke it. Preserve the blocked status and the resulting evidence limitation. Do not waive evidence requirements, weaken or skip approved gates/tests, or claim the blocked scenario was reproduced or verified. Continue permitted static review, pure validation and separately reviewed benign tests within their explicit scope; if a requested check would recreate a blocked action, stop that check and report the limitation to the supervisor. No implied permission follows from roadmap completion instructions. Append REVIEW {date} findings or evidence-backed no-defects to PROGRESS.md only. No code/tests, commits, pass flags or provider calls. Return promptly."
-  }
+    "prompt": "Review {since}..HEAD in two passes: contract completeness and correctness/security/concurrency/error handling. Read SPEC.md, phase contracts and prior findings. Review changed files in full and trace applicable callers/callees; do not infer coverage from prior prose. Run focused checks only; external host owns full gates. Never invoke bare autobuild. Do not retry, reconstruct, translate or reroute any previously blocked reproduction, including the nested-capture orphan/overflow reproduction and the filesystem-race reproduction. Do not use another tool, agent, provider, payload or later-phase fixture to perform the same blocked action. This execution restriction persists across phases; a new phase or passing unrelated test does not revoke it. Preserve the blocked status and the resulting evidence limitation. Do not waive evidence requirements, weaken or skip approved gates/tests, or claim the blocked scenario was reproduced or verified. Continue permitted static review, pure validation and separately reviewed benign tests within their explicit scope; if a requested check would recreate a blocked action, stop that check and report the limitation to the supervisor. No implied permission follows from roadmap completion instructions. Append REVIEW {date} findings or evidence-backed no-defects to PROGRESS-security-audit.md only. No code/tests, commits, pass flags or provider calls. Return promptly."
+  },
+  "stateDir": ".harness/security-audit",
+  "logsDir": "logs/security-audit"
 }
