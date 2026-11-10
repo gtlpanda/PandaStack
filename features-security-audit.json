@@ -50,6 +50,23 @@
       "passes": true
     },
     {
+      "id": "SA-02a1",
+      "title": "Bind journal reads and bound stored payloads before allocation",
+      "description": "Correct reviewed J1/J2 only under the journal-read contract. Preserve journal API, owning lease, per-record and total limits, all existing tests and unknown-call accounting. No large database, capture, race or provider reproduction.",
+      "contract": "spec/contracts/security-audit-journal-read.md",
+      "dependencies": [
+        "SA-02a"
+      ],
+      "acceptance": [
+        "Three ordinary reader consistency cases pass; changed valid current identity refuses CONFLICT and exact restoration preserves receipts.",
+        "Independent static review verifies every variable-width stored row field is size-bounded and aggregate capacity checked before materialization; exact logical accounting remains afterward.",
+        "Existing journal and full host gates remain unchanged; tests do not claim hostile identity or filesystem-race protection."
+      ],
+      "test": "acceptance/security-audit/sa-02a1-journal-read.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
       "id": "NR-01",
       "title": "Preserve original workflow schemas through native JSON output",
       "description": "Implement only the pure shared native schema contract. Preserve all six graph schemas, vendored validators and existing hunt converter. No runtime, provider, filesystem or installer changes.",
@@ -64,6 +81,42 @@
         "Fixed strict JSON-string wire envelope decodes once and validates the original schema."
       ],
       "test": "acceptance/native-runtime/nr-01-schema.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "SA-02b",
+      "title": "Publish readable partial audit reports from durable checkpoints",
+      "description": "Implement partial context, renderer, content-addressed publisher and freshness reader in the existing report owner. Preserve final report behavior and all audit authority bytes; unavailable evidence remains unknown. This helper slice does not claim native callback control integration.",
+      "contract": "spec/contracts/security-audit-partial-reports.md",
+      "dependencies": [
+        "SA-02a1"
+      ],
+      "acceptance": [
+        "Eleven ordinary partial-report cases pass using owning fixtures and journal API.",
+        "Retain pending lead identities, distinguish raw transport results from validated dispositions, and bind every rendered input.",
+        "Publish immutable generations and pointer last; stale, invalid or unavailable evidence cannot be reported current.",
+        "Output failures preserve completed receipts and allow rendering-only recovery; actual no-new-dispatch gate is a later mandatory integration."
+      ],
+      "test": "acceptance/security-audit/sa-02b-partial-reports.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "NR-02",
+      "title": "Execute trusted workflows through bounded native callback ports",
+      "description": "Implement the pinned six-template registry and shared native executor only. Preserve graph logic, original schemas, provider uncertainty, nested concurrency, durable replay and independent permission profiles. Fake ports only; no provider, installer migration or existing native hunt/autobuild rewrite.",
+      "contract": "spec/contracts/native-runtime-executor.md",
+      "dependencies": [
+        "NR-01"
+      ],
+      "acceptance": [
+        "Nineteen frozen ordinary/pure cases exercise actual trusted QA, dev-child, release refusal and audit workflows.",
+        "Nested workflows share one concurrency cap without parent permit deadlock; call identities are stable and binding conflicts refuse replay.",
+        "Durable checkpoint or transport uncertainty escapes graph catches; deadlines and abort bound pending operations and prevent late dispatch.",
+        "Use original NR-01 schema validation, exact transport receipts, explicit profile refusal and no model/provider fallback."
+      ],
+      "test": "acceptance/native-runtime/nr-02-runtime.test.mjs",
       "testKind": "node",
       "passes": false
     }
