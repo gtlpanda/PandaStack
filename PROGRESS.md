@@ -1890,3 +1890,60 @@ and prior-phase preservation; no confirmed defect. Previously documented sandbox
 process limitations were not retried or waived. Process-based P2-06 acceptance,
 full gates and live smoke remain host-owned. Frozen inputs, feature pass flags,
 Git control, staging, commits and the pinned host remain untouched.
+
+## Two-pass Phase 2 review — 2026-11-10 (P2-05/P2-06)
+
+Reviewed 14b4237c64c21b4851dd7d45f8d3706faab080cb..
+3703f2ccb86056aee07b60a58ca152866ce9bac1. Read AGENTS.md, CLAUDE.md,
+SPEC.md, phase contracts, decision records and prior findings/blocked-check
+dispositions. Read changed implementation and test files in full, inspected the
+documentation and host-owned feature changes, and traced queue validation/storage,
+managed gate selection, both launch boundaries, tracking and test discovery.
+
+REVIEW 2026-11-10: DEFECT core/skills/decisions/observations.mjs:128 Failed close emission retains a falsely complete public snapshot — Reproduced in memory: with a valid outer ID, successfully emitted waiting/received events and an emit callback that throws only for trace_closed, close() returns complete:true and every close() replay retains true, although trace.complete is false and no closure was emitted. close caches complete() before publish; publish at :60 records the sink failure only in the separate incomplete flag. API consumers using the returned/replayed closure therefore receive a success claim contrary to P2-06's successful-emission requirement. Preserve swallowed sink errors and no duplicate emission, but make the returned/cached closure conservatively incomplete when its own emission fails; add a focused close-only sink-failure regression. The current managed loop ignores the return value, so this finding concerns the public trace API, not changed provider execution or a successfully emitted closure.
+
+Pass 1 — contract completeness:
+- P2-05 reserves dispatch under the existing write transaction before RPC;
+  exact owned target/recipient/revision and live-state checks precede dispatch.
+  The validated turn receipt and acknowledgment share one commit. Ordinary ack
+  cannot clear inflight uncertainty; identical native replay sends nothing.
+- P2-06 reaches both actual launch implementations, captures nested tracking IDs,
+  separates spawn from successful Codex stdin completion, excludes probes and
+  untargeted work, and closes ordinary outer exits in finally. Event inventories,
+  replay and null-attribution behavior are present. The close-failure finding
+  above is the identified completeness gap; no additional missing feature found.
+- Documentation retains owned-session/manual-handoff limits and separates
+  synthetic coverage from supervisor-owned live evidence. Actor text and scope
+  bookkeeping still provide no merge/publish/deploy authority.
+
+Pass 2 — correctness, security, concurrency and error handling:
+- Traced the optional stored dispatch validator through queue reads, cancellation,
+  reservation and completion; public queue shapes and prior states remain intact.
+  Existing private storage checks, bounded SQLite locking and rollback apply.
+  Focused checks cover competing worker connections, interruption, reopen/replay,
+  commit failure, malformed receipts, cancellation/expiry and corruption.
+- Both transport callbacks catch observational failures. The focused launch
+  mocks verify original provider outcomes, HEAD checks, actual child attribution,
+  distinct retries, zero receipts on failed spawn and incomplete uncertain writes.
+  Answer payloads remain escaped untrusted data; raw RPC errors are not retained.
+- Prior findings were not treated as coverage. The relevant tracking call chain
+  still preserves pathname bytes, rejects indeterminate discovery before storage,
+  and supplies fresh parent/child IDs. Claude launch settings and environment still
+  use sessionConfigEnv. Historical blocked reproductions were not rerun or waived.
+
+Exact focused verification:
+- `node --input-type=module -e "for (const name of ['codex-delivery','trace-close','transport-receipt','launch','managed','queue','routing','observations']) await import('./tests/decision-'+name+'.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; `{ pass: 61, fail: 0 }`. Provider launches were synthetic mocks;
+  worker connections are not separate-process acceptance or live-provider proof.
+- `node --input-type=module` with an inline, filesystem-free diagnostic imported
+  createDecisionTrace, successfully emitted startWait/finishWait, and threw only
+  from the trace_closed sink. Assertions verified the discrepancy and exit was 0:
+  `{"returnedComplete":true,"getterComplete":false,"replayComplete":true,"emittedEvents":["waiting","received"]}`.
+  This is reproduction evidence for the finding, not a passing correctness test.
+- `git diff --check`: exit 0 before the review append.
+
+Only PROGRESS.md was changed. No code/tests, provider calls, autobuild invocation,
+full gates, pass flags, staging, commits, branches, Git control or pinned-host
+changes. Previously blocked process/CLI/runner-entry and filesystem-race checks
+remain excluded. External host retains full gates, review disposition, live smoke
+and final completion.
