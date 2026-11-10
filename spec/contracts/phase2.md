@@ -303,3 +303,14 @@ hunt escalated when its nested-process reproduction was rejected by the native
 provider safety filter; that run is preserved, not a passing disposition. Do not
 retry that rejected reproduction. These two repairs concern separately permitted
 installed-path and benign Git-path checks, independently reviewed before freeze.
+
+## Cooperative capture ownership corrective freeze
+
+P2-11 follows phase2-capture-ownership.md: six pure validation cases and one
+ordinary immediate nested-success case. The host reviewed those exact checks;
+none recreates the rejected negative reproduction. Static reasoning and normal
+launch evidence must remain distinguished from untested failure containment.
+P2-09 fixture closure adds conditional copying of scope-record.mjs and optional
+capture-owner.sh only when those source files exist. The four original mandatory
+copies and every original assertion remain unchanged; missing actual imports
+or calls still fail. No acceptance criterion or existing gate is waived.

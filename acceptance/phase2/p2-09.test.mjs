@@ -17,6 +17,7 @@ function fixture(t,exit){
  const source=join(root,'source'),skills=join(root,'.claude','skills'),task=join(root,'task'),evidence=join(root,'evidence');
  fs.mkdirSync(source);fs.mkdirSync(skills,{recursive:true});fs.mkdirSync(join(task,'scripts'),{recursive:true});fs.mkdirSync(evidence,{mode:0o700});
  for(const n of ['verify.sh','retention.mjs','retention.sh','packages.mjs'])fs.copyFileSync(join(ROOT,'core/skills/verify',n),join(source,n));
+ for(const n of ['scope-record.mjs','capture-owner.sh']){const dependency=join(ROOT,'core/skills/verify',n);if(fs.existsSync(dependency))fs.copyFileSync(dependency,join(source,n));}
  const link=join(skills,'verify');fs.symlinkSync(source,link,'dir');
  fs.writeFileSync(join(task,'scripts/test.sh'),'#!/bin/sh\nprintf "ACTUAL_TASK_RAN\\n"\nprintf "ran\\n" > task-marker\nexit '+exit+'\n',{mode:0o700});
  const env={...process.env,VERIFY_EVIDENCE_DIR:evidence};for(const k of ['VERIFY_CAPTURE_SESSION','VERIFY_ALLOW_NO_TESTS'])delete env[k];

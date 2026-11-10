@@ -18,3 +18,10 @@ in graphs/hunt/skills/bughunt/evidence.mjs. Follow only the selected contract.
 Do not run or recreate the nested-process reproduction rejected during the
 2026-11-10 second native hunt. No safety-filter retries, alternate-provider
 rerouting or review-gate waivers are authorized.
+
+P2-11 may implement its frozen cooperative capture-ownership contract in
+core/skills/verify. Its six pure and one immediate ordinary-success acceptance
+cases have completed host review and are authorized to run. This does not
+authorize the blocked negative reproduction, alternate payloads recreating it,
+or claims of hostile containment. Keep all signal authority in local root-owned
+identities. The optional shared helper basename is capture-owner.sh.

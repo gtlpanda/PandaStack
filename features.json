@@ -152,6 +152,24 @@
       "test": "acceptance/phase2/p2-10.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "P2-11",
+      "title": "Keep cooperative nested verification in its owned capture group",
+      "description": "Implement spec/contracts/phase2-capture-ownership.md. Use only the frozen pure and ordinary-success acceptance plus previously permitted gates. Do not run or recreate the rejected nested-process negative reproduction. Preserve Node and no-Node paths, byte/receipt semantics, and root-local signal authority. No generic scheduler or broker.",
+      "contract": "spec/contracts/phase2-capture-ownership.md",
+      "dependencies": [
+        "P2-10"
+      ],
+      "acceptance": [
+        "Pass all six pure scope-record/join checks and the one ordinary immediate nested-success check.",
+        "Preserve all prior acceptance/gates, no-Node compatibility and bounded existing evidence semantics.",
+        "Root signal targets derive only from locally captured identity; nested captures never detach into separate groups.",
+        "Report untested runtime failure scenarios honestly; never claim the blocked reproduction was executed or waived."
+      ],
+      "test": "acceptance/phase2/p2-11.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
