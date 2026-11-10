@@ -766,3 +766,42 @@ Focused verification:
 Only PROGRESS.md was modified. No full suite, bare autobuild, provider call,
 exploit reproduction, blocked reproduction retry, code/test edit, staging,
 commit, push, branch change, git-control edit or feature-pass change was performed.
+
+## P1-11 implementation — 2026-11-10
+
+Doctor now anchors configured prefixes only for their existence checks and keeps
+the expanded prefix bytes when serializing PATH. Relative candidates are still
+anchored after splitting the actual PATH. This preserves discovery in colon-bearing
+repository roots without treating literal colons in PATH strings as escaped
+characters. Explicit binary paths retain literal colons. Launcher behavior and
+default provider nonexecution are unchanged. Decisions D35-D36 record scope and
+host ownership.
+
+Extended tests/run-path-parity.test.mjs with four workflow-harness groups for both
+backends and colon/whitespace repository names. Existing fixture logic compares
+actual loadConfig/buildEnv discovery against doctor from target and unrelated cwd,
+using inert files only. Cases cover relative/dot/absolute prefixes, whitespace
+prefixes, inherited/project PATH, empty/missing prefixes, missing literal-colon
+prefixes, actual colon delimiters, explicit relative/absolute binary paths and
+caller environment/cwd preservation. Existing CI discovery includes these tests.
+
+Targeted verification:
+- Before implementation, `node acceptance/phase1/p1-11.test.mjs`: exit 1;
+  50 passed, 6 failed. Each failure reported `'fail' !== 'pass'` for a relative,
+  dot or literal-colon prefix in a colon-bearing repository (both backends).
+- Before implementation, the extended PATH test file via workflow-harness:
+  exit 1; 8 passed, 2 failed, both on the new colon-root relative-prefix case.
+- After implementation, `node acceptance/phase1/p1-11.test.mjs`: exit 0;
+  56 passed, 0 failed.
+- `node --input-type=module -e "await import('./tests/run-path-parity.test.mjs'); await import('./tests/run-launch-parity.test.mjs'); await import('./tests/run-edge-validation.test.mjs'); await import('./tests/run-doctor-trust.test.mjs'); await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; 29 passed, 0 failed.
+
+Changed doctor.mjs, extended focused tests, and updated DECISIONS.md/PROGRESS.md.
+No frozen inputs, full suites, provider execution, staging, commits, pass flags,
+branch changes or roadmap completion. Authoritative full gates, review disposition,
+live evidence and final completion remain with the external host.
+
+Read-only Explore sanity audit: PASS for data flow, edge/error handling, security,
+consistency and missing pieces; no concrete defects found in the scoped diff.
+This is static review only; execution evidence is the targeted verification above.
+Final `git diff --check`: exit 0 after documentation updates.

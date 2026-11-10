@@ -85,7 +85,9 @@ function effectivePath(config, env, pandaRoot, repo) {
   if (Object.hasOwn(vars, 'PATH')) return vars.PATH
   // The shared resolver has already expanded home prefixes. buildEnv omits
   // empty prefixes before search; an explicit PATH above retains empty entries.
-  const prepend = config.env.pathPrepend.filter(Boolean).map(p => fromRepo(repo, p)).filter(p => existsSync(p))
+  // Anchor only the existence check: serializing the repo would introduce new
+  // PATH delimiters when its pathname contains a colon.
+  const prepend = config.env.pathPrepend.filter(p => p && existsSync(fromRepo(repo, p)))
   const inherited = (env.PATH ?? '').split(delimiter).filter(Boolean)
   const kit = join(pandaRoot, 'graphs/autobuild/tool/bin')
   return [...prepend, ...(inherited.includes(kit) ? [] : [kit]), ...inherited].join(delimiter)

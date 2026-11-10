@@ -8,9 +8,9 @@ import { loadConfig } from '../graphs/autobuild/tool/lib/config.mjs'
 import { buildEnv } from '../graphs/autobuild/tool/lib/proc.mjs'
 import { inspectDoctor } from '../core/skills/run-records/doctor.mjs'
 
-async function fixture(backend, work) {
+async function fixture(backend, work, repoName = 'repo') {
   const root = mkdtempSync(join(tmpdir(), 'doctor search '))
-  const repo = join(root, 'repo'), outside = join(root, 'outside'), bins = join(root, 'bins')
+  const repo = join(root, repoName), outside = join(root, 'outside'), bins = join(root, 'bins')
   const cwd = process.cwd(), inherited = process.env.PATH
   for (const dir of [repo, outside, bins, join(repo, 'local'), join(root, 'external/child'), join(root, 'external/bin'), join(repo, 'bin')]) {
     mkdirSync(dir, { recursive: true })
@@ -55,6 +55,43 @@ async function fixture(backend, work) {
 }
 
 for (const backend of ['claude', 'codex']) {
+  for (const repoName of ['repo:part', 'repo with spaces']) {
+    await test(`${backend} doctor preserves PATH serialization in ${repoName}`, () => fixture(backend, async ({ repo, bins, binary, inspect }) => {
+      binary(join(repo, 'local'), 'local-provider')
+      binary(repo, 'root-provider')
+      for (const prefixes of [['local'], ['./local'], ['', 'missing', 'local']]) {
+        await inspect({ prefixes, bin: 'local-provider', expected: true })
+      }
+      await inspect({ prefixes: ['.'], bin: 'root-provider', expected: true })
+      await inspect({ prefixes: ['', 'missing'], bin: 'root-provider', expected: false })
+      await inspect({ path: 'local', bin: 'local-provider', expected: true })
+      await inspect({ override: 'local', bin: 'local-provider', expected: true })
+      await inspect({ prefixes: ['local'], override: 'missing', bin: 'local-provider', expected: false })
+      await inspect({ override: '', bin: 'root-provider', expected: true })
+      await inspect({ path: ':missing:', bin: 'root-provider', expected: false })
+
+      // Colons in actual PATH strings split entries; colons in an explicit
+      // executable pathname remain ordinary pathname bytes.
+      const absolute = join(repo, 'local'), expected = !repoName.includes(':')
+      await inspect({ prefixes: [absolute], bin: 'local-provider', expected })
+      await inspect({ path: absolute, bin: 'local-provider', expected })
+      await inspect({ override: absolute, bin: 'local-provider', expected })
+      for (const dir of ['left', 'left:right', 'with spaces']) mkdirSync(join(repo, dir))
+      binary(join(repo, 'left'), 'split-provider')
+      binary(join(repo, 'left:right'), 'literal-provider')
+      binary(join(repo, 'with spaces'), 'space-provider')
+      await inspect({ prefixes: ['left:right'], bin: 'split-provider', expected: true })
+      await inspect({ prefixes: ['left:right'], bin: 'literal-provider', expected: false })
+      await inspect({ prefixes: ['left:missing'], bin: 'split-provider', expected: false })
+      await inspect({ prefixes: ['with spaces'], bin: 'space-provider', expected: true })
+      for (const bin of ['local/local-provider', `${absolute}/local-provider`, 'left:right/literal-provider', `${repo}/left:right/literal-provider`]) {
+        await inspect({ override: 'missing', bin, expected: true })
+      }
+      binary(bins, 'external-provider')
+      await inspect({ prefixes: [bins], bin: 'external-provider', expected: true })
+    }, repoName))
+  }
+
   await test(`${backend} doctor preserves empty prefix and inherited/explicit PATH distinctions`, () => fixture(backend, async ({ repo, binary, inspect }) => {
     const bin = 'root-only-provider'
     binary(repo, bin)

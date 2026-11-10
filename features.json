@@ -169,7 +169,7 @@
       ],
       "test": "acceptance/phase1/p1-11.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     }
   ]
 }
