@@ -11,24 +11,49 @@ const context = new AsyncLocalStorage()
 export const currentRunId = () => context.getStore() ?? null
 const warn = () => { try { process.stderr.write('PandaStack: run tracking unavailable; execution continues.\n') } catch {} }
 function git(repo, ...args) {
-  return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 3000, maxBuffer: 8192 }).trim()
+  return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 3000, maxBuffer: 8192 })
+}
+function gitPath(repo, ...args) {
+  const output = git(repo, ...args)
+  // A pathname may itself end in LF, CR, tab or space. Only Git's final LF
+  // belongs to the protocol, and missing termination is indeterminate.
+  if (!output.endsWith('\n')) throw Error('Invalid Git path output')
+  return output.slice(0, -1)
 }
 function revision(repo) {
-  try { return git(repo, 'rev-parse', '--verify', 'HEAD') } catch { return null }
+  try { return git(repo, 'rev-parse', '--verify', 'HEAD').trim() } catch { return null }
+}
+
+function repositoryAbsent(directory, error) {
+  // Only the complete ordinary absence diagnostic permits fallback. Other
+  // failures may contain these words in a filename or additional diagnostics.
+  if (error.status !== 128 || String(error.stderr) !==
+    'fatal: not a git repository (or any of the parent directories): .git\n') return false
+  // Failed controlled discovery cannot prove absence. Successful discovery is
+  // still authoritative, and the caller's environment is never changed.
+  if (['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_CEILING_DIRECTORIES',
+    'GIT_DISCOVERY_ACROSS_FILESYSTEM'].some(key => process.env[key] !== undefined)) return false
+  for (let ancestor = directory; ; ancestor = dirname(ancestor)) {
+    try { lstatSync(join(ancestor, '.git')); return false }
+    catch (failure) { if (failure.code !== 'ENOENT') throw failure }
+    // lstat notices broken symlinks too; only absent entries all the way to
+    // the filesystem root allow the canonical supplied-directory fallback.
+    if (dirname(ancestor) === ancestor) return true
+  }
 }
 
 function placementRoot(directory) {
   let root
-  try { root = git(directory, 'rev-parse', '--show-toplevel') }
+  try { root = gitPath(directory, 'rev-parse', '--show-toplevel') }
   catch (error) {
     // Only a known non-Git directory gets the supplied-directory fallback.
     // Permission, timeout and invalid repository failures are indeterminate.
-    if (error.status === 128 && /not a git repository/.test(String(error.stderr))) {
+    if (repositoryAbsent(directory, error)) {
       return { root: directory, namespace: null }
     }
     throw error
   }
-  const owner = realpathSync(git(directory, 'rev-parse', '--absolute-git-dir'))
+  const owner = realpathSync(gitPath(directory, 'rev-parse', '--absolute-git-dir'))
   // Trust the metadata owner, never a caller-created namespace symlink target.
   return { root: realpathSync(root), namespace: join(owner, 'pandastack-runs') }
 }
@@ -59,7 +84,7 @@ function contains(root, candidate) {
 function managedStoreDirectory(options, repo, runnerRoot) {
   const roots = [placementRoot(repo), placementRoot(runnerRoot)]
   const selected = options.storeDir ?? process.env.PANDASTACK_RUNS_DIR ??
-    git(repo, 'rev-parse', '--path-format=absolute', '--git-path', 'pandastack-runs')
+    gitPath(repo, 'rev-parse', '--path-format=absolute', '--git-path', 'pandastack-runs')
   if (typeof selected !== 'string' || !selected || selected.includes('\0')) throw Error('Invalid tracking directory')
   // Match the store's lexical normalization, but keep its original no-follow path.
   const directory = resolve(selected)

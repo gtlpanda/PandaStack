@@ -116,3 +116,27 @@ Managed observation must not create worktree content before clean checks or stag
 ## P1-14 Git discovery correctness
 
 Final review found path trim changed meaningful bytes and broad not-a-repository matching accepted broken Git pointers. Freeze exact pathname-output parsing and genuine-absence classification before changing implementation. Retain caller Git environment/launcher semantics, linked/separate metadata, non-Git external storage and the prior placement guard.
+
+- D42 (P1-14): Separate raw Git output, pathname parsing and revision-token
+  parsing. Path queries require and remove exactly one final LF; revisions alone
+  retain trim(). On failed discovery, require the existing non-repository error,
+  no explicit discovery controls, and absence of every ancestor .git entry via
+  lstat before allowing non-Git fallback. Read errors remain indeterminate.
+  Successful discovery stays authoritative; caller environment is unchanged.
+- D43 (P1-14): Preserve the ancestry requirement despite this sandbox's existing
+  /tmp/.git directory. A read-only diagnostic observed Git exit 128 and lstat
+  finding that ancestor before tracking disabled recording. Do not remove or
+  bypass ambient metadata, weaken fixtures, or relax the contract to pass local
+  non-Git controls. Report targeted failures for host validation in a genuinely
+  metadata-free temporary ancestry. Host owns full gates, commits, feature flags
+  and final phase evidence.
+
+- D44 (P1-14 diagnostic follow-up): Require status 128 and the complete ordinary
+  Git absence diagnostic, including its terminating LF, before inspecting absent
+  ancestry. Reject unrecognized/localized/additional diagnostics conservatively;
+  do not change caller locale or Git configuration. Successful discovery remains
+  authoritative and valid GIT_CONFIG_GLOBAL remains supported. Test actual
+  malformed config filenames, including a full diagnostic with newline, with an
+  ancestry-boundary observer so ambient metadata cannot mask misclassification.
+  Retain the sandbox's /tmp/.git and report non-Git control failures to the host;
+  do not alter frozen fixtures, pass flags, staging or commits.

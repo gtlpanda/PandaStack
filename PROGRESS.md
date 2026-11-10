@@ -1173,3 +1173,106 @@ and final completion remain with the pinned external host.
 ## P1-14 independent acceptance freeze
 
 P1-13 full feature gate passed at12:41:30UTC and committed8a0a7c51. Final review recorded two reasoned discovery defects; independent36-case matrix reproduced both classes (3 passing controls,33 expected failures), with exact raw Git output assertions and independent review clear. Supervisor stopped ownedhost38629 during post-review gates (/tmp/pandastack-stop-p113-git-discovery.json); interrupted gates are not passes. Preserved review text. No new native hunt was claimed. Freeze P1-14 and retain all prior contracts/tests, including run-placement.
+
+## P1-14 implementation — 2026-11-10
+
+Tracking now removes exactly Git's final LF from pathname results and parses
+revision tokens separately. Failed discovery permits non-Git fallback only after
+checking explicit discovery controls and every canonical ancestor for .git with
+lstat. Broken symlinks count as metadata evidence; read uncertainty disables
+recording before store mutation. Successful Git discovery, caller environment,
+placement policy, namespace exceptions and work outcomes remain unchanged.
+
+Added tests/run-git-discovery.test.mjs using workflow-harness test(), included by
+existing test discovery. Six groups cover both path roles, compound whitespace
+suffixes, linked/separate metadata, broken ancestor metadata, nested context/error
+identity, caller controls, genuine non-Git storage and injected ancestry EACCES.
+Decisions D42-D43 record implementation and local evidence limits.
+
+Targeted verification:
+- Before implementation, `node acceptance/phase1/p1-14.test.mjs`: exit 1;
+  3 passed, 33 failed. Full output captured at /tmp/p1-14-before.log.
+- After implementation, `node acceptance/phase1/p1-14.test.mjs`: exit 1;
+  35 passed, 1 failed. Remaining output:
+  `genuine non-Git project and runner still record to explicit external shared store`:
+  `AssertionError: null !== 'nongit'`.
+- `node --input-type=module -e "await import('./tests/run-git-discovery.test.mjs'); await import('./tests/run-placement.test.mjs'); await import('./tests/run-tracking.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1; 13 passed, 6 failed before splitting the new I/O check from its
+  non-Git control. Failures were non-Git recording expectations: new control
+  `null !== 'nongit'`; placement lexical control unexpected generic warning;
+  concurrent placement `null !== 'one'`; concurrent tracking `null !== 'a'`;
+  conflict setup `Run store: NOT_FOUND`; fake-session records `0 !== 2`.
+- Final new-test command:
+  `node --input-type=module -e "await import('./tests/run-git-discovery.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1; 5 passed, 1 failed (`null !== 'nongit'`). Injected ancestry EACCES
+  now runs independently and passes.
+
+Local limitation confirmed by a read-only diagnostic (exit 0): an owned temporary
+directory's Git query returned status 128, `fatal: not a git repository (or any
+of the parent directories): .git`; a lstat observer then saw the fixture .git
+absent and `/tmp/.git` present, followed by null currentRunId and the generic
+warning. The new contract requires this refusal. The preexisting /tmp/.git was
+not modified. Non-Git success controls require host verification with genuinely
+absent metadata ancestry; no full local pass is claimed.
+
+Read-only Explore audit and parent inspection found no concrete defect: static
+PASS for data flow, edge/errors, security, consistency and missing pieces. Audit
+results are inspection evidence, not runtime or full-gate passes.
+
+Changed tracking.mjs, added run-git-discovery.test.mjs and appended decision and
+progress logs. Frozen inputs, full suites, live providers, staging, commits,
+feature flags, branches, git control and roadmap completion remain untouched.
+The external host retains all full gates and completion.
+
+Supervisor P1-14 diagnostic follow-up: root host250acceptance and20focusedgroups passed. Sandbox-only non-Git control encountered existing/tmp/.git; host had none, and no metadata or assertions were altered. Independent spotcheck reproduced a remaining contract violation: malformed Git config filename containing not-a-gitrepository text was misclassified as absence. Ordinary malformed filename refused and valid empty config recorded. Stopped ownedhost37256 during fullgate (NOTpass), preserving implementation. Expanded acceptance append-only39cases38pass1fail, independently reviewed; original36 bytes unchanged. Freeze complete-diagnostic clarification and resume same feature.
+
+## P1-14 complete-diagnostic correction — 2026-11-10
+
+Retained the prior P1-14 implementation and changed repository absence detection
+to require status 128 and the complete ordinary Git absence stderr, including its
+final LF. Malformed configuration errors containing diagnostic words no longer
+enter the absence fallback. Caller configuration and locale remain unchanged;
+successful discovery still permits valid GIT_CONFIG_GLOBAL. D44 records the choice.
+
+Added two workflow-harness test groups to tests/run-git-discovery.test.mjs:
+actual malformed config filenames (ordinary, substring, and complete diagnostic
+with newline), and successful recording with an explicit valid empty config.
+The malformed test observes the ancestry boundary, ensuring ambient metadata
+cannot mask misclassification. It also checks no directory creation, exact work
+error identity, one generic warning, unchanged configuration and environment.
+Existing automatic tests/*.test.mjs discovery includes these tests.
+
+Targeted evidence:
+- Before and after correction, `node acceptance/phase1/p1-14.test.mjs`:
+  exit 1; 37 passed, 2 failed. Outputs are /tmp/p1-14-resume-before.log and
+  /tmp/p1-14-resume-after.log. Failures are the genuine non-Git control
+  (`null !== 'nongit'`) and valid empty-config non-Git control (`false !== true`
+  for store existence). The malformed-config acceptance passes locally even
+  before correction because the separate ancestry guard can refuse recording.
+- New-test command before correction:
+  `node --input-type=module -e "await import('./tests/run-git-discovery.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1; 6 passed, 2 failed. The new malformed-config test failed with
+  `config error must be rejected before absence ancestry checks: 1 !== 0`.
+  The other failure was the existing non-Git control (`null !== 'nongit'`).
+  After correction, the same command exited 1 with 7 passed, 1 failed:
+  both added groups pass; only that existing non-Git control fails.
+- Final focused command:
+  `node --input-type=module -e "await import('./tests/run-git-discovery.test.mjs'); await import('./tests/run-placement.test.mjs'); await import('./tests/run-tracking.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1; 16 passed, 6 failed. Failure output: non-Git discovery
+  `null !== 'nongit'`; prospective placement unexpected generic warning;
+  concurrent placement `null !== 'one'`; concurrent tracking `null !== 'a'`;
+  conflict setup `Run store: NOT_FOUND`; fake-session records `0 !== 2`.
+- Read-only owned-temporary-directory diagnostic: exit 0; Git returned status
+  128 and `fatal: not a git repository (or any of the parent directories): .git`
+  plus LF, while lstat confirmed /tmp/.git is a directory. This conflicts with
+  these fixtures' genuine-absence assumption under the required ancestry guard.
+  No ambient metadata was modified or bypassed; host validation remains required.
+
+Read-only Explore audit and parent inspection: static PASS for data flow,
+edge/errors, security, consistency and missing pieces; no concrete defect found.
+This is inspection evidence, not a full-gate or runtime pass.
+
+Changed tracking.mjs, extended run-git-discovery.test.mjs, and appended decision
+and progress evidence. No frozen inputs, full suites, live providers, staging,
+commits, feature flags, branches, git control or roadmap completion changed.
+The external host owns all full gates and completion.
