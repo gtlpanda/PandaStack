@@ -13,6 +13,7 @@ import { huntStatus } from "./bughunt.mjs";
 import { readSession } from "./session.mjs";
 import { runFeatureTests } from "./tests.mjs";
 import { tail } from "./proc.mjs";
+import { flushDecisionOutput } from '../../../../core/skills/decisions/output.mjs';
 
 const HOME = path.resolve(import.meta.dirname, "..");
 
@@ -225,9 +226,12 @@ const isEntry = (() => {
 })();
 if (isEntry) {
   main()
-    .then((code) => process.exit(code ?? 0))
     .catch((error) => {
       console.error(error instanceof Error ? error.message : error);
-      process.exit(1);
+      return 1;
+    })
+    .then(async (code) => {
+      try { await flushDecisionOutput(); } catch { /* Output cannot replace the workflow result. */ }
+      process.exit(code ?? 0);
     });
 }

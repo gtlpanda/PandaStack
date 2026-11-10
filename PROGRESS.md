@@ -1949,3 +1949,104 @@ remain excluded. External host retains full gates, review disposition, live smok
 and final completion.
 
 BUGHUNT 2026-11-10: changes_requested; fixed none; open F1, F2 (F1, F2); report /home/gtlpanda/code/PandaStack/.git/bughunt/codex-phase2-decisions-b483da/report.md
+
+## P2-07 — Reliable observation completion and safe manual handoff
+
+Corrected closing publication failures to return and cache complete:false while
+preserving detached replay and one emission attempt. Added default stdout write
+callbacks and one error listener per stream so asynchronous errors preserve the
+decision result and degrade coverage. The owning autobuild CLI waits at most
+1000ms for pending observation writes before exiting with its original result.
+Timeout/error marks pending traces incomplete; no output replay or queue mutation
+is introduced. Distinct later observations remain eligible for emission after a
+historical sink failure. The decision ack CLI now retains MANUAL_HANDOFF while
+native uncertainty continues to prohibit acknowledgment or automatic resend.
+README and D68-D70 document the choices and limits. P2-08 remains untouched.
+
+Prepared new workflow-harness tests before implementation. Seven new groups cover
+closing snapshot failure/replay, asynchronous Writable errors with retained answer
+identity, 200 spans/601 events buffered until 100ms after close, synchronous output
+throws, bounded permanently blocked output, late closure failure/shared listeners,
+and in-process CLI ack refusal across a real queue reopen with synthetic native
+transport. These stream/queue checks are distinct from actual CLI/pipe acceptance
+and live-provider evidence.
+
+Exact focused validation:
+- Before implementation,
+  `node --input-type=module -e "for (const name of ['output','manual-handoff']) await import('./tests/decision-'+name+'.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1; `{ pass: 0, fail: 6 }`. Reproduced complete:true on closing failure,
+  absent error listener/output module, and IO_ERROR instead of MANUAL_HANDOFF.
+- Initial focused implementation run,
+  `node --input-type=module -e "for (const name of ['output','manual-handoff','trace-close','observations']) await import('./tests/decision-'+name+'.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; `{ pass: 16, fail: 0 }` before the additional synchronous-output group.
+- `node acceptance/phase2/p2-07.test.mjs`: exit 1; 3 passed, 4 failed.
+  Both actual-autobuild transport fixtures failed during setup with
+  `Error: spawnSync git EPERM`; the owning ack CLI reported
+  `Error: spawnSync /usr/bin/node EPERM`. The real closed-pipe case failed with
+  `Error: owned fixture deadline` before its IPC continuation. That timeout does
+  not establish a product failure or its cause. None of these process cases was
+  retried, bypassed or waived; host verification remains required.
+- Final focused implementation/compatibility command:
+  `node --input-type=module -e "for (const name of ['output','manual-handoff','trace-close','observations','transport-receipt','launch','managed','codex-delivery','routing']) await import('./tests/decision-'+name+'.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; `{ pass: 59, fail: 0 }`. Its first run exited 1 with 47 passed/12 failed:
+  a sticky output failure suppressed subsequent distinct events (first mismatch
+  `1 !== 4`; later missing receipt fields). Removed historical failure as a reason
+  to suppress new writes; destroyed/ended streams still fail closed. Re-ran the
+  same command to obtain the final result above. All provider boundaries were
+  synthetic mocks; no provider ran.
+- `node --test --test-isolation=none --test-name-pattern='^close-only|^successful closing' acceptance/phase2/p2-07.test.mjs`:
+  exit 0; 3 passed, 0 failed (the selected in-process acceptance cases only).
+- `node scripts/check-refs.mjs`: exit 0;
+  `check-refs: 267 references, all resolve`.
+- `bash scripts/check-secrets.sh`: exit 0; `check-secrets: clean` (tracked files).
+- `bash scripts/check-secrets.sh core/skills/decisions/output.mjs tests/decision-output.test.mjs tests/decision-manual-handoff.test.mjs`:
+  exit 0; `check-secrets: clean` (every new untracked source/test file). Scanner
+  rules unchanged; no fixture annotations needed.
+- `git diff --check`: exit 0.
+
+Required read-only Explore audit, follow-up audit after the compatibility fix,
+and parent inspection: bounded PASS for data flow, edge/error handling, security,
+consistency, completeness, original results and cleanup. This is focused evidence
+and static review, not full-gate acceptance or live delivery proof. Changed only
+observation output/closure, owning CLI completion, decision CLI redaction, two new
+tests, README and decision/progress logs. Frozen inputs, feature pass flags,
+staging, commits, branches, Git control and the pinned host remain untouched.
+External host retains process acceptance, full gates and final review/completion.
+
+
+SUPERVISOR 2026-11-10 P2-07 retry evidence: the first host gate failed with a
+transient installer fixture copy error on .git/packed-refs.lock. The retained
+implementation subsequently passed actual host node --test acceptance/phase2/p2-07.test.mjs
+(7/7) and the complete bash scripts/test.sh (exit0,446s), with full output retained
+at /tmp/pandastack-phase2-p207-host-diagnostic/. Independently reviewed fixture-only
+commit56fb04d excludes only top-level .git before fixture copying; all assertions
+unchanged, installed test-install138/0. Keep the existing P2-07 source unless a
+concrete defect is found. External host must still run every gate and own acceptance.
+
+## P2-07 — Reliable observation completion and safe manual handoff
+
+Installer-feedback retry: retained the existing P2-07 implementation and seven
+new workflow-harness test groups. Read the supervisor's recorded fixture-copy
+correction and inspected the retained observation/CLI changes against the Phase 2
+contracts. Fresh focused checks found no defect requiring a source change. This
+retry changes only DECISIONS.md (D71) and this progress entry; inherited host
+results above are not claimed as tests run in this session.
+
+Exact focused validation:
+- `node --test --test-isolation=none --test-name-pattern='^close-only|^successful closing' acceptance/phase2/p2-07.test.mjs`:
+  exit 0; 3 passed, 0 failed. Previously blocked subprocess/real-pipe cases were
+  not retried or waived; their acceptance remains host-owned.
+- `node --input-type=module -e "for (const name of ['output','manual-handoff','trace-close','observations','transport-receipt','launch','managed','codex-delivery','routing']) await import('./tests/decision-'+name+'.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; aggregate `{ pass: 59, fail: 0 }`. Provider boundaries are synthetic
+  mocks; queue reopen and stream tests do not establish actual CLI/pipe acceptance.
+- `bash scripts/check-secrets.sh`: exit 0; `check-secrets: clean` (tracked files).
+- `bash scripts/check-secrets.sh core/skills/decisions/output.mjs tests/decision-output.test.mjs tests/decision-manual-handoff.test.mjs`:
+  exit 0; `check-secrets: clean` (each new untracked source/test file).
+  Scanner rules unchanged; no annotations needed.
+- `git diff --check`: exit 0.
+
+Read-only Explore audit and parent inspection found no concrete P2-07 defect.
+This is bounded review and focused evidence, not full-gate or live-provider proof.
+Frozen inputs, prior implementation, feature flags and Git control remain
+unchanged. No staging, commits, full gates, provider calls or P2-08 work performed.
+External host retains full gates, actual CLI/pipe acceptance and final completion.

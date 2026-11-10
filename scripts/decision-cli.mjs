@@ -13,7 +13,7 @@ const commands = {
   cancel: { required: ['store', 'id', 'reason'], optional: [] },
 }
 const codes = new Set(['INVALID_DECISION', 'CONFLICT', 'NOT_FOUND', 'WRONG_RECIPIENT', 'STALE',
-  'EXPIRED', 'CANCELLED', 'NOT_READY', 'CORRUPT', 'IO_ERROR', 'TIMEOUT'])
+  'EXPIRED', 'CANCELLED', 'NOT_READY', 'CORRUPT', 'IO_ERROR', 'TIMEOUT', 'MANUAL_HANDOFF'])
 
 function parse(args) {
   const [command] = args

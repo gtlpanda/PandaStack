@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto'
 import { isAbsolute, normalize } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { exactRecord, validId, timestampKey } from './records.mjs'
+import { emitDecisionOutput } from './output.mjs'
 
 const invalid = () => Object.assign(new Error('Invalid decision observation'), { code: 'INVALID_OBSERVATION' })
 const sha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.exec(value)?.[0] === value
 const outcomes = ['timeout', 'cancelled', 'expired', 'stale', 'manual_handoff', 'failed']
 const waitKeys = ['queueNamespace', 'decisionRunId', 'featureId', 'decisionId', 'revision', 'deliveryId']
-const stdout = event => process.stdout.write(`PANDASTACK_DECISION ${JSON.stringify(event)}\n`)
 
 function requireValid(value) { if (!value) throw invalid() }
 
@@ -18,7 +18,7 @@ function traceOptions(input) {
   requireValid(typeof value.repo === 'string' && !value.repo.includes('\0') && isAbsolute(value.repo) &&
     normalize(value.repo) === value.repo && (value.repo === '/' || !value.repo.endsWith('/')))
   requireValid(sha(value.revision) && (value.invocationRunId === null || validId(value.invocationRunId)))
-  const { emit = stdout, now = () => new Date().toISOString(), monotonicNow = () => performance.now() } = value
+  const { emit = emitDecisionOutput, now = () => new Date().toISOString(), monotonicNow = () => performance.now() } = value
   requireValid(typeof emit === 'function' && typeof now === 'function' && typeof monotonicNow === 'function')
   return { ...value, emit, now, monotonicNow }
 }
@@ -57,7 +57,14 @@ export function createDecisionTrace(input) {
     // terminal replay or correlation metadata retained by the trace.
     if (event.event !== 'trace_closed') eventIds.push(event.eventId)
     if (event.event === 'context_supplied') contextEventIds.push(event.eventId)
-    try { opts.emit(structuredClone(event)) } catch { incomplete = true }
+    function publicationFailed() {
+      incomplete = true
+      if (closed) closed.complete = false
+    }
+    try {
+      if (opts.emit === emitDecisionOutput) opts.emit(structuredClone(event), publicationFailed)
+      else opts.emit(structuredClone(event))
+    } catch { publicationFailed() }
     return structuredClone(event)
   }
 

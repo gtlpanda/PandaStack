@@ -530,3 +530,13 @@ guarantee, model-consumption proof, or merge/publish/deploy permission. Claude
 interactive delivery remains unsupported. Adapter tests use synthetic owned
 transports; the supervisor owns the final ephemeral-session live smoke and full
 gates. Native receipts are separate from managed-launch trace receipts.
+
+Observation output failures preserve decision results. Failed closing emissions
+return and replay an incomplete snapshot without emitting again. The default
+stdout sink handles asynchronous write errors; an earlier returned snapshot does
+not prove a later write succeeded. On ordinary completion the owning autobuild
+CLI waits up to one second for pending observation writes, allowing temporary
+backpressure to clear. Broken output or the deadline marks pending traces
+incomplete and preserves the workflow exit code, without output replay. The
+decision ack CLI retains the safe `MANUAL_HANDOFF` code for uncertain native
+dispatch; it leaves acknowledgment unset.

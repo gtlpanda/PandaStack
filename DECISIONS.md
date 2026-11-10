@@ -312,3 +312,32 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   child/parent IDs, multiple answers per launch, usage probes/retries, failed
   spawns, unknown writes and sink failures. Outer host retains separate-process
   acceptance, full gates, live demonstrations, pass flags, commits and review.
+
+- D68 (P2-07): Preserve existing trace schemas and terminal identity. Publication
+  failure degrades both the trace and any cached closure; close replay stays
+  detached and never emits again. Use one default-output error listener per
+  stream and per-write callbacks to account for asynchronous failure without
+  uncaught stream errors, raw diagnostics, output replay or decision mutations.
+- D69 (P2-07): At the owning CLI's ordinary completion, wait for pending
+  observation callbacks for at most 1000ms before the existing forced exit.
+  Failure/deadline marks pending traces incomplete while retaining the original
+  workflow result and existing owned-process cleanup. A returned snapshot cannot
+  attest to later asynchronous publication. Keep MANUAL_HANDOFF in the decision
+  CLI's safe allowlist; native uncertainty remains durable and prohibits ack or
+  automatic resend. Lazy SQLite loading remains outside this selected feature.
+- D70 (P2-07 validation): Keep full gates, frozen inputs, feature flags and Git
+  mutations host-owned. Selected acceptance passed three in-process cases but
+  its two owning-autobuild fixtures failed at spawnSync git EPERM, the ack CLI
+  failed at spawnSync Node EPERM, and the real-pipe fixture reached its IPC
+  deadline. Do not retry or bypass these process boundaries. Use real in-process
+  Writable streams for delayed/backpressured/failing output tests and real local
+  queue reopen with synthetic native transport for ack refusal. This does not
+  establish actual subprocess acceptance or live-provider delivery.
+
+- D71 (P2-07 retry): Retain the existing implementation and seven new harness
+  groups after the supervisor's recorded installer fixture correction. This
+  session's selected acceptance and focused compatibility checks found no defect
+  requiring source changes. Do not alter the frozen installer fixture or retry
+  previously blocked subprocess boundaries; external host owns full gates and
+  actual CLI/pipe acceptance. Record fresh focused evidence without promoting
+  inherited host results to this session's validation.
