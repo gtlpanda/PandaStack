@@ -1,9 +1,9 @@
 // Read-only inspection of managed launches. Provider account availability is unknown.
 import { readFileSync, statSync, accessSync, constants, existsSync } from 'node:fs'
-import { resolve, join, isAbsolute, delimiter } from 'node:path'
+import { join, isAbsolute, delimiter } from 'node:path'
 import { readAgentConfig, validateAgentConfig } from '../../../scripts/agent-config.mjs'
 import { renderAgentConfig, ROOT } from '../../../scripts/configure-agents.mjs'
-import { resolveManagedModels, resolveManagedConfig, expandHome } from '../../../graphs/autobuild/tool/lib/config.mjs'
+import { resolveManagedModels, resolveManagedConfig } from '../../../graphs/autobuild/tool/lib/config.mjs'
 import { sanitizeSettings } from './records.mjs'
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -77,16 +77,21 @@ function normalizeRuntime(input) {
   return result
 }
 
-function effectivePath(project, env, pandaRoot, repo) {
-  const vars = project.env?.vars ?? {}
+// Anchor without join/resolve: the kernel must traverse symlink/.. components
+// just as it does for a managed child running in the target repository.
+const fromRepo = (repo, path) => isAbsolute(path) ? path : `${repo}/${path}`
+function effectivePath(config, env, pandaRoot, repo) {
+  const vars = config.env.vars ?? {}
   if (Object.hasOwn(vars, 'PATH')) return vars.PATH
-  const prepend = (project.env?.pathPrepend ?? []).map(p => resolve(repo, expandHome(p))).filter(p => existsSync(p))
+  // The shared resolver has already expanded home prefixes. buildEnv omits
+  // empty prefixes before search; an explicit PATH above retains empty entries.
+  const prepend = config.env.pathPrepend.filter(Boolean).map(p => fromRepo(repo, p)).filter(p => existsSync(p))
   const inherited = (env.PATH ?? '').split(delimiter).filter(Boolean)
   const kit = join(pandaRoot, 'graphs/autobuild/tool/bin')
   return [...prepend, ...(inherited.includes(kit) ? [] : [kit]), ...inherited].join(delimiter)
 }
 function locateBinary(bin, path, repo) {
-  const candidates = bin.includes('/') ? [resolve(repo, bin)] : path.split(delimiter).map(dir => resolve(repo, dir, bin))
+  const candidates = bin.includes('/') ? [fromRepo(repo, bin)] : path.split(delimiter).map(dir => fromRepo(repo, `${dir || '.'}/${bin}`))
   for (const file of candidates) {
     try { accessSync(file, constants.X_OK); if (statSync(file).isFile()) return file } catch { /* Try the next PATH entry. */ }
   }
@@ -104,7 +109,7 @@ export async function inspectDoctor({ repo, backend = 'codex', pandaRoot = ROOT,
     catch (error) { if (error.code === 'ENOENT') project = {}; else throw error }
     const resolved = resolveInspection({ backend, central, project, env, overrides })
     result.settings = resolved.settings
-    path = effectivePath(project, env, pandaRoot, repo)
+    path = effectivePath(resolved.config, env, pandaRoot, repo)
     bin = resolved.config[`${backend}Bin`]
     check('configuration', 'pass', 'Managed launch configuration is valid.')
     const rendered = renderAgentConfig(pandaRoot, central)

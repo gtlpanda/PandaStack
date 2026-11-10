@@ -614,3 +614,70 @@ Only PROGRESS.md was modified. No exploit reproduction, blocked reproduction
 retry, full suite, bare autobuild, provider call, code/test edit, staging, commit,
 push, branch change, git-control edit or pass-flag change. Full gates, actual
 hook acceptance, review disposition and final completion remain host-owned.
+
+## P1-10 implementation — 2026-11-10
+
+Doctor now uses the shared resolver's home-expanded prefixes, omits empty prefixes
+before anchoring them to the target repository, and preserves kernel traversal of
+symlink/parent components in prefixes, inherited/explicit PATH and explicit binary
+paths. Explicit PATH still replaces the constructed PATH and retains empty cwd
+entries; inherited empty entries are still omitted. Launcher behavior is unchanged.
+Decisions D32-D33 record scope and ownership.
+
+Added tests/run-path-parity.test.mjs with six workflow-harness groups, automatically
+included by existing CI discovery. Inert temporary fixtures compare doctor with
+loadConfig/buildEnv and filesystem presence from target and unrelated cwd. Coverage
+includes both providers, empty/missing prefixes, inherited versus explicit PATH,
+home expansions, executable regular files, fallback after a nonexecutable file,
+relative/absolute symlink-parent paths, false lexical matches, unknown controls,
+and caller environment/cwd preservation.
+
+Targeted verification:
+- Before implementation, `node acceptance/phase1/p1-10.test.mjs`: exit 1;
+  38 passed, 20 failed on empty-prefix and symlink/parent selection assertions.
+- Before implementation, the new focused test file via workflow-harness: exit 1;
+  2 passed, 4 failed, reproducing both categories for both backends.
+- After implementation, `node acceptance/phase1/p1-10.test.mjs`: exit 0;
+  58 passed, 0 failed.
+- `node --input-type=module -e "await import('./tests/run-path-parity.test.mjs'); await import('./tests/run-launch-parity.test.mjs'); await import('./tests/run-edge-validation.test.mjs'); await import('./tests/run-doctor-trust.test.mjs'); await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; 25 passed, 0 failed.
+
+Changed doctor.mjs, added focused tests, and updated DECISIONS.md/PROGRESS.md.
+No frozen-input edits, full suite, provider execution, blocked reproduction retry,
+staging, commits, pass flags, branch changes or roadmap completion. The outer host
+owns authoritative full gates, review disposition, live evidence and completion.
+
+Read-only Explore sanity audit: PASS for data flow, edge/error handling, security,
+consistency and missing pieces; no concrete defects found. This is static review;
+execution evidence is the targeted verification above. `git diff --check`: exit 0
+after documentation updates.
+
+## P1-10 resumed gate repair — 2026-11-10
+
+Retained the existing doctor PATH-selection implementation and six new
+workflow-harness test groups. Reproduced the supplied secret-scan failure with
+`bash scripts/check-secrets.sh`: exit 1, identifying only
+tests/run-launch-parity.test.mjs:73. That line contains the literal synthetic
+`fixture-token`, used to test authentication-variable preservation without
+authenticating. Added a line-local `allow-secret` annotation with that explanation,
+as supported by the unchanged scanner. No fixture value or assertion changed.
+Decision D34 records this repair.
+
+Targeted verification:
+- `node acceptance/phase1/p1-10.test.mjs`: exit 0; 58 passed, 0 failed.
+- `node --input-type=module -e "await import('./tests/run-path-parity.test.mjs'); await import('./tests/run-launch-parity.test.mjs'); await import('./tests/run-edge-validation.test.mjs'); await import('./tests/run-doctor-trust.test.mjs'); await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; 25 passed, 0 failed.
+- `bash scripts/check-secrets.sh`: exit 0; check-secrets: clean.
+- `bash scripts/check-secrets.sh tests/run-path-parity.test.mjs`: exit 0;
+  check-secrets: clean (explicitly includes the untracked implementation test).
+- `git diff --check`: exit 0 before this documentation append.
+
+This iteration changed only the synthetic-fixture annotation and progress/decision
+logs, retaining the prior doctor implementation and new PATH tests in the working
+copy. No frozen inputs, full suite, provider calls, staging, commits, pass flags,
+branches or roadmap completion were changed. The outer host owns authoritative
+full gates, review, live evidence and final completion.
+
+Read-only Explore sanity audit: PASS for data flow, edge/error handling, security,
+consistency and missing pieces; no concrete defects found. This is static-review
+evidence only. Final `git diff --check`: exit 0 after the documentation updates.

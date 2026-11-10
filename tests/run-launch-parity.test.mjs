@@ -70,7 +70,7 @@ await test('Claude session settings preserve selected CLI model on hook reload w
   const parentBefore = { ...process.env }
   for (const hooks of ['inject', 'project']) for (const model of [null, 'sonnet', 'PRIVATE MODEL']) {
     write({ backend: 'claude', model, hooks, frozen: ['tests'], env: { vars: { AUTOBUILD_MODEL: 'haiku' } } })
-    const inherited = { AUTOBUILD_MODEL: 'haiku', MODEL: 'PRIVATE LEGACY', CLAUDE_CODE_OAUTH_TOKEN: 'fixture-token' }
+    const inherited = { AUTOBUILD_MODEL: 'haiku', MODEL: 'PRIVATE LEGACY', CLAUDE_CODE_OAUTH_TOKEN: 'fixture-token' } // allow-secret: synthetic fixture, never used for authentication
     const config = loadConfig(repo, inherited, { model: 'opus' })
     const before = structuredClone(config), settings = sessionSettings(config)
     const childEnv = { ...inherited, ...config.env.vars, ...settings.env }
