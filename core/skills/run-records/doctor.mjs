@@ -4,7 +4,7 @@ import { resolve, join, isAbsolute, delimiter } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { readAgentConfig, validateAgentConfig } from '../../../scripts/agent-config.mjs'
 import { renderAgentConfig, ROOT } from '../../../scripts/configure-agents.mjs'
-import { resolveManagedModels, expandHome } from '../../../graphs/autobuild/tool/lib/config.mjs'
+import { resolveManagedModels, resolveManagedConfig, expandHome } from '../../../graphs/autobuild/tool/lib/config.mjs'
 import { sanitizeSettings } from './records.mjs'
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -34,6 +34,7 @@ export function resolveSettings({ backend, central, project = {}, env = {}, over
   if (!['claude', 'codex'].includes(backend)) throw Error('Invalid backend')
   validateAgentConfig(central)
   validateProject(project, env, overrides)
+  resolveManagedConfig({ project, env, overrides: { ...overrides, backend }, central })
   const { values, sources } = resolveManagedModels({ backend, central, project, env, overrides })
   const set = (key, value, source) => { values[key] = value; sources[key] = source }
   set('maxConcurrentSubagents', project.maxConcurrentSubagents ?? central.maxConcurrentSubagents,

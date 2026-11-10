@@ -134,3 +134,33 @@ REVIEW 2026-11-10: DEFECT core/skills/run-records/store.mjs:88 Directory validat
 REVIEW 2026-11-10: DEFECT core/skills/run-records/store.mjs:37 Newly created store directories are not durably published — Reasoned from code, not power-loss reproduced: the first successful putRun or first event for a run creates directory entries with mkdirSync but only fsyncs the leaf containing the JSON; a machine crash before the parent directory entries persist can lose the acknowledged runs/ or events/<runId>/ subtree, so restart reports missing records/events despite successful writes; fsync each newly created directory's parent as well as the published file and its containing directory before acknowledging success.
 
 Review verification: `autobuild check --skip-browser` exited 143 without stdout/stderr; termination cause is unverified and no full gate pass is claimed. The read-only in-memory doctor/launcher comparison exited 0 and printed doctorStatus=ready, configuration=pass, and "launch rejected: codex.sessionTimeoutMinutes must be positive". `git diff --check` exited 0. Only PROGRESS.md was changed; code, tests, contracts and feature flags were not edited. Per the final backend instruction, staging and the requested review commit are left to the outer harness.
+
+## P1-05 implementation — 2026-11-09
+
+Shared the managed launcher configuration merge/validation with doctor, blocking
+invalid hooks, Codex timeouts, and unsupported total budgets including both env
+aliases. Preserved explicit backend selection, valid Claude budget behavior,
+configuration provenance, and safe diagnostics. Store traversal now retains verified
+no-follow directory descriptors and anchors record reads, temporary writes,
+publication, enumeration and cleanup through procfs. Writes sync directory parents
+and the publication directory; replay retries that directory sync. Every synchronous
+operation closes its descriptors, including tested failure paths. README documents
+the Linux/WSL procfs requirement. Added four workflow-harness test groups discovered
+by existing CI; frozen inputs and gates were not edited.
+
+Targeted verification:
+- `node acceptance/phase1/p1-05.test.mjs`: exit 0, 2 passed / 0 failed.
+- `node --input-type=module -e "await import('./tests/run-hardening.test.mjs'); await import('./tests/run-store.test.mjs'); await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0, 18 passed / 0 failed. Covers config rejection parity, safe diagnostics,
+  backend precedence, anchored I/O, parent-sync ordering, descriptor cleanup,
+  unavailable procfs, publication errors/retry, immutable replay, cross-process
+  writers, corruption, symlink refusal and existing doctor behavior.
+- No full test suite, prohibited filesystem-race reproduction, paid model call,
+  or physical power-loss test was performed. No staging, commits, feature passes,
+  branch changes or roadmap completion; the external host retains those actions
+  and authoritative full-gate/live evidence.
+
+Read-only Explore audit: PASS for data flow, edge/error handling, security,
+consistency and completeness. Its replay-sync concern was addressed with a
+publication-sync failure/retry regression test before final verification.
+`git diff --check`: exit 0.

@@ -473,6 +473,9 @@ The default store is Git's per-worktree `pandastack-runs` path. Set
 `PANDASTACK_RUNS_DIR` to an absolute directory for a shared local store; library
 callers can override it with `storeDir`. Use `createRunStore(directory).listRuns()`
 and `readEvents(id)` from `core/skills/run-records/store.mjs` to inspect records.
+Store operations require Linux/WSL with `/proc/self/fd` directory anchors and fail
+closed when those anchors are unavailable. Writes synchronize directory parents
+and the publication directory; immutable replay retries the publication sync.
 Only allowlisted settings are stored, never prompts, commands, output or credentials.
 Effective merged adapter settings use runtime provenance where original provenance
 is unavailable. Build-app records its selected model, including `HARNESS_BUILD_MODEL`.

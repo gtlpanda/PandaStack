@@ -1,4 +1,4 @@
-import { constants, lstatSync, mkdirSync, openSync, closeSync, fstatSync,
+import { constants, mkdirSync, openSync, closeSync, fstatSync,
   readFileSync, writeFileSync, fsyncSync, linkSync, unlinkSync, readdirSync } from 'node:fs'
 import { resolve, parse, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -23,25 +23,54 @@ function guarded(work) {
   }
 }
 
-// Inspect each component, including the supplied root's ancestors. Never accept
-// an existing symlink as a directory, even when its target is inside the store.
-function directory(path, create = false) {
-  const root = parse(path).root
-  let current = root
-  for (const part of path.slice(root.length).split('/').filter(Boolean)) {
-    current = join(current, part)
-    let stat
-    try { stat = lstatSync(current) } catch (e) {
-      if (e.code !== 'ENOENT') throw e
-      if (!create) return false
-      try { mkdirSync(current, { mode: 0o700 }) } catch (e) {
-        if (e.code !== 'EEXIST') throw e
-      }
-      stat = lstatSync(current)
+// Linux/WSL procfs anchors keep every lookup relative to a retained directory.
+// There is deliberately no fallback to check-then-reopen pathname operations.
+function withDirectory(path, create, work) {
+  const descriptors = []
+  const flags = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+  const retain = name => {
+    let fd
+    try { fd = openSync(name, flags) } catch (e) {
+      if (e.code === 'ELOOP' || e.code === 'ENOTDIR') throw error('CORRUPT')
+      throw e
     }
-    if (!stat.isDirectory() || stat.isSymbolicLink()) throw error('CORRUPT')
+    descriptors.push(fd)
+    if (!fstatSync(fd).isDirectory()) throw error('CORRUPT')
+    return fd
   }
-  return true
+  try {
+    if (process.platform !== 'linux') throw error('IO_ERROR')
+    const root = parse(path).root
+    let fd = retain(root)
+    // Verify procfs resolves our descriptor before any mutation.
+    const anchor = fd => `/proc/self/fd/${fd}`
+    const probe = retain(`${anchor(fd)}/.`)
+    const original = fstatSync(fd), resolved = fstatSync(probe)
+    if (original.dev !== resolved.dev || original.ino !== resolved.ino) throw error('IO_ERROR')
+    for (const part of path.slice(root.length).split('/').filter(Boolean)) {
+      const child = `${anchor(fd)}/${part}`
+      let next
+      try { next = retain(child) } catch (e) {
+        if (e.code !== 'ENOENT') throw e
+        if (!create) return work(null, null)
+        try { mkdirSync(child, { mode: 0o700 }) } catch (e) {
+          if (e.code !== 'EEXIST') throw e
+        }
+        next = retain(child)
+      }
+      // Sync even existing parents on writes: a prior interrupted mkdir or a
+      // concurrent creator must not let this operation acknowledge an unsynced tree.
+      if (create) fsyncSync(fd)
+      fd = next
+    }
+    return work(anchor(fd), fd)
+  } finally {
+    let failure
+    for (const fd of descriptors.reverse()) {
+      try { closeSync(fd) } catch (e) { failure ??= e }
+    }
+    if (failure) throw failure
+  }
 }
 
 function read(path, validate, expected) {
@@ -74,42 +103,45 @@ function snapshot(input, validate) {
 }
 
 function publish(dir, value, validate, expected) {
-  directory(dir, true)
-  const target = join(dir, `${value.id}.json`)
-  const replay = () => {
-    const existing = read(target, validate, expected)
-    if (!isDeepStrictEqual(existing, value)) throw error('CONFLICT')
-    return { created: false }
-  }
-  if (read(target, validate, expected) !== null) return replay()
-  const temp = join(dir, `.tmp-${randomUUID()}`)
-  let fd
-  try {
-    fd = openSync(temp, 'wx', 0o600)
-    writeFileSync(fd, JSON.stringify(value) + '\n')
-    fsyncSync(fd)
-    closeSync(fd); fd = undefined
-    // link is exclusive across processes, and publishes only complete bytes.
-    try { linkSync(temp, target) } catch (e) {
-      if (e.code === 'EEXIST') return replay()
-      throw e
+  return withDirectory(dir, true, (dir, dirFd) => {
+    const target = join(dir, `${value.id}.json`)
+    const replay = () => {
+      const existing = read(target, validate, expected)
+      if (!isDeepStrictEqual(existing, value)) throw error('CONFLICT')
+      fsyncSync(dirFd)
+      return { created: false }
     }
-    const dirFd = openSync(dir, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW)
-    try { fsyncSync(dirFd) } finally { closeSync(dirFd) }
-    return { created: true }
-  } finally {
-    if (fd !== undefined) closeSync(fd)
-    try { unlinkSync(temp) } catch (e) { if (e.code !== 'ENOENT') throw e }
-  }
+    if (read(target, validate, expected) !== null) return replay()
+    const temp = join(dir, `.tmp-${randomUUID()}`)
+    let fd
+    try {
+      fd = openSync(temp, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
+      writeFileSync(fd, JSON.stringify(value) + '\n')
+      fsyncSync(fd)
+      closeSync(fd); fd = undefined
+      // link is exclusive across processes, and publishes only complete bytes.
+      try { linkSync(temp, target) } catch (e) {
+        if (e.code === 'EEXIST') return replay()
+        throw e
+      }
+      fsyncSync(dirFd)
+      return { created: true }
+    } finally {
+      if (fd !== undefined) closeSync(fd)
+      try { unlinkSync(temp) } catch (e) { if (e.code !== 'ENOENT') throw e }
+    }
+  })
 }
 
 function records(dir, validate, expected = {}) {
-  if (!directory(dir)) return []
-  return readdirSync(dir).filter(name => !name.startsWith('.tmp-')).map(name => {
-    if (!name.endsWith('.json') || !validId(name.slice(0, -5))) throw error('CORRUPT')
-    const value = read(join(dir, name), validate, { ...expected, id: name.slice(0, -5) })
-    if (value === null) throw error('CORRUPT')
-    return value
+  return withDirectory(dir, false, dir => {
+    if (dir === null) return []
+    return readdirSync(dir).filter(name => !name.startsWith('.tmp-')).map(name => {
+      if (!name.endsWith('.json') || !validId(name.slice(0, -5))) throw error('CORRUPT')
+      const value = read(join(dir, name), validate, { ...expected, id: name.slice(0, -5) })
+      if (value === null) throw error('CORRUPT')
+      return value
+    })
   })
 }
 
@@ -119,7 +151,7 @@ export function createRunStore(directoryPath) {
   const runs = join(root, 'runs')
   function readRun(id) {
     checkId(id)
-    return guarded(() => directory(runs) ? read(join(runs, `${id}.json`), validateRun, { id }) : null)
+    return guarded(() => withDirectory(runs, false, dir => dir === null ? null : read(join(dir, `${id}.json`), validateRun, { id })))
   }
   function requireRun(id) { if (readRun(id) === null) throw error('NOT_FOUND') }
   return {

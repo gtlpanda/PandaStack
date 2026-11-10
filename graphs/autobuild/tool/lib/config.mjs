@@ -102,8 +102,16 @@ export function findProjectRoot(start = process.cwd()) {
 export function loadConfig(root = findProjectRoot(), env = process.env, overrides = {}) {
   const file = path.join(root, CONFIG_FILE);
   const raw = JSON.parse(readFileSync(file, "utf8"));
+  return resolveManagedConfig({ project: raw, env, overrides, root });
+}
+
+// Shared, read-only managed launch validation for the launcher and doctor.
+export function resolveManagedConfig({ project: raw = {}, env = {}, overrides = {}, root, central = readAgentConfig() } = {}) {
   const config = {
     ...DEFAULTS,
+    model: central.claude.orchestrator.model,
+    subagentModel: central.claude.subagents.model,
+    maxConcurrentSubagents: central.maxConcurrentSubagents,
     ...raw,
     limits: { ...DEFAULTS.limits, ...(raw.limits ?? {}) },
     env: { ...DEFAULTS.env, ...(raw.env ?? {}) },
@@ -117,7 +125,7 @@ export function loadConfig(root = findProjectRoot(), env = process.env, override
   }
   config.backend = overrides.backend || env.AUTOBUILD_BACKEND || config.backend;
   if (!["claude", "codex"].includes(config.backend)) throw new Error('backend must be "claude" or "codex"');
-  Object.assign(config, resolveManagedModels({ backend: config.backend, central: readAgentConfig(), project: raw, env, overrides }).values);
+  Object.assign(config, resolveManagedModels({ backend: config.backend, central, project: raw, env, overrides }).values);
   if (env.AUTOBUILD_CLAUDE_BIN) config.claudeBin = env.AUTOBUILD_CLAUDE_BIN;
   if (env.AUTOBUILD_CODEX_BIN) config.codexBin = env.AUTOBUILD_CODEX_BIN;
   if (config.backend === "codex") {
