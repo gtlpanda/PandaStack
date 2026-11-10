@@ -2421,3 +2421,5 @@ or pinned-host edits. Previously blocked reproductions and P2-09/P2-10 process
 checks were not retried or waived. No-Node end-to-end and failure-path runtime
 claims are not established by this review. External host retains disposition,
 full gates and final completion.
+
+BUGHUNT 2026-11-10: changes_requested; fixed none; open F1, F2, F3, F4 (F1, F2, F3, F4); report /home/gtlpanda/code/PandaStack/.git/bughunt/codex-phase2-decisions-b483da/report.md
