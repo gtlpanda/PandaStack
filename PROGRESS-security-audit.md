@@ -147,3 +147,82 @@ The first scans tracked files; the second explicitly scans the sole new untracke
 source/test file. `git diff --check` exited 0. Final changed tree contains only
 `DECISIONS.md`, `PROGRESS-security-audit.md`, the inspector and the new root-path
 test file. No staging, commit or feature-pass flag mutation was performed.
+
+## SA-02a — Persist individual audit dispatch intent and returned results
+
+Implemented the audit-local journal API in
+`graphs/security-audit/skills/security-audit/dispatch-journal.mjs`, with private
+SQLite/lease handling in `journal-storage.mjs` and inert canonical JSON/capacity
+accounting in `journal-data.mjs`. It validates actual owning run identity before
+storage creation and each grant, reserves invocation holds, commits dispatch
+intent before the callback, commits individual terminal results before returning,
+and replays terminal siblings without callbacks. Throws, invalid envelopes and
+oversized results become charged uncertainty. Normal reopen durably converts
+persisted dispatches to uncertainty; an existing lock is never taken over.
+
+Storage uses retained directory descriptors, exclusive nonce-bearing ownership,
+0700/0600 checks without permission adoption, exact schema checks, per-row SQL
+updates and synchronous EXTRA transactions. It retains 1MiB individual input and
+result limits, 10000 rows and a 1GiB logical aggregate bound. Pending admission
+reserves the longest state marker and counter expansion. No existing audit
+metadata, spend, ledger, schema, vendor or validator file was changed.
+
+Added `graphs/security-audit/tests/dispatch-journal.test.mjs` using the existing
+workflow-harness `test` and `run` APIs. The first test import failed with
+ERR_MODULE_NOT_FOUND before implementation (exit 1). Final focused command:
+
+```sh
+node --input-type=module -e "await import('./graphs/security-audit/tests/dispatch-journal.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); console.log(summary()); process.exitCode=summary().fail?1:0"
+```
+
+Result: `{ pass: 21, fail: 0 }`, exit 0. Coverage includes detached canonical
+replay, descriptor/proxy/hook rejection without execution, UTF8 bounds, live
+identity/terminal guards, private file policy, read-only inspection, same-process
+owner exclusion/busy close, cancellation/order, synthetic persistence failures,
+partial lease initialization failure, independent siblings, more than 1MiB of
+combined persisted bodies, 10000 actual rows and malformed state. Aggregate 1GiB
+and control-state reservation checks are pure accounting tests; no actual 1GiB
+database, process death, crash recovery or filesystem race was exercised.
+
+Frozen acceptance remains **unverified**, not passing:
+
+```sh
+node --test acceptance/security-audit/sa-02a-journal.test.mjs
+# exit 1: file-level 'test failed' (1 failed, no case diagnostics)
+node acceptance/security-audit/sa-02a-journal.test.mjs
+# exit 1: 0 passed, 14 failed; every fixture fails before journal assertions:
+# Error: ENOENT: no such file or directory, open 'run-metadata.json'
+```
+
+The ordinary fixture's init child supplied an empty runDir. A separate inert
+`spawnSync(process.execPath, ['-e', 'console.log("ordinary child check")'])`
+diagnostic returned error `EPERM`, syscall `spawnSync /usr/bin/node`, status 0,
+empty stdout/stderr. No child restriction bypass, frozen fixture edit, substitute
+acceptance result or claim of actual-init success was made.
+
+Local sanity review: data flow PASS; edge/error handling PASS; security checks
+PASS within static/synthetic scope; consistency PASS. Verification completeness
+remains limited by frozen fixture setup and unavailable independent review.
+The required Explore audit could not start: `Unknown model gpt-6.1-sol`.
+No alternate model/provider was used. Local review corrected capacity reservation,
+partial lease-write cleanup and malformed integer classification; it does not
+replace independent host review.
+
+No target application change/execution, live provider, fallback provider,
+scheduler integration, automatic retry, abnormal-process lock takeover, capture,
+or blocked reproduction occurred. Disk-visible ordering is not a guarantee of
+physical inference execution or hostile same-user containment. Original blocked
+statuses remain unchanged. Full gates, flags, staging, commits and final review
+remain owned by the outer host.
+
+Unchanged scanner checks both reported `check-secrets: clean`, exit 0:
+
+```sh
+bash scripts/check-secrets.sh
+bash scripts/check-secrets.sh graphs/security-audit/skills/security-audit/dispatch-journal.mjs graphs/security-audit/skills/security-audit/journal-data.mjs graphs/security-audit/skills/security-audit/journal-storage.mjs graphs/security-audit/tests/dispatch-journal.test.mjs
+```
+
+The first scans tracked files; the second explicitly covers all four new
+untracked source/test files. `git diff --check` exited 0. Changed tree: the three
+new source modules, one new implementation test, `DECISIONS.md` and this progress
+log only. No frozen files, staging, commits or feature flags were changed.

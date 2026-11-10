@@ -496,3 +496,20 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   not concurrent replacement or containment proof. The required Explore audit
   request failed with `Unknown model gpt-6.1-sol`; no alternate model/provider
   was used. Local review does not replace the outer host's independent review.
+- D91 (SA-02a): Implement only the audit-local durable dispatch journal, with
+  private descriptor-anchored storage, exclusive retained ownership, per-row
+  SQLite transactions and conservative uncertainty. Prepare implementation tests
+  before code; keep existing metadata, schemas, validators and frozen checks
+  unchanged. No scheduler/provider/report integration or abnormal-process lock
+  takeover. Use canonical full-input equality and reserve pending control-state
+  capacity. The outer host owns flags, staging, commits, full gates and review.
+- D92 (SA-02a evidence): Keep the frozen acceptance failure explicit: the
+  ordinary init fixture returns an empty run directory and all fourteen cases
+  fail before journal assertions with ENOENT opening run-metadata.json. A separate
+  ordinary child diagnostic reports spawnSync /usr/bin/node EPERM (status 0,
+  empty stdout/stderr); do not bypass the execution restriction or alter fixtures.
+  Focused in-process tests use owned inert metadata accepted by loadRun and are
+  not substitutes for actual-init acceptance. The required Explore request failed
+  with Unknown model gpt-6.1-sol; no fallback. Local review found and corrected
+  pending-state capacity reservation, partial lease-write cleanup and unsafe
+  persisted integer classification. Independent review/full gates remain external.

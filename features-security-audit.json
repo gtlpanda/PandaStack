@@ -47,7 +47,7 @@
       ],
       "test": "acceptance/security-audit/sa-02a-journal.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "NR-01",
