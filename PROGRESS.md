@@ -1375,3 +1375,46 @@ BUGHUNT 2026-11-10: pass; fixed none; open none; report /home/gtlpanda/code/Pand
 ## Phase 2 — frozen bootstrap
 
 Phase 1 accepted and locally promoted as pinned external host 00b834c3e33911c852e6d734b7d01d34fa6463ba. Tested code at 518f8ef; two subsequent documentation-only commits retain native hunt pass. Phase 2 has six features and 55 independently prepared acceptance cases. Preserve all Phase 1 regression/acceptance gates. Native active-turn primitive spike passed in owned ephemeral sessions; shipped adapter and two-project queue dogfood remain pending. First run is bounded to one iteration. No remote merge, push or deployment.
+
+## P2-01 — Validated revision-bound decision records
+
+Added core/skills/decisions/records.mjs with validateDecision() and
+createDecision(). The shared pure boundary checks complete exact shapes, safe
+identifiers, normalized absolute repository paths, lowercase 40-hex revisions,
+bounded text/options/evidence, UTC calendar timestamps and later expiry. Approval
+records require approve/reject options and explicit matching revision scope.
+Construction detaches all nested data and rejects accessors, hidden/unknown
+properties and sparse arrays without invoking caller serialization hooks. Public
+errors contain no submitted values. Caller filesystem canonicalization remains
+the caller's responsibility; records do not require live repository access.
+
+Added tests/decision-records.test.mjs using workflow-harness test(); automatic
+tests/*.test.mjs discovery includes it. Six groups exercise required fields,
+types, unknown nested fields, bounds, paths, timestamps (including submillisecond
+expiry), approval scope, safe errors, hostile accessors and snapshot isolation.
+D45-D47 record implementation and host-ownership decisions.
+
+Exact focused validation:
+- Before implementation, `node acceptance/phase2/p2-01.test.mjs`: exit 1;
+  0 passed, 3 failed, all ERR_MODULE_NOT_FOUND for decisions/records.mjs.
+- Before implementation,
+  `node --input-type=module -e "await import('./tests/decision-records.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1, ERR_MODULE_NOT_FOUND for decisions/records.mjs before test loading.
+- After implementation, `node acceptance/phase2/p2-01.test.mjs`: exit 0;
+  3 passed, 0 failed.
+- `node --input-type=module -e "await import('./tests/decision-records.test.mjs'); await import('./tests/run-records.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; aggregate `{ pass: 11, fail: 0 }`, comprising six new groups and five
+  unchanged Phase 1 record groups.
+- `bash scripts/check-secrets.sh`: exit 0, `check-secrets: clean` (tracked files).
+- `bash scripts/check-secrets.sh core/skills/decisions/records.mjs tests/decision-records.test.mjs`:
+  exit 0, `check-secrets: clean` (both new untracked source/test files).
+- `git diff --check`: exit 0.
+
+Read-only Explore audit and parent inspection: static PASS for data flow,
+edge/error handling, security, consistency and completeness; no concrete defects
+found. These are bounded inspection results, not a full-gate pass.
+
+Only the new records module/test and decision/progress logs changed. Frozen
+inputs, feature flags, Git control and prior implementation remain untouched.
+No full gates or live providers ran; staging, commits, full regression validation
+and final completion remain with the external host.

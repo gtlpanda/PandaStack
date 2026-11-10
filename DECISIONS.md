@@ -140,3 +140,23 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   ancestry-boundary observer so ambient metadata cannot mask misclassification.
   Retain the sandbox's /tmp/.git and report non-Git control failures to the host;
   do not alter frozen fixtures, pass flags, staging or commits.
+
+## P2-01 decision record boundaries
+
+- D45 (P2-01): Implement only the selected record API as a pure validation and
+  snapshot boundary. Require every contracted field, exact nested shapes, dense
+  bounded arrays and own enumerable data properties. Reject accessors and unknown
+  properties rather than invoking serialization hooks or capturing ambient data.
+  Return detached nested objects; freezing is not required by the contract.
+- D46 (P2-01): Require normalized absolute repository paths without filesystem
+  lookups. The caller supplies the canonical filesystem identity; historical
+  records remain readable when repositories no longer exist. Validate UTC calendar
+  timestamps and compare normalized fractional seconds without millisecond loss.
+  Approval scopes require the same revision and exactly approve/reject options;
+  record construction grants no execution authority.
+- D47 (P2-01): Keep the host-selected scope and later explicit host-ownership
+  instructions authoritative over the generic mark-passed/commit/Stop-hook text.
+  Run selected acceptance and focused implementation/compatibility checks only;
+  preserve frozen inputs and leave staging, pass flags, commits and full gates to
+  the external host. Record evidence in PROGRESS.md rather than unrelated task,
+  retrospective or changelog files.
