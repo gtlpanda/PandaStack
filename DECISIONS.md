@@ -112,3 +112,7 @@ Managed observation must not create worktree content before clean checks or stag
   selected acceptance once and the two focused implementation files; do not retry
   runner-entry spawn EPERM failures or run full gates. Leave frozen inputs,
   staging, commits, pass flags and final completion to the outer host.
+
+## P1-14 Git discovery correctness
+
+Final review found path trim changed meaningful bytes and broad not-a-repository matching accepted broken Git pointers. Freeze exact pathname-output parsing and genuine-absence classification before changing implementation. Retain caller Git environment/launcher semantics, linked/separate metadata, non-Git external storage and the prior placement guard.

@@ -1099,3 +1099,77 @@ evidence above retains its original scope; full gates and completion remain with
 the external host.
 
 Final `git diff --check`: exit 0.
+
+## P1-13 two-pass review — 2026-11-10
+
+Reviewed 4edd0b612341e33f3a62d4f865da8703e9d2492c..8a0a7c51e600716e2bf631e298c312cfbc91d2f5
+against AGENTS.md, CLAUDE.md, SPEC.md and all ten phase1 contract files. Pass 1
+compared placement, selection precedence, metadata exceptions, observation semantics,
+documentation and test changes with the contracts. Pass 2 checked correctness,
+concurrency, durability, error handling, configuration provenance and compatibility.
+Two contract gaps remain below; both are static findings, not reproduced claims.
+
+REVIEW 2026-11-10: DEFECT core/skills/run-records/tracking.mjs:22 Git root parsing strips significant trailing whitespace — For a valid working tree named `/tmp/project ` (one trailing space), the existing git helper's trim() at :14 changes --show-toplevel output to `/tmp/project`. The newly added placementRoot call then canonicalizes that different path at :33. If the sibling `/tmp/project` exists, containment at :68 protects the wrong tree and an explicit store `/tmp/project /records` can be accepted inside the actual working tree, recreating the clean-input regression. If the sibling is absent, otherwise valid external tracking is unnecessarily disabled. Preserve pathname bytes by removing only Git's output newline, using path-specific output parsing if needed; add a focused trailing-space-root case with an existing sibling. Reasoned from code, untested hypothesis; no reproduction executed.
+
+REVIEW 2026-11-10: DEFECT core/skills/run-records/tracking.mjs:26 Broken Git metadata is classified as an ordinary non-Git directory — A syntactically valid .git file pointing to a missing Git directory produces a status-128 `not a git repository: <target>` failure, which matches the broad substring check and returns the supplied-directory fallback at :27. With an explicit external store, tracking proceeds to publication at :80-86 instead of executing unrecorded as required for indeterminate/invalid Git roots. The existing malformed-pointer test at tests/run-placement.test.mjs:112 uses invalid gitfile syntax, a different error path, so its pass does not cover this case. Distinguish genuine repository absence from invalid metadata/discovery failures before allowing the fallback, and cover a valid-format broken pointer with pre-mutation assertions. Reasoned from code, untested hypothesis; no reproduction executed.
+
+Prior findings dispositions (current file:line evidence):
+- Native P1-13 F1, tracking dirtying clean build-app input: ordinary placements
+  are addressed at core/skills/run-records/tracking.mjs:59-80 before publication;
+  ignored/full-root/subdirectory, exact namespace and static-alias acceptance
+  cases passed. Closure remains qualified by the trailing-whitespace defect above.
+  No blocked runner-entry reproduction was retried.
+- Frozen tracking-fixture conflict: addressed by the supervisor's external sibling
+  store at tests/run-tracking.test.mjs:15-20 and external regular-file fixture
+  at :49. Assertion behavior is preserved in the diff; all six groups passed.
+- Lost selected backend/model/subagent/probe/binary child context: remains
+  addressed by graphs/autobuild/tool/lib/proc.mjs:12-21 and :39, and
+  graphs/autobuild/tool/lib/loop.mjs:490, :513 and :520. Inspection only here;
+  prior hook/native-hunt evidence retains its original scope.
+- Doctor/launcher validation mismatch, shadowed models and null selected values:
+  remain addressed at core/skills/run-records/doctor.mjs:13-25 and :38-39,
+  graphs/autobuild/tool/lib/config.mjs:127-148 and :169-186. Inspection only.
+- Inspector-cwd dependence, empty PATH prefixes, symlink/parent traversal and
+  colon serialization: remain addressed at core/skills/run-records/doctor.mjs:82
+  and :85-96. Inspection only; these are separate from the new Git-path finding.
+- Directory replacement race: retained no-follow descriptors remain at
+  core/skills/run-records/store.mjs:28-66, with anchored reads at :79,
+  publication at :120 and :128, cleanup at :139 and enumeration at :148.
+  Addressed by inspection; no exploit or previously blocked reproduction run.
+- Missing durability barriers: parent sync at store.mjs:63, file sync at :122,
+  publication sync at :132 and replay sync at :113 remain. Inspection only;
+  no physical power-loss claim. Store paths here are core/skills/run-records/.
+- Selected central configuration/source-checkout dependency, including older
+  BUGHUNT F1: remains addressed at graphs/autobuild/tool/lib/config.mjs:114-119,
+  preserving lazy public getters at :73-77; doctor selects the owner at
+  core/skills/run-records/doctor.mjs:109 and supplies it at :38. Inspection only.
+- Close-after-release cleanup: remains addressed at
+  core/skills/run-records/store.mjs:124-126 and :134-139. Inspection only.
+- Default provider execution/trust boundary: remains addressed at
+  core/skills/run-records/doctor.mjs:104 and :129-137. Inspection only.
+- Operational read classification and falsy binaries: remain addressed at
+  core/skills/run-records/store.mjs:20-23 and :88-95, and
+  graphs/autobuild/tool/lib/config.mjs:134-137. Inspection only.
+- Event ordering and adapter provenance/session overrides remain addressed at
+  core/skills/run-records/store.mjs:11-17 and adapters.mjs:18-19, :36-52.
+  Adapter implementation tests passed; event ordering was inspected only.
+  Null effort and explicit-binary prerequisites remain at doctor.mjs:20 and :135.
+- Historical manual_review, interrupted/failed gates and revision-specific host
+  evidence retain their limitations. This review does not change their disposition
+  into a full pass or change feature flags or host-owned completion.
+
+Focused verification:
+- `node --test-skip-pattern='actual build-app|actual autobuild' acceptance/phase1/p1-13.test.mjs`:
+  exit 0; 15 passed, 0 failed. The five previously blocked runner-entry cases
+  were excluded, not retried; this is not a full acceptance pass.
+- `node --input-type=module -e "await import('./tests/run-placement.test.mjs'); await import('./tests/run-tracking.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; 14 passed, 0 failed. These existing tests do not cover the two findings.
+
+Only PROGRESS.md was modified. No full suite, bare autobuild, real provider call,
+exploit reproduction, blocked reproduction retry, code/test edit, staging, commit,
+push, branch/git-control change or feature-pass change was performed. Full gates
+and final completion remain with the pinned external host.
+
+## P1-14 independent acceptance freeze
+
+P1-13 full feature gate passed at12:41:30UTC and committed8a0a7c51. Final review recorded two reasoned discovery defects; independent36-case matrix reproduced both classes (3 passing controls,33 expected failures), with exact raw Git output assertions and independent review clear. Supervisor stopped ownedhost38629 during post-review gates (/tmp/pandastack-stop-p113-git-discovery.json); interrupted gates are not passes. Preserved review text. No new native hunt was claimed. Freeze P1-14 and retain all prior contracts/tests, including run-placement.

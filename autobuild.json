@@ -250,6 +250,7 @@
     "tests/run-hardening.test.mjs",
     "tests/run-launch-parity.test.mjs",
     "tests/run-path-parity.test.mjs",
+    "tests/run-placement.test.mjs",
     "tests/run-records.test.mjs",
     "tests/run-store.test.mjs",
     "tests/run-tracking.test.mjs",

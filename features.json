@@ -202,6 +202,22 @@
       "test": "acceptance/phase1/p1-13.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "P1-14",
+      "title": "Preserve exact Git paths and distinguish invalid discovery",
+      "description": "Implement spec/contracts/phase1-git-discovery.md. Keep P1-13 placement and all earlier frozen tests. Ordinary owned Git fixtures only; no provider or exploit calls.",
+      "contract": "spec/contracts/phase1-git-discovery.md",
+      "dependencies": [
+        "P1-13"
+      ],
+      "acceptance": [
+        "Preserve all pathname bytes except Git output terminator across target, runner and metadata paths.",
+        "Only genuine non-Git absence permits fallback; invalid metadata or indeterminate controlled discovery executes unrecorded before mutation."
+      ],
+      "test": "acceptance/phase1/p1-14.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
