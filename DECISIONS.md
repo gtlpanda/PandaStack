@@ -22,3 +22,7 @@
 
 - D21 (P1-05): Extract the existing managed config merge/validation into `resolveManagedConfig`, called by both `loadConfig` and doctor. Doctor supplies the selected backend and central config while preserving settings provenance and safe diagnostics. No separate timeout/hooks/budget validation copy or launcher behavior change.
 - D22 (P1-05): On Linux/WSL, retain O_DIRECTORY|O_NOFOLLOW descriptors from the filesystem root through the target directory, verify procfs descriptor resolution before mutation, and use `/proc/self/fd` anchors for record I/O, enumeration, publication and cleanup. Fail closed without this mechanism. Sync traversed parents on writes (including previously created directories), sync publication on both creation and replay, and close retained descriptors on success/failure. Validate via ordinary operations and injected I/O failures only; no prohibited race reproduction or physical power-loss claim. Host owns flags, commits, full gates and final phase evidence.
+
+## P1-06: independently confirmed final-review defects
+
+Freeze selected-installation and close-error regressions before another bounded autobuild session. The native hunt proposed configuration repair remains unlanded after an inconclusive suite comparison; do not override its result. Fix both confirmed behaviors through the ordinary external host gates and repeat branch review.

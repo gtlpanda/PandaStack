@@ -73,6 +73,22 @@
       "test": "acceptance/phase1/p1-05.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "P1-06",
+      "title": "Fix selected configuration isolation and close-error cleanup",
+      "description": "Implement spec/contracts/phase1-followup.md. Preserve every existing gate and frozen test. No exploit reproduction is requested.",
+      "contract": "spec/contracts/phase1-followup.md",
+      "dependencies": [
+        "P1-05"
+      ],
+      "acceptance": [
+        "Doctor uses the selected central configuration without consulting source defaults.",
+        "Temporary records are cleaned up when close releases its descriptor then reports EIO; preserve safe IO_ERROR."
+      ],
+      "test": "acceptance/phase1/p1-06.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
