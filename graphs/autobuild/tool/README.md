@@ -21,6 +21,72 @@ Set up a new project with the `/autobuild` skill (`graphs/autobuild/skills/autob
 
 ## How one iteration works
 
+### Managed decision gate
+
+Opt in by adding this complete object to the project's `autobuild.json`:
+
+```json
+{
+  "decisions": {
+    "store": "/home/example/.local/state/pandastack/decisions",
+    "runId": "workflow-example-1",
+    "featureId": "F-1",
+    "ids": ["color-choice"],
+    "timeoutMs": 60000
+  }
+}
+```
+
+Use an absolute normalized store path, a nonempty list of distinct request IDs,
+and an integer timeout from 0 to 2147483647 milliseconds per request. The feature
+must exist exactly once. Omit `decisions` to retain the ordinary loop behavior.
+Config loading and default doctor validate structure without opening a queue,
+creating storage or running a provider; successful inspection does not establish
+queue readiness.
+
+Prepare requests through `pandastack decision request --store DIR --file JSON`
+using the canonical project path, configured logical `runId`, and exact current
+Git HEAD. Submit an ordinary answer with `pandastack decision answer --store DIR
+--id ID --file JSON`. Request and answer JSON formats are in the
+[Phase 2 contract](../../../spec/contracts/phase2.md). Inputs are data, never commands.
+
+Immediately before that feature's builder, the host waits without a model
+process, binds recipient and revision, and acknowledges receipt before launch.
+The builder receives delimited untrusted question/selected-answer data. Approval
+requests stop with `MANUAL_HANDOFF` before acknowledgment or launch. Ordinary
+answers and matching approval scope never grant merge, publish, deploy or command
+permission; actor text is attribution, not authenticated consent.
+
+Use a fresh logical `runId` for a new workflow. For an incomplete feature retry,
+keep the same canonical repo, runId, feature, request and revision: they determine
+the durable delivery ID. Invocation UUIDs and provider session IDs are fresh and
+do not enter that identity. Feature commits remain the execution checkpoint;
+completed features and subsequent builders do not reuse the old answer/context.
+HEAD is rechecked before each acknowledgment and immediately before spawn.
+Timeout, cancellation, expiry, wrong routing or stale revision stop before launch
+(exit 14; interruption exits 130). Reconcile the request or answer it, then retry.
+Arbitrary answer effects are not exactly-once; consumers need durable checkpoints.
+
+Keep the queue outside project and runner worktrees, on Linux/WSL local POSIX
+storage. A newly created private leaf uses mode 0700, with database and sidecars
+mode 0600. Preexisting unsafe permissions, ownership, symlinks and nonregular
+files are refused. Shared parents such as `/tmp/` are permitted. The trust boundary
+is one OS user, not a remote authorization service. Keep secrets out of decisions
+and protect provider logs/context as you would other task input.
+
+The host emits one-line `PANDASTACK_DECISION` JSON v2 observations for `waiting`,
+`received` and `wait_failed`, with a persisted random queue namespace, logical
+identity, actual Phase 1 outer ID (or null), fresh trace/span/event IDs and
+monotonic elapsed milliseconds. No answer text, actor or raw errors are emitted.
+Observations are best-effort and never authorize work. This feature does not claim
+complete trace coverage, supplied-context counts, or native interactive delivery.
+Owned Codex active-turn delivery is a separate adapter; Claude interactive delivery
+remains unsupported/unproven and requires manual handoff. Terminal-session resume
+is separate. Never fall back to another provider. Live demonstrations are owned by
+the supervisor; mocked checks are not live evidence.
+
+### Builder lifecycle
+
 1. **Pick the feature.** `next`: the first feature with `passes: false` whose dependencies pass and that has no `BLOCKER <ID>:` line in `PROGRESS.md`.
 2. **Start a session.**
    - Fresh `claude -p "<prompt>"` with `--permission-mode dontAsk`, the configured allowlist, turn and budget caps.

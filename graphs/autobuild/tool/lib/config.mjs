@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 
 import { readAgentConfig, validateConcurrency } from "../../../../scripts/agent-config.mjs";
+import { validateDecisionConfig } from "../../../../core/skills/decisions/config.mjs";
 
 export const CONFIG_FILE = "autobuild.json";
 
@@ -140,6 +141,7 @@ export function resolveManagedConfig({ project: raw = {}, env = {}, overrides = 
     if (config.limits.totalBudgetUsd != null) throw new Error("Codex does not report dollar cost; remove totalBudgetUsd and use maxIterations/sessionTimeoutMinutes instead");
   }
   validateConcurrency(config.maxConcurrentSubagents);
+  if (config.decisions !== undefined) config.decisions = validateDecisionConfig(config.decisions);
   if (env.EXPECTED_BRANCH) config.branch = env.EXPECTED_BRANCH;
   config.env.pathPrepend = (config.env.pathPrepend ?? []).map(expandHome);
   config.env.ldLibraryPath = (config.env.ldLibraryPath ?? []).map(expandHome);

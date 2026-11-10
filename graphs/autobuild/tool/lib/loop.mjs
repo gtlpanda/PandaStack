@@ -1,5 +1,7 @@
-import { withTrackedRun } from '../../../../core/skills/run-records/tracking.mjs';
+import { withTrackedRun, currentRunId } from '../../../../core/skills/run-records/tracking.mjs';
 import { autobuildTracking } from '../../../../core/skills/run-records/adapters.mjs';
+import { createDecisionTrace } from '../../../../core/skills/decisions/observations.mjs';
+import { prepareDecisionGate, decisionRevision, validateDecisionFeature } from './decisions.mjs';
 // The autobuild loop: one fresh headless Claude session per feature, until every feature
 // passes, the iteration cap is hit, NO_PROGRESS_LIMIT sessions in a row make no progress,
 // or something needs a human. A usage limit is a pause, not a failure: the loop sleeps
@@ -12,6 +14,7 @@ import { autobuildTracking } from '../../../../core/skills/run-records/adapters.
 //   9 billing / spend limit      10 auth problem              11 another loop is running
 //   12 the bug hunt needs a human (findings left open, or it could not run or land)
 //   13 the final review ended twice without its commit (the last features are unreviewed)
+//   14 a managed decision could not safely release the selected builder
 //   130 interrupted
 //
 // Once every feature passes (and the final review ran), lib/bughunt.mjs runs /bughunt --fix over
@@ -19,7 +22,7 @@ import { autobuildTracking } from '../../../../core/skills/run-records/adapters.
 
 import { claudeAgentSettings, readAgentConfig, validateConcurrency } from "../../../../scripts/agent-config.mjs";
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, linkSync, mkdirSync, openSync, closeSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, linkSync, mkdirSync, openSync, closeSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { statePath } from "./config.mjs";
 import { countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures, blockedClosure } from "./features.mjs";
@@ -148,6 +151,12 @@ export async function runLoop(config, options = {}) {
 }
 
 async function runLoopWork(config, options) {
+  let decisionTrace;
+  if (config.decisions !== undefined) {
+    try {
+      decisionTrace = createDecisionTrace({ repo: realpathSync(config.root), revision: decisionRevision(config), invocationRunId: currentRunId() });
+    } catch { /* Observations cannot change queue or work behavior. */ }
+  }
   const runId = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
   const logsDir = path.join(config.root, config.logsDir);
   mkdirSync(logsDir, { recursive: true });
@@ -172,9 +181,13 @@ async function runLoopWork(config, options) {
     if (readPid(pidFile) === process.pid) rmSync(pidFile, { force: true });
   };
   let interrupted = false;
+  let waitingForDecision = false;
+  const decisionAbort = new AbortController();
   const onSignal = () => {
     if (interrupted) return;
     interrupted = true;
+    decisionAbort.abort();
+    if (waitingForDecision) return;
     log("interrupted; stopping the running session");
     stopSessions().finally(() => {
       cleanup();
@@ -255,25 +268,44 @@ async function runLoopWork(config, options) {
         return 3;
       }
 
-      const base = git(config, ["rev-parse", "HEAD"]).output.trim();
+      let decisionGate;
+      try {
+        waitingForDecision = true;
+        decisionGate = await prepareDecisionGate({ config, feature, trace: decisionTrace, signal: decisionAbort.signal });
+      } catch (error) {
+        log(`decision gate stopped: ${error.code ?? 'IO_ERROR'}`);
+        return interrupted ? 130 : 14;
+      } finally { waitingForDecision = false; }
+
       const passingBefore = countPassing(doc);
       const label = `${String(iteration + 1).padStart(2, "0")}-${feature.id}`;
       const iterLog = path.join(logsDir, `${runId}-iter-${label}${limitWaitedMs > 0 || transientStreak > 0 ? `-retry-${Date.now()}` : ""}.jsonl`);
-      writeSession(config, { role: "builder", featureId: feature.id, iteration: iteration + 1, baseSha: base, startedAt: new Date().toISOString(), progressAtStart: readProgress(config), stopAttempts: 0 });
-      clearStopFailure(config);
-
-      log(`iteration ${iteration + 1}: ${feature.id} — ${feature.title} (base ${base.slice(0, 8)}, ${passingBefore} passing)`);
-      const started = Date.now();
-      const control = gitControlDigest(config);
-      const exitCode = await runClaude(config, {
-        role: "builder",
-        prompt: config.prompt,
-        appendSystemPrompt: builderSystemPrompt(config, feature, iteration + 1),
-        maxTurns: limits.maxTurns,
-        maxBudgetUsd: limits.maxBudgetUsd,
-        allowedTools: config.allowedTools,
-        logFile: iterLog,
-      });
+      let exitCode, base, started, control, gateFailure;
+      try {
+        base = git(config, ["rev-parse", "HEAD"]).output.trim();
+        writeSession(config, { role: "builder", featureId: feature.id, iteration: iteration + 1, baseSha: base, startedAt: new Date().toISOString(), progressAtStart: readProgress(config), stopAttempts: 0 });
+        clearStopFailure(config);
+        log(`iteration ${iteration + 1}: ${feature.id} — ${feature.title} (base ${base.slice(0, 8)}, ${passingBefore} passing)`);
+        started = Date.now();
+        control = gitControlDigest(config);
+        exitCode = await runClaude(config, {
+          role: "builder",
+          prompt: decisionGate ? config.prompt + decisionGate.context : config.prompt,
+          beforeLaunch: decisionGate ? () => {
+            try { decisionGate.beforeLaunch(); }
+            catch (error) { gateFailure = error; throw error; }
+          } : undefined,
+          appendSystemPrompt: builderSystemPrompt(config, feature, iteration + 1),
+          maxTurns: limits.maxTurns,
+          maxBudgetUsd: limits.maxBudgetUsd,
+          allowedTools: config.allowedTools,
+          logFile: iterLog,
+        });
+      } catch (error) {
+        if (error !== gateFailure) throw error;
+        log(`decision gate stopped: ${error.code ?? 'IO_ERROR'}`);
+        return interrupted ? 130 : 14;
+      } finally { decisionGate?.close(); }
       if (interrupted) return 130;
       const elapsed = Math.round((Date.now() - started) / 1000);
       const result = config.backend === "codex" ? readCodexResult(iterLog) : readResult(iterLog);
@@ -406,6 +438,11 @@ async function runLoopWork(config, options) {
 
 function preflight(config, log) {
   let failed = false;
+  try { if (config.decisions !== undefined) validateDecisionFeature(config, readFeatures(config)); }
+  catch {
+    log('preflight: invalid decisions featureId or configuration');
+    return 5;
+  }
   if (readFeatures(config).features.length === 0) {
     log(`preflight: ${config.featuresFile} lists no features; write the feature list and its frozen tests first (the /autobuild skill)`);
     failed = true;
@@ -496,11 +533,11 @@ async function runClaude(config, options) {
   return withTrackedRun(autobuildTracking(config, "session"), () => runClaudeWork(config, options));
 }
 
-async function runClaudeWork(config, { role, prompt, appendSystemPrompt, maxTurns, maxBudgetUsd, allowedTools, logFile }) {
+async function runClaudeWork(config, { role, prompt, appendSystemPrompt, maxTurns, maxBudgetUsd, allowedTools, logFile, beforeLaunch }) {
   if (config.backend === "codex") {
     const feedback = statePath(config, "codex-feedback.txt");
     if (role === "builder" && existsSync(feedback)) prompt += `\nPrevious gate feedback:\n${readFileSync(feedback, "utf8")}`;
-    return runCodex(config, { role, prompt, appendSystemPrompt, logFile }, track);
+    return runCodex(config, { role, prompt, appendSystemPrompt, logFile, beforeLaunch }, track);
   }
   const settingsFile = statePath(config, `session-settings.json`);
   writeFileSync(settingsFile, `${JSON.stringify(sessionSettings(config), null, 2)}\n`);
@@ -531,6 +568,7 @@ async function runClaudeWork(config, { role, prompt, appendSystemPrompt, maxTurn
   const out = openSync(logFile, "w");
   const err = openSync(`${logFile}.stderr`, "w");
   try {
+    beforeLaunch?.();
     return await new Promise((resolve) => {
       const child = track(spawn(config.claudeBin, args, { cwd: config.root, env, stdio: ["ignore", out, err] }));
       child.on("close", (code) => resolve(code ?? 1));

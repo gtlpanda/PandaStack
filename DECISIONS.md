@@ -215,3 +215,58 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   independently confirming a local process boundary limitation. Do not bypass or
   retry it. In-process CLI tests cover shared native state and safe errors but do
   not replace frozen process acceptance; leave that validation to the host.
+
+## P2-04 managed gate and host observations
+
+- D55 (P2-04): Keep decisions configuration validation pure and shared with the
+  managed resolver/default doctor. Require the complete exact object, normalized
+  absolute store path, safe logical/feature/request IDs, unique nonempty IDs and
+  integer timeout 0..2147483647ms per request. Validate target feature existence
+  before managed execution; inspection never opens a queue or launches a provider.
+- D56 (P2-04): Gate only the selected incomplete target feature. Hash the ordered
+  canonical-repo/logical-run/feature/request/revision tuple for deterministic
+  delivery identity; preserve fresh Phase 1 invocation and child IDs. Refuse
+  approvals before delivery/ack. Check HEAD before ack and at each provider's
+  actual spawn boundary, rechecking earlier receipts for expiry after later waits.
+  Keep committed feature checkpoints and do not put decision context in config,
+  reviews, probes or later builders. Encode selected question/answer JSON as
+  explicitly untrusted data with escaped delimiter characters; omit actor/evidence.
+- D57 (P2-04): Use typed v2 wait spans with detached events, monotonic durations,
+  terminal replay and safe observer errors. Sink/input/clock failures mark coverage
+  incomplete but cannot change queue outcomes or provider errors. Queue failures
+  stop with exit 14; abort during waiting returns 130. Native delivery, transport
+  receipts and complete trace closure remain P2-05/P2-06 work, not claims here.
+- D58 (P2-04): The selected baseline acceptance run failed nine process cases at
+  fixture setup with spawnSync git EPERM; two pure observation cases initially
+  failed because the module was absent. Do not retry or bypass the denied process
+  boundary. Validate pure observations and real in-process queue/config behavior;
+  any synthetic process tests are explicitly mocked, not live evidence. Preserve
+  frozen inputs and leave full gates, feature flags, commits and completion to
+  the pinned external host.
+
+- D59 (P2-04 gate-feedback retry): Reproduced the reported reference-check failure
+  before editing. Spell the documented shared parent directory as `/tmp/` so it
+  is unambiguously a path rather than a slash command. Preserve the frozen checker
+  and inherited implementation/tests. Reuse focused P2-04 implementation coverage
+  and the two process-free acceptance cases; do not retry the previously denied
+  process cases or run full gates. No new implementation/test files are needed
+  for this documentation correction; explicitly scan all six inherited untracked
+  source/test files before returning to the host.
+
+- D60 (P2-04 fixture-closure retry): Retain the existing implementation and tests
+  after the host's reviewed frozen fixture amendment. Verify the amended
+  run-followup groups together with focused P2-04 and compatibility checks;
+  no additional implementation change is justified by passing focused evidence.
+  Do not edit the frozen fixture, retry previously denied process acceptance,
+  or run full gates. Explicitly scan the six untracked source/test files as well
+  as tracked files. Leave pass flags, staging, commits and final review to the host.
+
+- D61 (P2-04 second fixture-closure retry): Retain implementation and tests after
+  the host's second reviewed dependency-copy amendment. Verify the amended
+  Phase 1 acceptance file directly plus focused integration/compatibility checks
+  and the two process-free P2-04 acceptance cases. The initial Phase 1 invocation
+  with --test-isolation=none produced no test output and was interrupted; its
+  cause is unverified. The bounded direct invocation passes both assertions.
+  No additional code change is justified by these results. Preserve frozen
+  inputs and leave process-based P2-04 acceptance, full gates and Git mutations
+  to the host; scan tracked files and all six untracked source/test files.

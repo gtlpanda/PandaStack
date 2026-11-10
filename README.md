@@ -495,3 +495,22 @@ a terminal event. A conflicting supplied run ID does not modify the earlier run.
 Focused tests under `tests/run-tracking.test.mjs` are discovered by normal workflow
 CI. Fake-provider coverage does not establish native provider support or live
 readiness; supervisor-run acceptance and live dogfood evidence remain required.
+
+### Opt-in managed decision waiting
+
+Autobuild can wait for explicitly assigned ordinary questions immediately before
+one named feature's builder. Configure `decisions` as described in the
+[autobuild decision gate guide](graphs/autobuild/tool/README.md#managed-decision-gate).
+It waits without a model process, acknowledges the matching queue receipt before
+launch, and supplies only delimited untrusted question/selected-answer data.
+Approval requests require manual handoff and never release this gate.
+
+Use a private external Linux/WSL local directory for the shared SQLite queue.
+`decisions.runId` is a stable logical retry group, separate from fresh Phase 1
+invocation/session IDs. Version 2 `PANDASTACK_DECISION` lines correlate waiting,
+received and failed waits without answer text or actor data. These observations
+do not yet establish complete trace coverage or model consumption. Queue failures
+stop the builder; observational failures preserve queue and work behavior.
+Native active-session delivery is not supplied by this gate. Unsupported
+interactive adapters, including Claude, require explicit manual handoff; terminal
+session resume is a separate capability. There is no provider fallback.

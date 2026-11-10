@@ -1528,3 +1528,186 @@ full-gate completion. Changed only the routing module, CLI module/entry point,
 new implementation test and decision/progress logs. Frozen inputs, feature flags,
 Git control, staging and commits remain untouched. No full gates or live providers
 ran; the external host retains process acceptance, full gates and final review.
+
+## P2-04 — Opt-in autobuild decision gate
+
+Added pure shared decisions configuration validation, the managed selected-feature
+gate and typed version 2 host observations. The gate uses canonical repo, logical
+retry ID, selected feature, request and exact HEAD for deterministic delivery IDs;
+it waits without a provider, refuses approvals before delivery/ack, acknowledges
+ordinary answers before launch and supplies delimited untrusted selected-answer
+context only to that builder. Both provider spawn boundaries recheck HEAD and
+live receipts. Completed-feature checkpoints, unrelated builders, reviews and
+probes retain their behavior. Phase 1 invocation/session identities remain fresh
+and independent of logical decision IDs. Config loading/default doctor never open
+the queue. Safe queue failures stop execution; observer failures preserve work
+and original errors. README, tool README and skill instructions describe setup,
+private external storage, retry identities, permission boundaries and adapter limits.
+
+New workflow-harness tests cover config inspection, routing/refusal, timeout and
+abort, durable replay, canonical aliases, multiple answers and late expiry,
+monotonic observations, exact terminal replay, unsafe inputs and observer failures.
+Both managed provider paths have in-process synthetic process mocks verifying
+ack-before-spawn, HEAD checks, context isolation and unchanged provider outcomes.
+All process calls in those tests are mocked; they are not live/provider or real
+Git process evidence. D55-D58 record the implementation choices and limitations.
+
+Exact focused validation:
+- Baseline `node acceptance/phase2/p2-04.test.mjs`: exit 1; 0 passed, 11 failed.
+  Nine process-dependent cases failed in fixture setup with `spawnSync git EPERM`
+  at graphs/autobuild/tool/test-fixtures/project.mjs:21-22. The two pure observation
+  cases failed with ERR_MODULE_NOT_FOUND for decisions/observations.mjs. The nine
+  denied process cases were not retried or waived; host verification is required.
+- Tests prepared before implementation:
+  `node --input-type=module -e "await import('./tests/decision-managed.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1, ERR_MODULE_NOT_FOUND for the managed decisions module. After implementation
+  this command exited 0 with `{ pass: 7, fail: 0 }`; the later expiry group adds one.
+- `node --test --test-isolation=none --test-name-pattern='host gate durations|invalid observations' acceptance/phase2/p2-04.test.mjs`:
+  exit 0; 2 named cases passed, 0 failed. No process-based cases were run here.
+- Final focused implementation and compatibility run:
+  `node --input-type=module -e "await import('./tests/decision-managed.test.mjs'); await import('./tests/decision-observations.test.mjs'); await import('./tests/decision-launch.test.mjs'); await import('./tests/decision-routing.test.mjs'); await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; `{ pass: 37, fail: 0 }` (8 managed, 7 observation, 8 synthetic runner,
+  7 existing routing/CLI and 7 existing doctor groups). The earlier focused run
+  without synthetic runner tests passed 29/0.
+- `bash scripts/check-secrets.sh`: exit 0, `check-secrets: clean` for tracked files.
+- `bash scripts/check-secrets.sh core/skills/decisions/config.mjs core/skills/decisions/observations.mjs graphs/autobuild/tool/lib/decisions.mjs tests/decision-managed.test.mjs tests/decision-observations.test.mjs tests/decision-launch.test.mjs`:
+  exit 0, `check-secrets: clean` for every new untracked source/test file. Scanner
+  rules unchanged; no fixture annotations were needed.
+- `git diff --check`: exit 0.
+
+Read-only Explore audit found a setup-error queue cleanup gap and missing docs/
+expiry coverage during implementation. Setup now shares the owning try/finally;
+docs and actual expiry coverage were added. Follow-up inspection reports PASS for
+data flow, edge/error handling, security, consistency, missing pieces and Phase 1
+opt-out, with no remaining concrete defect. This is bounded inspection plus the
+focused test evidence above, not a full-gate pass or live delivery claim.
+
+Changed only decision/config/observation implementation, managed launch wiring,
+new tests, documentation and decision/progress logs. Frozen inputs, feature flags,
+Git control, staging and commits are untouched. No full gates or live providers
+ran. Native active-turn delivery and complete context traces remain P2-05/P2-06;
+the external host owns process acceptance, full gates, commits and final review.
+
+## P2-04 — Opt-in autobuild decision gate
+
+Gate-feedback retry: reproduced the host's reference-check failure at
+graphs/autobuild/tool/README.md:73. Changed the shared-parent example from `/tmp`
+to `/tmp/`, preserving its filesystem meaning while avoiding slash-command
+classification. This retry changes only that documentation line and the decision/
+progress logs; inherited P2-04 implementation and harness tests remain intact.
+No new test is needed for this formatting correction; the unchanged reference
+checker directly verifies the reported regression. D59 records the scoped choice.
+
+Exact focused validation:
+- Before correction, `node scripts/check-refs.mjs`: exit 1;
+  `graphs/autobuild/tool/README.md:73: command 'tmp' is not in this repo or built into Claude Code`;
+  `check-refs: 1 of 268 references do not resolve`.
+- After correction, `node scripts/check-refs.mjs`: exit 0;
+  `check-refs: 267 references, all resolve`.
+- `node --test --test-isolation=none --test-name-pattern='host gate durations|invalid observations' acceptance/phase2/p2-04.test.mjs`:
+  exit 0; 2 passed, 0 failed. Process-based acceptance cases remain host-owned;
+  the prior sandbox-denied cases were not retried.
+- `node --input-type=module -e "await import('./tests/decision-managed.test.mjs'); await import('./tests/decision-observations.test.mjs'); await import('./tests/decision-launch.test.mjs'); await import('./tests/decision-routing.test.mjs'); await import('./tests/run-doctor.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; aggregate `{ pass: 37, fail: 0 }`. Provider process boundaries are
+  synthetic mocks, not live provider evidence.
+- `bash scripts/check-secrets.sh`: exit 0; `check-secrets: clean` (tracked files).
+- `bash scripts/check-secrets.sh core/skills/decisions/config.mjs core/skills/decisions/observations.mjs graphs/autobuild/tool/lib/decisions.mjs tests/decision-launch.test.mjs tests/decision-managed.test.mjs tests/decision-observations.test.mjs`:
+  exit 0; `check-secrets: clean` (all six untracked source/test files).
+- `git diff --check`: exit 0.
+
+Read-only Explore audit of this documentation correction: PASS for data flow,
+edge/error handling, security, consistency and completeness. Scanner rules,
+frozen inputs, feature flags and Git control remain unchanged. No staging,
+commits, full gates or live providers; external host retains final review.
+
+
+## Host investigation — P2-04 fixture dependency closure
+
+The second host baseline failure was hidden by tail-only feedback. A complete
+unchanged baseline capture reproduced exactly one workflow failure (1549 passed):
+tests/run-followup.test.mjs copied config.mjs but omitted its two new pure decision
+module imports, so none of the original isolation assertions ran. Independent
+review approved adding those two paths only. Frozen test/contract amendment
+ecc85d02307f3b57eeb100d939d440821cea4e08 preserves every assertion. Root focused
+run now passes both groups (summary pass2/fail0). Full host acceptance is pending.
+Retained P2-04 implementation is unchanged by this amendment. Full capture:
+/tmp/pandastack-phase2-p204-full-baseline.log; focused proof:
+/tmp/pandastack-phase2-p204-fixture-after.log. Continue P2-04 normally; do not edit
+the frozen fixture or scanner to bypass a failure.
+
+## P2-04 — Opt-in autobuild decision gate
+
+Fixture-closure retry after the host's reviewed amendment: retained the P2-04
+implementation and its three workflow-harness test files unchanged. The amended
+run-followup fixture now passes both original groups in the same focused run as
+the decision integration and compatibility checks. No further implementation
+change was needed. This session adds only D60 and this progress entry.
+
+Exact focused validation:
+- `node --input-type=module -e "await import('./tests/decision-managed.test.mjs'); await import('./tests/decision-observations.test.mjs'); await import('./tests/decision-launch.test.mjs'); await import('./tests/decision-routing.test.mjs'); await import('./tests/run-doctor.test.mjs'); await import('./tests/run-followup.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; aggregate `{ pass: 39, fail: 0 }`, including both amended fixture
+  groups. Provider launch checks use synthetic process mocks, not live providers.
+- `node --test --test-isolation=none --test-name-pattern='host gate durations|invalid observations' acceptance/phase2/p2-04.test.mjs`:
+  exit 0; 2 passed, 0 failed. Previously sandbox-denied process cases remain
+  host-owned and were not retried or waived.
+- `node scripts/check-refs.mjs`: exit 0;
+  `check-refs: 267 references, all resolve`.
+- `bash scripts/check-secrets.sh`: exit 0; `check-secrets: clean` (tracked files).
+- `bash scripts/check-secrets.sh core/skills/decisions/config.mjs core/skills/decisions/observations.mjs graphs/autobuild/tool/lib/decisions.mjs tests/decision-launch.test.mjs tests/decision-managed.test.mjs tests/decision-observations.test.mjs`:
+  exit 0; `check-secrets: clean` (all six untracked source/test files).
+- `git diff --check`: exit 0.
+
+Read-only Explore audit: PASS for data flow, edge/error handling, security,
+consistency and P2-04 completeness; no concrete defect found. This is bounded
+review and focused validation, not full-gate or live delivery evidence. Frozen
+inputs, scanner rules, feature flags and Git control remain unchanged. No staging,
+commits, full gates or live provider calls; external host retains final review.
+
+
+## Host investigation — second copied-source fixture
+
+The amended baseline passed, then Phase 1 acceptance exposed the same omitted
+pure-module closure in acceptance/phase1/p1-06.test.mjs (252/253 passed). The
+host was stopped gracefully (130) before editing its frozen fixture. Independent
+review cleared adding only the two pure dependency paths and identified no other
+partial config-copy fixtures beyond these two. Commit
+d07b7d7124916da5c32aad9a9b9771208757e126 changes only that copy list and contract
+rationale. Original assertions and trusted capability fixture remain unchanged.
+Root host verification now passes Phase 1 253/253 and current Phase 2 29/29:
+/tmp/pandastack-phase2-p204-phase1-after.log and
+/tmp/pandastack-phase2-p204-phase2-current-after.log. Retained implementation is
+unchanged by supervisor; complete normal host gates and review.
+
+## P2-04 — Opt-in autobuild decision gate
+
+Second fixture-closure retry: retained implementation and the three existing
+workflow-harness test files after the host's reviewed Phase 1 copy-list amendment.
+The amended acceptance file passes both original assertions with its direct
+invocation. No additional implementation change was needed; this session adds
+only D61 and this progress entry.
+
+Exact focused validation:
+- `node --input-type=module -e "await import('./tests/decision-managed.test.mjs'); await import('./tests/decision-observations.test.mjs'); await import('./tests/decision-launch.test.mjs'); await import('./tests/decision-routing.test.mjs'); await import('./tests/run-doctor.test.mjs'); await import('./tests/run-followup.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; aggregate `{ pass: 39, fail: 0 }`. Provider launch tests use synthetic
+  process mocks, not live providers.
+- Initial `node --test --test-isolation=none acceptance/phase1/p1-06.test.mjs`:
+  produced no test output and was interrupted with exit 130; cause unverified.
+  Its chained P2-04 command did not execute.
+- `timeout 20s node acceptance/phase1/p1-06.test.mjs`: exit 0;
+  2 passed, 0 failed (selected-installation doctor and close-EIO cleanup).
+- `node --test --test-isolation=none --test-name-pattern='host gate durations|invalid observations' acceptance/phase2/p2-04.test.mjs`:
+  exit 0; 2 passed, 0 failed. Previously sandbox-denied process cases were not
+  retried or waived; their verification remains host-owned.
+- `node scripts/check-refs.mjs`: exit 0;
+  `check-refs: 267 references, all resolve`.
+- `bash scripts/check-secrets.sh`: exit 0; `check-secrets: clean` (tracked files).
+- `bash scripts/check-secrets.sh core/skills/decisions/config.mjs core/skills/decisions/observations.mjs graphs/autobuild/tool/lib/decisions.mjs tests/decision-launch.test.mjs tests/decision-managed.test.mjs tests/decision-observations.test.mjs`:
+  exit 0; `check-secrets: clean` (all six untracked source/test files).
+- `git diff --check`: exit 0.
+
+Read-only Explore audit: PASS for data flow, edge/error handling, security,
+consistency, completeness and Phase 1 opt-out; no concrete implementation defect
+found. This is bounded review and focused evidence, not full-gate or live delivery
+verification. Frozen inputs, scanner rules, feature flags and Git control remain
+unchanged. No staging, commits, full gates or live provider calls; the external
+host retains final review and completion.

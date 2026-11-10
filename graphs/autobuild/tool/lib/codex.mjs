@@ -40,6 +40,7 @@ async function runCodexWork(config, options, track) {
   // A nested CLI must not attach itself to its parent's thread.
   delete env.CODEX_THREAD_ID;
   try {
+    options.beforeLaunch?.();
     return await new Promise((resolve) => {
       const child = track(spawn(config.codexBin, args, { cwd: config.root, env, detached: true, stdio: ["pipe", out, err] }));
       const killGroup = (signal) => {
