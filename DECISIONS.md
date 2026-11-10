@@ -444,3 +444,18 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   The required Explore audit request failed with Unknown model gpt-6.1-sol;
   do not substitute a model/provider. Local static review is not independent
   review; the host retains that outstanding audit and the full gates.
+
+- D85 (P2-14): Implement only fixed capture-directory preparation and armCapture
+  wiring. Validate the trusted absolute state before writes; attempt each fixed
+  child mkdir once, adopt only EEXIST after real-directory/ancestry validation,
+  and harden only the validated logs root. Keep evidence-parent mode unchanged,
+  invocation's private-root/ownership checks and exclusive output opens intact.
+  Preserve literal absolute paths and the caller's stateDir in the return value.
+- D86 (P2-14 evidence): Run only the authorized five sequential helper acceptance
+  cases and focused implementation checks. Additional checks cover malformed,
+  missing/file state, literal paths and static call-site binding; none exercises
+  capture, concurrency or a blocked reproduction. Required independent Explore
+  audit could not start: requested gpt-6.1-sol was rejected as an unknown model.
+  No fallback; local static review does not replace independent host review of
+  wiring, EEXIST-only handling and authority. Native F3 ERROR and refused F4
+  evidence limits remain unchanged. Host owns full gates, flags and commits.

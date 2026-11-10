@@ -2525,3 +2525,47 @@ negative capture or filesystem-race reproduction, provider call or full gate ran
 No frozen-input, feature-flag, staging, commit, branch, Git-control or pinned-host
 changes. The external host retains the inert-test execution, independent review,
 full gates, commits and final completion.
+
+## P2-14 — Prepare fixed capture directories idempotently
+
+Added prepareCaptureDirectories(stateDir) in evidence.mjs and wired armCapture
+through it before invocation(root). The helper validates absolute state input
+before writes, attempts only the fixed evidence/logs directory creations, adopts
+only EEXIST after directory/ancestry checks, preserves evidence-parent mode and
+hardens the real logs root to0700. Existing invocation ownership/private-root
+validation and exclusive output opens remain unchanged. Added four focused
+workflow-harness tests. D85-D86 record scope and evidence limits.
+
+Exact focused validation:
+- Before implementation, `node acceptance/phase2/p2-14.test.mjs`: exit 1;
+  0 passed, 5 failed, 0 skipped. Every failure was
+  `prepareCaptureDirectories export must exist`; no fixture ran past that check.
+- After implementation, `node acceptance/phase2/p2-14.test.mjs`: exit 0;
+  5 passed, 0 failed, 0 skipped. Sequential ordinary helper checks only.
+- `node --input-type=module -e "await import('./tests/capture-directories.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  before implementation exit 1, `{ pass: 0, fail: 4 }` (missing export/wiring);
+  after implementation exit 0, `{ pass: 4, fail: 0 }`. Three helper groups and
+  one static call-site check; no process/capture lifecycle execution.
+- `node --check graphs/hunt/skills/bughunt/evidence.mjs && node --check tests/capture-directories.test.mjs && git diff --check`:
+  exit 0.
+- `bash scripts/check-secrets.sh`: exit 0; `check-secrets: clean` (tracked files).
+- `bash scripts/check-secrets.sh tests/capture-directories.test.mjs`: exit 0;
+  `check-secrets: clean` (the only new untracked source/test file).
+  Scanner rules unchanged; no fixture annotations needed.
+- Final `git diff --check`: exit 0.
+
+Local static review: bounded PASS for data flow (both capture callers use the
+helper before existing invocation allocation), edge/error handling (only EEXIST
+adopted, validation before chmod), security (fixed children, existing root-local
+authority/private-root/ownership and exclusive-output checks retained), consistency
+(unchanged parent-mode policy) and completeness within selected scope. Imports
+retain their existing inert guard. These source observations are not runtime
+capture or concurrency proof. The required independent Explore audit could not
+start: spawn_agent returned `Unknown model gpt-6.1-sol`. No model/provider fallback
+was attempted; independent static review remains host-owned and outstanding.
+
+Native F3 ERROR and refused F4 reproduction remain distinct and unchanged. No
+blocked reproduction, concurrent actor, capture lifecycle, live provider, full
+gate or later-feature work ran. No frozen inputs, pass flags, staging, commits,
+branches, Git control or pinned host were changed. External host retains full
+gates, independent review, commits and final completion.

@@ -217,8 +217,28 @@ export function createSuiteExport({repo,tree}) {
   }catch(e){cleanup();throw e}
 }
 
+// Shared fixed parents only; invocation() still owns private allocation and
+// ownership validation. Sequential reuse does not imply a hostile race guarantee.
+export function prepareCaptureDirectories(stateDir) {
+  if (typeof stateDir !== 'string' || !isAbsolute(stateDir) || stateDir.includes('\0')) throw new Error('Invalid capture state directory')
+  const directory = path => {
+    noSymlinks(path)
+    if (!lstatSync(path).isDirectory()) throw new Error('Capture path must be a directory')
+  }
+  directory(stateDir)
+  const evidence = join(stateDir, 'evidence'), root = join(evidence, 'logs')
+  for (const path of [evidence, root]) {
+    try { mkdirSync(path, { mode: 0o700 }) }
+    catch (error) { if (error.code !== 'EEXIST') throw error }
+    directory(path)
+  }
+  // Preserve the evidence parent's mode; only the validated logs root hardens.
+  chmodSync(root, 0o700)
+  return { stateDir, evidence, root }
+}
+
 function armCapture(workDir,name){
-  const stateDir=dirname(dirname(workDir)),evidence=join(stateDir,'evidence'),root=join(evidence,'logs');noSymlinks(stateDir);if(!existsSync(evidence))mkdirSync(evidence,{mode:0o700});noSymlinks(evidence);if(!existsSync(root))mkdirSync(root,{mode:0o700});noSymlinks(root);chmodSync(root,0o700)
+  const {stateDir,root}=prepareCaptureDirectories(dirname(dirname(workDir)))
   const dir=invocation(root),path=join(dir,name+'.out');return {stateDir,dir,path}
 }
 function captureResult(capture,result){
