@@ -2363,3 +2363,61 @@ ordinary success case does not establish hostile containment or failure-path
 runtime behavior. Frozen inputs, feature flags, staging, commits, branches, Git
 control and the pinned host remain untouched. The external host owns full gates,
 commits and final review.
+
+## Two-pass review — 2026-11-10 (P2-09 through P2-11)
+
+Reviewed 7e9465ffcda6b5bca9279c093d79b8fe40ebae1f..
+b31a8514208b03fdcfc488e618e7eff6516a796d. Read AGENTS.md, CLAUDE.md,
+SPEC.md, phase contracts, decision records, prior progress findings and the
+second native hunt's findings/disposition. Read changed implementation and test
+files in full and traced verify.sh, installer symlinks, both retention adapters,
+the shared owner, export Git calls, hunt receipt/manifest consumers and harness
+discovery. Historical review prose was not treated as execution coverage.
+
+REVIEW 2026-11-10: DEFECT [P2] core/skills/verify/capture-owner.sh:207,213,221,235 — Malformed control bytes can disappear without closing the scope. The admission-loop read at :207 checks only read's success status: a short non-newline fragment is consumed but ignored when read returns nonzero. A subsequent read at :213 clears message, so if anchor admission succeeds between those reads, the earlier fragment no longer prevents the initial grant. Separately, all these Bash reads silently discard NUL bytes; a NUL-only request leaves an empty message and does not select the incomplete branch. This violates phase2-capture-ownership.md:57-63 (unknown messages mean incomplete) and the pending-grant rule. Pure bounded read-predicate diagnostics confirmed both byte-loss cases, with UNKNOWN-newline and STOP-newline controls selecting incomplete. Actual owner/FIFO lifecycle consequences are reasoned from source, an untested hypothesis; no capture tree, cancellation, overflow, orphan or escape reproduction was executed. Use bounded byte-aware parsing that cannot erase malformed input, and retain partial-input failure during admission. Keep signal targets root-local. The compliant fixed STOP-newline writer is unaffected; this is a protocol error-handling finding, not a hostile-containment claim.
+
+Pass 1 — contract completeness:
+- P2-09's nonthrowing canonical entry guard reaches the existing dispatcher
+  through directory/file symlinks and preserves inert imports. The installed
+  caller and fixture dependency closure were inspected, including new siblings.
+- P2-10 removes only the Git pathname terminator and quotes one alternate-list
+  element. Literal blob restoration, executable modes, repack, alternate removal
+  and owned cleanup remain wired through both suite-export callers.
+- P2-11 supplies the exact pure record API, strict observed lineage checks,
+  private path admission, inherited nondetached launches and separate budget/
+  ownership scopes. Both adapters reach the shared owner. The malformed-message
+  finding is the identified gap in the frozen fail-closed protocol.
+
+Pass 2 — correctness/security/concurrency/error handling:
+- Traced root metadata-before-grant ordering, local birth/group signal checks,
+  bounded STOP writers, first-failure latching, membership inspection, anchor
+  release/join, adapter output settlement and receipt/manifest propagation.
+  The parser finding affects admission and control-error handling; no additional
+  concrete introduced defect was established in this bounded review.
+- Rechecked second-hunt F1/F2 against current dispatch/export code. Fresh worker
+  and synthetic Git checks support the repairs without claiming actual installed
+  task or real Git export acceptance here. F3's historical escalation is unchanged;
+  ordinary nested success does not dispose of its blocked failure scenario.
+
+Fresh focused evidence:
+- `node acceptance/phase2/p2-11.test.mjs`: exit 0; 7 passed, 0 failed, 0 skipped.
+  Six pure cases plus the authorized ordinary nested-success execution verify
+  actual group/lineage and private retained manifest/log bytes and hashes.
+- `node --input-type=module -e "for (const name of ['verify-scope-record','verify-scope-adapter','verify-capture-owner','verify-entrypoint','suite-export-paths']) await import('./tests/'+name+'.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; `{ pass: 32, fail: 0 }`. Admission/Git observations are synthetic;
+  Bash checks exercise inert validation primitives, not negative lifecycles.
+- Two inline Bash bounded-read diagnostics: exit 0 each. Using only disposable
+  pipes and builtins, the :221 predicate returned `nul:ignored:length=0`,
+  `unknown:incomplete:length=7`, `stop:incomplete:length=4`; the :207 then :213
+  predicates returned `admission_fragment:ignored:length=7; next_read:grant_allowed:length=0`.
+  These are parser evidence, not an end-to-end capture result or a passing test
+  of the required malformed-message behavior. No product owner or signals ran.
+- `bash -n core/skills/verify/capture-owner.sh core/skills/verify/retention.sh && node --check core/skills/verify/retention.mjs && node --check core/skills/verify/scope-record.mjs && node --check graphs/hunt/skills/bughunt/evidence.mjs && git diff --check`:
+  exit 0. `git diff --check 7e9465ffcda6b5bca9279c093d79b8fe40ebae1f..HEAD`: exit 0.
+
+Only PROGRESS.md was modified. No code/tests, full gates, provider calls,
+autobuild invocation, pass flags, staging, commits, branch/Git-control changes
+or pinned-host edits. Previously blocked reproductions and P2-09/P2-10 process
+checks were not retried or waived. No-Node end-to-end and failure-path runtime
+claims are not established by this review. External host retains disposition,
+full gates and final completion.
