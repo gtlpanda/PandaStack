@@ -267,3 +267,11 @@ test remains unchanged. Neither new module initializes a queue/provider or reads
 source defaults. The full host diagnostic reproduced exactly this fixture import
 failure (1549 workflow checks passed); independent review cleared the copy-list
 correction. Scanner/gate rules and implementation requirements are unchanged.
+
+The same dependency closure correction also applies to
+acceptance/phase1/p1-06.test.mjs, whose stated purpose is copying the entry point
+and its dependencies while omitting only source agent-config.json. Add the same
+two pure modules, retaining every assertion and the trusted capability fixture.
+Independent inventory identified these two partial-copy fixtures; full-tree and
+original-module imports need no change. The first amended baseline passed; this
+second fixture was exposed by the subsequent 252/253 Phase 1 acceptance result.

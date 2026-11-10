@@ -21,6 +21,8 @@ test('doctor uses the selected installation when its source checkout has no cent
     for (const file of [
       'core/skills/run-records/doctor.mjs',
       'core/skills/run-records/records.mjs',
+      'core/skills/decisions/config.mjs',
+      'core/skills/decisions/records.mjs',
       'graphs/autobuild/tool/lib/config.mjs',
       'scripts/agent-config.mjs',
       'scripts/configure-agents.mjs',
