@@ -26,7 +26,7 @@ import { countPassing, featureById, nextFeature, readBlockers, readFeatures, rea
 import { frozenChanges, gitControlChanges, gitControlDigest } from "./gate.mjs";
 import { huntEnabled, runBughunt, stopHunt } from "./bughunt.mjs";
 import { classifyOutcome, parseResetTime, planLimitWait } from "./limits.mjs";
-import { buildEnv, git, sh, quote } from "./proc.mjs";
+import { buildEnv, sessionConfigEnv, git, sh, quote } from "./proc.mjs";
 import { isOurs } from "../../../build/skills/build-app/driver/proc.mjs";
 import { clearStopFailure, readStopFailure, writeSession } from "./session.mjs";
 import { runCodex, readCodexResult } from "./codex.mjs";
@@ -486,8 +486,8 @@ export function sessionSettings(config) {
   // overrides the process env, and these --settings override the user's.
   const env = { ...native.env, CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: concurrent, CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS: concurrent, CLAUDE_CODE_SUBAGENT_MODEL: config.subagentModel, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: config.subagentModelForce === false ? "0" : "1", CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL: config.subagentModelForce === false ? "" : config.subagentModel };
   // Hooks and mark-passed reload configuration without the original CLI args.
-  // Pin the selected model in --settings as well as the child process environment.
-  env.AUTOBUILD_MODEL = config.model;
+  // Pin the accepted selection in --settings as well as the child process environment.
+  Object.assign(env, sessionConfigEnv(config));
   return { ...native, model: config.model ?? native.model, env, hooks, permissions: { deny: [...deny, "Bash(git push)", "Bash(git push *)", "Bash(rm -rf *)", "Bash(curl *)", "Bash(wget *)", "Bash(npx *)"] } };
 }
 
@@ -510,7 +510,7 @@ async function runClaudeWork(config, { role, prompt, appendSystemPrompt, maxTurn
     AUTOBUILD_ROLE: role,
     HARNESS_ROLE: role,
     AUTOBUILD_HOME: HOME,
-    AUTOBUILD_MODEL: config.model,
+    ...sessionConfigEnv(config),
     CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
     CLAUDE_CODE_RETRY_WATCHDOG: "1",
     CLAUDE_CODE_RETRY_WATCHDOG_MAX_WAIT_MS: String(config.limits.watchdogMaxWaitMs),

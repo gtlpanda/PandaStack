@@ -884,3 +884,46 @@ Only PROGRESS.md was modified. No full suite, bare autobuild, provider call,
 exploit reproduction, blocked reproduction retry, code/test edit, staging,
 commit, push, branch change, git-control edit or feature-pass change was performed.
 Mandatory full gates and final completion remain with the pinned external host.
+
+## P1-12 implementation — 2026-11-10
+
+Claude child processes and injected session settings now share sessionConfigEnv,
+which pins the accepted backend, main model, subagent model, probe model and selected
+provider binary after project environment merging. Lower-priority aliases and
+invalid/empty project shadows cannot reselect those fields on hook/CLI reload.
+The helper copies only these fields; auth handling, hook policy, gates and runner
+control flow remain unchanged. Existing partial sessionSettings callers retain
+their Claude default; actual launch validation remains authoritative.
+
+Added tests/run-child-context.test.mjs with five workflow-harness groups, included
+by existing test discovery. Both hook modes cover 13 shadow combinations across
+process-only, settings-only and combined environments. Tests also cover parent
+immutability, independent invocation contexts, synthetic auth preservation without
+copying it into settings, permissions, invalid parent selection and partial-config
+compatibility. Decisions D37-D38 record scope and verification limits.
+
+Targeted verification:
+- Before implementation, `node acceptance/phase1/p1-12.test.mjs`: exit 1;
+  0 passed, 15 failed during fixture initialization with `Error: spawnSync git EPERM`
+  at graphs/autobuild/tool/test-fixtures/project.mjs:21 (`git init -q -b autobuild`).
+  No fake provider or hook assertions were reached. Output:
+  /tmp/p1-12-acceptance-before.log. No retry or sandbox workaround was attempted;
+  actual hook/stop-gate/mark-passed acceptance remains for the external host.
+- Before implementation, the new focused file via workflow-harness: exit 1;
+  1 passed, 2 failed with `No Codex equivalent for claude-fable-5-1; set an explicit
+  OpenAI model`, reproducing loss of the accepted backend during child reload.
+- Final `node --input-type=module -e "await import('./tests/run-child-context.test.mjs'); await import('./tests/run-launch-parity.test.mjs'); await import('./tests/run-edge-validation.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; 13 passed, 0 failed.
+
+Self-review caught that existing frozen settings tests use partial configurations
+without backend. Corrected the helper's default and added regression coverage
+before final verification. Read-only Explore re-review: PASS for data flow,
+edge/error handling, security/authority, consistency and missing pieces. This is
+static-review evidence; end-to-end fake-provider acceptance is not claimed.
+
+Changed loop.mjs, proc.mjs, added focused tests, and updated decision/progress logs.
+No frozen inputs, full suite, live provider calls, staging, commits, pass flags,
+branches, git control or roadmap completion were changed. The outer host retains
+full gates, review disposition, live evidence and final completion.
+
+Final `git diff --check`: exit 0 after documentation updates.
