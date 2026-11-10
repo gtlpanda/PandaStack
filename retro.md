@@ -3165,3 +3165,14 @@ checks passed (Codex 0.167.0, Claude 2.1.321); no paid model sessions were run.
 Self-review checked data flow, invalid inputs, preservation of tools/permissions,
 configuration precedence, generated metadata and both native execution paths.
 The final affected routing/configuration rerun passed 272/272.
+
+## P1-01: safe run and event contracts
+
+Added a pure ESM record module and skill documentation, plus five implementation
+test groups discovered by the existing workflow harness. Records enforce required
+metadata, safe identifiers, absolute paths, explicit revision unknowns, calendar
+validity, and event/exit-code consistency. Settings snapshots copy only allowlisted
+values and provenance. Lesson: Date.parse normalizes impossible calendar dates;
+validate the parsed calendar components as well. Read-only sanity review found no
+issues across data flow, errors, security, consistency, and completeness. Full
+gate results and remaining limitations are recorded in PROGRESS.md.
