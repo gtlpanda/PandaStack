@@ -133,6 +133,8 @@ export function resolveManagedConfig({ project: raw = {}, env = {}, overrides = 
   Object.assign(config, resolveManagedModels({ backend: config.backend, central, project: raw, env, overrides }).values);
   if (env.AUTOBUILD_CLAUDE_BIN) config.claudeBin = env.AUTOBUILD_CLAUDE_BIN;
   if (env.AUTOBUILD_CODEX_BIN) config.codexBin = env.AUTOBUILD_CODEX_BIN;
+  const bin = config[`${config.backend}Bin`];
+  if (typeof bin !== "string" || !bin.trim() || /[\x00-\x1f\x7f]/.test(bin)) throw new Error("Invalid managed provider binary");
   if (config.backend === "codex") {
     if (!Number.isFinite(config.codex.sessionTimeoutMinutes) || config.codex.sessionTimeoutMinutes <= 0) throw new Error("codex.sessionTimeoutMinutes must be positive");
     if (config.limits.totalBudgetUsd != null) throw new Error("Codex does not report dollar cost; remove totalBudgetUsd and use maxIterations/sessionTimeoutMinutes instead");
@@ -165,6 +167,11 @@ export function resolveManagedModels({ backend, central, project = {}, env = {},
   const values = {}, sources = {};
   const choose = (key, candidates) => {
     const [value, source] = candidates.find(([value]) => value !== undefined);
+    // Launch roles require identifiers; null remains valid only in observational
+    // records. Match agent-config's grammar before provider mapping can coerce it.
+    if (typeof value !== "string" || !/^[A-Za-z0-9]/.test(value) || /[^A-Za-z0-9._:/-]/.test(value)) {
+      throw new Error(`${key} must be a nonempty model identifier`);
+    }
     values[key] = backend === "codex" ? codexModel(value) : value;
     sources[key] = source;
   };

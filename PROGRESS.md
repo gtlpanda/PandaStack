@@ -376,3 +376,41 @@ Focused verification:
 Only PROGRESS.md was modified. No full suite, bare autobuild, provider call,
 exploit reproduction, blocked reproduction retry, code/test edit, staging,
 commit, push, branch change, git-control edit or pass-flag change was performed.
+
+## P1-08 implementation — 2026-11-10
+
+Shared managed configuration now validates the effective selected provider binary
+after environment overrides; doctor consumes that selection without a separate
+truthiness fallback. Selected launch model identifiers are validated before Codex
+mapping, including rejecting null, while valid environment/CLI overrides retain
+precedence. Observational run settings still accept null models. Store reads now
+separate filesystem I/O from JSON parsing, returning safe IO_ERROR for operational
+failures and retaining CORRUPT for malformed JSON, invalid schema and identity
+mismatches. Decisions D27-D28 record scope and ownership.
+
+Added five workflow-harness test groups in tests/run-edge-validation.test.mjs,
+automatically discovered by existing CI. Coverage includes both backends, malformed
+binaries/models, null-model overrides and provenance, inert executable paths with
+spaces, safe diagnostics, unknown observational models, injected EIO/EACCES,
+descriptor closure, unchanged replay after recovery, corrupt content and missing
+records. No provider execution or filesystem-race reproduction was used.
+
+Targeted verification:
+- Before implementation, `node acceptance/phase1/p1-08.test.mjs`: exit 1;
+  6 passed, 17 failed (read errors reported CORRUPT, invalid selected binaries and
+  null launch models reported ready).
+- Before implementation, the new focused implementation tests: exit 1;
+  2 passed, 3 failed on the same defect categories.
+- After implementation, `node acceptance/phase1/p1-08.test.mjs`: exit 0;
+  23 passed, 0 failed.
+- `node --input-type=module -e "await import('./tests/run-edge-validation.test.mjs'); await import('./tests/run-doctor-trust.test.mjs'); await import('./tests/run-doctor.test.mjs'); await import('./tests/run-followup.test.mjs'); await import('./tests/run-hardening.test.mjs'); await import('./tests/run-store.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0; 29 passed, 0 failed.
+
+Read-only Explore sanity audit: PASS for data flow, edge/error handling, security,
+consistency and missing pieces; no concrete defects found. This audit used static
+inspection; test evidence is the targeted execution above. `git diff --check`:
+exit 0 after documentation updates.
+
+No full suite, frozen-input edits, staging, commits, pass flags, branch changes or
+roadmap completion. The external host retains authoritative full gates, live
+evidence and final completion.

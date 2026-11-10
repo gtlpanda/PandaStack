@@ -84,8 +84,10 @@ function read(path, validate, expected) {
   }
   try {
     if (!fstatSync(fd).isFile()) throw error('CORRUPT')
+    // Operational failures belong to guarded()'s IO_ERROR normalization.
+    const content = readFileSync(fd, 'utf8')
     let value
-    try { value = JSON.parse(readFileSync(fd, 'utf8')) } catch { throw error('CORRUPT') }
+    try { value = JSON.parse(content) } catch { throw error('CORRUPT') }
     if (validate(value).length || Object.entries(expected).some(([key, v]) => value[key] !== v)) {
       throw error('CORRUPT')
     }

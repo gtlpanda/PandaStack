@@ -30,10 +30,14 @@ function validateProject(project, env, overrides) {
 }
 
 export function resolveSettings({ backend, central, project = {}, env = {}, overrides = {} }) {
+  return resolveInspection({ backend, central, project, env, overrides }).settings
+}
+
+function resolveInspection({ backend, central, project, env, overrides }) {
   if (!['claude', 'codex'].includes(backend)) throw Error('Invalid backend')
   validateAgentConfig(central)
   validateProject(project, env, overrides)
-  resolveManagedConfig({ project, env, overrides: { ...overrides, backend }, central })
+  const config = resolveManagedConfig({ project, env, overrides: { ...overrides, backend }, central })
   const { values, sources } = resolveManagedModels({ backend, central, project, env, overrides })
   const set = (key, value, source) => { values[key] = value; sources[key] = source }
   set('maxConcurrentSubagents', project.maxConcurrentSubagents ?? central.maxConcurrentSubagents,
@@ -55,7 +59,7 @@ export function resolveSettings({ backend, central, project = {}, env = {}, over
     set('subagentEffort', central.claude.subagents.effort, 'central')
     set('probeEffort', values.effort, sources.effort)
   }
-  return { values: sanitizeSettings(values), sources }
+  return { settings: { values: sanitizeSettings(values), sources }, config }
 }
 
 const unknownRuntime = (evidence = 'No established native control evidence.') => ({ version: null,
@@ -100,10 +104,10 @@ export async function inspectDoctor({ repo, backend = 'codex', pandaRoot = ROOT,
     const central = readAgentConfig(join(pandaRoot, 'agent-config.json'))
     try { project = JSON.parse(readFileSync(join(repo, 'autobuild.json'), 'utf8')) }
     catch (error) { if (error.code === 'ENOENT') project = {}; else throw error }
-    result.settings = resolveSettings({ backend, central, project, env, overrides })
+    const resolved = resolveInspection({ backend, central, project, env, overrides })
+    result.settings = resolved.settings
     path = effectivePath(project, env, pandaRoot)
-    bin = env[backend === 'codex' ? 'AUTOBUILD_CODEX_BIN' : 'AUTOBUILD_CLAUDE_BIN'] || project[`${backend}Bin`] || backend
-    if (typeof bin !== 'string' || !bin.trim() || /[\x00-\x1f]/.test(bin)) throw Error('Invalid binary')
+    bin = resolved.config[`${backend}Bin`]
     check('configuration', 'pass', 'Managed launch configuration is valid.')
     const rendered = renderAgentConfig(pandaRoot, central)
     const drift = [...rendered].some(([file, text]) => readFileSync(join(pandaRoot, file), 'utf8') !== text)
