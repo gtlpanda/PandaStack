@@ -37,7 +37,7 @@ console.log(JSON.stringify({type:'result',subtype:'success',is_error:false,num_t
 `);chmodSync(file,0o700);
 }
 for(const scenario of ['null project','conflicting lower-priority environment'])test(`actual fake-Claude child preserves CLI model through guard and stop hooks: ${scenario}`,async()=>{
- const f=await fixture(),repo=f.project(['F-1'],{maxIterations:1,noProgressLimit:1}),tmp=mkdtempSync(join(tmpdir(),'p1-hook-child-'));
+ const f=await fixture(),repo=f.project(['F-1'],{maxIterations:2,noProgressLimit:1}),tmp=mkdtempSync(join(tmpdir(),'p1-hook-child-'));
  try{
   const config=JSON.parse(readFileSync(join(repo,'autobuild.json'),'utf8'));config.backend='claude';config.model=scenario==='null project'?null:'sonnet';writeFileSync(join(repo,'autobuild.json'),JSON.stringify(config));git(repo,'add','autobuild.json');git(repo,'commit','-qm','hook override fixture');
   const fake=join(tmp,'fake-provider.mjs'),report=join(tmp,'report.json');provider(fake,report);
