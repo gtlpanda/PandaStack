@@ -203,7 +203,7 @@
       ],
       "test": "acceptance/phase2/p2-13.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "P2-14",

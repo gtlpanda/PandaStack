@@ -428,3 +428,19 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   No alternate model/provider was used; local static review is not an independent
   audit. Preserve these outstanding evidence limits for host review. Backend
   instructions leave flags, staging, commits and full gates to the host.
+
+- D83 (P2-13): Apply only the host-selected literal evidence-parent correction.
+  Feed retained log and child-manifest contents to sha256sum through quoted stdin
+  redirections, avoiding filename escaping in checksum output. Keep existing
+  parsing, fail branches, relative references, bytes, permissions and owner
+  ordering. No other capture or later-feature changes. Backend instructions leave
+  feature flags, staging, commits and full gates with the external host.
+- D84 (P2-13 evidence): The two approved normal-success acceptance cases ran
+  before and after the repair: ordinary/backslash results changed from 1/1 to
+  2/0. This does not relabel native F3 ERROR or prove blocked negative scenarios.
+  New inert finalize implementation tests hit spawnSync /bin/bash EPERM before
+  behavior; leave those checks intact for the host without retry or rerouting.
+  Separate their static digest binding check so it can run without subprocesses.
+  The required Explore audit request failed with Unknown model gpt-6.1-sol;
+  do not substitute a model/provider. Local static review is not independent
+  review; the host retains that outstanding audit and the full gates.

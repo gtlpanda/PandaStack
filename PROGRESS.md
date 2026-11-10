@@ -2473,3 +2473,55 @@ or pinned-host modifications. Native F3 ERROR and refused F4 evidence limits
 remain unchanged; no owner/lifecycle or hostile-containment proof is claimed.
 External host retains acceptance execution, independent review, full gates,
 commits and final completion.
+
+## P2-13 — Retain valid Bash evidence under literal backslash parents
+
+Changed only the two Bash retention checksum producers to read retained bytes
+through stdin. sha256sum no longer receives an evidence pathname to escape;
+existing digest extraction, byte counts, JSON references, private-path checks,
+owner ordering, cleanup and exit propagation remain unchanged. Added two inert
+finalize tests and a separate static check binding both digest producers, using
+workflow-harness test(). D83-D84 record scope and evidence limits.
+
+Exact focused validation:
+- Before implementation, `node acceptance/phase2/p2-13.test.mjs`: exit 1;
+  1 passed, 1 failed, 0 skipped. Ordinary parent passed; literal-backslash parent
+  failed with `BUGHUNT-F3 normal completion must publish valid JSON`, caused by
+  JSON parsing reporting `Bad escaped character in JSON at position 105`.
+- Before implementation,
+  `node --input-type=module -e "await import('./tests/verify-literal-evidence-parent.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 1, `{ pass: 0, fail: 3 }`. Both inert finalize tests failed with
+  `ifError got unwanted exception: spawnSync /bin/bash EPERM` before behavior;
+  the static test found filename operands at both checksum sites. The static
+  test subsequently moved unchanged to verify-evidence-digests.test.mjs so it
+  could run separately. The two subprocess tests remain intact and host-owned;
+  they were not retried or rerouted.
+- After implementation, `node acceptance/phase2/p2-13.test.mjs`: exit 0;
+  2 passed, 0 failed, 0 skipped. These are the exact reviewed ordinary and
+  backslash-parent immediate normal-success cases, with no optional runtime in
+  the task PATH, actual root/child manifests, hash/byte/mode assertions and
+  ordinary scope observations.
+- `node --input-type=module -e "await import('./tests/verify-evidence-digests.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); const r=summary(); console.log(r); process.exitCode=r.fail?1:0"`:
+  exit 0, `{ pass: 1, fail: 0 }`; static binding/failure-handling check only.
+- `bash -n core/skills/verify/retention.sh && node --check tests/verify-literal-evidence-parent.test.mjs && git diff --check`:
+  exit 0.
+- `shellcheck -S warning core/skills/verify/retention.sh`: exit 0, no diagnostics.
+- `bash scripts/check-secrets.sh`: exit 0, `check-secrets: clean` (tracked files).
+- `bash scripts/check-secrets.sh tests/verify-literal-evidence-parent.test.mjs tests/verify-evidence-digests.test.mjs`:
+  exit 0, `check-secrets: clean` (every new untracked source/test file).
+  Scanner rules unchanged; no fixture annotations needed.
+- `git diff --check && node --check tests/verify-literal-evidence-parent.test.mjs && node --check tests/verify-evidence-digests.test.mjs`:
+  exit 0. Final tracked secret scan and diff check after documentation: exit 0.
+
+Local static review: bounded PASS for data flow (both digest consumers), edge/error
+handling (existing fail branches), security (quoted paths and root-local signal
+authority), consistency and completeness within the two-line repair. The required
+independent Explore audit could not start: spawn_agent rejected the requested
+model with `Unknown model gpt-6.1-sol`. No fallback was attempted; independent
+review remains outstanding.
+
+Native F3 ERROR remains distinct from this ordinary-path evidence. No blocked
+negative capture or filesystem-race reproduction, provider call or full gate ran.
+No frozen-input, feature-flag, staging, commit, branch, Git-control or pinned-host
+changes. The external host retains the inert-test execution, independent review,
+full gates, commits and final completion.

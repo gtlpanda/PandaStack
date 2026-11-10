@@ -58,7 +58,7 @@ case "${1:-}" in
   for manifest in "$dir"/run*/manifest.json; do
     [[ -e "$manifest" ]] || continue
     [[ -f "$manifest" && ! -L "$manifest" && ! -L "${manifest%/*}" ]] || fail
-    hashline="$(sha256sum "$manifest")" || fail; read -r hash _ <<<"$hashline" || fail; bytes="$(wc -c <"$manifest")" || fail
+    hashline="$(sha256sum <"$manifest")" || fail; read -r hash _ <<<"$hashline" || fail; bytes="$(wc -c <"$manifest")" || fail
     total=$((total+bytes)); ((total<=1024*1024)) || fail
     [[ -z "$children" ]] || children+=','
     children+="{\"path\":$(quote "${manifest#"$dir/"}"),\"sha256\":\"$hash\",\"bytes\":$bytes,\"complete\":true}"
@@ -107,7 +107,7 @@ case "${1:-}" in
   trap - TERM INT
   head -c "$limit" "$raw" >"$log" || { complete=false; rc=125; }
   rm -f "$raw" "$fifo"
-  bytes="$(wc -c <"$log")" || fail; budget "$session" "$((bytes-limit))" >/dev/null || { complete=false; rc=125; }; hashline="$(sha256sum "$log")" || fail; read -r hash _ <<<"$hashline" || fail
+  bytes="$(wc -c <"$log")" || fail; budget "$session" "$((bytes-limit))" >/dev/null || { complete=false; rc=125; }; hashline="$(sha256sum <"$log")" || fail; read -r hash _ <<<"$hashline" || fail
   if [[ "$complete" == false ]]; then printf 'capture incomplete\n' >"$session/.incomplete" || fail; fi
   row="{\"label\":$(quote "$label"),\"exitCode\":$rc,\"log\":{\"path\":$(quote "${log##*/}"),\"sha256\":\"$hash\",\"bytes\":$bytes,\"complete\":$complete}}"
   if [[ -s "$dir/.steps" ]]; then printf ',\n' >>"$dir/.steps" || fail; fi
