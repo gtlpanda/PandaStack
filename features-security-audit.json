@@ -242,6 +242,25 @@
       "test": "acceptance/security-audit/sa-lt01-feedback.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "SA-RV01",
+      "title": "Require review when historical selected backlog is unavailable",
+      "description": "Correct review-baseline accounting conservatively: missing or malformed historical selected backlog leaves every current passing feature unreviewed. Preserve old review SHA, known valid before-set behavior, current passing semantics, host gates and review retry/commit rules. Read spec/contracts/security-audit-execution-restrictions.md; no blocked reproduction or provider fallback.",
+      "contract": "spec/contracts/security-audit-review-baseline.md",
+      "dependencies": [
+        "SA-LT01"
+      ],
+      "acceptance": [
+        "All 21 frozen ordinary acceptance cases pass using the existing fake Codex transport and owning loop.",
+        "Missing, invalid or structurally unusable historical backlog counts all current passing work; a valid historical snapshot retains set difference by ID.",
+        "Actual startup/final review uses the original SHA range; a new host-gated review acknowledgment precedes the existing clean fake hunt and Done.",
+        "Two unacknowledged final reviews retain the range and stop with exit13; explicit finalReview:false and valid-history controls remain unchanged.",
+        "Preserve all existing frozen tests/gates and blocked capture, race and F2 shared-repository Git ownership/trust reproduction restrictions."
+      ],
+      "test": "acceptance/security-audit/review-baseline-correction.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
