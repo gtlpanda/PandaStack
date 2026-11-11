@@ -1337,3 +1337,14 @@ GitHub CI still needs a compatible isolation environment. A concrete temporary
 Ubuntu22.04 workflow amendment was posted on PR45 and explicitly requested as
 an exception to frozen gate configuration. It is not yet applied or approved.
 No blocked reproduction was run and earlier native-hunt dispositions remain.
+
+## Approved CI environment amendment
+
+The user directed merge after the exact runner amendment was presented for
+approval. Applied the reviewed temporary Ubuntu22.04 environment, retained
+Node24 and the unchanged required test job and15-minute bound, checked setpriv
+presence, and added the existing non-root isolation preflight before the suite.
+No sysctl or AppArmor policy was disabled and no test or assertion was skipped.
+This supersedes the prior pending-amendment status only. CI success must still
+be observed on the new commit before merge. The runner retirement date remains
+April17,2027; a later compatible maintained image is still needed.

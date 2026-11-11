@@ -32,9 +32,10 @@ run failed 29 workflow checks and one autobuild fixture; other checks passed.
 The exact OS-level cause remains unconfirmed because the probe suppresses stderr.
 
 A temporary Ubuntu 22.04 runner amendment, with the same Node 24, required tests,
-15-minute bound and actual isolation checks, is proposed on PR #45. It also checks
+15-minute bound and actual isolation checks, was approved by the user for PR #45 and applied. It also checks
 setpriv availability and runs the production isolation probe before the suite.
-Gate configuration remains frozen pending explicit approval. No security-policy
+This approved environment-only amendment preserves the required test command,
+assertions, isolation checks, and time limit. No security-policy
 disable, unsafe fallback, test skip or timeout increase is proposed. The older
 runner retires April 17, 2027, so this is a temporary compatibility path.
 

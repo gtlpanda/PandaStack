@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   test:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -24,11 +24,21 @@ jobs:
       - name: Tools the checks need
         run: |
           missing=()
-          for t in shellcheck jq ip python3 unshare timeout; do command -v "$t" >/dev/null || missing+=("$t"); done
+          for t in shellcheck jq ip python3 unshare setpriv timeout; do command -v "$t" >/dev/null || missing+=("$t"); done
           if [ "${#missing[@]}" -gt 0 ]; then
             echo "installing for: ${missing[*]}"
             sudo apt-get update -q && sudo apt-get install -yq shellcheck jq iproute2 python3 util-linux coreutils
           fi
           node --version; git --version; shellcheck --version | sed -n 2p
+      - name: Required non-root isolation
+        run: |
+          node --input-type=module -e '
+            import { isolation } from "./graphs/hunt/skills/bughunt/evidence.mjs";
+            const observed = isolation();
+            for (const name of ["pidns", "network", "loopback", "timeout"]) {
+              if (observed[name] !== true) throw new Error("Required isolation unavailable: " + name);
+            }
+            console.log("Required non-root isolation: PASS");
+          '
       - name: scripts/test.sh
         run: scripts/test.sh
