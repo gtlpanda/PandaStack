@@ -3256,10 +3256,11 @@ Not changed:
 - Overnight launches that allow 1-2 iterations, and `noProgressLimit: 2`, both end a run
   after one or two failed attempts. The loop already retries a failed gate with feedback
   while those limits allow.
-- Pre-existing failures. On this branch's base (5a8b7f6), 9 workflow tests fail locally
-  with and without this change, and none of their files import gate.mjs or cli.mjs:
-  native-offering-catalog 1, run-placement 2, run-git-discovery 1, run-child-context 2,
-  run-tracking 3. main's CI is red at 5a8b7f6. Their cause is untested.
+- Pre-existing failures. On 5a8b7f6, 9 workflow tests failed locally with and without
+  this change, and none of their files import gate.mjs or cli.mjs. main's CI was red
+  there too. #48 (entry 46) fixed 3 of them. After rebasing onto 3346943 (green CI), 6
+  still fail only locally: run-placement 2, run-git-discovery 1, run-tracking 3. Their
+  cause is untested.
 
 ## 46. main CI repair after the PR-first merge (2026-11-11)
 
