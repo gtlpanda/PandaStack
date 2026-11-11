@@ -6,6 +6,7 @@ export const TOTAL_LIMIT = 1024 * 1024 * 1024
 export const ROW_LIMIT = 10000
 export const fail = code => { throw Object.assign(new Error(`Audit journal: ${code}`), { code }) }
 const errors = new Set(['INVALID_JOURNAL_INPUT', 'INPUT_TOO_LARGE', 'CONFLICT', 'BUDGET_EXHAUSTED',
+  'INVALID_CONTROL_INPUT', 'CONTROL_INIT_REFUSED', 'CONTROL_BUSY', 'CONTROL_PAUSED', 'CONTROL_CAPACITY', 'REPORT_NOT_CURRENT',
   'OWNER_BUSY', 'BUSY', 'CLOSED', 'DISPATCH_UNCERTAIN', 'TERMINAL_RUN', 'NOT_FOUND', 'CORRUPT', 'IO_ERROR'])
 export function guarded(fn) {
   try { return fn() } catch (e) {

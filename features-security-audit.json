@@ -135,7 +135,7 @@
       ],
       "test": "acceptance/security-audit/sa-02c-control-budget.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SR-01",

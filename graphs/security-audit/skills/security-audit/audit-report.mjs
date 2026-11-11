@@ -26,7 +26,7 @@ import { metadataProblems, validateRunAuthority } from './audit-run.mjs'
 import { parsePool, parseDecisions } from './audit-findings.mjs'
 import { criticResultProblems } from './audit-ledger.mjs'
 import { validateFindingsDocument, validateLedgerDocument } from './upstream.mjs'
-import { readAuditJournal, validIdentity } from './dispatch-journal.mjs'
+import { readAuditJournal, readAuditBudgetEvidence, validIdentity } from './dispatch-journal.mjs'
 import { canonical, fields, record, TOTAL_LIMIT } from './journal-data.mjs'
 
 export const REPORT_FILES = ['REPORT.md', 'FINDINGS-DETAIL.md', 'NEEDS-VALIDATION.md']
@@ -319,7 +319,7 @@ function needsDetail(ctx, r) {
 }
 
 // ---------- observational partial checkpoints (never advance the audit) ----------
-const PARTIAL_VERSION = 'partial-report-v1'
+const PARTIAL_VERSION = 'partial-report-v2'
 const MIB = 1024 * 1024, REPORT_LIMIT = 16 * MIB, POINTER_LIMIT = 64 * 1024
 const PARTIAL_INPUTS = Object.freeze({ 'run-metadata.json': MIB, 'stage-state.json': MIB,
   'coverage-ledger.json': 5 * MIB, 'candidates.json': REPORT_LIMIT, 'decisions.json': REPORT_LIMIT,
@@ -450,13 +450,16 @@ export function partialReportContext(runDir) {
   artifact('critic.json', v => { partialNeed(!criticResultProblems(v).length); return v }, null, 'ARTIFACT_REJECTED')
 
   let journal = { status: 'unavailable', states: null, settledCalls: null, heldCalls: null, available: null, pendingAgents: null }
-  let journalDigest, awaitingSemantic = [], journalError = null
+  let journalDigest, awaitingSemantic = [], journalError = null, budgetEvidence = null
   try {
     // The journal's loadRun reads these four files. Do not let that re-read
     // bypass the partial report's preallocation limits or no-follow admission.
     partialNeed(['run-metadata.json', 'stage-state.json', 'coverage-ledger.json', 'findings.json'].every(n =>
       ['present', 'rejected', 'absent'].includes(inputs[n].binding.state) && inputs[n].stable), 'IO_ERROR')
     const snapshot = readAuditJournal(root)
+    // Once the journal is available, a failed budget read cannot masquerade as
+    // a legacy null projection. Refuse this context and its freshness claim.
+    try { budgetEvidence = readAuditBudgetEvidence(root) } catch { partialFail('INVALID_CONTEXT') }
     journalDigest = partialJournalDigest(snapshot)
     const states = Object.fromEntries(LEAF_STATES.map(s => [s, 0]))
     for (const row of snapshot.rows) {
@@ -467,7 +470,7 @@ export function partialReportContext(runDir) {
       available: snapshot.available, pendingAgents: states.prepared + states.dispatched + states.uncertain }
     if (states.uncertain || states.dispatched) add('DISPATCH_UNCERTAIN', 'Dispatched or uncertain calls are held; terminal reconciliation is required.')
   } catch (e) {
-    if (e.code === 'CONFLICT') partialFail('INVALID_CONTEXT')
+    if (['CONFLICT', 'INVALID_CONTEXT'].includes(e.code)) partialFail('INVALID_CONTEXT')
     journalError = ['NOT_FOUND', 'CORRUPT', 'IO_ERROR', 'INVALID_JOURNAL_INPUT'].includes(e.code) ? e.code : 'IO_ERROR'
     journalDigest = digestJson({ unavailable: journalError })
     add('JOURNAL_UNAVAILABLE', `Journal authority unavailable (${journalError}); all journal counts are unknown.`)
@@ -479,11 +482,11 @@ export function partialReportContext(runDir) {
   const coverage = { status: ledger ? 'valid' : inputs['coverage-ledger.json'].binding.state === 'absent' ? 'missing' : 'rejected', counts,
     gaps: (ledger ?? []).filter(u => u.status !== 'covered').map(u => ({ id: u.coverage_id, status: u.status,
       surface: u.surface, boundary: u.boundary, reasons: [...u.unresolved] })) }
-  const binding = { rendererVersion: PARTIAL_VERSION, identityDigest: digestJson(identity), journalDigest,
+  const binding = { rendererVersion: PARTIAL_VERSION, identityDigest: digestJson(identity), journalDigest, budgetEvidence,
     journalStatus: journal.status, journalError, artifacts: Object.fromEntries(Object.entries(inputs).map(([n, a]) => [n, a.binding])),
     stable: Object.values(inputs).every(a => a.stable) }
   return { version: 1, identity, stage, profile: meta.profile, runStatus: meta.run_status, incompleteReason: meta.incomplete_reason ?? null,
-    binding, generationKey: digestJson(binding), journal, coverage, leads, blockers, awaitingSemantic, historicalFinalRecords }
+    binding, generationKey: digestJson(binding), budgetEvidence, journal, coverage, leads, blockers, awaitingSemantic, historicalFinalRecords }
 }
 
 function partialLeads(pool, decisions, findings, ledger) {
@@ -520,7 +523,7 @@ function checkedPartialContext(context) {
   const c = JSON.parse(finiteJson(context, 64 * MIB))
   try {
     fields(c, ['version', 'identity', 'stage', 'profile', 'runStatus', 'incompleteReason', 'binding', 'generationKey',
-      'journal', 'coverage', 'leads', 'blockers', 'awaitingSemantic', 'historicalFinalRecords'], 'INVALID_CONTEXT')
+      'budgetEvidence', 'journal', 'coverage', 'leads', 'blockers', 'awaitingSemantic', 'historicalFinalRecords'], 'INVALID_CONTEXT')
     fields(c.identity, ['runId', 'repo', 'target', 'sourceRef'], 'INVALID_CONTEXT')
     fields(c.journal, ['status', 'states', 'settledCalls', 'heldCalls', 'available', 'pendingAgents'], 'INVALID_CONTEXT')
     fields(c.coverage, ['status', 'counts', 'gaps'], 'INVALID_CONTEXT')
@@ -529,7 +532,13 @@ function checkedPartialContext(context) {
     validIdentity({ version: 1, run_id: c.identity.runId, repo: c.identity.repo, target: c.identity.target, source_ref: c.identity.sourceRef })
     validateRunAuthority({ run_status: c.runStatus }, c.stage, '')
     partialNeed(['standard', 'quick', 'deep'].includes(c.profile) && (c.incompleteReason === null || textValue(c.incompleteReason)))
-    fields(c.binding, ['rendererVersion', 'identityDigest', 'journalDigest', 'journalStatus', 'journalError', 'artifacts', 'stable'], 'INVALID_CONTEXT')
+    fields(c.binding, ['rendererVersion', 'identityDigest', 'journalDigest', 'budgetEvidence', 'journalStatus', 'journalError', 'artifacts', 'stable'], 'INVALID_CONTEXT')
+    partialNeed(finiteJson(c.budgetEvidence) === finiteJson(c.binding.budgetEvidence))
+    if (c.budgetEvidence !== null) {
+      const b = fields(c.budgetEvidence, ['version', 'maximum', 'currentGrant'], 'INVALID_CONTEXT')
+      partialNeed(b.version === 1 && naturalCount(b.maximum) && naturalCount(b.currentGrant) && b.currentGrant <= b.maximum &&
+        c.journal.status === 'available' && b.maximum === c.journal.settledCalls + c.journal.heldCalls + c.journal.available)
+    }
     fields(c.binding.artifacts, Object.keys(PARTIAL_INPUTS), 'INVALID_CONTEXT')
     partialNeed(c.binding.rendererVersion === PARTIAL_VERSION && digestJson(c.binding) === c.generationKey &&
       c.binding.identityDigest === digestJson(c.identity) && hexDigest(c.binding.journalDigest) && typeof c.binding.stable === 'boolean')
@@ -579,6 +588,8 @@ export function buildPartialReport(context) {
     `- Settled calls: ${j.settledCalls}; held calls: ${j.heldCalls}; available calls: ${j.available}; pending agents: ${j.pendingAgents}`,
     `- Returned awaiting semantic review: ${c.awaitingSemantic.length}. No owning application receipt links these dispatches to semantic dispositions.`,
     ...c.awaitingSemantic.map(r => `  - Dispatch ${full(r.id)}: awaiting semantic review.`))
+  if (c.budgetEvidence === null) out.push('- Budget controls: legacy / unavailable; current authorized grant is unknown.')
+  else out.push(`- Maximum invocations: ${c.budgetEvidence.maximum}`, `- Current authorized grant: ${c.budgetEvidence.currentGrant}`)
   out.push('', '## Known leads', '', 'Pending leads are unverified; needs_validation retains its blocker; rejected dispositions are not vulnerabilities. Raw transport output is never a lead.', '')
   if (!c.leads.length) out.push('No known lead identities in the available validated artifacts; missing evidence does not establish zero leads.')
   for (const l of c.leads) out.push(`- ${full(l.fingerprint)} — ${full(l.disposition)}: ${full(l.title)}`,

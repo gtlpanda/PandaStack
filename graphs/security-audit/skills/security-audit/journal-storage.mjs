@@ -7,6 +7,7 @@ import { resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { fail, need, guarded } from './journal-data.mjs'
+import { CONTROL_SCHEMA } from './journal-control.mjs'
 
 const FILE = 'journal.sqlite', LOCK = 'owner.lock', APP_ID = 0x53414a31
 const SCHEMA = [
@@ -90,9 +91,11 @@ export function openStorage(runDir, write, initialize) {
       need(db.prepare('PRAGMA journal_mode').get().journal_mode === 'delete')
       const schema = () => {
         need(db.prepare('PRAGMA application_id').get().application_id === APP_ID)
-        need(db.prepare('PRAGMA user_version').get().user_version === 1)
+        const version = db.prepare('PRAGMA user_version').get().user_version
+        need(version === 1 || version === 2)
         const rows = db.prepare("SELECT sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY name").all()
-        need(rows.length === 2 && rows[0].sql === SCHEMA[1] && rows[1].sql === SCHEMA[0])
+        const expected = version === 1 ? [SCHEMA[1], SCHEMA[0]] : [SCHEMA[1], ...CONTROL_SCHEMA, SCHEMA[0]]
+        need(rows.length === expected.length && rows.every((r, i) => r.sql === expected[i]))
       }
       function transaction(mutating, work, initial = false) {
         return guarded(() => {

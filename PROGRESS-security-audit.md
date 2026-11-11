@@ -634,3 +634,107 @@ git diff --check
 git diff --exit-code -- scripts/check-secrets.sh acceptance spec features-security-audit.json graphs scripts/workflow-harness.mjs
 # exit 0: scanner, frozen acceptance/contracts/features/harness and all graph files unchanged
 ```
+
+## SA-02c — Persist opt-in audit grant controls and report freshness barriers
+
+Implemented the selected C1 slice in the existing journal owner. Explicit empty
+journal opt-in atomically upgrades the exact v1 schema to v2 under the original
+lease. Legacy journals retain their immutable invocation limit and public
+snapshot shape. Controls provide detached reads, CAS increases only while
+budget-paused/quiescent, selective blocker removal, and actual owning-report
+acknowledgement. No method clears paused_uncertain. New reservations and prepared
+dispatches honor blockers; replay, cancellation and admitted settlement retain
+their distinct permissions.
+
+Admission reserves one history event and a full 1 MiB result allowance per
+prepared row, in addition to existing row/input accounting and the fixed
+33,558,528-byte control reserve. Length/count checks precede stored-body reads.
+The immutable history is limited to 32,768 rows. Ordinary mutations cannot use
+settlement slots. Settlement or ordinary reopen recovery consumes one reserved
+event, adds the appropriate blockers, and updates the receipt in one transaction.
+Prepared cancellation releases its unused reservations without changing public
+revision. Unknown outcomes retain their result allowance and invocation charge.
+
+Partial reports now bind the exact budgetEvidence projection and renderer
+version partial-report-v2, distinguishing Maximum invocations from Current
+authorized grant, including zero. Live control revision/blockers/acknowledgement/
+history are excluded from immutable report content and its digest. A failed
+budget-projection read rejects the context rather than representing legacy null.
+Acknowledgement calls the actual reader outside journal transactions and then
+checks bound identity, current accounting and revision at the synchronous owning
+host boundary; acknowledgement does not invalidate its own generation.
+
+Changed tree:
+- graphs/security-audit/skills/security-audit/journal-control.mjs (new helper)
+- graphs/security-audit/skills/security-audit/dispatch-journal.mjs
+- graphs/security-audit/skills/security-audit/journal-storage.mjs
+- graphs/security-audit/skills/security-audit/journal-data.mjs
+- graphs/security-audit/skills/security-audit/audit-report.mjs
+- graphs/security-audit/tests/dispatch-control.test.mjs (19 new harness checks)
+- DECISIONS.md and PROGRESS-security-audit.md
+
+Exact verification and observed results:
+
+```sh
+node --input-type=module -e 'for (const f of ["dispatch-control.test.mjs","dispatch-journal.test.mjs","dispatch-journal-read.test.mjs","audit-partial-report.test.mjs","audit-md.test.mjs"]) await import("./graphs/security-audit/tests/"+f); const {summary}=await import("./scripts/workflow-harness.mjs"); console.log(summary()); process.exitCode=summary().fail?1:0'
+# exit 0: { pass: 82, fail: 0 }
+# 19 new controls + 32 unchanged journal + 18 unchanged partial report + 13 Markdown
+node acceptance/security-audit/sa-02c-control-budget.test.mjs
+# exit 1: 9 tests, 0 pass, 9 fail, all at setup/openAuditJournal
+# Error: Audit journal: INVALID_JOURNAL_INPUT
+node --input-type=module -e 'import {newInit} from "./graphs/security-audit/tests/stage-fixtures.mjs"; const x=newInit(); console.log(JSON.stringify({runDir:x.runDir,repo:x.repo})); process.exitCode=x.runDir?0:1'
+# exit 1: {"runDir":"","repo":"/tmp/audit-run-test-MyYy6W/repo-1"}
+node --input-type=module -e 'import {spawnSync} from "node:child_process"; const r=spawnSync(process.execPath,["--version"],{encoding:"utf8"}); console.log(JSON.stringify({status:r.status,error:r.error&&{code:r.error.code,syscall:r.error.syscall},stdout:r.stdout,stderr:r.stderr})); process.exitCode=r.error?1:0'
+# exit 1: status 0, error.code EPERM, stdout "v24.21.0\n"
+node --check graphs/security-audit/skills/security-audit/journal-control.mjs
+node --check graphs/security-audit/skills/security-audit/dispatch-journal.mjs
+node --check graphs/security-audit/skills/security-audit/journal-data.mjs
+node --check graphs/security-audit/skills/security-audit/journal-storage.mjs
+node --check graphs/security-audit/skills/security-audit/audit-report.mjs
+node --check graphs/security-audit/tests/dispatch-control.test.mjs
+# each exit 0
+git diff --check
+# exit 0
+bash scripts/check-secrets.sh graphs/security-audit/skills/security-audit/journal-control.mjs graphs/security-audit/tests/dispatch-control.test.mjs
+# exit 0: check-secrets: clean (both new untracked source/test files)
+```
+
+Logs: /tmp/sa-02c-focused.log and /tmp/sa-02c-acceptance.log. The initial direct
+acceptance run failed all nine cases with missing readAuditControl; the first
+eight new implementation cases likewise failed on absent control methods. An
+initial node --test wrapper failed with only a file-level test-failed result.
+The final direct acceptance reaches the unchanged fixture setup and rejects its
+empty runDir before control assertions. This is not acceptance evidence or an
+authorized fixture repair. No process-restriction bypass was attempted.
+
+Local static review: data flow PASS; edge/error handling PASS; data security
+PASS; schema/field consistency PASS; C1 implementation completeness PASS.
+Capacity trace: inspectControl charges the fixed reserve before body allocation;
+controlledBytes adds each pending result allowance; prepare reserves history
+atomically with the row; transitionControl uses reserved settlement slots;
+recovery consumes them only for dispatched rows; cancellation releases only
+prepared holds. Nineteen tests cover ordinary SQLite write rollback, clean
+close/reopen after a synthetic failed settlement, full-size result retention,
+unknown holds, CAS, malformed read observations, byte admission, pure capacity
+boundaries and actual publisher/reader use. No large database or race fixture.
+A final red/green compatibility check caught expanded identity validation
+affecting v1 settlement/cancellation. Their original stored-binding behavior
+is retained; opted-in controls and all new control APIs require current identity.
+The required independent Explore request failed with Unknown model gpt-6.1-sol.
+No alternate model was used; local review is not independent host review.
+
+Limits: C2 native scheduler reserves and runtime pause/draining are unimplemented
+and unclaimed. No provider capability, account/cost, tool confinement, crash-lock
+takeover, multi-writer guarantee, filesystem-race protection or hostile same-user
+containment is established. No target application edits/execution, live/fallback
+providers, blocked reproduction, pinned-host changes, Git staging/commit or
+feature-pass flag changes occurred. Every prior blocked status/evidence limit
+remains in force. Frozen acceptance, baseline tests, schemas, vendors and
+validators were preserved. Full gates, acceptance rerun, flags, staging, commits
+and final independent review remain with the external host.
+
+Final hygiene: the unchanged tracked-file scanner (`bash scripts/check-secrets.sh`)
+returned exit 0, `check-secrets: clean`. The explicit scan of both new source/test
+files also returned exit 0. `git diff --check` passed. The frozen-path diff check
+returned exit 0, including acceptance, spec, feature flags, project rules,
+scripts, native runtime, vendor path and existing journal/partial-report tests.

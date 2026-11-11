@@ -590,3 +590,32 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   The required Explore request returned Unknown model gpt-6.1-sol; no fallback.
   Local review and fake-port tests do not replace independent host review,
   production journal integration, real provider capability or full gates.
+- D101 (SA-02c): Implement only the host-selected C1 journal controls, despite
+  the contract's retained proposal heading. Preserve exact legacy schemas and
+  behavior; upgrade only an empty journal through explicit initControl under
+  its existing lease. Keep control/history validation and capacity arithmetic in
+  a helper of the existing owner, not a second scheduler. Use actual owning
+  report reads outside transactions, with synchronous bound-identity/CAS checks.
+  Bind only maximum/currentGrant into versioned partial reports, excluding live
+  control bookkeeping. Prepare in-process implementation tests before code;
+  reserve settlement history and result capacity at admission. No C2 runtime,
+  target execution, provider, blocked reproduction, or frozen-file changes.
+  Record session evidence here and in PROGRESS-security-audit.md; external host
+  retains full gates, flags, staging, commits and final review.
+- D102 (SA-02c evidence): Nineteen new implementation checks and 63 unchanged
+  focused journal/report/Markdown checks pass (82/0). The selected nine-case
+  acceptance fails during setup with INVALID_JOURNAL_INPUT; an unmodified
+  newInit probe returns runDir="". An ordinary Node --version subprocess probe
+  independently reports EPERM despite status 0. Preserve the fixture and
+  execution restrictions; the external host must rerun acceptance. A new
+  budget-read fault check first failed, then passed after refusing the context
+  instead of exposing a legacy-shaped null budget. The required Explore request
+  returned Unknown model gpt-6.1-sol; no model/provider fallback. Local static
+  review is not independent host review. Capacity arithmetic, synchronous
+  callbacks and injected local SQLite faults do not prove C2 runtime draining,
+  verification reserves, crash-lock takeover or hostile filesystem containment.
+- D103 (SA-02c compatibility): A final red/green check caught expanded identity
+  validation affecting v1 settlement/cancellation. Keep their original stored
+  binding semantics; require current identity for opted-in controls and every
+  new control API, including legacy getControl. The corrected focused run is
+  82/0 (19 new checks). No frozen baseline was changed.
