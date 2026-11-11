@@ -188,6 +188,43 @@
       "test": "acceptance/native-runtime/oc-01-catalog.test.mjs",
       "testKind": "node",
       "passes": false
+    },
+    {
+      "id": "SA-02d",
+      "title": "Connect native audit checkpoints with actual owners, controlled pauses and cooperative cancellation",
+      "description": "Implement actual native journal/report bridge and narrowly selected NR02 pause and reserve-signal extension. Preserve existing frozen contracts/tests and fatal precedence. No alternate scheduler, provider, grant bypass or previously blocked reproduction.",
+      "contract": "spec/contracts/security-audit-native-checkpoints.md",
+      "dependencies": [
+        "NR-02",
+        "SA-02c"
+      ],
+      "acceptance": [
+        "Nine ordinary actual-owner fixtures pass using existing trusted graphs and inert provider ports.",
+        "Actual freshness precedes authorization; durable terminal receipts survive controlled publication failure and same invocation resumes without repeated callbacks.",
+        "Concurrent controlled pause drains authorized siblings; external cancellation joins only owned deferred callbacks and retains uncertain charges.",
+        "Owner association rejects forged, Proxy, closed and mismatched handles before hooks. No real provider, hostile filesystem containment or C2 reserve-policy claim."
+      ],
+      "test": "acceptance/native-runtime/sa-02d-native-checkpoints.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "SA-LT01",
+      "title": "Expose per-record lifecycle feedback and deliver legal critic transitions",
+      "description": "Reuse owning unitFromInput and vendored validation. Preserve valid sibling input bytes, reject lifecycle null/empty rather than normalize identity, and provide shared legal transition vocabulary in actual critic prompts and partition/global hashes. Retry application remains separate.",
+      "contract": "spec/contracts/security-audit-lifecycle-feedback.md",
+      "dependencies": [
+        "SA-05a"
+      ],
+      "acceptance": [
+        "Ten ordinary/pure cases pass with unchanged original validators and frozen gates.",
+        "Accepted sibling records retain original bytes and identity; all duplicate slots reject; no partial run publication.",
+        "Deferred units remain non-reopenable; malformed transition context dispatches nobody.",
+        "Actual criticInput, graph prompt and partition/global planner use shared owner context, bound before hash and unchanged500000-byte measurement."
+      ],
+      "test": "acceptance/security-audit/sa-lt01-feedback.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
