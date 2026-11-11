@@ -155,6 +155,23 @@
       "passes": true
     },
     {
+      "id": "SR-01a",
+      "title": "Reject statically aliased source/context roots by directory identity",
+      "description": "Correct SR-ROOT-ALIAS-01: retain frozen SR01 lexical/path/mode/hash boundaries and add exact reliable bigint directory identities across opposite root ancestor chains. Pure metadata validation; no actual Windows/DrvFS alias, race or containment claim.",
+      "contract": "spec/contracts/security-audit-root-identities.md",
+      "dependencies": [
+        "SR-01"
+      ],
+      "acceptance": [
+        "Four serial ordinary/pure cases pass: distinct siblings share parents; identical root identities and opposite-chain overlap refuse; unusable identities fail closed.",
+        "No lossy Number/lowercase/realpath-only identity inference. Preserve all frozen SR01 tests and baseline gates.",
+        "Pure substituted metadata tests prove decision predicates only; no previously blocked filesystem or capture reproduction."
+      ],
+      "test": "acceptance/security-audit/sr-01a-root-identities.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
       "id": "SA-05a",
       "title": "Partition full critic evidence and require global semantic reconciliation",
       "description": "Implement pure partition planner and narrow optional context in owning security-audit graph. Use exact executable arguments and real serializer measurement; preserve legacy behavior when context absent. No durable scheduling or existing clipping test amendments in this slice.",
