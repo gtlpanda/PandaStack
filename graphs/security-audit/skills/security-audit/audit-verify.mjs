@@ -125,7 +125,8 @@ function closeVerify(runDir) {
   return finishRun(runDir)
 }
 
-export function applyVerify({ runDir, run, stage, input, result, event, notes }) {
+// rejectCompleted: applyStage's capability for branding the completed all-null round; a direct call without it refuses as before.
+export function applyVerify({ runDir, run, stage, input, result, event, notes, rejectCompleted = refuse }) {
   const got = result.results.verifiers
   const ids = input.items.map(i => i.agent_id)
   if (!isObj(got) || Object.keys(got).length !== ids.length || !ids.every(id => Object.hasOwn(got, id) && (got[id] === null || isObj(got[id])))) refuse(`results.verifiers must have exactly one entry per planned verifier (${ids.join(', ')}), each a result object or null; nothing was changed`)
@@ -136,7 +137,7 @@ export function applyVerify({ runDir, run, stage, input, result, event, notes })
     recordSpend(runDir, stage.name, result.budgetSpent)
     writeJson(join(stage.dir, 'result.json'), result)
     event('escalated', {}, 'every verifier returned nothing')
-    refuse(`every verifier of the round returned nothing (${result.reason}); no try was used (${result.budgetSpent} agent(s) spent): plan the stage again to retry it`)
+    rejectCompleted(`every verifier of the round returned nothing (${result.reason}); no try was used (${result.budgetSpent} agent(s) spent): plan the stage again to retry it`, 'escalation')
   }
   let history = historyOf(runDir)
   const cache = new Map()

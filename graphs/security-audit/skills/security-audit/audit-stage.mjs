@@ -411,6 +411,23 @@ export function planNativeStage(runDir) {
   return { ...out, captured: false, invocationId: readCapture(out.stage).invocation_id }
 }
 
+// ---------- completed stage rejections ----------
+// An applier that has finished every write a rejection needs (spend, result.json, the owning event) brands the very Refusal it throws, so
+// native application can tell "this stage completed and was rejected" from an operational failure (an I/O error, a missing input) escaping
+// the same code. Authority is the object's identity in this module-private WeakMap: no class name, message, code or field grants it, and the
+// query reads nothing from the value, so a Proxy or accessor runs no hook.
+const COMPLETED_REJECTION_KINDS = ['semantic', 'escalation']
+const completedRejections = new WeakMap()
+export function completedStageRejection(value) {
+  return completedRejections.get(value) ?? null   // WeakMap.get answers undefined for a primitive and never touches an object's properties
+}
+// Throws the existing Refusal for `message`, branded as a completed rejection of `kind`. Call it only as the last statement of a branch whose
+// required writes all returned; it is passed to applyValidate/applyVerify only through the context applyStage builds.
+function rejectCompleted(message, kind) {
+  if (!COMPLETED_REJECTION_KINDS.includes(kind)) throw new TypeError(`unknown completed rejection kind ${JSON.stringify(kind)}`)
+  try { refuse(message) } catch (e) { completedRejections.set(e, kind); throw e }
+}
+
 // ---------- apply ----------
 // What the workflow returns, as an untrusted value: the contract of security-audit-flow.js.
 function resultProblems(result, input) {
@@ -439,7 +456,7 @@ function refuseResult({ runDir, stage, result, event, file, scope, problems, wha
   const last = mine.length >= MAX_SYNTH_ATTEMPTS
   if (last) giveUp()
   event(last ? 'failed' : 'refused', { counts: { problems: problems.length, attempt: mine.length } }, last ? LEDGER_FAILED : 'the ledger would not accept the units')
-  return refuse(`${what} (${problems.length} problem(s)): ${problems[0].slice(0, 200)}${problems.length > 1 ? ` (and ${problems.length - 1} more, in ${file})` : ''} (attempt ${mine.length} of ${MAX_SYNTH_ATTEMPTS}${last ? `: the run is marked incomplete (${LEDGER_FAILED}), and the reasons are in ${file}` : `; ${then}`})`)
+  return rejectCompleted(`${what} (${problems.length} problem(s)): ${problems[0].slice(0, 200)}${problems.length > 1 ? ` (and ${problems.length - 1} more, in ${file})` : ''} (attempt ${mine.length} of ${MAX_SYNTH_ATTEMPTS}${last ? `: the run is marked incomplete (${LEDGER_FAILED}), and the reasons are in ${file}` : `; ${then}`})`, 'semantic')
 }
 
 // One applier per step: it checks the part of the result that is its own, writes the files `then` names, records the cost, saves result.json, and
@@ -457,7 +474,7 @@ const APPLIERS = {
         recordSpend(runDir, stage.name, result.budgetSpent)
         writeJson(join(stage.dir, 'result.json'), result)
         event('refused', { dropped: dropped.length }, 'no fact held')
-        return refuse(`not one fact the researchers returned holds (${dropped.length} dropped); recon-facts.json is not written. Plan the stage again to retry it`)
+        return rejectCompleted(`not one fact the researchers returned holds (${dropped.length} dropped); recon-facts.json is not written. Plan the stage again to retry it`, 'semantic')
       }
       writeJson(join(runDir, 'recon-facts.json'), { version: 1, facts, dropped: dropped.slice(0, MAX_DROPPED_LISTED), dropped_total: dropped.length })
       recordSpend(runDir, stage.name, result.budgetSpent)
@@ -529,8 +546,9 @@ const APPLIERS = {
     return applyConsolidate(ctx)
   },
 
-  validate: applyValidate,
-  verify: applyVerify,
+  // Only these two are handed rejectCompleted, for their completed all-null rounds; called directly they fall back to a plain refusal.
+  validate: ctx => applyValidate({ ...ctx, rejectCompleted }),
+  verify: ctx => applyVerify({ ...ctx, rejectCompleted }),
 }
 
 // The Workflow tool's own output file wraps what the script returned: { summary, agentCount, logs, result: { status, ... }, ... } (measured, claude 2.1.319).
@@ -572,7 +590,7 @@ export function applyStage(runDir, returnedFile) {
     recordSpend(runDir, stage.name, result.budgetSpent)
     writeJson(join(stage.dir, 'result.json'), result)
     event('escalated', {}, result.reason)
-    return refuse(`${next.step} ${input.part} escalated: ${result.reason} (${result.budgetSpent} agent(s) spent; plan the stage again to retry it)`)
+    return rejectCompleted(`${next.step} ${input.part} escalated: ${result.reason} (${result.budgetSpent} agent(s) spent; plan the stage again to retry it)`, 'escalation')
   }
   return APPLIERS[next.step]({ runDir, run, stage, input, result, event, notes })
 }
