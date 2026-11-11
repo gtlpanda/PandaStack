@@ -815,3 +815,13 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   template's allowlist plus `Bash(node *)` and `Bash(bash scripts/*)`; the guard
   hook and deny rules still block frozen files, push, curl, wget and rm -rf.
 
+- D120 (SA-AR01 build, 2026-11-11, unattended): The `cause`-carrying native
+  errors (APPLICATION_RECEIPT_UNCONFIRMED, CLEANUP_UNCONFIRMED) use a small local
+  `nativeError` helper in native-stage.mjs. It keeps boundary.mjs's message
+  format, and boundary.mjs is outside the contract's allowed files. Only the
+  contract's five completed branches are branded. No other post-write Refusal is
+  branded, because the contract forbids it. Such a stage stays pending, and
+  same-result replay is the recovery. The known final-attempt receipt-failure
+  mislabel is recorded as a PROGRESS limit. It is not fixed here because a fix
+  needs new durable state that this slice does not select.
+

@@ -1723,6 +1723,9 @@ reported tests 10, pass 10, fail 0. Focused regressions, all 0 FAIL:
 - audit-stage 35, audit-validate 28, audit-verify 28, security-audit-verdicts 19
 - audit-verify-apply-write-failed 1, audit-consolidate 20, audit-quick-verify 5
 - `node --test` of sa-02b, sa-02c, sa-lt01 and sa-05a acceptance: 35/35 pass
+- run unpiped, each exited 0: native-checkpoint-owners 7 ok,
+  audit-verify-findings-write-retry 1 ok, audit-partial-report 18 ok, and
+  tests/native-runtime-executor 16 ok
 
 `git diff --check` was clean. The unchanged `bash scripts/check-secrets.sh` on
 tracked files, and run separately on the new test file, both printed
@@ -1734,6 +1737,18 @@ Limits:
   refusals (the intended fix) and consolidate's post-write rethrows. Such a
   stage stays pending for same-result replay. Refusals raised before
   result.json exists were already unreceipted, so their behavior is unchanged.
+- Static review only, not executed: replay of the same result after a
+  post-write operational failure should not hit the "not pending" or "not
+  waiting for a verifier" refusals. Each applier skips already-applied work:
+  validate via `decided_in`/`attempts[].stage`, verify via `phase5.last_stage`,
+  and consolidate via its `finished`/`resumed` markers. Only the recon
+  synthesis replay is exercised.
+- Known mislabel, found by static review and not fixed. If the rejected-receipt
+  write fails on a final `refuseResult` attempt after `giveUp` (synthesis
+  `markIncomplete`), `nextStep` becomes `report`. Recovery then skips `apply()`
+  and records `applied` for that rejected stage. The run is already terminal,
+  so scheduling is unaffected. Fixing the label needs new durable state outside
+  this slice (D120).
 - The mint-path `refuseResult` brand shares the synthesis code path but has no
   dedicated test.
 - No process was killed; the only I/O faults are the acceptance's one-shot
