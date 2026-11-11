@@ -1,7 +1,11 @@
 # Security-audit execution and recovery priority
 
-Status: active preparation; broader roadmap paused after P2-14 at
-364cb2b7c29f245df053c66ba6a37161dfa131ad. This is the user's explicit priority
+Status: closed 2026-11-11. The execution and recovery repairs are complete
+(features-security-audit.json 17/17, last SA-AR01 in PR #50). The user closed the
+full Codex parity expansion (D122); Codex remains a fallback backend for the paths
+already native. The broader roadmap resumes with Phase 2. History below is kept
+as written. The roadmap was paused after P2-14 at
+364cb2b7c29f245df053c66ba6a37161dfa131ad. This was the user's explicit priority
 handoff, not a new Terracotta application audit or application repair.
 
 ## Incident evidence

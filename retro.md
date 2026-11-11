@@ -3332,3 +3332,24 @@ unchanged). The loop and doctor cases fail with the wiring reverted. The loop te
 first failed here because it counted this machine's real Codex; it now uses version
 999.0.0 and passes with and without a real Codex on PATH.
 
+## 48. SA-AR01 on the Claude backend; Phase 2 resumes (2026-11-11)
+
+- Converted the Codex-shaped autobuild.json for a Claude run (D119): dropped the
+  Codex model ids, rewrote the builder and review prompts for the session-commits
+  flow, set noProgressLimit 3, and added a builder allowlist.
+- Dry run 1 found the missing allowlist: INCOMPLETE, 20 permission denials,
+  $5.23 est, nothing changed. Dry run 2 built SA-AR01: 101 turns, $6.84 est, one
+  Stop-hook block. Full gate, six-lens /bughunt (pass, 0 findings) and CI green;
+  merged as #50 (0bc2604). The security-audit track is 17/17.
+- P2-15 and P2-16 had shipped in b7a6c8c without flags. Their frozen tests fail
+  on b7a6c8c^ (0/2, 1/3) and pass on main (2/2, 3/3); `autobuild mark-passed` set
+  them (D121). Phase 2 features are 16/16.
+- /bughunt F1 (LOW, reproduced): the new Phase 2 prompt called AGENTS.md binding
+  while AGENTS.md still said Phase 2 was paused. The user closed the Codex parity
+  priority (D122); AGENTS.md now selects features.json, and
+  tests/agents-active-priority.test.mjs (2 cases) fails on the old text.
+- An earlier hunt on the same head ended manual_review (logic lens skipped one
+  area); a fresh hunt covered it and found F1.
+
+Remaining for Phase 2: the dogfood scenario and docs/dogfood/phase-02.md.
+

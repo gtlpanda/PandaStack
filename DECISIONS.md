@@ -836,3 +836,11 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   prompts plus an explicit pointer to AGENTS.md, which Claude does not read on
   its own. Phase 2 completion still needs its dogfood scenario and report
   (ROADMAP Phase 2; docs/dogfood/phase-02.md).
+
+- D122 (priority change, 2026-11-11): The user closed the security-audit and
+  full Codex parity priority after the repairs reached 17/17. Codex stays a
+  fallback backend for the paths already native (autobuild and bughunt); 44 of
+  46 offerings remain uncertified on Codex and are not being ported now. The
+  roadmap resumes with Phase 2. AGENTS.md's active-priority section now selects
+  features.json, and tests/agents-active-priority.test.mjs keeps that section in
+  step with autobuild.json (bughunt F1 on 0278090 found them contradicting).
