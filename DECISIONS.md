@@ -568,3 +568,25 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   in the checkout by the failed empty-directory fixture was inspected and
   removed; it was absent at session start. Local static review is not independent
   host review, native dispatch gating, concurrency or containment evidence.
+- D99 (NR-02): Implement only the pinned registry and shared callback executor.
+  Use the existing NR-01 finite JSON boundary and original six graph templates;
+  add implementation tests before code. Keep leaf permits separate from nested
+  workflow evaluation, and latch fatal uncertainty outside graph catches. Bound
+  checkpoint awaits and provider joining without claiming storage rollback or
+  process isolation. Fake ports only; no production journal adapter, provider,
+  installer, target execution or graph rewrite. Record session evidence here and
+  in PROGRESS-security-audit.md rather than unrelated roadmap/retro files. The
+  outer harness owns all gates, flags, staging, commits and independent review.
+- D100 (NR-02 evidence): Nineteen selected acceptance cases, fifteen NR-01
+  acceptance regressions, and 24 focused implementation/schema checks pass.
+  The wider selected graph regression run reports 197 passes and 25 failures:
+  four dev run-script subprocess checks see empty output; 21 audit recon checks
+  cannot open run-metadata.json after fixture initialization. A separate ordinary
+  Node --version subprocess probe reports EPERM despite status 0; no process
+  restriction bypass or frozen-fixture change was attempted. Remove the failed
+  fixture's incidental root recon-facts.json after inspecting its inert contents.
+  Red/green implementation checks caught unsafe thrown-error code access,
+  exact-limit replay wrapper accounting, and post-close uncertainty dispatch.
+  The required Explore request returned Unknown model gpt-6.1-sol; no fallback.
+  Local review and fake-port tests do not replace independent host review,
+  production journal integration, real provider capability or full gates.

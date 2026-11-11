@@ -15,7 +15,7 @@ const reject = code => { throw Object.assign(new Error('Native output contract r
 // Inspect only data descriptors, never user property reads or serialization
 // hooks. Count the exact serialized representation as we copy, including keys,
 // escaping and repeated aliases; the active path detects cycles, not sharing.
-function copyJSON(input, code) {
+export function copyJSON(input, code) {
   let bytes = 0
   const active = new WeakSet()
   const count = size => { bytes += size; if (bytes > MAX_BYTES) reject(code) }

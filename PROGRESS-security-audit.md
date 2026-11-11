@@ -520,3 +520,117 @@ git diff --check
 git diff --exit-code -- scripts/check-secrets.sh acceptance spec features-security-audit.json graphs/security-audit/vendor
 # exit 0: these frozen inputs and vendored validators/schemas are unchanged
 ```
+
+## NR-02 — Execute trusted workflows through bounded native callback ports
+
+Implemented only the selected registry/executor slice. The six installed
+templates are captured after bounded UTF8, realpath containment, SHA256 and
+metadata checks. The private registry retains compiled captured bytes; no later
+disk reads or arbitrary workflow injection are accepted. Original workflow
+templates, approval behavior, schemas, vendors and validators are unchanged.
+The only NR-01 change exports its existing finite JSON copier for reuse without
+changing its behavior.
+
+The executor shares leaf admission across nested workflows, preserves call
+ordering and stable binding identities, requires explicit model/profile
+selection, and validates the original schema through NR-01 before reservation.
+Completed fake checkpoint results replay without dispatch. Exact returned/failed
+transport envelopes settle before graph-visible completion. Unknown dispatch,
+storage failure, conflicts and malformed transport remain fatal outside graph
+catches. Deadline/abort/close bound pending operations; checkpoint signals and
+sanitized operationPending diagnostics retain storage uncertainty. Provider
+promises get a 1000ms cleanup grace; unjoined fake callbacks reject with
+CLEANUP_UNCONFIRMED. No automatic reopen, retry or provider fallback is added.
+
+Added sixteen workflow-harness implementation cases. They cover exact real QA
+ledger parity, descriptor/Proxy refusal, envelope/receipt/size failures, late
+settlement, busy/close, nonsettling fake callbacks, immutable template capture,
+static path escape refusal, canonical binding/replay, real deadline timers,
+failed-result replay, unsafe thrown-error descriptors, exact 1 MiB completion
+replay and refusal to start uncertainty storage after close. The last three had
+observed red/green results during implementation. Existing schema tests remain
+unchanged. Static path checks are not concurrent replacement evidence.
+
+Exact verification commands and results (2026-11-10):
+
+```sh
+node acceptance/native-runtime/nr-02-runtime.test.mjs
+# exit 0: 19 passed, 0 failed
+node acceptance/native-runtime/nr-01-schema.test.mjs
+# exit 0: 15 passed, 0 failed
+node --input-type=module -e 'await import("./tests/native-runtime-schema.test.mjs"); await import("./tests/native-runtime-executor.test.mjs"); const {summary}=await import("./scripts/workflow-harness.mjs"); console.log(summary()); process.exitCode=summary().fail?1:0'
+# exit 0: { pass: 24, fail: 0 } (8 schema + 16 executor)
+node --input-type=module -e 'for (const file of ["./tests/native-runtime-schema.test.mjs", "./tests/native-runtime-executor.test.mjs", "./graphs/qa/tests/harness-repair.test.mjs", "./graphs/dev/tests/dev-build.test.mjs", "./graphs/release/tests/release-flow.test.mjs", "./graphs/security-audit/tests/security-audit-flow.test.mjs", "./graphs/security-audit/tests/security-audit-waves.test.mjs", "./graphs/security-audit/tests/security-audit-verdicts.test.mjs"]) await import(file); const {summary}=await import("./scripts/workflow-harness.mjs"); console.log(summary()); process.exitCode=summary().fail?1:0'
+# exit 1: { pass: 197, fail: 25 }
+```
+
+The wider regression result is NOT passing: four frozen dev run-script checks
+report missing expected subprocess text with `Input: ''`; 21 frozen audit recon
+checks report `ENOENT: no such file or directory, open 'run-metadata.json'`.
+No baseline/fixture was amended or waived. A separate ordinary diagnostic:
+
+```sh
+node --input-type=module -e 'import {spawnSync} from "node:child_process"; const r=spawnSync(process.execPath,["--version"],{encoding:"utf8"}); console.log(JSON.stringify({status:r.status,error:r.error&&{code:r.error.code,syscall:r.error.syscall},stdout:r.stdout,stderr:r.stderr})); process.exitCode=r.error?1:0'
+# exit 1:
+# {"status":0,"error":{"code":"EPERM","syscall":"spawnSync /usr/bin/node"},"stdout":"v24.21.0\n","stderr":""}
+```
+
+This probe records the subprocess limitation; it does not replace host diagnosis
+or verification of the 25 failures. The initial `node --test` invocation reported
+one file-level `test failed`; directly running the unchanged node:test file
+executed all nineteen cases in process. Before implementation those nineteen
+cases and the initial seven implementation cases failed with missing modules.
+The failed audit fixture wrote root-level recon-facts.json through its empty
+runDir; it was absent at session start, inspected as inert facts and removed.
+Logs: `/tmp/nr-02-acceptance.log`, `/tmp/nr-02-schema-acceptance.log`,
+`/tmp/nr-02-focused.log`, `/tmp/nr-02-regressions.log`.
+
+Local static review within this slice: data flow PASS; edge/error handling PASS;
+data security PASS; consistency PASS; implementation completeness PASS. The
+required independent Explore review could not start: `Unknown model
+gpt-6.1-sol`. No alternate model/provider was used. These local results do not
+substitute for independent host review, full gates or production capability.
+
+Evidence limits: all executor ports are programmatic fakes. This is not actual
+durable journal integration, provider/tool preflight, source/context reader
+enforcement, native installation, OS lifecycle/containment proof or full Codex
+workflow parity. An expired checkpoint may already have committed or may finish
+later; cancellation does not claim rollback or release of a journal lease. Only
+the owning host can reconcile uncertain storage. Pins cover these six trusted
+templates, not the installation's complete future instructions/profile closure.
+All prior blocked reproduction statuses and evidence limitations remain intact.
+No target application changes/execution, live providers, provider fallback,
+blocked reproduction, pinned-host edit, Git staging/commit or pass-flag update
+occurred. Full gates, flags, commits and final review remain with the outer host.
+
+Changed tree: core/skills/native-runtime/{boundary,registry,runtime}.mjs (new),
+core/skills/native-runtime/schema.mjs (existing copier export only),
+tests/native-runtime-executor.test.mjs (new), DECISIONS.md and this progress log.
+Stable SHA256 implementation/test evidence:
+
+```text
+e5a7cdde8dfa3f9e30c4a80013edd77b61cd999c6099a1a107b8745f414187d5  core/skills/native-runtime/boundary.mjs
+de3b33dde1bf71505cd3de90677f06127ff4d9a5bdd421ba309e39abc68e81f8  core/skills/native-runtime/registry.mjs
+8bc17001f6cb5a9266ddb8c84da1c85170704e2a811582bd80c068414a1a2983  core/skills/native-runtime/runtime.mjs
+25b9fde5a37295dd23dc95d498eda6f3a35719f29fdd299fe6d55f28aad533f6  core/skills/native-runtime/schema.mjs
+af23314943067967006b17fe2c961866bb5cfe4c8c7b0687b467f15c814bc047  tests/native-runtime-executor.test.mjs
+```
+
+Final hygiene commands and observed results:
+
+```sh
+bash scripts/check-secrets.sh
+# exit 0: check-secrets: clean (tracked files)
+bash scripts/check-secrets.sh core/skills/native-runtime/boundary.mjs core/skills/native-runtime/registry.mjs core/skills/native-runtime/runtime.mjs tests/native-runtime-executor.test.mjs
+# exit 0: check-secrets: clean (all four new untracked source/test files)
+node --check core/skills/native-runtime/boundary.mjs
+node --check core/skills/native-runtime/registry.mjs
+node --check core/skills/native-runtime/runtime.mjs
+node --check core/skills/native-runtime/schema.mjs
+node --check tests/native-runtime-executor.test.mjs
+# each exit 0
+git diff --check
+# exit 0
+git diff --exit-code -- scripts/check-secrets.sh acceptance spec features-security-audit.json graphs scripts/workflow-harness.mjs
+# exit 0: scanner, frozen acceptance/contracts/features/harness and all graph files unchanged
+```
