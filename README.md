@@ -493,6 +493,11 @@ is a trusted integration/testing boundary, not evidence read from project files;
 for bare executable names it supplies discovery evidence as well. Explicit binary
 paths are checked locally even with injection. These reports describe managed
 launch configuration, not interactive sessions or account-level model access.
+For the Codex backend, an informational `codex-cli` check names the Codex the launch
+will use and any other `codex` on PATH, with versions read from npm `package.json`
+files (not by running them). It always passes, so readiness does not depend on what
+else is installed; `autobuild` preflight is what refuses an older Codex shadowing a
+newer one.
 
 ### Local run lifecycle records
 

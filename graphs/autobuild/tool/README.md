@@ -297,6 +297,15 @@ Codex configuration is separate from Claude's settings:
 `agents.default_subagent_model`. See [non-interactive execution](https://learn.chatgpt.com/docs/non-interactive-mode).
 Authentication stays with Codex; there is no Claude or API-key fallback.
 
+Preflight logs which Codex the launch will use. For a bare `codexBin` name it also
+lists every other `codex` on PATH, with versions read from each npm install's
+`package.json` (nothing is executed; non-npm installs show `version unknown`). It
+refuses the run when another install on PATH is known to be newer than the one in use.
+A lone outdated Codex with nothing newer on PATH is only logged, not refused. An older CLI can reject the subagent model,
+for example `Unknown model ... for spawn_agent`. Fix it by putting the newer install first on PATH,
+removing the old one, or pinning one with an explicit `AUTOBUILD_CODEX_BIN` path. An
+explicit path is used alone: no listing, warning or comparison.
+
 ### Verification and operational differences
 
 - Sessions use `workspace-write` and `approval_policy=never`. Codex's own sandbox,

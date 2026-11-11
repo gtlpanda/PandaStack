@@ -7,6 +7,7 @@ import path from "node:path";
 import { project, run, KIT, CLI } from "../test-fixtures/project.mjs";
 import { loadConfig } from "../lib/config.mjs";
 import { codexArgs, readCodexResult } from "../lib/codex.mjs";
+import { npmCodex } from "../test-fixtures/codex-installs.mjs";
 const env = { AUTOBUILD_BACKEND: "codex", AUTOBUILD_CODEX_BIN: path.join(KIT, "test-fixtures", "fake-codex.mjs"), AUTOBUILD_CLAUDE_BIN: "/no/claude" };
 const REVIEW_STATUS = path.resolve(KIT, "../../hunt/skills/bughunt/review-status.mjs");
 const git = (root, ...args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
@@ -234,4 +235,23 @@ test("a missing backend value fails instead of silently launching Claude", () =>
   const result = spawnSync(process.execPath, [CLI, "run", "--backend"], { cwd: root, encoding: "utf8" });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /--backend requires a value/);
+});
+test("preflight refuses a Codex that is older than another install on PATH, before any session", () => {
+  const prefixes = mkdtempSync(path.join(tmpdir(), "codex-path-"));
+  const fake = path.join(KIT, "test-fixtures", "fake-codex.mjs");
+  const old = npmCodex(path.join(prefixes, "usr"), "0.154.0", { target: fake });
+  // 999.0.0 outranks any real Codex the inherited PATH may hold, so the result is machine-independent.
+  const fresh = npmCodex(path.join(prefixes, "npm-global"), "999.0.0", { target: fake });
+  const shadowed = { ...env, AUTOBUILD_CODEX_BIN: "codex", PATH: [old, fresh, process.env.PATH].join(path.delimiter) };
+  const refused = run(project(["F-1"]), [{ build: "F-1" }], shadowed);
+  assert.equal(refused.code, 5, refused.out);
+  assert.equal(refused.calls.length, 0, "no Codex session starts");
+  assert.match(refused.loopLog, /preflight: Codex in use: .*usr\/bin\/codex \(0\.154\.0\)\. Warning: \d+ more on PATH: .*npm-global\/bin\/codex \(999\.0\.0\).* The one in use is older than .*npm-global\/bin\/codex;/);
+  assert.match(refused.loopLog, /preflight FAILED/);
+
+  const ordered = { ...shadowed, PATH: [fresh, old, process.env.PATH].join(path.delimiter) };
+  const passed = run(project(["F-1"]), [{ build: "F-1" }], ordered);
+  assert.equal(passed.code, 0, passed.out);
+  assert.match(passed.loopLog, /preflight: Codex in use: .*npm-global\/bin\/codex \(999\.0\.0\)\. Warning: \d+ more on PATH: .*usr\/bin\/codex \(0\.154\.0\)/);
+  assert.match(passed.loopLog, /preflight OK/);
 });

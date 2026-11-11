@@ -24,6 +24,7 @@ test('doctor uses the selected installation when its source checkout has no cent
       'core/skills/decisions/config.mjs',
       'core/skills/decisions/records.mjs',
       'graphs/autobuild/tool/lib/config.mjs',
+      'graphs/autobuild/tool/lib/codex-installs.mjs',
       'scripts/agent-config.mjs',
       'scripts/configure-agents.mjs',
     ]) {
