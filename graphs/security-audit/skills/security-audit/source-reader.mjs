@@ -99,16 +99,24 @@ function rootPath(value) {
   return join(parse(value).root, ...value.slice(parse(value).root.length).split(separator).filter(Boolean))
 }
 function directory(path, protectedMode) {
-  const stat = io(() => lstatSync(path))
-  need(stat.isDirectory() && !stat.isSymbolicLink() && (!protectedMode || !(stat.mode & 0o222)), 'UNSAFE_PATH')
+  const stat = io(() => lstatSync(path, { bigint: true }))
+  need(stat.isDirectory() && !stat.isSymbolicLink() && (!protectedMode || !(stat.mode & 0o222n)), 'UNSAFE_PATH')
+  return stat
 }
 function inspectRoot(root) {
+  const identities = []
+  const inspect = path => {
+    const { dev, ino } = directory(path, path === root)
+    need(typeof dev === 'bigint' && dev >= 0n && typeof ino === 'bigint' && ino > 0n, 'UNSAFE_PATH')
+    identities.push({ dev, ino })
+  }
   let path = parse(root).root
-  directory(path, path === root)
+  inspect(path)
   for (const part of root.slice(path.length).split(separator).filter(Boolean)) {
     path = join(path, part)
-    directory(path, path === root)
+    inspect(path)
   }
+  return identities
 }
 function inspectFile(root, entry) {
   inspectRoot(root)
@@ -157,7 +165,11 @@ export function createSourceReader(options) {
     const within = (a, b) => a === b || a.startsWith(b.endsWith(sep) ? b : b + sep)
     need(!within(sourceRoot, contextRoot) && !within(contextRoot, sourceRoot))
     const manifest = captureManifest(input.manifest, input.expectedManifestHash)
-    inspectRoot(sourceRoot); inspectRoot(contextRoot)
+    const sourceChain = inspectRoot(sourceRoot), contextChain = inspectRoot(contextRoot)
+    const containsIdentity = (chain, root) => chain.some(entry => entry.dev === root.dev && entry.ino === root.ino)
+    // Compare roots against opposite chains, not every pair of ancestors:
+    // distinct siblings legitimately share parents. Static observation only.
+    need(!containsIdentity(contextChain, sourceChain.at(-1)) && !containsIdentity(sourceChain, contextChain.at(-1)))
     const manifestHash = input.expectedManifestHash
     const files = new Map(manifest.files.map(entry => [entry.path, entry]))
     const contexts = new Map(manifest.contexts.map(context => [context.manifestId,

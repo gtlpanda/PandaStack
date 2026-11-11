@@ -169,7 +169,7 @@
       ],
       "test": "acceptance/security-audit/sr-01a-root-identities.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SA-05a",

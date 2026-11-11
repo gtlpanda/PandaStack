@@ -811,3 +811,65 @@ both new source/test files also returned exit 0 as recorded above. The tracked
 diff outside DECISIONS.md and this progress file is empty, and the index is
 unchanged: `git diff --exit-code -- . ':!DECISIONS.md' ':!PROGRESS-security-audit.md'`
 and `git diff --cached --exit-code` returned exit 0. Frozen files are preserved.
+
+## SR-01a — Reject statically aliased source/context roots by directory identity
+
+Changed only the existing reader implementation, added
+`graphs/security-audit/tests/source-reader-identities.test.mjs`, and recorded
+decisions D106/D107. Directory inspection now requests `lstatSync` bigint
+metadata and retains the existing directory/symlink and write-bit checks with
+bigint mode arithmetic. Every root-chain identity requires bigint dev >= 0 and
+bigint ino > 0; unusable identity refuses UNSAFE_PATH. Factory initialization
+compares each root's exact (dev, ino) pair against every opposite-chain identity
+and refuses overlap with INVALID_READER_INPUT. Ordinary shared parents remain
+valid. Lexical validation, manifest capture, source/context lookup, addressed
+file checks, complete hashing and no-follow opens remain intact. No recursive
+walk, spelling-based identity inference or new reader API was introduced.
+
+Verification (2026-11-10, Node v24.21.0):
+
+```sh
+node acceptance/security-audit/sr-01a-root-identities.test.mjs
+# exit 0: 4 passed, 0 failed
+node acceptance/security-audit/sr-01-reader.test.mjs
+# exit 0: 8 passed, 0 failed
+node --input-type=module -e 'for (const file of ["source-reader-identities", "source-reader", "snapshot-protection", "snapshot-root-path"]) await import(`./graphs/security-audit/tests/${file}.test.mjs`); const {summary}=await import("./scripts/workflow-harness.mjs"); console.log(summary()); process.exitCode=summary().fail ? 1 : 0'
+# exit 0: 29 passed, 0 failed
+node --check graphs/security-audit/skills/security-audit/source-reader.mjs
+node --check graphs/security-audit/tests/source-reader-identities.test.mjs
+git diff --check
+git diff --cached --exit-code
+# each exit 0
+bash scripts/check-secrets.sh
+bash scripts/check-secrets.sh graphs/security-audit/tests/source-reader-identities.test.mjs
+# each exit 0: check-secrets: clean (tracked files and explicit new test file)
+```
+
+Tests were prepared before implementation. Initial selected acceptance returned
+exit 1 with one pass and three missing-exception failures. Initial new focused
+checks returned exit 1 with one pass and four failures: three missing exceptions
+and one bigint-observation assertion surfaced as the reader's fixed IO_ERROR.
+The five final implementation checks cover distinct adjacent bigint inode and
+device values beyond Number precision, exact pair equality, both opposite
+interior ancestor directions, invalid identity fields at both roots and shared
+or private ancestors, and bigint observations with shared-parent acceptance.
+All metadata seams are synchronous and restored in finally; cases run serially.
+Frozen SR-01 acceptance also verifies separate source/context bytes and the
+existing path, symlink, manifest, paging, search and hash boundaries.
+
+Local static sanity review: data flow PASS; edge/error handling PASS; security
+PASS; consistency PASS; selected library-slice completeness PASS. The requested
+Explore subagent returned `Unknown model gpt-6.1-sol`; no fallback was attempted.
+This is not independent review evidence; final independent review remains with
+the external host.
+
+Limits: substituted directory metadata proves decision predicates only. No
+actual Windows/DrvFS alias or filesystem race was reproduced. Meaningful OS
+dev/ino identity remains a filesystem prerequisite; this does not establish
+identity reliability, hostile-kernel or remote-filesystem trust, mount-race
+safety, later replacement protection, same-user containment, Git provenance,
+context sanitization or runtime tool confinement. All prior blocked statuses
+and evidence limits remain. No target application changes/execution, providers,
+blocked capture/race reproduction, pinned-host changes, full gates, flags,
+staging or commits were performed. Prior acceptance, baselines, vendors,
+validators and schemas remain unchanged. The host owns full gates and promotion.

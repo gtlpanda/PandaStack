@@ -1,5 +1,28 @@
 # Phase 1 decisions
 
+- D106 (SR-01a): Correct only static source/context root identity separation in
+  the existing reader. Retain lexical and static type/mode checks, request bigint
+  lstat metadata, validate every ancestor identity, and compare each root only
+  against the opposite chain. Shared parents remain legal. Prepare serial
+  workflow-harness tests before code using synchronous directory-metadata
+  substitution on tiny owned fixtures. The host-selected four acceptance cases
+  are reviewed ordinary/pure fixtures; no real alias, replacement, target code,
+  provider or blocked reproduction is exercised. Record evidence in this log and
+  PROGRESS-security-audit.md; leave frozen files, full gates, flags, staging,
+  commits and independent final review to the external host.
+
+- D107 (SR-01a evidence): Initial unchanged acceptance was 1 pass/3 failures;
+  new implementation checks were 1 pass/4 failures. After the correction all
+  four selected cases, eight unchanged SR-01 cases and 29 focused harness checks
+  pass (five new identity checks plus 24 reader/snapshot regressions). Exact
+  bigint comparisons include zero device and adjacent values above Number
+  precision; invalid identity fields refuse on roots and ordinary ancestors.
+  Local static review passes data flow, edge/error handling, security,
+  consistency and scope completeness. The requested Explore subagent returned
+  Unknown model gpt-6.1-sol; no fallback or independent review claim. Metadata
+  substitution proves predicates only, not actual Windows/DrvFS aliases,
+  filesystem identity reliability, replacement safety or hostile containment.
+
 - D93 (SA-02a1): Correct only journal read identity binding and pre-materialization
   admission. Compare the full canonical current identity inside the read
   transaction; validate all stored variable-width field lengths and their safe
