@@ -533,3 +533,18 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   returned Unknown model gpt-6.1-sol; no fallback. Record stable source hashes
   and local static aggregate-admission tracing without claiming independent
   review or runtime overflow proof. No large database or blocked reproduction.
+- D95 (NR-01): Implement only the pure shared schema adapter and new focused
+  workflow-harness tests. Use descriptor-checked detached JSON with incremental
+  UTF8 byte accounting before semantic validation; reject Proxies before any
+  reflection. Validate the entire original schema before considering values,
+  and transport through a fixed JSON-string envelope without schema conversion.
+  Keep graph schemas, hunt converter, vendors, validators and frozen inputs
+  unchanged. No runtime/provider/filesystem integration or target execution.
+  The outer host owns full gates, flags, staging, commits and final review.
+- D96 (NR-01 evidence): The selected fifteen pure acceptance cases and eight
+  added workflow-harness cases pass. Both were red before implementation because
+  the required module was absent. The mandatory Explore request returned
+  `Unknown model gpt-6.1-sol`; do not substitute another model/provider or claim
+  independent review. Local static review supplements pure schema tests only;
+  native runtime enforcement, provider capability and overall parity remain
+  unproven and outside this slice. Keep all prior blocked evidence limits.

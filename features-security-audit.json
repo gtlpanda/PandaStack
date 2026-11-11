@@ -82,7 +82,7 @@
       ],
       "test": "acceptance/native-runtime/nr-01-schema.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SA-02b",

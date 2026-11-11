@@ -320,3 +320,74 @@ untracked source/test file. `git diff --check` also exited 0. Changed tree:
 `dispatch-journal.mjs`, the new `dispatch-journal-read.test.mjs`, `DECISIONS.md`
 and this progress log only. No feature was marked passing and no Git staging or
 commit was performed.
+## NR-01 — Preserve original workflow schemas through native JSON output
+
+Implemented only `core/skills/native-runtime/schema.mjs`, with pure exports
+`schemaProblems(value, schema)` and `encodeOutputContract(schema)`. The adapter
+captures a detached validated schema, uses the exact strict `{json: string}`
+wire envelope, parses once, then validates the original schema. Optional fields
+remain absent, explicit null unions stay exact, and open records retain fields.
+No defaulting, coercion, schema rewriting or unknown-field removal is performed.
+
+Input admission rejects Proxies before reflection and reads data descriptors
+without invoking getters, setters or serialization hooks. Plain/null-prototype
+records and dense ordinary arrays are checked with path-local cycle detection;
+shared noncyclic aliases remain valid. Incremental serialized UTF8 accounting
+enforces the 1048576-byte limits, container depth is capped at 64, and generic
+numeric-path diagnostics are capped at 100 entries and 256 characters each.
+Wire, JSON parse/nonfinite, decoded-result, malformed-schema and unsupported
+schema failures retain their distinct codes. Decoder state is detached and the
+published wire schema is frozen.
+
+Tests were added first in `tests/native-runtime-schema.test.mjs`, using the
+unchanged `scripts/workflow-harness.mjs`. Initial selected acceptance: 0 passed,
+15 failed, exit 1; initial focused checks: 0 passed, 8 failed, exit 1. Both
+reported `ERR_MODULE_NOT_FOUND` for the not-yet-implemented schema owner.
+
+Final verification commands and exact results:
+
+```sh
+node acceptance/native-runtime/nr-01-schema.test.mjs
+# exit 0: tests 15, pass 15, fail 0, skipped 0
+
+node --input-type=module -e "await import('./tests/native-runtime-schema.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); console.log(summary()); process.exitCode=summary().fail ? 1 : 0"
+# exit 0: { pass: 8, fail: 0 }
+
+bash scripts/check-secrets.sh
+# exit 0: check-secrets: clean (tracked files)
+
+bash scripts/check-secrets.sh core/skills/native-runtime/schema.mjs tests/native-runtime-schema.test.mjs
+# exit 0: check-secrets: clean (both new untracked source/test files)
+
+git diff --check
+# exit 0
+```
+
+The eight additional checks cover alias/cycle distinctions, exotic arrays and
+hooks, revoked/nested Proxies, unvisited schema and error precedence, exact byte
+thresholds including escaping/envelope overhead, schema representation depth,
+mixed unions/enums, wire/nonfinite classification and diagnostic bounds.
+
+Local static review: data flow PASS; edge/error handling PASS; data security
+PASS; consistency PASS; implementation completeness PASS within NR-01's pure
+scope. Inspected the schema sections of all six existing workflows and left
+them, the hunt converter, vendors, validators, schemas and frozen files
+unchanged. The mandatory independent Explore review could not start:
+`Unknown model gpt-6.1-sol`. No alternate model/provider was used. Local review
+does not replace independent host review or full gates.
+
+Stable SHA256 evidence for external review:
+
+```text
+3d0f97d13126e278cda278153d5c6736ceba1c84fb3d6d398669c1bc667afbbb  core/skills/native-runtime/schema.mjs
+464dc1184c207ad8d326d49747e47d932c10bf30bc9ffefd141215a1f0879b75  tests/native-runtime-schema.test.mjs
+```
+
+Changed tree: the new schema owner and focused test, `DECISIONS.md`, and this
+progress log only. No runtime, installer, provider or target application change
+or execution occurred. No blocked capture/orphan/overflow/filesystem-race
+reproduction was attempted. This establishes pure schema behavior only, not
+provider capability, tool isolation, workflow integration or complete Codex
+parity. Prior evidence limits remain unchanged. The pinned host is untouched;
+full gates, flags, staging, commits and final review remain with the external
+host. No feature flag was changed and nothing was staged or committed.
