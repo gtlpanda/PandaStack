@@ -1,5 +1,17 @@
 # Phase 1 decisions
 
+- D93 (SA-02a1): Correct only journal read identity binding and pre-materialization
+  admission. Compare the full canonical current identity inside the read
+  transaction; validate all stored variable-width field lengths and their safe
+  aggregate before fetching bodies, retaining exact logical accounting afterward.
+  Add separate workflow-harness tests with small owned inert fixtures; do not
+  edit baseline tests or build a large database. Selected acceptance is authorized
+  by the host-selected feature despite prospective wording in the frozen contract.
+  No provider/target execution, blocked reproduction, flags or Git writes. Keep
+  mandatory independent static review with source hashes for the outer host;
+  the requested gpt-6.1-sol model is not in this session's available model list,
+  so no substitute agent/model is authorized.
+
 - D1: Node 24 ESM and filesystem primitives; no new dependency/service for a local run registry.
 - D2: Git per-worktree default store; explicit PANDASTACK_RUNS_DIR for shared storage. Avoid changing user home state during tests.
 - D3: Immutable run/event records; atomic publication and idempotency, with AsyncLocalStorage parent context.
@@ -513,3 +525,11 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   with Unknown model gpt-6.1-sol; no fallback. Local review found and corrected
   pending-state capacity reservation, partial lease-write cleanup and unsafe
   persisted integer classification. Independent review/full gates remain external.
+
+- D94 (SA-02a1 evidence): All 32 focused journal checks pass; the three frozen
+  selected acceptance cases fail in fixture setup with ENOENT opening
+  run-metadata.json, before journal assertions. Preserve that limitation and
+  leave actual-init acceptance to the host. The independent review request
+  returned Unknown model gpt-6.1-sol; no fallback. Record stable source hashes
+  and local static aggregate-admission tracing without claiming independent
+  review or runtime overflow proof. No large database or blocked reproduction.

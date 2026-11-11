@@ -226,3 +226,97 @@ The first scans tracked files; the second explicitly covers all four new
 untracked source/test files. `git diff --check` exited 0. Changed tree: the three
 new source modules, one new implementation test, `DECISIONS.md` and this progress
 log only. No frozen files, staging, commits or feature flags were changed.
+
+## SA-02a1 — Bind journal reads and bound stored payloads before allocation
+
+Changed only `dispatch-journal.mjs` production behavior: read-only inspection
+retains the validated current canonical identity and compares it with the stored
+canonical identity inside the read transaction, refusing `CONFLICT` on a valid
+mismatch. Matching terminal metadata remains readable. Malformed metadata still
+refuses `CORRUPT`; the missing-storage path and owning lease are unchanged.
+
+All header and attempt variable-width data now passes byte-length admission
+before the first body-returning SELECT. Identity is bounded to 1MiB; ID to 1–80
+bytes; state to 6–10 bytes, with exact vocabulary checked after fetching; input
+and non-null result to 1MiB each. The unchanged STRICT integer schema bounds
+sequence/invocation text to signed-int64 width; invocation text length also
+contributes to the subtotal. Every length must be a nonnegative safe integer.
+The bounded metadata query fetches at most 10001 rows and refuses counts over
+10000. Subtraction-before-addition caps identity/header + ID + state + input +
+result bytes at 1073741824 before materialization. After parsing, the existing
+`contentBytes` check still enforces exact logical size including JSON envelopes
+and reserved control expansion. No API, schema, validator or capacity changed.
+
+Added `graphs/security-audit/tests/dispatch-journal-read.test.mjs` using the
+unchanged workflow harness and small owned inert SQLite fixtures. The new suite
+first reported **3 passes, 8 failures**, exit 1: the missing identity exception
+and observed body reads before rejection. After implementation the new 11 checks
+and all 21 existing journal implementation checks pass, **32 passes, 0 failures**:
+
+```sh
+node --input-type=module -e "await import('./graphs/security-audit/tests/dispatch-journal-read.test.mjs'); await import('./graphs/security-audit/tests/dispatch-journal.test.mjs'); const {summary}=await import('./scripts/workflow-harness.mjs'); console.log(summary()); process.exitCode=summary().fail?1:0"
+```
+
+Exit 0. New coverage includes every valid mutable identity field (including
+dirty/uncommitted), exact metadata restoration with unchanged database bytes,
+matching terminal reads, malformed current metadata, oversized/empty ID and state,
+header/input/result byte bounds, 10001 small rows, exact 1MiB bodies/80-byte ID,
+detached reads and unchanged held/settled counters. Test-only SQLite statement
+observation verifies rejected small fixtures do not fetch stored bodies; it does
+not assert source text. These fixtures do not run target code or an init child.
+
+Frozen selected acceptance remains **unverified**, not passing:
+
+```sh
+node --test acceptance/security-audit/sa-02a1-journal-read.test.mjs
+# before implementation, exit 1: file-level 'test failed', no case diagnostics
+node acceptance/security-audit/sa-02a1-journal-read.test.mjs
+# after implementation, exit 1: 0 passed, 3 failed
+# Each fails at fixture setup: Error: ENOENT: no such file or directory,
+# open 'run-metadata.json' (fixture line 11), before journal assertions.
+```
+
+The frozen init fixture supplies an empty run directory in this environment.
+No fixture modification, execution-restriction bypass or substitute acceptance
+claim was made. The actual init acceptance remains for the external host.
+
+Local static trace: `snapshot` performs all metadata admission before either
+header or attempt body SELECT; exact post-parse logical accounting remains last.
+`readAuditJournal` compares full identity before returning public data in the
+same read transaction. Data flow PASS; edge/error handling PASS; local data
+security checks PASS; API/state consistency PASS. Completeness remains LIMITED:
+the mandatory independent static gate has not run. The requested Explore review
+failed to start with `Unknown model gpt-6.1-sol`; no alternate model/provider was
+used. This local review does not replace independent host review.
+
+Stable SHA256 evidence for that independent review:
+
+```text
+39a4f577b94413bc14f66e0d6bf47aed435da15912d4ab94e613cba71865d5a7  graphs/security-audit/skills/security-audit/dispatch-journal.mjs
+7bff650bd276ee01a22a876a96bfb619afbb524c5d1373434605e5ada649ae04  graphs/security-audit/skills/security-audit/journal-data.mjs
+d89cf5f9adfc138c08c3b4ecaac60d6ad4b75608252e22f2db3bb1dac4c70b45  graphs/security-audit/skills/security-audit/journal-storage.mjs
+0973af66d29008aded896afbf1ab7d3f5d3f7e328b9b6ea390879b5bb9cbbe8f  graphs/security-audit/tests/dispatch-journal-read.test.mjs
+```
+
+J2 aggregate admission is static evidence only; no multi-GiB database/payload
+fixture or numeric admission mock was run. Existing pure logical accounting
+tests do not establish pre-materialization aggregate runtime coverage. Neither
+metadata comparison nor SQL length observations authenticate identity or prove
+hostile-user isolation. No capture, filesystem race, blocked reproduction,
+target application change/execution, provider or fallback was attempted.
+Unknown-call accounting and abnormal-process lock recovery limitations remain.
+Frozen files and the pinned host are untouched. The external host retains full
+gates, feature flags, staging, commits and final independent review.
+
+Unchanged scanner commands each reported `check-secrets: clean`, exit 0:
+
+```sh
+bash scripts/check-secrets.sh
+bash scripts/check-secrets.sh graphs/security-audit/tests/dispatch-journal-read.test.mjs
+```
+
+The first covers tracked files; the second explicitly covers the sole new
+untracked source/test file. `git diff --check` also exited 0. Changed tree:
+`dispatch-journal.mjs`, the new `dispatch-journal-read.test.mjs`, `DECISIONS.md`
+and this progress log only. No feature was marked passing and no Git staging or
+commit was performed.

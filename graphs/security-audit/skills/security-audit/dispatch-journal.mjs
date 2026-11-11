@@ -43,23 +43,41 @@ function runIdentity(runDir, grant = true) {
 }
 
 function snapshot(db) {
-  const headers = db.prepare('SELECT singleton, length(CAST(identity AS BLOB)) AS bytes FROM header').all()
-  need(headers.length === 1 && headers[0].singleton === 1 && headers[0].bytes <= BODY_LIMIT)
+  // Admit every variable-width field using byte lengths only, before fetching
+  // even the identity body. The transaction keeps both query phases consistent.
+  const headers = db.prepare(`SELECT singleton, length(CAST(identity AS BLOB)) AS bytes,
+    length(CAST(invocation_limit AS BLOB)) AS limit_bytes FROM header LIMIT 2`).all()
+  need(headers.length === 1 && headers[0].singleton === 1)
+  let storedBytes = 0
+  const countBytes = (bytes, maximum, minimum = 0) => {
+    need(natural(bytes) && bytes >= minimum && bytes <= maximum)
+    // Subtract before adding: no unsafe sum or aggregate body allocation.
+    need(bytes <= TOTAL_LIMIT - storedBytes)
+    storedBytes += bytes
+  }
+  countBytes(headers[0].bytes, BODY_LIMIT, 1)
+  // The unchanged STRICT schema bounds integer text to signed int64 (20 bytes).
+  countBytes(headers[0].limit_bytes, 20, 1)
+  const bounded = db.prepare(`SELECT CAST(seq AS TEXT) AS position,
+    length(CAST(id AS BLOB)) AS id_bytes, length(CAST(state AS BLOB)) AS state_bytes,
+    length(CAST(input AS BLOB)) AS input_bytes, length(CAST(result AS BLOB)) AS result_bytes
+    FROM attempts ORDER BY seq LIMIT 10001`).all()
+  need(bounded.length <= ROW_LIMIT)
+  let last = 0
+  for (const row of bounded) {
+    const seq = Number(row.position)
+    need(Number.isSafeInteger(seq) && seq > last)
+    countBytes(row.id_bytes, 80, 1)
+    countBytes(row.state_bytes, 10, 6) // failed through dispatched; validate vocabulary below.
+    countBytes(row.input_bytes, BODY_LIMIT)
+    if (row.result_bytes !== null) countBytes(row.result_bytes, BODY_LIMIT)
+    last = seq
+  }
   const header = db.prepare('SELECT identity, CAST(invocation_limit AS TEXT) AS invocation_limit FROM header WHERE singleton=1').get()
   need(header)
   header.invocation_limit = Number(header.invocation_limit)
   need(natural(header.invocation_limit))
   const identity = validIdentity(parseCanonical(header.identity))
-  const bounded = db.prepare('SELECT CAST(seq AS TEXT) AS position, length(CAST(input AS BLOB)) AS input_bytes, length(CAST(result AS BLOB)) AS result_bytes FROM attempts ORDER BY seq LIMIT 10001').all()
-  need(bounded.length <= ROW_LIMIT)
-  let last = 0, bodyBytes = 0
-  for (const row of bounded) {
-    const seq = Number(row.position)
-    need(Number.isSafeInteger(seq) && seq > last && row.input_bytes <= BODY_LIMIT && (row.result_bytes === null || row.result_bytes <= BODY_LIMIT))
-    bodyBytes += row.input_bytes + (row.result_bytes ?? 0)
-    need(Number.isSafeInteger(bodyBytes) && bodyBytes <= TOTAL_LIMIT)
-    last = seq
-  }
   const rows = db.prepare('SELECT id, input, state, result FROM attempts ORDER BY seq LIMIT 10001').all()
   const ids = new Set(), detached = []
   let settledCalls = 0, heldCalls = 0
@@ -79,6 +97,8 @@ function snapshot(db) {
     }
     detached.push({ id: row.id, input, state: row.state, result })
   }
+  // The length subtotal is only a lower bound; retain exact logical accounting
+  // including JSON envelopes and reserved pending control-state expansion.
   need(rows.length <= header.invocation_limit && contentBytes(identity, header.invocation_limit, rows) <= TOTAL_LIMIT)
   return { identity: header.identity, rows, public: { version: 1, runId: identity.run_id, sourceRef: identity.source_ref,
     invocationLimit: header.invocation_limit, settledCalls, heldCalls,
@@ -87,9 +107,15 @@ function snapshot(db) {
 
 export function readAuditJournal(runDir) {
   return guarded(() => {
-    runIdentity(runDir, false)
+    const identity = runIdentity(runDir, false)
     const storage = openStorage(runDir, false)
-    try { return storage.transaction(false, db => snapshot(db).public) }
+    try {
+      return storage.transaction(false, db => {
+        const s = snapshot(db)
+        need(s.identity === identity, 'CONFLICT')
+        return s.public
+      })
+    }
     finally { storage.close() }
   })
 }
