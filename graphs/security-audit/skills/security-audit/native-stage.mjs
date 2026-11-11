@@ -2,7 +2,7 @@
 // is not a provider launcher or a second audit lifecycle. Critic partition dispatch
 // remains a separate required integration; legacy clipped critics are refused.
 import { join } from 'node:path'
-import { planNativeStage, applyStage, NATIVE_CAPTURE_FILE, pendingNativeApplication, recordNativeApplication } from './audit-stage.mjs'
+import { planNativeStage, applyStage, completedStageRejection, NATIVE_CAPTURE_FILE, pendingNativeApplication, recordNativeApplication } from './audit-stage.mjs'
 import { loadRun, nextStep, readJson, writeJson } from './audit-run.mjs'
 import { assertAuditJournalOwner } from './dispatch-journal.mjs'
 import { createAuditStageCheckpoints } from './native-checkpoints.mjs'
@@ -10,7 +10,7 @@ import { publishPartialReport, readPartialReport } from './audit-report.mjs'
 import { inspectSnapshotProtection } from './snapshot-protection.mjs'
 import { createNativeRuntime } from '../../../../core/skills/native-runtime/runtime.mjs'
 import { registryWorkflow } from '../../../../core/skills/native-runtime/registry.mjs'
-import { fields, exact, json, fail, error } from '../../../../core/skills/native-runtime/boundary.mjs'
+import { fields, exact, json, fail } from '../../../../core/skills/native-runtime/boundary.mjs'
 
 export async function runNativeAuditStage(options) {
   const input = fields(options, 'INVALID_RUNTIME_INPUT')
@@ -35,16 +35,20 @@ export async function runNativeAuditStage(options) {
   const marker = readJson(join(plan.stage.dir, NATIVE_CAPTURE_FILE))
   if (registryWorkflow(registry, 'security-audit-flow').sha256 !== marker.workflow_sha256) fail('CONFLICT')
   const apply = () => {
+    let applied
     try {
-      const applied = applyStage(runDir, plan.returned)
-      recordNativeApplication(plan, 'applied')
-      return applied
+      applied = applyStage(runDir, plan.returned)
     } catch (e) {
-      // Owning semantic refusals deliberately allow the next bounded attempt.
-      // Operational write failures retain the saved application for replay.
-      if (e?.constructor?.name === 'Refusal' && readJson(join(plan.stage.dir, 'result.json')) !== undefined) recordNativeApplication(plan, 'rejected')
+      // Only a rejection the owning applier completed (and branded) allows the
+      // next bounded attempt. Any other error, Refusal or not, leaves the saved
+      // result pending, so the same result is applied again with no new call.
+      if (completedStageRejection(e) === null) throw e
+      try { recordNativeApplication(plan, 'rejected') }
+      catch { throw nativeError('APPLICATION_RECEIPT_UNCONFIRMED', e) }
       throw e
     }
+    recordNativeApplication(plan, 'applied')
+    return applied
   }
   if (recovery) {
     const result = readJson(plan.returned)
@@ -72,11 +76,19 @@ export async function runNativeAuditStage(options) {
     value = { stageName: plan.stage.name, invocationId: plan.invocationId, result, applied }
   } catch (e) { failure = e }
   finally {
-    try { if (runtime) await runtime.close() } catch { failure = error('CLEANUP_UNCONFIRMED') }
-    try { await checkpoints.close() } catch { failure = error('CLEANUP_UNCONFIRMED') }
+    // Unconfirmed cleanup stays fatal and takes precedence; the primary error is kept as its cause.
+    const primary = failure
+    try { if (runtime) await runtime.close() } catch { failure = nativeError('CLEANUP_UNCONFIRMED', primary) }
+    try { await checkpoints.close() } catch { failure = nativeError('CLEANUP_UNCONFIRMED', primary) }
   }
   if (failure) throw failure
   return value
+}
+
+// boundary.mjs's error(code), with the original error object retained as `cause` when there is one.
+function nativeError(code, cause) {
+  const e = cause === undefined ? new Error(`Native runtime: ${code}.`) : new Error(`Native runtime: ${code}.`, { cause })
+  return Object.assign(e, { code })
 }
 
 function planNativeStageAfterCriticCheck(runDir) {

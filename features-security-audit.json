@@ -300,7 +300,7 @@
       ],
       "test": "acceptance/security-audit/sa-ar01-application-recovery.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     }
   ]
 }

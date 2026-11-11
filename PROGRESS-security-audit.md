@@ -1669,3 +1669,78 @@ Focused verification covers core mode selection, both backend environments,
 current acceptance, deferred checks, draft PR hooks, build-app delivery, clean
 head binding, stale readiness and full-mode compatibility. Full regressions are
 intentionally pending in the PR; no push/merge has been performed for this change.
+
+## SA-AR01 — Recover saved native audit application after ordinary I/O failure
+
+`audit-stage.mjs` exports `completedStageRejection(value)`, a lookup in a
+module-private WeakMap. No property is read and no Proxy trap or accessor runs.
+The WeakMap is filled only by the private `rejectCompleted(message, kind)`. That
+function throws the existing `Refusal` through `refuse` and brands that one
+object. It runs as the last statement of five completed branches, after their
+spend, result.json and event writes:
+- `refuseResult`, which covers the seed and mint feedback paths (semantic)
+- recon facts with zero retained facts (semantic)
+- `applyStage` with explicit `status: 'escalate'` (escalation)
+- the fresh all-null round of `applyValidate` (escalation)
+- the fresh all-null round of `applyVerify` (escalation)
+
+The last two receive the capability only through the `APPLIERS` wrappers that
+`applyStage` builds. Called directly, they default to plain `refuse`. Messages,
+the `Refusal` class and CLI output are unchanged.
+
+`native-stage.mjs` writes a `rejected` receipt only when the error is
+classified as a completed rejection. The constructor-name and result.json read
+probe are removed. Any other error, `Refusal` or not, is rethrown as the same
+object and leaves the saved result pending for same-result replay. If the
+rejected receipt write fails, the session throws `APPLICATION_RECEIPT_UNCONFIRMED`
+with the original branded rejection as `cause`. Fatal `CLEANUP_UNCONFIRMED`
+still takes precedence and now keeps the prior primary error as `cause`. Nothing
+exercises this cause path: the contract proposes no forced cleanup-failure test,
+and its only evidence is static review. Receipt version/fields, capture hashes,
+`nativeInvocation`, `pendingNativeApplication` and the scheduler are unchanged.
+`audit-run.mjs` and all frozen files are unchanged.
+
+Tests: new `graphs/security-audit/tests/completed-stage-rejection.test.mjs`, 5
+workflow-harness cases:
+- validate and verify all-null rounds called directly are unbranded, and a
+  foreign capability is not trusted; the same round through `applyStage` is
+  branded `escalation` with an identical message, charged once, with no try
+  consumed
+- copies, clones, wrappers and look-alikes are null, while a retained `cause`
+  is still the very object
+- the exports contain only the classifier and no WeakMap
+- CLI escalation output is unchanged
+Run with `node graphs/security-audit/tests/completed-stage-rejection.test.mjs`:
+5 ok, 0 FAIL.
+
+Evidence before code: the frozen acceptance failed. The observed failures were
+the missing `completedStageRejection` classifier and an EIO error where
+`APPLICATION_RECEIPT_UNCONFIRMED` was expected. Only the tail of that output was
+kept, so no exact count is claimed. After:
+`node --test acceptance/security-audit/sa-ar01-application-recovery.test.mjs`
+reported tests 10, pass 10, fail 0. Focused regressions, all 0 FAIL:
+- native-stage 8, native-stage-plan 5, native-stage-spend 6, native-checkpoints 2
+- audit-stage 35, audit-validate 28, audit-verify 28, security-audit-verdicts 19
+- audit-verify-apply-write-failed 1, audit-consolidate 20, audit-quick-verify 5
+- `node --test` of sa-02b, sa-02c, sa-lt01 and sa-05a acceptance: 35/35 pass
+
+`git diff --check` was clean. The unchanged `bash scripts/check-secrets.sh` on
+tracked files, and run separately on the new test file, both printed
+`check-secrets: clean`.
+
+Limits:
+- Any `Refusal` raised after result.json exists outside the five branches is
+  no longer receipted as rejected. That covers `readText`/`readJson` I/O
+  refusals (the intended fix) and consolidate's post-write rethrows. Such a
+  stage stays pending for same-result replay. Refusals raised before
+  result.json exists were already unreceipted, so their behavior is unchanged.
+- The mint-path `refuseResult` brand shares the synthesis code path but has no
+  dedicated test.
+- No process was killed; the only I/O faults are the acceptance's one-shot
+  synchronous fixture wrappers.
+- Graph-returned provider-failure provenance, native-audit provider-refusal
+  propagation and the original F1 hunt finding remain unverified and out of
+  scope.
+- No target application change or execution, live or fallback provider, or
+  blocked capture/orphan/overflow/filesystem-race/F2 reproduction was run.
+- Full regressions, broad review and the hunt remain pending for the PR.
