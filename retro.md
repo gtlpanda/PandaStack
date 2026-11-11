@@ -3215,7 +3215,7 @@ Prepending to the unchanged tail and keeping detail by indentation fixed all thr
 first version was measured failing the noisy and small-budget cases; the final version
 passes them.
 
-Tests: 11 in `graphs/autobuild/tool/test/gate-failure-excerpt.test.mjs`. They include:
+Tests: 12 in `graphs/autobuild/tool/test/gate-failure-excerpt.test.mjs`. They include:
 - the overnight shape through `runGate` and `finishCodexBuilder`;
 - the `autobuild test`, `mark-passed` and `check` commands, a case that fails on the old code;
 - a check that the old tail is always contained, across noisy, huge-line and small-budget
@@ -3230,6 +3230,17 @@ first 7 tests failed.
 On a real failing `scripts/test.sh` run (255,404 chars, 9 failures, then 142 passing
 autobuild tests), the old feedback showed 0 of the 9 failures. The new feedback shows all
 9 with their diffs, in 8,099 chars, and still contains the old tail.
+
+Bug hunt (PR #47, discover, lenses logic/regression/security/contract/errors) found 0
+findings. Its disposition was manual_review because the errors lens left one area
+uncovered: quadratic regex backtracking. The security hunter had raised the same thing
+and it was dropped at confidence 58, just under the floor of 60. Measured, it was
+real: the unanchored summary pattern `\b[A-Z][A-Z-]*: FAIL\b` restarts at every letter
+of an `A-A-A-…` line. 80k chars took 1.3 s, and a 1 MB line took 199 s, which would hang
+the gate while it built feedback. It was replaced with the fixed-width `[A-Z]: FAIL\b`,
+which matches the same summaries (TEST/VALIDATE/GATE/SEO-CHECK). A regression test was
+added (1 MB line under 2 s), and every alternative was timed at 10 ms or less on 1 MB
+worst cases.
 
 Not changed:
 - Overnight launches that allow 1-2 iterations, and `noProgressLimit: 2`, both end a run

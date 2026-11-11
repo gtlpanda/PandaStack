@@ -85,7 +85,9 @@ const EXCERPT_CHARS = 6000;
 const DETAIL_LINES = 12; // at most this many detail lines kept under one failure line
 // "  FAIL x" (this repo's harnesses), "FAIL  x" (validate.sh), "FAILED x" (pytest), "--- FAIL:" (go),
 // "not ok" (TAP), "✖" (node's spec reporter), "TEST: FAIL"-style summaries, and thrown errors.
-const FAILURE_LINE = /^\s*(FAIL(ED)?\b|--- FAIL:|not ok\b|✖|\w*Error\b)|\b[A-Z][A-Z-]*: FAIL\b/;
+// Every alternative is anchored or fixed-width so a long line costs linear time: an unanchored
+// `[A-Z][A-Z-]*: FAIL` restarted at each letter of "A-A-A-…" and took minutes on a 1 MB line.
+const FAILURE_LINE = /^\s*(FAIL(ED)?\b|--- FAIL:|not ok\b|✖|\w*Error\b)|[A-Z]: FAIL\b/;
 // A passing line can name a failure ("ok   prints TEST: FAIL when…"); it is never one.
 const PASSING_LINE = /^\s*(ok\b|✔)/;
 const indentOf = (line) => line.length - line.trimStart().length;

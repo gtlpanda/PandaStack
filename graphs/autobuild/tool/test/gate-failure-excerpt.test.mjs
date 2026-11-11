@@ -97,6 +97,15 @@ test("detail stops at the next line that is not indented under the failure", () 
   assert.doesNotMatch(excerpt.split("End of output:")[0], /passing next|ok {3}next/);
 });
 
+test("a long line that only looks like a summary takes linear time, not quadratic", () => {
+  // "A-A-A-…" gives the old unanchored summary pattern a fresh start at every letter: 80k chars took ~1.3 s, 1 MB minutes.
+  const output = `${"A-".repeat(500_000)}\nTEST: FAIL\n${"x".repeat(7000)}`;
+  const started = Date.now();
+  const excerpt = failureExcerpt(output);
+  assert.ok(Date.now() - started < 2000, `took ${Date.now() - started} ms`);
+  assert.match(excerpt, /Failure lines earlier in the output:\nTEST: FAIL/);
+});
+
 test("many failures stay within the size bound", () => {
   const output = Array.from({ length: 2000 }, (_, i) => `  FAIL failing check ${i}\n       detail ${i}`).join("\n");
   const excerpt = failureExcerpt(output);
