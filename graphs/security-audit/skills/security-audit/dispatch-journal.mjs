@@ -18,7 +18,7 @@ function readOwnedJson(file, optional = false) {
     throw e
   }
 }
-function validIdentity(identity) {
+export function validIdentity(identity) {
   const m = fields(identity, ['version', 'run_id', 'repo', 'target', 'source_ref'], 'CORRUPT')
   need(m.version === 1 && [m.run_id, m.repo, m.target].every(nonempty))
   const s = m.source_ref

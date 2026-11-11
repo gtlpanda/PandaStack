@@ -391,3 +391,132 @@ provider capability, tool isolation, workflow integration or complete Codex
 parity. Prior evidence limits remain unchanged. The pinned host is untouched;
 full gates, flags, staging, commits and final review remain with the external
 host. No feature flag was changed and nothing was staged or committed.
+
+## SA-02b — Publish readable partial audit reports from durable checkpoints
+
+Implemented `partialReportContext`, `buildPartialReport`, `publishPartialReport`
+and `readPartialReport` in the existing `audit-report.mjs` owner. This is a
+candidate implementation, not a host-verified pass: selected acceptance and
+existing final-report regressions have the execution limitations recorded below.
+
+The read-only context binds the exact bytes/presence/rejection state of the seven
+contracted artifacts, the complete current identity and the owning detached
+journal snapshot. It uses existing metadata/stage rules, journal identity rules,
+candidate/decision parsers and unchanged vendored document validators. Small
+pure validation extractions preserve the original load/read rules and their
+metadata-before-stage error order. No target tree, prior history, raw prompt file
+or event log is consulted. Shared coverage linkage and Markdown escaping remain
+in the final report owner; final report generation/lifecycle code is retained.
+
+Partial prose distinguishes transport returns from semantic dispositions, lists
+every known pending fingerprint, retains needs_validation blockers and rejected
+dispositions, and labels legacy confirmed records as historical final records
+outside provisional leads. Unknown evidence remains unknown. Missing/malformed
+required authority or an incompatible journal binding refuses INVALID_CONTEXT.
+Unavailable journal counts remain null; such a bound incomplete generation can
+be published for visibility but cannot read as current. Input byte admission
+precedes parsing; oversized optional files get streaming digests without body
+allocation. Raw transport prompts/results/errors never enter the report.
+
+Publication uses the fixed private partial-reports namespace, 0700 directories
+and 0600 regular files, static no-dot/no-symlink path admission, immutable
+content-addressed Markdown/manifest pairs, synced staging and a current pointer
+published last after recomputing the input binding. Existing conflicting bytes
+are refused. The reader verifies the pair and current-source binding; historical
+prose stays stale after source changes or failed newer publication. Report bodies
+are limited to 16 MiB and metadata pointers/manifests to 64 KiB. Output failure
+never changes a journal receipt or launches a callback. This helper does not
+wire the later native callback report_stale/admission/drain/resume gate.
+
+Tests were written before implementation using the unchanged
+`scripts/workflow-harness.mjs`. Initial selected acceptance: exit 1, 0/11 passed,
+all reporting missing partial-report exports. Initial added tests: exit 1,
+`{ pass: 0, fail: 9 }`, for the missing APIs. The final 18 new checks cover
+receipts/counters, pending/disposition semantics, every bound artifact and ignored
+unbound history, authority unavailability, rendering-only recovery, corrupt
+immutable bytes, static unsafe modes/paths, required identity refusal, inert
+renderer admission/escaping, journal bodies above 1 MiB, oversized input hashing,
+report expansion limits, corrupt/path-directed pointers/manifests, semantic
+record mismatch, terminal-reason preservation, historical confirmed records and
+ordinary recovery of an interrupted generation pair.
+
+Final focused command:
+
+```sh
+node --input-type=module -e "for (const f of ['audit-partial-report.test.mjs','dispatch-journal.test.mjs','dispatch-journal-read.test.mjs','audit-md.test.mjs']) await import('./graphs/security-audit/tests/'+f); const {summary}=await import('./scripts/workflow-harness.mjs'); console.log(summary()); process.exitCode=summary().fail ? 1 : 0"
+# exit 0: { pass: 63, fail: 0 }
+```
+
+Selected acceptance attempt after implementation:
+
+```sh
+node acceptance/security-audit/sa-02b-partial-reports.test.mjs
+# exit 1: tests 11, pass 0, fail 11, skipped 0
+# Error: Audit journal: INVALID_JOURNAL_INPUT
+# Refusal [Error]:  has no run-metadata.json: it is not a run directory
+```
+
+All eleven fail in owning fixture setup (empty runDir), before the partial-report
+assertions. The fixtures and gate were not changed. The attempted focused
+existing final-report/profile regression command was:
+
+```sh
+node --input-type=module -e "for (const f of ['dispatch-journal.test.mjs','dispatch-journal-read.test.mjs','audit-report.test.mjs','audit-report-profile.test.mjs','audit-report-profile-claims.test.mjs','profile-report.test.mjs','audit-md.test.mjs']) await import('./graphs/security-audit/tests/'+f); const {summary}=await import('./scripts/workflow-harness.mjs'); console.log(summary()); process.exitCode=summary().fail ? 1 : 0"
+# exit 1: { pass: 46, fail: 59 }
+# validate-coverage-ledger.cjs: spawnSync /usr/bin/node EPERM
+# The input did not match the regular expression /^AUDIT: OK run=/. Input: ''
+```
+
+The 46 successes include the 32 journal checks, 13 Markdown checks and existing
+early-incomplete golden case. Other golden/profile/final-writer evidence remains
+unverified here. No subprocess workaround, fixture amendment, provider fallback
+or gate waiver was attempted. The failed fixture's incidental checkout-root
+stage-state.json was inspected and removed (absent in the initial clean tree).
+Logs for this session are `/tmp/sa-02b-focused.log`,
+`/tmp/sa-02b-acceptance.log` and `/tmp/sa-02b-regressions.log`.
+
+Local static review within helper scope: data flow PASS; edge/error handling
+PASS; data security PASS; consistency PASS; implementation completeness PASS.
+The required independent Explore review could not start: `Unknown model
+'gpt-6.1-sol'`. No alternate model/provider was used. These local results do not
+replace independent host review or the outstanding actual-init acceptance.
+Publication ordering was reviewed statically; no filesystem-race or abnormal
+process/capture reproduction was run or claimed. Existing blocked status and
+all prior evidence limits remain unchanged.
+
+Stable SHA256 source/test evidence for host review:
+
+```text
+62e17e43de6c804a6cc2d38ccce038b9f16f24da24fb7cc638546c2e7f2c39df  graphs/security-audit/skills/security-audit/audit-report.mjs
+226aab129980958cf2f1b4e376a2238484067718808c95a2814b10f58c5a85db  graphs/security-audit/skills/security-audit/audit-findings.mjs
+ac83733a9fc6acbfbab543a87d5b2a4b3af1e091ff29bcb28e67c1846b2b074e  graphs/security-audit/skills/security-audit/audit-run.mjs
+3c5fcdaf8668e2f9cbf2def300fb80d8ade4a209abeb48fb9b7bf7cb3dc3c76d  graphs/security-audit/skills/security-audit/dispatch-journal.mjs
+f467b62ab2fd499728b507ff8de8d0673a2d0e28a569c60f3e5beef8e851be17  graphs/security-audit/tests/audit-partial-report.test.mjs
+```
+
+Changed tree: these four existing implementation files, the new focused test,
+DECISIONS.md and this progress log. Vendors, schemas, acceptance, baseline tests,
+validators, scanner, configuration and frozen paths remain unchanged. No target
+application modification/execution, live provider, fallback provider or blocked
+reproduction occurred. The pinned host is untouched. Full gates, pass flags,
+staging, commits and final review remain with the external host; none were done
+by this session. Overall security/native workflow completion is not claimed.
+
+Final hygiene commands and observed results:
+
+```sh
+bash scripts/check-secrets.sh
+# exit 0: check-secrets: clean (all tracked files)
+bash scripts/check-secrets.sh graphs/security-audit/tests/audit-partial-report.test.mjs
+# exit 0: check-secrets: clean (the only new untracked source/test file)
+node --check graphs/security-audit/skills/security-audit/audit-report.mjs
+node --check graphs/security-audit/skills/security-audit/audit-findings.mjs
+node --check graphs/security-audit/skills/security-audit/audit-run.mjs
+node --check graphs/security-audit/skills/security-audit/dispatch-journal.mjs
+node --check graphs/security-audit/tests/audit-partial-report.test.mjs
+# each exit 0
+git diff --check
+# exit 0
+git diff --exit-code -- scripts/check-secrets.sh acceptance spec features-security-audit.json graphs/security-audit/vendor
+# exit 0: these frozen inputs and vendored validators/schemas are unchanged
+```

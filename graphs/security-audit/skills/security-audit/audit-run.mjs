@@ -563,14 +563,26 @@ export function formatNext(n) {
 // ---------- reading a run back ----------
 export function loadRun(runDir) {
   const meta = readJson(join(runDir, 'run-metadata.json'))
+  validateRunMetadata(meta, runDir)
+  const state = readJson(join(runDir, 'stage-state.json'))
+  validateRunState(state, runDir)
+  return { meta, state, ledger: readJson(join(runDir, 'coverage-ledger.json')), findings: readJson(join(runDir, 'findings.json')) }
+}
+
+// Shared read-only authority validation; partial reports must not load optional files.
+export function validateRunAuthority(meta, state, runDir) {
+  validateRunMetadata(meta, runDir)
+  validateRunState(state, runDir)
+}
+function validateRunMetadata(meta, runDir) {
   if (meta === undefined) refuse(`${runDir} has no run-metadata.json: it is not a run directory`)
   if (typeof meta !== 'object' || meta === null || !RUN_STATUSES.includes(meta.run_status)) refuse(`${runDir}/run-metadata.json has no valid run_status (${RUN_STATUSES.join(', ')})`)
-  const state = readJson(join(runDir, 'stage-state.json'))
+}
+function validateRunState(state, runDir) {
   if (state === undefined) refuse(`${runDir} has no stage-state.json`)
   if (typeof state !== 'object' || state === null || state.version !== 1 || !STEPS.includes(state.last) || !isInt(state.wave) || ![null, 'post-wave', 'final-clean'].includes(state.critic_kind)) {
     refuse('stage-state.json is not { version: 1, last: <step>, wave: <integer>, critic_kind: null | post-wave | final-clean }')
   }
-  return { meta, state, ledger: readJson(join(runDir, 'coverage-ledger.json')), findings: readJson(join(runDir, 'findings.json')) }
 }
 
 function statusLines(runDir) {
@@ -596,7 +608,7 @@ function statusLines(runDir) {
 }
 
 // ---------- check ----------
-function metadataProblems(m) {
+export function metadataProblems(m) {
   const p = []
   const need = (ok, what) => { if (!ok) p.push(`run-metadata.json: ${what}`) }
   need(isStr(m.run_id) && isStr(m.repo) && isStr(m.target), 'run_id, repo and target must be non-empty strings')

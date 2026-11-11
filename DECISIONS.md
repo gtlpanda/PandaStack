@@ -548,3 +548,23 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   independent review. Local static review supplements pure schema tests only;
   native runtime enforcement, provider capability and overall parity remain
   unproven and outside this slice. Keep all prior blocked evidence limits.
+- D97 (SA-02b): Implement only partial context, deterministic Markdown, immutable
+  generations and freshness reads in audit-report.mjs. Extract existing pure
+  owner validation without changing its rules; bind only the seven contracted
+  artifacts and the owning journal snapshot. Reject unavailable authority for
+  freshness, preserve terminal receipts on output failure, and never read target
+  source or unbound history. Add in-process workflow-harness tests first; run
+  selected acceptance and focused regressions only. Native callback admission
+  gating remains a later required integration. The external host owns full
+  gates, flags, staging, commits and final review; no broader roadmap work.
+- D98 (SA-02b evidence): The final focused in-process run passes 63 checks
+  (18 new partial-report, 32 journal, 13 Markdown). Selected acceptance reaches
+  fixture setup but fails all eleven cases with empty run directories, before
+  partial-report assertions. The attempted existing final-report/profile run
+  reports 46 passes and 59 failures, including explicit validator subprocess
+  EPERM and empty-init-output failures. Do not change fixtures or bypass process
+  restrictions; host validation is outstanding. The required Explore request
+  failed with `Unknown model gpt-6.1-sol`; no fallback. A stage-state.json left
+  in the checkout by the failed empty-directory fixture was inspected and
+  removed; it was absent at session start. Local static review is not independent
+  host review, native dispatch gating, concurrency or containment evidence.

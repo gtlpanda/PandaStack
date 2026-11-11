@@ -12,16 +12,22 @@
 // task and export-remediation run at the end of a run (`next` says report or done: every record has passed Phase 5) and need a findings.json that passes upstream's validator. Nothing here
 // writes into the audited repository: the files are the run's own.
 // A command's last line is "AUDIT: OK <cmd> ..." (exit 0) or "AUDIT: FAIL <reason>" (exit 1); bad usage is on stderr, exit 2.
-import { createHash } from 'node:crypto'
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash, randomUUID } from 'node:crypto'
+import { constants, closeSync, fstatSync, fsyncSync, openSync, readSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FINDINGS_FAILED, FINDINGS_REJECTED, LEDGER_FAILED, LEDGER_REJECTED, Usage, advanceState, appendEvent, formatNext, loadRun, markIncomplete, nextStep, readJson, refuse, STATUSES } from './audit-run.mjs'
 import { COMPLETE_CHECK_FAILED, byFingerprint, completeProblems, decisionsOf, finishRun, linkCheck, readPool } from './audit-findings.mjs'
-import { LEDGER_FILE, needsSecondPass } from './audit-ledger.mjs'
+import { LEDGER_FILE, MAX_CANDIDATE_BYTES, needsSecondPass } from './audit-ledger.mjs'
 import { QUICK_DEFERRED, rulesOf } from './audit-profile.mjs'
 import { validateFindingsFile, validateLedgerFile } from './upstream.mjs'
 import { cell, code, fence, fenceTag, inline, plain, plural, where } from './audit-md.mjs'
+import { metadataProblems, validateRunAuthority } from './audit-run.mjs'
+import { parsePool, parseDecisions } from './audit-findings.mjs'
+import { criticResultProblems } from './audit-ledger.mjs'
+import { validateFindingsDocument, validateLedgerDocument } from './upstream.mjs'
+import { readAuditJournal, validIdentity } from './dispatch-journal.mjs'
+import { canonical, fields, record, TOTAL_LIMIT } from './journal-data.mjs'
 
 export const REPORT_FILES = ['REPORT.md', 'FINDINGS-DETAIL.md', 'NEEDS-VALIDATION.md']
 const SEVERITIES = ['critical', 'high', 'medium', 'low', 'informational']
@@ -97,7 +103,8 @@ function problemsOf(runDir, meta) {
 
 const unitsOf = (ledger, ids) => (ledger ?? []).filter(u => ids.includes(u.coverage_id))
 const labelOf = u => `${inline(u.surface, 120)} (${inline(u.boundary, 120)})`
-const boundariesOf = (ctx, fp) => [...new Set((ctx.ledger ?? []).filter(u => list(u.result_fingerprints).includes(fp) || list(u.attempts).some(a => list(a.result_fingerprints).includes(fp)) || list(u.merged_fingerprints).some(m => m.into === fp)).map(u => inline(u.boundary, 120)))].sort()
+const linkedUnits = (ledger, fp) => (ledger ?? []).filter(u => list(u.result_fingerprints).includes(fp) || list(u.attempts).some(a => list(a.result_fingerprints).includes(fp)) || list(u.merged_fingerprints).some(m => m.into === fp))
+const boundariesOf = (ctx, fp) => [...new Set(linkedUnits(ctx.ledger, fp).map(u => inline(u.boundary, 120)))].sort()
 const traceLine = (r, table = false) => { const t = list(r.trace); return t.length ? `${where(t[0].file, t[0].line, table)} (${inline(t[0].kind, 20)})${t.length > 1 ? ` → ${where(t.at(-1).file, t.at(-1).line, table)} (${inline(t.at(-1).kind, 20)})` : ''}` : '(no trace)' }
 const countBy = (items, key) => items.reduce((m, i) => m.set(key(i), (m.get(key(i)) ?? 0) + 1), new Map())
 
@@ -309,6 +316,407 @@ function detailSection(r) {
 function needsDetail(ctx, r) {
   return [`## ${inline(r.title, 200)}`, '', `- Fingerprint: ${code(r.fingerprint)}`, `- Affected boundary: ${boundariesOf(ctx, r.fingerprint).join('; ') || '(none)'}`, '', '### Source trace', '', ...steps(r), '', '### Evidence', '', ...list(r.evidence).map(e => `- ${where(e.file, e.line)}: ${inline(e.description, COPY)}`), '',
     '### Blocker', '', ...list(r.blockers).map(b => `- ${inline(b, COPY)}`), '', '### Resolution plans', '', `- Bounded local: ${inline(r.validation_plan?.local ?? 'none given', COPY)}`, `- Owner-observed deployment check: ${inline(r.validation_plan?.deployment ?? 'none given', COPY)}`, '']
+}
+
+// ---------- observational partial checkpoints (never advance the audit) ----------
+const PARTIAL_VERSION = 'partial-report-v1'
+const MIB = 1024 * 1024, REPORT_LIMIT = 16 * MIB, POINTER_LIMIT = 64 * 1024
+const PARTIAL_INPUTS = Object.freeze({ 'run-metadata.json': MIB, 'stage-state.json': MIB,
+  'coverage-ledger.json': 5 * MIB, 'candidates.json': REPORT_LIMIT, 'decisions.json': REPORT_LIMIT,
+  'critic.json': REPORT_LIMIT, 'findings.json': 5 * MIB })
+const LEAF_STATES = ['prepared', 'dispatched', 'returned', 'failed', 'uncertain']
+const sha256 = bytes => createHash('sha256').update(bytes).digest('hex')
+const partialFail = code => { throw Object.assign(new Error(`Partial report: ${code}`), { code }) }
+const partialNeed = (ok, code = 'INVALID_CONTEXT') => { if (!ok) partialFail(code) }
+const finiteJson = (value, limit = REPORT_LIMIT) => canonical(value, limit, 'INVALID_CONTEXT', 'REPORT_TOO_LARGE')
+const digestJson = value => sha256(finiteJson(value))
+const hexDigest = v => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v)
+const textValue = v => typeof v === 'string'
+const naturalCount = v => Number.isSafeInteger(v) && v >= 0
+const stringList = v => Array.isArray(v) && v.every(textValue)
+const statOrMissing = path => { try { return lstatSync(path) } catch (e) { if (e.code === 'ENOENT') return null; throw e } }
+
+// Static path admission, matching the journal's no-dot/no-symlink policy. No
+// independent writers or hostile replacement guarantee is asserted here.
+function partialRoot(runDir) {
+  partialNeed(typeof runDir === 'string' && runDir.length && !runDir.includes('\0') &&
+    !runDir.split('/').some(p => p === '.' || p === '..'))
+  partialNeed(process.platform === 'linux' && typeof process.getuid === 'function')
+  const root = resolve(runDir)
+  let path = '/'
+  for (const part of root.split('/').filter(Boolean)) {
+    path = join(path, part)
+    partialNeed(statOrMissing(path)?.isDirectory())
+  }
+  return root
+}
+
+// Bound before allocation/parsing. Oversized regular files get a streaming hash,
+// not a body. Unreadable/unsafe inputs cannot support a freshness claim.
+function partialInput(root, name, limit) {
+  let fd
+  try {
+    const path = join(root, name), s = statOrMissing(path)
+    if (!s) return { binding: { state: 'absent' }, stable: true }
+    if (!s.isFile()) return { binding: { state: 'unreadable', reason: 'UNSAFE_INPUT' }, stable: false }
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+    const before = fstatSync(fd), hash = createHash('sha256'), chunks = [], buffer = Buffer.alloc(64 * 1024)
+    let bytes = 0
+    partialNeed(before.isFile(), 'IO_ERROR')
+    for (;;) {
+      const n = readSync(fd, buffer, 0, buffer.length, null)
+      if (!n) break
+      hash.update(buffer.subarray(0, n)); bytes += n
+      if (bytes <= limit && before.size <= limit) chunks.push(Buffer.from(buffer.subarray(0, n)))
+    }
+    const after = fstatSync(fd)
+    const stable = before.dev === s.dev && before.ino === s.ino && before.size === bytes &&
+      after.size === bytes && before.mtimeMs === after.mtimeMs && before.ctimeMs === after.ctimeMs
+    const binding = { state: bytes > limit ? 'oversized' : 'present', observedBytes: bytes, sha256: hash.digest('hex') }
+    if (!stable) return { binding: { ...binding, state: 'unavailable' }, stable: false }
+    if (bytes > limit) return { binding, stable: true }
+    const raw = Buffer.concat(chunks, bytes)
+    try { return { binding, stable: true, value: JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(raw)) } }
+    catch { return { binding: { ...binding, state: 'rejected' }, stable: true } }
+  } catch { return { binding: { state: 'unreadable', reason: 'IO_ERROR' }, stable: false } }
+  finally { if (fd !== undefined) closeSync(fd) }
+}
+
+function partialJournalDigest(snapshot) {
+  // Canonical JSON streamed by row: journal bounds, not report input bounds,
+  // govern the snapshot. Do not retain raw prompts/results in render context.
+  const hash = createHash('sha256')
+  hash.update('{')
+  Object.keys(snapshot).sort().forEach((key, i) => {
+    if (i) hash.update(',')
+    hash.update(JSON.stringify(key) + ':')
+    if (key !== 'rows') hash.update(canonical(snapshot[key], TOTAL_LIMIT))
+    else {
+      hash.update('[')
+      snapshot.rows.forEach((row, j) => { if (j) hash.update(','); hash.update(canonical(row, TOTAL_LIMIT)) })
+      hash.update(']')
+    }
+  })
+  return hash.update('}').digest('hex')
+}
+
+export function partialReportContext(runDir) {
+  let root
+  try { root = partialRoot(runDir) } catch { partialFail('INVALID_CONTEXT') }
+  const inputs = Object.fromEntries(Object.entries(PARTIAL_INPUTS).map(([name, limit]) => [name, partialInput(root, name, limit)]))
+  const meta = inputs['run-metadata.json'].value, stage = inputs['stage-state.json'].value
+  let identity
+  try {
+    partialNeed(record(meta) && record(stage))
+    for (const name of ['run-metadata.json', 'stage-state.json']) partialNeed(inputs[name].stable && inputs[name].binding.state === 'present')
+    validateRunAuthority(meta, stage, root)
+    partialNeed(metadataProblems(meta).length === 0)
+    const m = validIdentity(Object.fromEntries(['version', 'run_id', 'repo', 'target', 'source_ref'].map(k => [k, meta[k]])))
+    identity = { runId: m.run_id, repo: m.repo, target: m.target, sourceRef: m.source_ref }
+  } catch { partialFail('INVALID_CONTEXT') }
+  const blockers = [], add = (code, message, artifact = null) => blockers.push({ code, message, artifact })
+  function artifact(name, validate, missing, rejected) {
+    const input = inputs[name]
+    if (input.binding.state === 'absent') { if (missing) add(missing, `${name} is absent; its evidence is unknown.`, name); return null }
+    try {
+      partialNeed(input.binding.state === 'present')
+      const value = validate(input.value)
+      return value
+    } catch {
+      if (input.binding.state === 'present') input.binding.state = 'rejected'
+      add(rejected, `${name} was rejected; no content or counts from it are used.`, name)
+      return null
+    }
+  }
+  const ledger = artifact('coverage-ledger.json', v => { partialNeed(!validateLedgerDocument(v).length); return v }, 'LEDGER_MISSING', 'LEDGER_REJECTED')
+  const findings = artifact('findings.json', v => { partialNeed(!validateFindingsDocument(v).length); return v }, 'FINDINGS_MISSING', 'FINDINGS_REJECTED')
+  const pool = artifact('candidates.json', v => {
+    const rows = parsePool(v)
+    for (const c of rows) partialNeed(c.record.fingerprint === c.fingerprint)
+    return rows
+  }, null, 'ARTIFACT_REJECTED') ?? []
+  const decisions = artifact('decisions.json', v => {
+    const d = parseDecisions(v)
+    for (const e of d.entries) {
+      if (e.record !== null) {
+        finiteJson(e.record, MAX_CANDIDATE_BYTES)
+        partialNeed(!validateFindingsDocument([e.record]).length && e.record.fingerprint === e.fingerprint && e.record.verdict === e.decision)
+      }
+      partialNeed(e.unresolved === null || textValue(e.unresolved))
+      if (e.phase5?.state === 'removed') partialNeed(textValue(e.phase5.reason))
+    }
+    return d
+  }, null, 'ARTIFACT_REJECTED')
+  artifact('critic.json', v => { partialNeed(!criticResultProblems(v).length); return v }, null, 'ARTIFACT_REJECTED')
+
+  let journal = { status: 'unavailable', states: null, settledCalls: null, heldCalls: null, available: null, pendingAgents: null }
+  let journalDigest, awaitingSemantic = [], journalError = null
+  try {
+    // The journal's loadRun reads these four files. Do not let that re-read
+    // bypass the partial report's preallocation limits or no-follow admission.
+    partialNeed(['run-metadata.json', 'stage-state.json', 'coverage-ledger.json', 'findings.json'].every(n =>
+      ['present', 'rejected', 'absent'].includes(inputs[n].binding.state) && inputs[n].stable), 'IO_ERROR')
+    const snapshot = readAuditJournal(root)
+    journalDigest = partialJournalDigest(snapshot)
+    const states = Object.fromEntries(LEAF_STATES.map(s => [s, 0]))
+    for (const row of snapshot.rows) {
+      states[row.state]++
+      if (row.state === 'returned') awaitingSemantic.push({ id: row.id })
+    }
+    journal = { status: 'available', states, settledCalls: snapshot.settledCalls, heldCalls: snapshot.heldCalls,
+      available: snapshot.available, pendingAgents: states.prepared + states.dispatched + states.uncertain }
+    if (states.uncertain || states.dispatched) add('DISPATCH_UNCERTAIN', 'Dispatched or uncertain calls are held; terminal reconciliation is required.')
+  } catch (e) {
+    if (e.code === 'CONFLICT') partialFail('INVALID_CONTEXT')
+    journalError = ['NOT_FOUND', 'CORRUPT', 'IO_ERROR', 'INVALID_JOURNAL_INPUT'].includes(e.code) ? e.code : 'IO_ERROR'
+    journalDigest = digestJson({ unavailable: journalError })
+    add('JOURNAL_UNAVAILABLE', `Journal authority unavailable (${journalError}); all journal counts are unknown.`)
+  }
+  const leads = partialLeads(pool, decisions, findings ?? [], ledger ?? [])
+  const historicalFinalRecords = (findings ?? []).filter(r => r.verdict === 'confirmed').map(r => ({ fingerprint: r.fingerprint, artifact: 'findings.json' }))
+  add('FINAL_VERIFICATION_PENDING', 'This partial checkpoint does not establish final verification; consult the separately owned final reports.')
+  const counts = ledger ? Object.fromEntries(STATUSES.map(s => [s, countBy(ledger, u => u.status).get(s) ?? 0])) : null
+  const coverage = { status: ledger ? 'valid' : inputs['coverage-ledger.json'].binding.state === 'absent' ? 'missing' : 'rejected', counts,
+    gaps: (ledger ?? []).filter(u => u.status !== 'covered').map(u => ({ id: u.coverage_id, status: u.status,
+      surface: u.surface, boundary: u.boundary, reasons: [...u.unresolved] })) }
+  const binding = { rendererVersion: PARTIAL_VERSION, identityDigest: digestJson(identity), journalDigest,
+    journalStatus: journal.status, journalError, artifacts: Object.fromEntries(Object.entries(inputs).map(([n, a]) => [n, a.binding])),
+    stable: Object.values(inputs).every(a => a.stable) }
+  return { version: 1, identity, stage, profile: meta.profile, runStatus: meta.run_status, incompleteReason: meta.incomplete_reason ?? null,
+    binding, generationKey: digestJson(binding), journal, coverage, leads, blockers, awaitingSemantic, historicalFinalRecords }
+}
+
+function partialLeads(pool, decisions, findings, ledger) {
+  const leads = new Map()
+  const add = (fp, units = [], title = '', blockers = []) => {
+    if (!leads.has(fp)) leads.set(fp, { fingerprint: fp, disposition: 'pending', blockers: [], units: [], title: '' })
+    const l = leads.get(fp)
+    l.units = [...new Set([...l.units, ...units])].sort()
+    if (title) l.title = title
+    l.blockers = [...new Set([...l.blockers, ...blockers])]
+    return l
+  }
+  for (const c of pool) add(c.fingerprint, c.units, textValue(c.record.title) ? c.record.title : '', stringList(c.record.blockers) ? c.record.blockers : [])
+  for (const e of decisions?.entries ?? []) {
+    const l = add(e.fingerprint)
+    if (e.unresolved) l.blockers.push(e.unresolved)
+    if (e.phase5?.state === 'removed') l.blockers.push(e.phase5.reason)
+    else if (e.state === 'decided') {
+      l.disposition = e.decision; l.blockers = e.record.blockers ?? []; l.title = e.record.title
+    }
+  }
+  for (const r of findings) {
+    if (r.verdict === 'confirmed') { leads.delete(r.fingerprint); continue }
+    const l = add(r.fingerprint)
+    l.disposition = r.verdict; l.blockers = r.blockers ?? []; l.title = r.title
+  }
+  for (const fp of leads.keys()) add(fp, linkedUnits(ledger, fp).map(u => u.coverage_id))
+  return [...leads.values()].sort(byFingerprint)
+}
+
+function checkedPartialContext(context) {
+  // Canonical admission inspects data descriptors and rejects Proxies, hooks,
+  // cycles and non-JSON values before any field access by the renderer.
+  const c = JSON.parse(finiteJson(context, 64 * MIB))
+  try {
+    fields(c, ['version', 'identity', 'stage', 'profile', 'runStatus', 'incompleteReason', 'binding', 'generationKey',
+      'journal', 'coverage', 'leads', 'blockers', 'awaitingSemantic', 'historicalFinalRecords'], 'INVALID_CONTEXT')
+    fields(c.identity, ['runId', 'repo', 'target', 'sourceRef'], 'INVALID_CONTEXT')
+    fields(c.journal, ['status', 'states', 'settledCalls', 'heldCalls', 'available', 'pendingAgents'], 'INVALID_CONTEXT')
+    fields(c.coverage, ['status', 'counts', 'gaps'], 'INVALID_CONTEXT')
+    partialNeed(record(c) && c.version === 1 && hexDigest(c.generationKey))
+    partialNeed(record(c.identity) && [c.identity.runId, c.identity.repo, c.identity.target].every(textValue))
+    validIdentity({ version: 1, run_id: c.identity.runId, repo: c.identity.repo, target: c.identity.target, source_ref: c.identity.sourceRef })
+    validateRunAuthority({ run_status: c.runStatus }, c.stage, '')
+    partialNeed(['standard', 'quick', 'deep'].includes(c.profile) && (c.incompleteReason === null || textValue(c.incompleteReason)))
+    fields(c.binding, ['rendererVersion', 'identityDigest', 'journalDigest', 'journalStatus', 'journalError', 'artifacts', 'stable'], 'INVALID_CONTEXT')
+    fields(c.binding.artifacts, Object.keys(PARTIAL_INPUTS), 'INVALID_CONTEXT')
+    partialNeed(c.binding.rendererVersion === PARTIAL_VERSION && digestJson(c.binding) === c.generationKey &&
+      c.binding.identityDigest === digestJson(c.identity) && hexDigest(c.binding.journalDigest) && typeof c.binding.stable === 'boolean')
+    partialNeed(record(c.journal) && ['available', 'unavailable'].includes(c.journal.status))
+    const j = c.journal
+    if (j.status === 'unavailable') partialNeed(['states', 'settledCalls', 'heldCalls', 'available', 'pendingAgents'].every(k => j[k] === null))
+    else {
+      fields(j.states, LEAF_STATES, 'INVALID_CONTEXT')
+      partialNeed(record(j.states) && LEAF_STATES.every(s => naturalCount(j.states[s])))
+      partialNeed(['settledCalls', 'heldCalls', 'available', 'pendingAgents'].every(k => naturalCount(j[k])))
+      partialNeed(j.pendingAgents === j.states.prepared + j.states.dispatched + j.states.uncertain && j.heldCalls === j.pendingAgents && j.settledCalls === j.states.returned + j.states.failed)
+    }
+    partialNeed(record(c.coverage) && ['valid', 'missing', 'rejected'].includes(c.coverage.status))
+    if (c.coverage.status === 'valid') fields(c.coverage.counts, STATUSES, 'INVALID_CONTEXT')
+    partialNeed(c.coverage.status === 'valid' ? record(c.coverage.counts) && STATUSES.every(s => naturalCount(c.coverage.counts[s])) : c.coverage.counts === null)
+    partialNeed(Array.isArray(c.coverage.gaps) && c.coverage.gaps.every(g => record(g) && [g.id, g.surface, g.boundary].every(textValue) && STATUSES.includes(g.status) && stringList(g.reasons)))
+    partialNeed(Array.isArray(c.leads) && c.leads.every(l => record(l) && textValue(l.fingerprint) && textValue(l.title) && ['pending', 'needs_validation', 'rejected'].includes(l.disposition) && stringList(l.blockers) && stringList(l.units)))
+    partialNeed(new Set(c.leads.map(l => l.fingerprint)).size === c.leads.length)
+    partialNeed(Array.isArray(c.blockers) && c.blockers.every(b => record(b) && textValue(b.code) && textValue(b.message) && (b.artifact === null || Object.hasOwn(PARTIAL_INPUTS, b.artifact))))
+    partialNeed(Array.isArray(c.awaitingSemantic) && c.awaitingSemantic.every(r => record(r) && textValue(r.id)))
+    partialNeed(Array.isArray(c.historicalFinalRecords) && c.historicalFinalRecords.every(r => record(r) && textValue(r.fingerprint) && r.artifact === 'findings.json'))
+    for (const [rows, keys] of [[c.leads, ['fingerprint', 'disposition', 'blockers', 'units', 'title']],
+      [c.coverage.gaps, ['id', 'status', 'surface', 'boundary', 'reasons']], [c.blockers, ['code', 'message', 'artifact']],
+      [c.awaitingSemantic, ['id']], [c.historicalFinalRecords, ['fingerprint', 'artifact']]]) {
+      for (const row of rows) fields(row, keys, 'INVALID_CONTEXT')
+    }
+  } catch { partialFail('INVALID_CONTEXT') }
+  return c
+}
+
+export function buildPartialReport(context) {
+  const c = checkedPartialContext(context), j = c.journal
+  const full = value => inline(value, Infinity)
+  const out = ['# PROGRESS-REPORT — PARTIAL / NOT FINAL', '',
+    'Immutable historical checkpoint. Freshness requires current-source verification with readPartialReport; this document does not assert that it is current.', '',
+    `- Run: ${full(c.identity.runId)}; repository: ${full(c.identity.repo)}; target: ${full(c.identity.target)}`,
+    `- Source commit: ${full(c.identity.sourceRef.commit)}; tree: ${full(c.identity.sourceRef.tree)}`,
+    `- Snapshot generation: ${c.generationKey}`,
+    `- Stage: ${full(finiteJson(c.stage))}; profile: ${full(c.profile)}`,
+    `- Actual run status: ${full(c.runStatus)}; reason: ${full(c.incompleteReason ?? '(none)')}`,
+    '- Report completeness: PARTIAL / NOT FINAL, independent of actual run status.', '',
+    'Source-only evidence. No target code was executed. This report establishes no final verification, new confirmed finding or severity.', '',
+    '## Durable dispatch progress', '',
+    'Returned means transport completion, not semantic acceptance. Failed or uncertain calls are not rejected security findings. Future unplanned work and provider dollar cost are unknown. Invocation budget is measured in calls.', '']
+  if (j.status === 'unavailable') out.push('Journal authority unavailable: states, settled calls, held calls, available calls and pending agents are unknown.')
+  else out.push(...LEAF_STATES.map(s => `- ${s}: ${j.states[s]}`),
+    `- Settled calls: ${j.settledCalls}; held calls: ${j.heldCalls}; available calls: ${j.available}; pending agents: ${j.pendingAgents}`,
+    `- Returned awaiting semantic review: ${c.awaitingSemantic.length}. No owning application receipt links these dispatches to semantic dispositions.`,
+    ...c.awaitingSemantic.map(r => `  - Dispatch ${full(r.id)}: awaiting semantic review.`))
+  out.push('', '## Known leads', '', 'Pending leads are unverified; needs_validation retains its blocker; rejected dispositions are not vulnerabilities. Raw transport output is never a lead.', '')
+  if (!c.leads.length) out.push('No known lead identities in the available validated artifacts; missing evidence does not establish zero leads.')
+  for (const l of c.leads) out.push(`- ${full(l.fingerprint)} — ${full(l.disposition)}: ${full(l.title)}`,
+    `  - Units: ${l.units.map(full).join(', ') || '(none linked)'}`,
+    ...l.blockers.map(b => `  - Blocker: ${full(b)}`))
+  for (const r of c.historicalFinalRecords) out.push(`- historical-final-record: ${full(r.fingerprint)} (findings.json); no new partial confirmation.`)
+  out.push('', '## Coverage', '')
+  if (!c.coverage.counts) out.push(`Coverage unknown (${c.coverage.status}); no successful or clean coverage claim.`)
+  else {
+    out.push('| Status | Units |', '|---|---|', ...STATUSES.map(s => `| ${s} | ${c.coverage.counts[s]} |`), '',
+      'Covered counts reflect ledger review only. Deferred, blocked, planned and in_progress units are not completed review.')
+    for (const g of c.coverage.gaps) out.push(`- ${full(g.id)}: ${full(g.status)}; ${labelOf(g)}`,
+      ...g.reasons.map(r => `  - Unresolved: ${full(r)}`))
+  }
+  out.push('', '## Blockers and limits', '', ...c.blockers.map(b => `- ${full(b.code)}${b.artifact ? ` (${b.artifact})` : ''}: ${full(b.message)}`),
+    '', 'Native callback publication, drain/pause and the no-new-dispatch freshness gate require later host integration. This helper alone does not enforce that gate.', '')
+  const text = out.join('\n')
+  partialNeed(Buffer.byteLength(text) <= REPORT_LIMIT, 'REPORT_TOO_LARGE')
+  return text
+}
+
+function privatePartialEntry(path, directory = false) {
+  const s = statOrMissing(path)
+  if (!s) return null
+  partialNeed(directory ? s.isDirectory() : s.isFile(), 'IO_ERROR')
+  partialNeed(s.uid === process.getuid() && (s.mode & 0o7777) === (directory ? 0o700 : 0o600) && (directory || s.nlink === 1), 'CORRUPT')
+  return s
+}
+function partialOutputDir(root, create) {
+  const path = join(root, 'partial-reports')
+  if (!statOrMissing(path)) {
+    if (!create) return null
+    mkdirSync(path, { mode: 0o700 }); syncPartialDirectory(root)
+  }
+  privatePartialEntry(path, true)
+  return path
+}
+function readPartialFile(path, limit) {
+  const s = privatePartialEntry(path)
+  if (!s) return null
+  partialNeed(s.size <= limit, 'CORRUPT')
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+  try {
+    const data = Buffer.alloc(s.size + 1)
+    let bytes = 0
+    while (bytes < data.length) { const n = readSync(fd, data, bytes, data.length - bytes, null); if (!n) break; bytes += n }
+    partialNeed(bytes === s.size, 'CORRUPT')
+    return data.subarray(0, bytes)
+  } finally { closeSync(fd) }
+}
+function partialJson(bytes, keys) {
+  try { return fields(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), keys, 'CORRUPT') }
+  catch { partialFail('CORRUPT') }
+}
+function partialPointer(dir) {
+  const bytes = readPartialFile(join(dir, 'current.json'), POINTER_LIMIT)
+  if (bytes === null) return null
+  const p = partialJson(bytes, ['version', 'generationKey', 'manifest'])
+  partialNeed(p.version === 1 && hexDigest(p.generationKey) && p.manifest === p.generationKey + '.json', 'CORRUPT')
+  return p
+}
+function verifyPartialGeneration(dir, key) {
+  const bytes = readPartialFile(join(dir, key + '.json'), POINTER_LIMIT)
+  partialNeed(bytes !== null, 'CORRUPT')
+  const m = partialJson(bytes, ['version', 'generationKey', 'binding', 'markdownSha256', 'bytes'])
+  partialNeed(m.version === 1 && m.generationKey === key && hexDigest(m.markdownSha256) && naturalCount(m.bytes) && m.bytes <= REPORT_LIMIT && digestJson(m.binding) === key, 'CORRUPT')
+  const text = readPartialFile(join(dir, key + '.md'), REPORT_LIMIT)
+  partialNeed(text !== null && text.length === m.bytes && sha256(text) === m.markdownSha256, 'CORRUPT')
+  return { manifest: bytes, markdown: text }
+}
+function syncPartialDirectory(dir) {
+  const fd = openSync(dir, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW)
+  try { fsyncSync(fd) } finally { closeSync(fd) }
+}
+function stagePartialFile(dir, bytes) {
+  const path = join(dir, `.staging-${randomUUID()}`)
+  let fd
+  try {
+    fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
+    writeFileSync(fd, bytes); fsyncSync(fd)
+    privatePartialEntry(path)
+    return path
+  } catch (e) { if (fd !== undefined) rmSync(path, { force: true }); throw e }
+  finally { if (fd !== undefined) closeSync(fd) }
+}
+function immutablePartialFile(dir, name, bytes, limit) {
+  const path = join(dir, name), existing = readPartialFile(path, limit)
+  if (existing !== null) { partialNeed(existing.equals(bytes), 'CORRUPT'); return true }
+  const tmp = stagePartialFile(dir, bytes)
+  try { renameSync(tmp, path); syncPartialDirectory(dir) }
+  finally { rmSync(tmp, { force: true }) }
+  return false
+}
+
+export function publishPartialReport(runDir) {
+  let generationKey = null, phase = 'context', tmp
+  try {
+    const c = partialReportContext(runDir)
+    generationKey = c.generationKey
+    phase = 'render'
+    const markdown = Buffer.from(buildPartialReport(c))
+    const manifest = Buffer.from(finiteJson({ version: 1, generationKey, binding: c.binding, markdownSha256: sha256(markdown), bytes: markdown.length }))
+    partialNeed(manifest.length <= POINTER_LIMIT, 'REPORT_TOO_LARGE')
+    phase = 'io'
+    const dir = partialOutputDir(partialRoot(runDir), true)
+    // Refuse malformed pointers rather than adopting or overwriting them.
+    partialPointer(dir)
+    const hadMarkdown = immutablePartialFile(dir, generationKey + '.md', markdown, REPORT_LIMIT)
+    const hadManifest = immutablePartialFile(dir, generationKey + '.json', manifest, POINTER_LIMIT)
+    verifyPartialGeneration(dir, generationKey)
+    tmp = stagePartialFile(dir, Buffer.from(finiteJson({ version: 1, generationKey, manifest: generationKey + '.json' })))
+    phase = 'context'
+    const current = partialReportContext(runDir)
+    if (!c.binding.stable || !current.binding.stable || current.generationKey !== generationKey) return { status: 'stale', generationKey, currentPath: null, reason: 'SOURCE_CHANGED' }
+    phase = 'io'
+    // The immutable pair is durable and all inputs rechecked before pointer LAST.
+    partialPointer(dir)
+    renameSync(tmp, join(dir, 'current.json')); tmp = null
+    syncPartialDirectory(dir)
+    return { status: hadMarkdown && hadManifest ? 'replayed' : 'published', generationKey, currentPath: join(dir, generationKey + '.md'), reason: null }
+  } catch (e) {
+    const reason = ['INVALID_CONTEXT', 'REPORT_TOO_LARGE', 'CORRUPT'].includes(e.code) ? e.code : phase === 'render' ? 'RENDER_ERROR' : 'IO_ERROR'
+    return { status: 'failed', generationKey: reason === 'INVALID_CONTEXT' ? null : generationKey, currentPath: null, reason }
+  } finally { if (tmp) { try { rmSync(tmp, { force: true }) } catch { /* Staging is never current. */ } } }
+}
+
+export function readPartialReport(runDir) {
+  let expectedGenerationKey = null
+  try {
+    const c = partialReportContext(runDir)
+    if (c.journal.status !== 'available' || !c.binding.stable) return { status: 'invalid', generationKey: null, expectedGenerationKey: null, path: null }
+    expectedGenerationKey = c.generationKey
+    const dir = partialOutputDir(partialRoot(runDir), false), pointer = dir && partialPointer(dir)
+    if (!pointer) return { status: 'missing', generationKey: null, expectedGenerationKey, path: null }
+    verifyPartialGeneration(dir, pointer.generationKey)
+    return { status: pointer.generationKey === expectedGenerationKey ? 'current' : 'stale', generationKey: pointer.generationKey,
+      expectedGenerationKey, path: join(dir, pointer.generationKey + '.md') }
+  } catch { return { status: 'invalid', generationKey: null, expectedGenerationKey, path: null } }
 }
 
 // ---------- report ----------

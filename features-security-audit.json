@@ -100,7 +100,7 @@
       ],
       "test": "acceptance/security-audit/sa-02b-partial-reports.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "NR-02",
