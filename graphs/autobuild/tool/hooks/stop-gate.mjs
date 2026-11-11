@@ -17,9 +17,16 @@ import { git } from "../lib/proc.mjs";
 import { isActive, projectRootFromHookEnv, readSession, writeSession } from "../lib/session.mjs";
 
 const REASON_LIMIT = 9000;
+const REASON_START = 1500; // the instructions; the rest of the cap goes to the end of the gate output
+const OMITTED = "\n… (middle omitted to fit the stop hook's limit)\n";
 const allow = () => process.exit(0);
+/** Over the cap, drop the middle: the start holds the instructions, the end holds the end of the failing output. */
+function capReason(reason) {
+  if (reason.length <= REASON_LIMIT) return reason;
+  return `${reason.slice(0, REASON_START)}${OMITTED}${reason.slice(-(REASON_LIMIT - REASON_START - OMITTED.length))}`;
+}
 function block(reason) {
-  process.stdout.write(JSON.stringify({ decision: "block", reason: reason.slice(0, REASON_LIMIT) }));
+  process.stdout.write(JSON.stringify({ decision: "block", reason: capReason(reason) }));
   process.exit(0);
 }
 

@@ -3242,6 +3242,16 @@ which matches the same summaries (TEST/VALIDATE/GATE/SEO-CHECK). A regression te
 added (1 MB line under 2 s), and every alternative was timed at 10 ms or less on 1 MB
 worst cases.
 
+The re-hunt at ab3712f reproduced one finding, F1 (MEDIUM, regression lens). The Claude
+stop hook caps its block reason at 9000 chars with `reason.slice(0, 9000)`. The longer
+excerpt (up to about 9.1k) plus the hook's preamble went over that cap, so the end of the
+output was cut, the part this change promises to keep. The 9000 cap is kept. Over it, the
+hook now drops the middle instead of the end: the first 1500 chars (the instructions)
+and the last ~7.4k (the end of the gate output) stay.
+`graphs/autobuild/tool/test/stop-gate-reason-cap.test.mjs`, adapted from the hunt's
+reproduction, fails without the fix (the reason ended at passing check 190) and passes
+with it.
+
 Not changed:
 - Overnight launches that allow 1-2 iterations, and `noProgressLimit: 2`, both end a run
   after one or two failed attempts. The loop already retries a failed gate with feedback
