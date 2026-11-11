@@ -12,6 +12,36 @@ symlink and invoke `../../tool/bin/autobuild` relative to its real directory.
 For example, `readlink -f ~/.agents/skills/autobuild` locates that directory.
 Use the same executable for all commands below; no Claude installation is needed.
 
+
+## PR-first delivery (opt-in)
+
+Use `"deliveryMode": "pr-first"` in `autobuild.json`, or
+`autobuild run --delivery-mode pr-first --backend codex`. Claude uses the same
+mode with `--backend claude`. Full mode remains the default for other projects.
+
+The host checks the current feature's acceptance tests, frozen inputs and Git
+controls before committing. Put fast checks such as secret scanning in
+`commitGate` (the same named-command format as `gate`). Full regressions, periodic
+review and the final hunt are deferred to the PR stage. They remain pending;
+a feature commit is not merge approval. Existing provider refusals stay stopped.
+
+`autobuild check --phase commit --feature ID` runs the focused gate.
+`autobuild check --phase full` (also the default `check`) runs the full configured
+gate, regardless of delivery mode. Run it in required PR CI; broad review/hunt
+still require their own review evidence before merge.
+
+After all features pass, autobuild checks a clean committed tree and writes
+`delivery-status.json` in its state directory with `ready_for_pr`, pending full
+checks/review and `mergeReady: false`. It does not push or open a PR itself.
+The review hook permits explicit `gh pr create --draft` when the repository's
+`autobuild.json` opts in; a CLI-only override does not change that hook policy.
+Protected pushes and merge checks remain enforced. The build-app driver uses
+that same repository opt-in to open a draft PR before final QA/hunt, or report
+`ready_for_pr` without pushing when `--no-pr` is used.
+
+PandaStack's current project config opts in. To restore its original workflow,
+set `deliveryMode` to `full`; keep the original `gate` definitions intact.
+
 ## Choose the backend first
 
 When running this skill in Codex, use `autobuild run --backend codex` (or `AUTOBUILD_BACKEND=codex`); never launch Claude as a fallback. In Claude Code, the default backend remains Claude. Existing project configs and completed features can be resumed unchanged. New Codex projects: `autobuild init --backend codex`.

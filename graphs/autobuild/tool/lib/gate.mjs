@@ -4,7 +4,8 @@
 //   3. the project's gate commands (typecheck, lint, regression suite, coverage…)
 //   4. the tests of every feature already passing (non-browser)
 //   5. browser suites: the regression command plus passing and current browser specs
-// failFast stops at the first failing step.
+// failFast stops at the first failing step. Explicit PR-first commit phase keeps
+// frozen/current acceptance and commitGate; deferred regressions are not passes.
 
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
@@ -80,11 +81,18 @@ export function gitControlChanges(config, before) {
   return [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((file) => before[file] !== after[file]).sort();
 }
 
-export function runGate(config, { featureId = null, baseSha = null, failFast = false, skipBrowser = false } = {}) {
+export function runGate(config, { featureId = null, baseSha = null, failFast = false, skipBrowser = false, phase = "full" } = {}) {
+  if (!["full", "commit"].includes(phase)) throw new Error("Unknown gate phase");
+  if (phase === "commit" && config.deliveryMode !== "pr-first") throw new Error("Commit gate requires pr-first deliveryMode");
   const doc = readFeatures(config);
   const current = featureId ? featureById(doc, featureId) : null;
   const browserKind = config.browser?.runner ?? null;
   const steps = [];
+  const deferred = phase === "commit" ? [
+    ...(config.gate ?? []).map(step => ({ kind: "gate", name: step.name, reason: "PR full gate pending" })),
+    ...doc.features.filter(feature => feature.passes && feature.id !== featureId).map(feature => ({ kind: "acceptance", name: feature.id, reason: "PR prior-feature regression pending" })),
+    ...(config.browser?.regressionCommand ? [{ kind: "browser-regression", name: "browser regression suite", reason: "PR browser regression pending" }] : []),
+  ] : [];
   const record = (step) => {
     steps.push(step);
     return step.ok || !failFast;
@@ -92,6 +100,8 @@ export function runGate(config, { featureId = null, baseSha = null, failFast = f
   const summary = () => ({
     ok: steps.every((step) => step.ok),
     feature: featureId,
+    phase,
+    deferred,
     steps: steps.map((step) => ({ name: step.name, ok: step.ok, seconds: Math.round((step.ms ?? 0) / 1000), tail: step.ok ? "" : tail(step.output ?? "", 6000) })),
   });
 
@@ -100,6 +110,16 @@ export function runGate(config, { featureId = null, baseSha = null, failFast = f
     const frozen = frozenChanges(config, baseSha);
     const ok = frozen.ok && frozen.changed.length === 0;
     if (!record({ name: "frozen files unchanged", ok, ms: Date.now() - started, output: ok ? "" : `Changed or added frozen files:\n${frozen.changed.join("\n")}` })) return summary();
+  }
+
+  if (phase === "commit") {
+    // Current acceptance is mandatory, including browser tests. skipBrowser only
+    // applies to the ordinary full gate's browser regression policy.
+    if (current) {
+      for (const step of runFeatureTests(config, [current])) if (!record({ ...step, name: `current feature ${current.id}: ${step.name}` })) return summary();
+    }
+    for (const step of config.commitGate ?? []) if (!record({ name: step.name, ...sh(config, step.command) })) return summary();
+    return summary();
   }
 
   if (current && current.testKind !== browserKind) {

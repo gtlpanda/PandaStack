@@ -73,6 +73,7 @@ test, you do not have the claim, and you do not get to say it.
 - Report findings as PASS/FAIL per category. Fix all critical issues before committing. Not optional — catch bugs before the user does
 
 ### 8. Review Before a PR
+- **PR-first exception:** When repository `autobuild.json` sets `deliveryMode: "pr-first"`, explicitly draft PRs may open before broad review/hunt. Keep focused acceptance and `commitGate` before commits; full regressions/review/hunt remain pending in the PR. This opt-in supersedes the pre-PR ordering below, never merge checks or provider refusal restrictions.
 - Run `/bughunt` on a branch before opening its PR. The PandaStack review gate enforces it: `gh pr create` needs a finished hunt, `gh pr merge` needs one that passed. Off switch `PANDASTACK_REVIEW_GATE=0` is for a person to set at launch; never set it yourself
 
 ## Working Unattended (/goal and /loop)

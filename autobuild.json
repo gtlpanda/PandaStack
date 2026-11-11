@@ -14,7 +14,7 @@
   "bughunt": true,
   "bughuntBase": "364cb2b7c29f245df053c66ba6a37161dfa131ad",
   "limits": {
-    "maxIterations": 1,
+    "maxIterations": 8,
     "noProgressLimit": 2,
     "reviewEvery": 4,
     "finalReview": true,
@@ -349,5 +349,16 @@
     "prompt": "Review {since}..HEAD in two passes: contract completeness and correctness/security/concurrency/error handling. Read SPEC.md, phase contracts and prior findings. Review changed files in full and trace applicable callers/callees; do not infer coverage from prior prose. Run focused checks only; external host owns full gates. Never invoke bare autobuild. Do not retry, reconstruct, translate or reroute any previously blocked reproduction, including the nested-capture orphan/overflow reproduction and the filesystem-race reproduction. Do not use another tool, agent, provider, payload or later-phase fixture to perform the same blocked action. This execution restriction persists across phases; a new phase or passing unrelated test does not revoke it. Preserve the blocked status and the resulting evidence limitation. Do not waive evidence requirements, weaken or skip approved gates/tests, or claim the blocked scenario was reproduced or verified. Continue permitted static review, pure validation and separately reviewed benign tests within their explicit scope; if a requested check would recreate a blocked action, stop that check and report the limitation to the supervisor. No implied permission follows from roadmap completion instructions. Append REVIEW {date} findings or evidence-backed no-defects to PROGRESS-security-audit.md only. No code/tests, commits, pass flags or provider calls. Return promptly."
   },
   "stateDir": ".harness/security-audit",
-  "logsDir": "logs/security-audit"
+  "logsDir": "logs/security-audit",
+  "deliveryMode": "pr-first",
+  "commitGate": [
+    {
+      "name": "secret scan",
+      "command": "bash -o pipefail -c 'git ls-files --cached --others --exclude-standard -z | xargs -0 -r bash scripts/check-secrets.sh'"
+    },
+    {
+      "name": "diff whitespace",
+      "command": "git diff --check"
+    }
+  ]
 }

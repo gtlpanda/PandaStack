@@ -279,7 +279,7 @@
       ],
       "test": "acceptance/security-audit/provider-refusal.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SA-AR01",

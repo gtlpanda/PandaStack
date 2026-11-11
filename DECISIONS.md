@@ -775,3 +775,23 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   change fixtures or bypass that execution restriction. Keep documentation here
   and in PROGRESS-security-audit.md. Host owns full gates, flags and commits;
   no target changes, providers, fallback or prohibited reproductions.
+
+- D117 (SA-RF01): Explicit host selection and the frozen acceptance own this
+  session despite preserved preparation headings in the contract/fixtures.
+  Implement trusted top-level protocol refusal, terminal ordinary-loop handling,
+  and one native status owner for immutable repository admission stop, partial
+  reports and explicit live-owner saved-evidence adoption. Keep all authority in
+  existing branded repository ownership; no new scheduler, clearing, replay or
+  fallback. Add focused workflow-harness tests and run only selected acceptance
+  and relevant focused tests. Initial integration fixtures fail at spawnSync git
+  EPERM; preserve them and record the evidence limit without alternate transport.
+  Record plan and results here and in PROGRESS-security-audit.md; full gates,
+  flags, staging and commits remain external-host work. No target execution or
+  actual incident adoption and no prohibited reproduction is authorized.
+
+- D118 (temporary PR-first delivery): User explicitly authorized changing gates
+  to unblock shipping on 2026-11-11. Use opt-in focused commit checks and defer
+  full regressions/broad review/hunt to the PR, keeping their status pending.
+  Root may implement/test/commit this coordinated repair directly; earlier
+  full-gate-before-commit choreography is superseded for this hotfix. No provider
+  refusal bypass, blocked reproduction, protected push or merge waiver follows.

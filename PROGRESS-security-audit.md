@@ -1640,3 +1640,32 @@ Final hygiene: unchanged `bash scripts/check-secrets.sh` (tracked files) and
 `git diff --check` and `git diff --cached --exit-code` all exit 0.
 Changed inventory: loop.mjs, the new helper and test file, DECISIONS.md and this
 progress entry. No staged changes; selected feature flag remains host-owned.
+
+## SA-RF01 — Durable provider refusal and honest partial status
+
+Trusted top-level Codex refusal events stop builder/review/probe retry paths.
+Native hunts retain an immutable repository receipt, bounded provisional status
+and report, stop future admission, and preserve a known refusal even if optional
+status data is corrupt. Generic adoption composition is implemented; the old
+incident has not been adopted or rerun. No blocked reproduction was executed.
+
+Independent review corrected first-refusal ownership and optional-status
+precedence. Final focused native tests:23 passed. Frozen acceptance:20 passed,
+exit0, with evidence /var/tmp/pandastack-refusal-check-3eeuosnh/run.json.
+The original hunt remains incomplete and no security finding is verified by
+these protocol fixtures. Full PR regressions/review remain pending.
+
+## Temporary PR-first delivery — user-authorized 2026-11-11
+
+User moved broad quality checks to the PR stage to unblock code delivery.
+Opt-in deliveryMode pr-first keeps focused acceptance and commitGate before
+feature commits, defers full regressions/review/hunt, and records a clean-head
+handoff with mergeReady:false. Explicit draft PR creation is allowed; merge
+checks are preserved. Full mode and default full check behavior remain intact.
+PandaStack opts in, scans tracked and new files for secrets, and runs its original
+full configured gate in PR CI. The old builder was stopped before config edits.
+
+Focused verification covers core mode selection, both backend environments,
+current acceptance, deferred checks, draft PR hooks, build-app delivery, clean
+head binding, stale readiness and full-mode compatibility. Full regressions are
+intentionally pending in the PR; no push/merge has been performed for this change.

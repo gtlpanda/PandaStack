@@ -41,7 +41,7 @@ export function finishCodexBuilder(config, { feature, base, docBefore, exitCode,
   if (readBlockers(readProgress(config)).has(feature.id)) return; // outer loop records the blocker
   const featuresBefore = readFileSync(path.join(config.root, config.featuresFile), "utf8");
   const control = gitControlDigest(config);
-  const summary = runGate(config, { featureId: feature.id, baseSha: base, failFast: true });
+  const summary = runGate(config, { featureId: feature.id, baseSha: base, failFast: true, phase: config.deliveryMode === "pr-first" ? "commit" : "full" });
   if (!protectedUnchanged(config, base, featuresBefore, control)) {
     log("Codex gate commands changed protected files or HEAD; work kept for inspection"); return 4;
   }
@@ -58,7 +58,9 @@ export function finishCodexBuilder(config, { feature, base, docBefore, exitCode,
     return;
   }
   rmSync(statePath(config, "codex-feedback.txt"), { force: true });
-  log(`Codex host gate: PASS; committed ${feature.id}`);
+  log(summary.phase === "commit"
+    ? `Codex commit gate: PASS; committed ${feature.id}; full regressions and broad review remain pending for the PR (${summary.deferred.length} deferred gate entries)`
+    : `Codex host gate: PASS; committed ${feature.id}`);
 }
 
 export function finishCodexReview(config, { base, exitCode, result, log }) {

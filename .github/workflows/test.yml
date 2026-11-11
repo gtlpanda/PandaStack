@@ -1,4 +1,4 @@
-# Runs every repo check (scripts/test.sh) on each pull request and on main.
+# Runs the full configured gate (including scripts/test.sh) on each PR and main.
 # Branch protection on main requires this job ("test") to pass.
 name: test
 on:
@@ -15,7 +15,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,5 +40,5 @@ jobs:
             }
             console.log("Required non-root isolation: PASS");
           '
-      - name: scripts/test.sh
-        run: scripts/test.sh
+      - name: Full PR gate (regressions and passing acceptance)
+        run: node graphs/autobuild/tool/lib/cli.mjs check --phase full

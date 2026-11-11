@@ -21,7 +21,9 @@ export function codexArgs(config, { prompt, appendSystemPrompt = "", role = "bui
     "No human is present. Do the authorized work without questions. Never push, change branches, edit git control files, or launch Claude.",
     `Frozen paths (never edit): ${JSON.stringify(config.frozen)}. Writable exceptions: ${JSON.stringify(config.writable)}.`,
     "Leave git staging, commits and feature passes flags to the outer harness. This overrides the Claude-specific mark-passed/commit/Stop-hook procedure.",
-    "Run tests, fix failures, append the required progress entry, and stop. The outer harness reruns the full gate and commits only verified work.",
+    config.deliveryMode === "pr-first"
+      ? "Run focused acceptance, fix failures, append the required progress entry, and stop. The outer harness reruns the commit gate; full regressions and broad review remain pending for the PR."
+      : "Run tests, fix failures, append the required progress entry, and stop. The outer harness reruns the full gate and commits only verified work.",
     `If delegating, use ${config.subagentModel} for subagents. Keep them on this working copy with separate files.`,
   ].join("\n");
   args.push("-");
@@ -37,7 +39,7 @@ async function runCodexWork(config, options, track) {
   const { args, input } = codexArgs(config, options);
   const out = openSync(options.logFile, "w");
   const err = openSync(`${options.logFile}.stderr`, "w");
-  const env = buildEnv(config, { AUTOBUILD_BACKEND: "codex", AUTOBUILD_ACTIVE: "1", AUTOBUILD_ROLE: options.role });
+  const env = buildEnv(config, { AUTOBUILD_BACKEND: "codex", AUTOBUILD_ACTIVE: "1", AUTOBUILD_ROLE: options.role, AUTOBUILD_DELIVERY_MODE: config.deliveryMode ?? "full" });
   // A nested CLI must not attach itself to its parent's thread.
   delete env.CODEX_THREAD_ID;
   try {
@@ -73,13 +75,23 @@ async function runCodexWork(config, options, track) {
 export function readCodexResult(file) {
   if (!existsSync(file)) return null;
   let result = null;
+  let providerRefusal;
+  let lineNumber = 0;
   for (const line of readFileSync(file, "utf8").split("\n")) {
+    lineNumber++;
     let event;
     try { event = JSON.parse(line); } catch { continue; }
+    if (!event || typeof event !== 'object') continue;
+    const message = event.type === 'error' ? event.message : event.type === 'turn.failed' ? event.error?.message : null;
+    if (!providerRefusal && typeof message === 'string' && message.startsWith('This content was flagged for possible cybersecurity risk.')) {
+      providerRefusal = { kind: 'provider_refusal', retryable: false, event: event.type, line: lineNumber };
+    }
     if (event.type === "turn.completed") result = { subtype: "success", is_error: false, num_turns: 1, usage: event.usage };
     if (event.type === "turn.failed" || event.type === "error") {
       result = { subtype: "error_during_execution", is_error: true, result: event.error?.message ?? event.message ?? "Codex failed" };
     }
   }
+  if (providerRefusal) return { ...result, subtype: 'error_during_execution', is_error: true,
+    result: 'Provider declined this work; automatic retry is blocked.', providerRefusal };
   return result;
 }

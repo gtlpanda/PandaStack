@@ -53,6 +53,8 @@ const STATIC_DEFAULTS = {
   preflight: [],
   runners: {},
   gate: [],
+  deliveryMode: "full",
+  commitGate: [],
   browser: null,
   frozen: [],
   writable: ["PROGRESS.md", "DECISIONS.md"],
@@ -128,6 +130,11 @@ export function resolveManagedConfig({ project: raw = {}, env = {}, overrides = 
   for (const [key, names] of Object.entries(LEGACY_ENV)) {
     const name = names.find((candidate) => env[candidate] !== undefined && env[candidate] !== "");
     if (name) config.limits[key] = Number(env[name]);
+  }
+  config.deliveryMode = overrides.deliveryMode ?? env.AUTOBUILD_DELIVERY_MODE ?? config.deliveryMode;
+  if (!["full", "pr-first"].includes(config.deliveryMode)) throw new Error('deliveryMode must be "full" or "pr-first"');
+  if (!Array.isArray(config.commitGate) || config.commitGate.some(step => !step || typeof step.name !== "string" || !step.name.trim() || typeof step.command !== "string" || !step.command.trim())) {
+    throw new Error("commitGate must be an array of named commands");
   }
   config.backend = overrides.backend || env.AUTOBUILD_BACKEND || config.backend;
   if (!["claude", "codex"].includes(config.backend)) throw new Error('backend must be "claude" or "codex"');
