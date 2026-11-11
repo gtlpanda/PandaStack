@@ -9,7 +9,7 @@ import { buildEnv, sessionConfigEnv } from '../graphs/autobuild/tool/lib/proc.mj
 
 const selection = config => ({
   backend: config.backend, model: config.model, subagentModel: config.subagentModel,
-  probeModel: config.probeModel, binary: config[`${config.backend}Bin`],
+  probeModel: config.probeModel, deliveryMode: config.deliveryMode, binary: config[`${config.backend}Bin`],
 })
 
 async function fixture(work) {
@@ -22,7 +22,7 @@ for (const hooks of ['inject', 'project']) {
   await test(`Claude child settings retain every accepted selection with ${hooks} hooks`, () => fixture((repo, write) => {
     const parentEnv = { ...process.env }
     const shadows = [
-      {}, { AUTOBUILD_BACKEND: 'codex' }, { AUTOBUILD_BACKEND: 'invalid' },
+      {}, { AUTOBUILD_DELIVERY_MODE: 'pr-first' }, { AUTOBUILD_DELIVERY_MODE: 'invalid' }, { AUTOBUILD_BACKEND: 'codex' }, { AUTOBUILD_BACKEND: 'invalid' },
       { AUTOBUILD_MODEL: 'haiku', MODEL: 'bad model' },
       { AUTOBUILD_SUBAGENT_MODEL: 'haiku' }, { SUBAGENT_MODEL: 'opus' },
       { AUTOBUILD_SUBAGENT_MODEL: 'bad model' },
@@ -44,8 +44,10 @@ for (const hooks of ['inject', 'project']) {
       const before = structuredClone(accepted)
       const settings = sessionSettings(accepted)
       const context = sessionConfigEnv(accepted)
-      assert.deepEqual(Object.keys(context).sort(), ['AUTOBUILD_BACKEND', 'AUTOBUILD_MODEL',
+      assert.deepEqual(Object.keys(context).sort(), ['AUTOBUILD_BACKEND', 'AUTOBUILD_DELIVERY_MODE', 'AUTOBUILD_MODEL',
         'AUTOBUILD_SUBAGENT_MODEL', 'AUTOBUILD_PROBE_MODEL', 'AUTOBUILD_CLAUDE_BIN'].sort())
+      assert.equal(accepted.deliveryMode, 'full')
+      assert.equal(context.AUTOBUILD_DELIVERY_MODE, 'full')
       const processEnv = buildEnv(accepted, context)
       const child = { ...processEnv, ...settings.env }
       for (const env of [processEnv, { ...buildEnv(accepted), ...settings.env }, child]) {
@@ -102,6 +104,7 @@ await test('partial Claude settings inputs retain native defaults and frozen-pat
   const settings = sessionSettings({ hooks: 'inject', frozen: ['spec'],
     writable: ['spec/DECISIONS.md'], subagentModel: 'claude-haiku-5-5' })
   assert.equal(settings.env.AUTOBUILD_BACKEND, 'claude')
+  assert.equal(settings.env.AUTOBUILD_DELIVERY_MODE, 'full')
   assert.equal(settings.env.CLAUDE_CODE_SUBAGENT_MODEL, 'claude-haiku-5-5')
   assert.ok(settings.model)
   assert.ok(settings.permissions.deny.includes('Edit(/spec)'))
