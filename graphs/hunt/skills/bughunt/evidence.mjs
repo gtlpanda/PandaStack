@@ -35,7 +35,7 @@
 // committed. Every git call in the fix worktree runs without hooks or
 // fsmonitor, in the sandbox environment.
 // Exit 0 when it ran, 1 on an error it could not run past, 2 on usage.
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, lstatSync, symlinkSync, realpathSync, openSync, closeSync, readdirSync, mkdtempSync, chmodSync, readlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, lstatSync, symlinkSync, realpathSync, openSync, closeSync, readdirSync, mkdtempSync, chmodSync, readlinkSync, fstatSync } from 'node:fs'
 import { join, dirname, extname, normalize, relative, basename, resolve, isAbsolute } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -184,7 +184,7 @@ function exportTree(repo, sha, dir) {
 
 export function createSuiteExport({repo,tree}) {
   if(typeof repo!=='string'||typeof tree!=='string'||! /^[0-9a-f]{40,64}$/.test(tree))throw new Error('Invalid suite export source')
-  let parent = realpathSync(tmpdir())
+  const parent = realpathSync(tmpdir())
   for(let current=parent;;current=dirname(current)){
     if(basename(current)==='.git')throw new Error('Suite temporary location is inside Git metadata')
     if(current===dirname(current))break
@@ -197,8 +197,13 @@ export function createSuiteExport({repo,tree}) {
   }
   let cleaned=false;const cleanup=()=>{if(!cleaned){rmSync(directory,{recursive:true,force:true});cleaned=true}}
   try{
-    call(['init','-q','--template='])
-    const objects=git(repo,['rev-parse','--path-format=absolute','--git-path','objects']);if(!objects.ok)throw new Error('Suite source object directory is unavailable')
+    // Query storage format: a 40-character source identifier can also be a
+    // SHA256 abbreviation. Identifier length cannot select the destination.
+    const formatResult=git(repo,['rev-parse','--show-object-format'],{env,timeoutMs:30000})
+    const format=formatResult.stdout.replace(/\n$/, '')
+    if(!formatResult.ok||!['sha1','sha256'].includes(format))throw new Error('Suite source object format is unavailable')
+    call(['init','-q','--template=',`--object-format=${format}`])
+    const objects=git(repo,['rev-parse','--path-format=absolute','--git-path','objects'],{env,timeoutMs:30000});if(!objects.ok)throw new Error('Suite source object directory is unavailable')
     // Git parses this as a path list. C-quote one element so literal colons,
     // quotes and backslashes cannot change its meaning; controls use octal.
     const objectDirectory=objects.stdout.replace(/\n$/, '')
@@ -206,10 +211,39 @@ export function createSuiteExport({repo,tree}) {
     env.GIT_ALTERNATE_OBJECT_DIRECTORIES='"'+quotedDirectory+'"'
     call(['read-tree',tree])
     const entries=call(['ls-files','--stage','-z']).split('\0').filter(Boolean).map(e=>{const m=/^(\d+) ([0-9a-f]+) 0\t([\s\S]+)$/.exec(e);if(!m||m[3].split('/').some(p=>!p||p==='.'||p==='..'||p.toLowerCase()==='.git')||!['100644','100755','120000'].includes(m[1]))throw new Error('Unsupported suite tree entry');return {mode:m[1],sha:m[2],path:m[3]}})
-    call(['checkout-index','-a','-f'])
-    // Restore literal blob bytes after checkout conversion (e.g. working-tree-encoding).
-    const blobs=call(['cat-file','--batch'],{encoding:null,input:Buffer.from(entries.map(e=>e.sha).join('\n')+'\n')});let cursor=0
-    for(const entry of entries){const end=blobs.indexOf(10,cursor),header=blobs.subarray(cursor,end).toString(),match=/^[0-9a-f]+ blob (\d+)$/.exec(header);if(end<0||!match)throw new Error('Invalid exported blob');const size=Number(match[1]);cursor=end+1;const data=blobs.subarray(cursor,cursor+size);cursor+=size+1;const path=join(directory,entry.path);if(data.length!==size)throw new Error('Incomplete exported blob');rmSync(path,{force:true});mkdirSync(dirname(path),{recursive:true});if(entry.mode==='120000')symlinkSync(data.toString(),path);else{writeFileSync(path,data);chmodSync(path,entry.mode==='100755'?0o755:0o644)}}
+    // Restore literal object bytes, bypassing checkout conversions/attributes.
+    // The small-object path is bounded independently of tree size. Larger
+    // regular blobs go directly from Git to their owned destination fd; neither
+    // their contents nor the aggregate tree occupy a subprocess stdout buffer.
+    const maxBufferedBlob=1024*1024
+    for(const entry of entries){
+      const input=Buffer.from(entry.sha+'\n')
+      const info=call(['cat-file','--batch-check'],{input})
+      const match=/^([0-9a-f]+) blob (0|[1-9][0-9]*)\n$/.exec(info)
+      if(!match||match[0]!==info||match[1]!==entry.sha)throw new Error('Invalid exported blob')
+      const size=Number(match[2])
+      if(!Number.isSafeInteger(size))throw new Error('Invalid exported blob size')
+      const path=join(directory,entry.path)
+      mkdirSync(dirname(path),{recursive:true})
+      if(size<=maxBufferedBlob){
+        const bytes=call(['cat-file','--batch'],{encoding:null,input})
+        const header=Buffer.from(`${entry.sha} blob ${size}\n`)
+        if(!Buffer.isBuffer(bytes)||bytes.length!==header.length+size+1||!bytes.subarray(0,header.length).equals(header)||bytes.at(-1)!==10)throw new Error('Incomplete exported blob')
+        const data=bytes.subarray(header.length,header.length+size)
+        if(entry.mode==='120000')symlinkSync(data,path)
+        else{writeFileSync(path,data,{flag:'wx',mode:0o600});chmodSync(path,entry.mode==='100755'?0o755:0o644)}
+      }else{
+        // Symlink targets must fit the bounded metadata path; no unbounded
+        // allocation just because an object declares itself a link target.
+        if(entry.mode==='120000')throw new Error('Unsupported suite symlink size')
+        const fd=openSync(path,'wx',0o600)
+        try{
+          call(['cat-file','blob',entry.sha],{encoding:null,stdio:['ignore',fd,'pipe']})
+          if(fstatSync(fd).size!==size)throw new Error('Incomplete exported blob')
+        }finally{closeSync(fd)}
+        chmodSync(path,entry.mode==='100755'?0o755:0o644)
+      }
+    }
     const snapshotTree=call(['rev-parse',tree+'^{tree}']).trim();const commit=call(['commit-tree',snapshotTree,'-m','Private source-only suite snapshot']).trim();call(['update-ref','HEAD',commit])
     // Objects are copied into this source-only repository; no persistent alternate or source ref.
     call(['repack','-a','-d']);delete env.GIT_ALTERNATE_OBJECT_DIRECTORIES

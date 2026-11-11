@@ -1322,3 +1322,18 @@ and P2-16 corrective scope remains explicitly deferred. They prevent merge,
 regardless of baseline CI status. Final host acceptance remains distinct.
 See docs/reviews/security-audit-pr-readiness.md. No blocked reproduction,
 Terracotta audit, provider fallback or frozen-test amendment occurred.
+
+## PR #45 export corrections
+
+After the user directed merge and continuation in response to the P2-15/P2-16
+scope question, the two source-export fixes were implemented. Large regular
+objects stream directly to private fds; actual source storage format selects the
+destination format. Existing buffer/time bounds and frozen fixtures are intact.
+Independent static review found no concrete defect in the delta. Thirteen
+focused checks and all five frozen ordinary Git export cases passed. The exact
+Codex repair fixture highlighted by the user passed unchanged locally.
+
+GitHub CI still needs a compatible isolation environment. A concrete temporary
+Ubuntu22.04 workflow amendment was posted on PR45 and explicitly requested as
+an exception to frozen gate configuration. It is not yet applied or approved.
+No blocked reproduction was run and earlier native-hunt dispositions remain.
