@@ -14,8 +14,8 @@ function fixture(t) {
   execFileSync("git", ["-C", root, "add", "tracked.txt"]);
   return { root, file };
 }
-function scan(root, args = ["--worktree"]) {
-  const result = spawnSync("bash", [scanner, ...args], { cwd: root, encoding: "utf8", timeout: 10000 });
+function scan(root, args = ["--worktree"], env = process.env) {
+  const result = spawnSync("bash", [scanner, ...args], { cwd: root, encoding: "utf8", timeout: 10000, env });
   return { status: result.status, output: result.stdout + result.stderr };
 }
 const syntheticSecret = () => "sk-" + "A".repeat(40); // Generated inert pattern, not a credential.
@@ -50,4 +50,18 @@ test("worktree scan respects nonignored scope and keeps default and staged scan 
   assert.equal(scan(root, ["--staged"]).status, 0, "staged scan sees indexed clean content");
   execFileSync("git", ["-C", root, "add", "new.txt"]);
   assert.equal(scan(root, ["--staged"]).status, 1);
+});
+
+
+for (const phase of ["patterns", "placeholders"]) test(`scanner refuses a grep error during ${phase}`, t => {
+  const { root, file } = fixture(t);
+  writeFileSync(file, syntheticSecret());
+  const bin = path.join(root, "fixture-bin"); mkdirSync(bin);
+  const realGrep = execFileSync("which", ["grep"], { encoding: "utf8" }).trim();
+  // One synchronous, finite fixture executable; no signal/capture/race behavior.
+  writeFileSync(path.join(bin, "grep"), '#!/bin/sh\ncase "$FAIL_GREP_PHASE:$1" in patterns:-nEIi|placeholders:-vE) exit 2 ;; esac\nexec "$REAL_GREP" "$@"\n', { mode: 0o700 });
+  const result = scan(root, ["tracked.txt"], { ...process.env, PATH: `${bin}:${process.env.PATH}`, REAL_GREP: realGrep, FAIL_GREP_PHASE: phase });
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, phase === "patterns" ? /could not scan patterns; refusing/ : /could not filter placeholders; refusing/);
+  assert.doesNotMatch(result.output, /check-secrets: clean/);
 });

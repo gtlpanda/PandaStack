@@ -31,8 +31,23 @@ ALLOW_MARK='allow-secret'   # append this comment to a line to whitelist it (e.g
 
 hits=0
 scan_stream() {  # scan_stream <label>; content on stdin
-  local label="$1" out
-  out="$(grep -nEIi "$REGEX" | grep -vE "$PLACEHOLDERS" || true)"
+  local label="$1" out status
+  if out="$(grep -nEIi "$REGEX")"; then
+    :
+  else
+    status=$?
+    if [ "$status" -eq 1 ]; then return 0; fi
+    echo "SECRET? $label: could not scan patterns; refusing" >&2
+    hits=$((hits + 1)); return 0
+  fi
+  if out="$(printf '%s\n' "$out" | grep -vE "$PLACEHOLDERS")"; then
+    :
+  else
+    status=$?
+    if [ "$status" -eq 1 ]; then return 0; fi
+    echo "SECRET? $label: could not filter placeholders; refusing" >&2
+    hits=$((hits + 1)); return 0
+  fi
   if [ -n "$out" ]; then
     printf 'SECRET? %s\n%s\n' "$label" "$out" | sed '2,$s/^/  /'
     hits=$((hits + 1))
