@@ -3177,6 +3177,91 @@ validate the parsed calendar components as well. Read-only sanity review found n
 issues across data flow, errors, security, consistency, and completeness. Full
 gate results and remaining limitations are recorded in PROGRESS.md.
 
+## 45. Gate feedback shows what failed (2026-11-11)
+
+Overnight Codex autobuild runs on 2026-11-11 hit `Codex host gate: FAIL` twice (SA-05a at
+02:08Z, OC-01 at 02:56Z). The loop log, the retry feedback (`codex-feedback.txt`) and CI's
+`autobuild check` output each showed only the last 6000 characters of the failing step.
+The `baseline regression suite` step runs `scripts/test.sh`, which prints the autobuild
+suite last. So every report ended in `TEST-AUTOBUILD: 107 passed, 0 failed` / `TEST: FAIL`,
+and the failing assertion had already scrolled off. The builder recorded that it could not
+see the failure (PROGRESS-security-audit.md, OC-01 entry). The retries were blind.
+
+Fix: `failureExcerpt` in `graphs/autobuild/tool/lib/gate.mjs` builds the `tail` of a failed
+gate step. The output is unchanged in three cases:
+- output that fits is kept whole;
+- long output keeps exactly the old 6000-char tail;
+- output with no earlier failure lines is the old tail alone.
+
+When failure lines came before that tail, they are prepended, capped at half the budget:
+- the markers recognised are `  FAIL x`, `FAIL  x`, pytest `FAILED`, go `--- FAIL:`, TAP
+  `not ok`, `✖`, `X: FAIL` summaries and thrown `…Error` lines;
+- each failure keeps the lines indented under it (up to 12), which are the message, diff
+  or TAP block;
+- lines starting with `ok` or `✔` never count, because passing test names here contain
+  "FAIL".
+
+Because the result always contains the old tail, it can never show less than before.
+Every gate consumer gets it: Codex retry feedback, Claude's stop hook, the bug hunt's
+host gate, PR handoff checks and `autobuild check`. `autobuild test` and `mark-passed`
+use it for failures at 12000 chars.
+
+Review: an independent read-only audit of the first version found 3 defects.
+- A regression: noisy `Error:` lines shrank the tail and could drop a failure the old
+  tail showed.
+- An unbounded result for a small budget (18,085 chars at `chars=40`).
+- A fixed 3-line detail window that missed TAP's error block.
+Prepending to the unchanged tail and keeping detail by indentation fixed all three. The
+first version was measured failing the noisy and small-budget cases; the final version
+passes them.
+
+Tests: 12 in `graphs/autobuild/tool/test/gate-failure-excerpt.test.mjs`. They include:
+- the overnight shape through `runGate` and `finishCodexBuilder`;
+- the `autobuild test`, `mark-passed` and `check` commands, a case that fails on the old code;
+- a check that the old tail is always contained, across noisy, huge-line and small-budget
+  inputs;
+- passing lines that name FAIL;
+- real `node --test` TAP output.
+
+That last fixture must drop `NODE_TEST_CONTEXT`: inherited, it makes the child report to
+the parent runner and print only 182 bytes. Against a stub equal to the old tail, 5 of the
+first 7 tests failed.
+
+On a real failing `scripts/test.sh` run (255,404 chars, 9 failures, then 142 passing
+autobuild tests), the old feedback showed 0 of the 9 failures. The new feedback shows all
+9 with their diffs, in 8,099 chars, and still contains the old tail.
+
+Bug hunt (PR #47, discover, lenses logic/regression/security/contract/errors) found 0
+findings. Its disposition was manual_review because the errors lens left one area
+uncovered: quadratic regex backtracking. The security hunter had raised the same thing
+and it was dropped at confidence 58, just under the floor of 60. Measured, it was
+real: the unanchored summary pattern `\b[A-Z][A-Z-]*: FAIL\b` restarts at every letter
+of an `A-A-A-…` line. 80k chars took 1.3 s, and a 1 MB line took 199 s, which would hang
+the gate while it built feedback. It was replaced with the fixed-width `[A-Z]: FAIL\b`,
+which matches the same summaries (TEST/VALIDATE/GATE/SEO-CHECK). A regression test was
+added (1 MB line under 2 s), and every alternative was timed at 10 ms or less on 1 MB
+worst cases.
+
+The re-hunt at ab3712f reproduced one finding, F1 (MEDIUM, regression lens). The Claude
+stop hook caps its block reason at 9000 chars with `reason.slice(0, 9000)`. The longer
+excerpt (up to about 9.1k) plus the hook's preamble went over that cap, so the end of the
+output was cut, the part this change promises to keep. The 9000 cap is kept. Over it, the
+hook now drops the middle instead of the end: the first 1500 chars (the instructions)
+and the last ~7.4k (the end of the gate output) stay.
+`graphs/autobuild/tool/test/stop-gate-reason-cap.test.mjs`, adapted from the hunt's
+reproduction, fails without the fix (the reason ended at passing check 190) and passes
+with it.
+
+Not changed:
+- Overnight launches that allow 1-2 iterations, and `noProgressLimit: 2`, both end a run
+  after one or two failed attempts. The loop already retries a failed gate with feedback
+  while those limits allow.
+- Pre-existing failures. On 5a8b7f6, 9 workflow tests failed locally with and without
+  this change, and none of their files import gate.mjs or cli.mjs. main's CI was red
+  there too. #48 (entry 46) fixed 3 of them. After rebasing onto 3346943 (green CI), 6
+  still fail only locally: run-placement 2, run-git-discovery 1, run-tracking 3. Their
+  cause is untested.
+
 ## 46. main CI repair after the PR-first merge (2026-11-11)
 
 PR #46 merged as 5a8b7f6 with CI red. #47's gate excerpt showed the hidden failures,

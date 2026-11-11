@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG_FILE, findProjectRoot, loadConfig, statePath } from "./config.mjs";
 import { blockedClosure, countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures } from "./features.mjs";
-import { runGate } from "./gate.mjs";
+import { failureExcerpt, runGate } from "./gate.mjs";
 import { runLoop } from "./loop.mjs";
 import { huntStatus } from "./bughunt.mjs";
 import { readSession } from "./session.mjs";
@@ -101,7 +101,7 @@ export async function main(argv = process.argv.slice(2)) {
       let ok = true;
       for (const step of runFeatureTests(config, args.map((id) => featureById(doc, id)))) {
         console.log(`\n=== ${step.name}: ${step.ok ? "PASS" : "FAIL"} (${Math.round(step.ms / 1000)}s)`);
-        console.log(tail(step.output, step.ok ? 1500 : 12000));
+        console.log(step.ok ? tail(step.output, 1500) : failureExcerpt(step.output, 12000));
         ok &&= step.ok;
       }
       return ok ? 0 : 1;
@@ -142,7 +142,7 @@ export async function main(argv = process.argv.slice(2)) {
       for (const step of runFeatureTests(config, [feature])) {
         console.log(`=== ${step.name}: ${step.ok ? "PASS" : "FAIL"}`);
         if (!step.ok) {
-          console.log(tail(step.output, 12000));
+          console.log(failureExcerpt(step.output, 12000));
           console.error(`${id}: acceptance test failed; passes stays false.`);
           return 1;
         }
