@@ -1348,3 +1348,88 @@ No sysctl or AppArmor policy was disabled and no test or assertion was skipped.
 This supersedes the prior pending-amendment status only. CI success must still
 be observed on the new commit before merge. The runner retirement date remains
 April17,2027; a later compatible maintained image is still needed.
+
+## OC-01 — Windows WSL discovery comparison correction (2026-11-11)
+
+- Resumed from clean candidate `5743cde73892ba432bdac07411affaa7d5d1184f`.
+  The unchanged external host `b31a8514208b03fdcfc488e618e7eff6516a796d` ran
+  `autobuild check --feature OC-01 --base 5743cde73892ba432bdac07411affaa7d5d1184f --json`: all ten steps passed, exit 0.
+  This first pass covers the pre-correction revision, not the subsequent edits.
+- Actual read-only Windows preflight found the installed security-audit link
+  reported `wrong-target` with a `\\wsl$` installation root and `linked` with
+  the equivalent `\\wsl.localhost` root. Independent review also identified
+  that Windows relative-path comparison folds case in WSL Linux path components.
+- Catalog equality and containment now share comparison-only handling for the
+  two reserved WSL UNC hosts, including extended UNC spelling. Distribution and
+  Linux path components remain exact; filesystem reads keep their original
+  resolved paths. No device/inode identity inference or arbitrary host aliasing.
+  Microsoft documents these WSL host spellings in its
+  [release notes](https://learn.microsoft.com/en-us/windows/wsl/release-notes#build-21354).
+- Focused validation: eight unchanged OC-01 acceptance cases, six new pure path
+  groups, sixteen existing catalog groups and fourteen CLI groups passed (44
+  checks, exit 0). The six pure groups also passed with Windows Node 24.22.1.
+  Both actual Windows root spellings now produce `linked`, readiness `unknown`,
+  and exit 2 for the still-uncertified security-audit offering. A syntax error in
+  two new trailing-backslash test literals was corrected before the passing run.
+- Independent `catalog_review` review found no actionable issues in the correction.
+  Tracked and explicitly named new files passed the unchanged secret scanner;
+  `git diff --check` passed. Full host revalidation of the correction follows.
+- Evidence: `/var/tmp/pandastack-oc01-host-check-zl5nsw9a/` contains original host
+  output, Windows before/after observations, focused output and reconciliation.
+  No model worker, provider fallback, target audit, blocked reproduction, gate
+  change, feature flag or commit was made by this correction. Full native audit
+  execution and all-offering parity remain incomplete.
+- Final corrected-candidate host revalidation: **all ten steps passed**, exit 0.
+  Recorded implementation/test/progress hashes stayed unchanged throughout the
+  check. Evidence: `corrected-run.json` and `corrected-gate.jsonl` in the directory
+  above. This final note was appended afterward; implementation and test bytes
+  remain the verified bytes. Host feature acceptance/commit remains pending.
+
+## OC-01 — Inventory every offering and distinguish visibility from native readiness
+
+Autobuild resume, 2026-11-11: retained the incoming OC-01 correction in
+`catalog.mjs`, the new `catalog-paths.mjs`, and its six new workflow-harness
+test groups. No additional source change was needed after focused verification
+and local review. Reserved WSL host aliases share comparison keys; distribution
+and Linux path components remain case-sensitive. Reads retain their resolved
+paths, and visibility never certifies native readiness. No installer changes.
+
+Exact checks in this session:
+
+```sh
+node acceptance/native-runtime/oc-01-catalog.test.mjs
+# exit 0; 8 passed, 0 failed
+node --input-type=module -e 'await import("./tests/native-catalog-paths.test.mjs"); await import("./tests/native-offering-catalog.test.mjs"); await import("./tests/native-preflight-cli.test.mjs"); const {summary}=await import("./scripts/workflow-harness.mjs"); const {pass,fail}=summary(); console.log(`OC-01 FOCUSED: ${pass} passed, ${fail} failed`); process.exitCode=fail?1:0'
+# exit 0; OC-01 FOCUSED: 36 passed, 0 failed
+```
+
+The six pure comparison groups, sixteen discovery/validation groups and fourteen
+offline CLI groups plus eight acceptance cases establish 44 passing checks.
+This session did not repeat the earlier Windows runtime observations or full
+host gates. The supplied previous baseline feedback ends in `TEST: FAIL` but
+omits the failing assertion; `.harness/security-audit/codex-feedback.txt` has
+the same truncated detail. That failure is not claimed resolved or waived.
+The older saved corrected host check records `ok: true`, which is historical
+evidence only, not a replacement for the next host gate.
+
+Local sanity review: data flow, edge/error handling, static-path security,
+consistency and selected implementation completeness PASS within the offline
+contract. The requested independent Explore review could not start:
+`Unknown model gpt-6.1-sol`. No fallback agent/provider was launched; independent
+review remains host-owned. Decision: retain the passing correction and report
+the missing baseline failure detail rather than alter unrelated frozen code.
+
+Limits remain unchanged: no target application execution or changes, provider
+calls, account/auth/billing inference, runtime certification, hostile containment
+or filesystem-race evidence. No blocked reproduction, broader feature, pinned
+host edit, frozen-file change, feature flag, staging or commit. Full gates and
+final acceptance remain with the external host.
+
+Final hygiene: `bash scripts/check-secrets.sh` and
+`bash scripts/check-secrets.sh core/skills/native-runtime/catalog-paths.mjs tests/native-catalog-paths.test.mjs`
+each exited 0 with `check-secrets: clean`, covering tracked files and explicitly
+both new untracked source/test files. `git diff --check`,
+`git diff --cached --exit-code`, and `node --check` on all three changed/new
+source/test files exited 0. Changed inventory remains the four incoming paths:
+this progress log, `catalog.mjs`, `catalog-paths.mjs`, and
+`tests/native-catalog-paths.test.mjs`. This session only appended this log entry.

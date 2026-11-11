@@ -204,7 +204,7 @@
       ],
       "test": "acceptance/native-runtime/oc-01-catalog.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SA-02d",
