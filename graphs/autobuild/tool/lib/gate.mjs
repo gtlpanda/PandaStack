@@ -81,6 +81,47 @@ export function gitControlChanges(config, before) {
   return [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((file) => before[file] !== after[file]).sort();
 }
 
+const EXCERPT_CHARS = 6000;
+const DETAIL_LINES = 12; // at most this many detail lines kept under one failure line
+// "  FAIL x" (this repo's harnesses), "FAIL  x" (validate.sh), "FAILED x" (pytest), "--- FAIL:" (go),
+// "not ok" (TAP), "✖" (node's spec reporter), "TEST: FAIL"-style summaries, and thrown errors.
+const FAILURE_LINE = /^\s*(FAIL(ED)?\b|--- FAIL:|not ok\b|✖|\w*Error\b)|\b[A-Z][A-Z-]*: FAIL\b/;
+// A passing line can name a failure ("ok   prints TEST: FAIL when…"); it is never one.
+const PASSING_LINE = /^\s*(ok\b|✔)/;
+const indentOf = (line) => line.length - line.trimStart().length;
+
+/** Failure lines, each with the more-indented (or blank) lines under it: the message, diff or TAP block. */
+function failureLines(lines) {
+  const kept = new Set();
+  lines.forEach((line, index) => {
+    if (PASSING_LINE.test(line) || !FAILURE_LINE.test(line)) return;
+    kept.add(index);
+    for (let next = index + 1; next < lines.length && next <= index + DETAIL_LINES; next += 1) {
+      const detail = lines[next];
+      if (PASSING_LINE.test(detail) || (detail.trim() !== "" && indentOf(detail) <= indentOf(line))) break;
+      kept.add(next);
+    }
+  });
+  const ordered = [...kept].sort((a, b) => a - b);
+  return ordered.map((index, i) => (i > 0 && index !== ordered[i - 1] + 1 ? `…\n${lines[index]}` : lines[index])).join("\n");
+}
+
+/**
+ * What a failed gate step shows the next session and the loop log: the end of the output (exactly
+ * what a plain tail showed), preceded by the failure lines that came before that end. A multi-suite
+ * gate prints its failing suite first and a long passing suite last, so the end alone loses the
+ * failure. The result always contains the plain tail, so it never shows less than before.
+ */
+export function failureExcerpt(output, chars = EXCERPT_CHARS) {
+  if (output.length <= chars) return output;
+  const end = tail(output, chars);
+  const earlier = failureLines(output.slice(0, output.length - chars).split("\n"));
+  if (earlier === "") return end;
+  const budget = Math.floor(chars / 2);
+  const shown = earlier.length > budget ? `${earlier.slice(0, budget)}\n… (more failure lines omitted)` : earlier;
+  return `Failure lines earlier in the output:\n${shown}\n\nEnd of output:\n${end}`;
+}
+
 export function runGate(config, { featureId = null, baseSha = null, failFast = false, skipBrowser = false, phase = "full" } = {}) {
   if (!["full", "commit"].includes(phase)) throw new Error("Unknown gate phase");
   if (phase === "commit" && config.deliveryMode !== "pr-first") throw new Error("Commit gate requires pr-first deliveryMode");
@@ -102,7 +143,7 @@ export function runGate(config, { featureId = null, baseSha = null, failFast = f
     feature: featureId,
     phase,
     deferred,
-    steps: steps.map((step) => ({ name: step.name, ok: step.ok, seconds: Math.round((step.ms ?? 0) / 1000), tail: step.ok ? "" : tail(step.output ?? "", 6000) })),
+    steps: steps.map((step) => ({ name: step.name, ok: step.ok, seconds: Math.round((step.ms ?? 0) / 1000), tail: step.ok ? "" : failureExcerpt(step.output ?? "") })),
   });
 
   if (baseSha) {
