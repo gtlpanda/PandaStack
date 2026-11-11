@@ -204,7 +204,7 @@
       ],
       "test": "acceptance/native-runtime/oc-01-catalog.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SA-02d",
@@ -223,7 +223,7 @@
       ],
       "test": "acceptance/native-runtime/sa-02d-native-checkpoints.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SA-LT01",
@@ -240,6 +240,65 @@
         "Actual criticInput, graph prompt and partition/global planner use shared owner context, bound before hash and unchanged500000-byte measurement."
       ],
       "test": "acceptance/security-audit/sa-lt01-feedback.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "SA-RV01",
+      "title": "Require review when historical selected backlog is unavailable",
+      "description": "Correct review-baseline accounting conservatively: missing or malformed historical selected backlog leaves every current passing feature unreviewed. Preserve old review SHA, known valid before-set behavior, current passing semantics, host gates and review retry/commit rules. Read spec/contracts/security-audit-execution-restrictions.md; no blocked reproduction or provider fallback.",
+      "contract": "spec/contracts/security-audit-review-baseline.md",
+      "dependencies": [
+        "SA-LT01"
+      ],
+      "acceptance": [
+        "All 21 frozen ordinary acceptance cases pass using the existing fake Codex transport and owning loop.",
+        "Missing, invalid or structurally unusable historical backlog counts all current passing work; a valid historical snapshot retains set difference by ID.",
+        "Actual startup/final review uses the original SHA range; a new host-gated review acknowledgment precedes the existing clean fake hunt and Done.",
+        "Two unacknowledged final reviews retain the range and stop with exit13; explicit finalReview:false and valid-history controls remain unchanged.",
+        "Preserve all existing frozen tests/gates and blocked capture, race and F2 shared-repository Git ownership/trust reproduction restrictions."
+      ],
+      "test": "acceptance/security-audit/review-baseline-correction.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "SA-RF01",
+      "title": "Persist provider refusal and stop automatic hunt redispatch",
+      "description": "Classify only trusted top-level refusal protocol; stop automatic retries in hunt and shared ordinary-loop consumers. Persist a repository-wide immutable refusal receipt and honest partial status/report. Add explicit live-owner saved-evidence adoption with exact artifact hashes; no actual incident adoption during implementation. Read spec/contracts/security-audit-execution-restrictions.md; no blocked reproduction, provider fallback, override or replay.",
+      "contract": "spec/contracts/security-audit-provider-refusal.md",
+      "dependencies": [
+        "SA-RV01"
+      ],
+      "acceptance": [
+        "Frozen inert protocol acceptance passes with top-level classification controls and terminal builder/review/probe handling; tool or agent text cannot classify refusal.",
+        "Native entry persists first refusal and blocks all later hunt preparation/dispatch, including changed head/run identity, while separately selected ordinary builds remain runnable.",
+        "Partial status honestly retains admitted completed/pending/failed/blocked work, provisional findings and coverage; report freshness and persistence failures never clear refusal or advise deleting the stop.",
+        "Explicit adoption requires a live branded repository owner and independently matched intake/protocol/result hashes and identities; generic saved fixtures reject invalid bindings and preserve original bytes with zero dispatch.",
+        "Preserve all existing frozen gates/tests, source-only evidence limits and every prohibited capture, race and F2 shared-repository Git ownership/trust reproduction."
+      ],
+      "test": "acceptance/security-audit/provider-refusal.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "SA-AR01",
+      "title": "Recover saved native audit application after ordinary I/O failure",
+      "description": "Distinguish stage-owned completed semantic rejection/escalation from escaping operational failures using private identity. Preserve saved-result replay, original Refusal messages, original error causes and owning spend/report/application behavior. Execution follows SA-RF01; this slice does not certify graph-returned provider-failure provenance or implement native-audit provider-refusal propagation. Read spec/contracts/security-audit-execution-restrictions.md; no original F1 verification, blocked reproduction or provider fallback.",
+      "contract": "spec/contracts/security-audit-application-recovery.md",
+      "dependencies": [
+        "SA-02d",
+        "SA-LT01",
+        "SA-RF01"
+      ],
+      "acceptance": [
+        "All ten frozen ordinary cases pass using actual existing owners and deterministic in-memory callbacks; exact fixture-owned one-shot synchronous I/O only.",
+        "Private completedStageRejection identity distinguishes completed semantic/escalation branches, including fresh validate/verify all-null rounds, from ordinary errors and spoofed/hooked values.",
+        "Operational read/write failure after saved valid result leaves no rejected receipt; same-result application recovery preserves invocation, spend and callback/row counts and publishes a current partial report.",
+        "Receipt-write failure retains the original owner-branded rejection as cause under APPLICATION_RECEIPT_UNCONFIRMED; replay consumes no extra semantic attempt or provider call.",
+        "Preserve capture/receipt bindings, existing refusal messages, fatal cleanup precedence, frozen tests/gates and all blocked reproduction restrictions; graph-returned provider-failure provenance remains separately unresolved."
+      ],
+      "test": "acceptance/security-audit/sa-ar01-application-recovery.test.mjs",
       "testKind": "node",
       "passes": false
     }

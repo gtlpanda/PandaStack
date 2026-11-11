@@ -127,7 +127,10 @@ function runScope({ deadlineMs, nowMs, signal, onEvent, cap }) {
     try {
       const value = await pending
       if (!cleanup) ensure()
-      if (kind === 'reserve' && value?.state === 'dispatch') {
+      // Keep ownership linked until the leaf validates the reply and finishes.
+      // Reading state here would invoke unvalidated accessors/Proxy traps.
+      // Non-dispatch replies release this listener in the same leaf finally.
+      if (kind === 'reserve') {
         const cancel = () => op.abort()
         controller.signal.addEventListener('abort', cancel, { once: true })
         lifetimes.set(callId, () => controller.signal.removeEventListener('abort', cancel))

@@ -85,7 +85,7 @@ export async function runBughunt(config, options) {
     // Acquire before intake/prepare can reset analysis or repair worktrees.
     return await withNativeRepoLock(config.root, lockToken => runBughuntLocked(config, { ...options, lockToken }));
   } catch (error) {
-    if (error.code !== "HUNT_LOCKED") throw error;
+    if (!["HUNT_LOCKED", "NATIVE_HUNT_REFUSED", "REFUSAL_STATE_INVALID"].includes(error.code)) throw error;
     options.log(`bug hunt: ${error.message}`);
     return HUNT_EXIT;
   }
@@ -159,8 +159,9 @@ async function runBughuntLocked(config, { log, runId, stopped = () => false, loc
   const prompt = bughuntPrompt({ repo, stateDir: prep.stateDir, configDir: CONFIG_DIR, branch: prep.branch, label: "an autobuild run", scope: `the branch ${target}` });
   log(`bug hunt: /bughunt --fix over ${target} against ${base} (backend ${config.backend}; state ${prep.stateDir})`);
   const control = gitControlDigest(config);
+  let nativeResult;
   const code = config.backend === "codex"
-    ? (await runNativeHunt({ repo, tree: path.join(prep.stateDir, "tree"), configDir: CONFIG_DIR,
+    ? (nativeResult = await runNativeHunt({ repo, tree: path.join(prep.stateDir, "tree"), configDir: CONFIG_DIR,
         stateDir: prep.stateDir, mode: "fix", fixBranch: prep.branch, config, log, runId, stopped, lockToken })).code
     : await runClaude({
         bin: config.claudeBin, repo, logFile,
@@ -173,6 +174,10 @@ async function runBughuntLocked(config, { log, runId, stopped = () => false, loc
   if (tampered.length) {
     log(keep(`bug hunt: GIT CONTROL FILES CHANGED (hooks, config or info under .git) — stopping for a human:\n${tampered.join("\n")}`));
     return 4;
+  }
+  if (nativeResult?.outcome?.kind === 'provider_refusal') {
+    log(`bug hunt: provider_refusal/nonretryable; Provider declined this work; automatic retry is blocked. status=${nativeResult.outcome.statusFile}; report=${nativeResult.outcome.reportFile}. Separately selected ordinary builds/static review remain independent work.`);
+    return HUNT_EXIT;
   }
   if (stopped()) {
     log(keep("bug hunt: stopped by request"));

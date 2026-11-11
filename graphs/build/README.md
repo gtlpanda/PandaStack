@@ -15,7 +15,17 @@ slice (opt-in, never in `scripts/test.sh`). The first live end-to-end build
 (retro 24) landed all 7 slices of a reading-list CLI on their first attempt,
 then passed the final QA: 1 h 40 min and $44 for the build.
 
-## Graph
+## PR-first finalization
+
+With `"deliveryMode": "pr-first"` in the repository's `autobuild.json`, all
+per-slice checks still apply. Once slices land, the driver defers final QA and
+hunt, opens a draft PR, and reports `awaiting_review` with pending checks.
+`--no-pr` instead reports `ready_for_pr` without pushing. Full regressions and
+review must still be completed before ordinary merge; neither status means done.
+This mode does not add a Codex backend to this Claude-based driver.
+See the [PR-first guide](../../docs/pr-first-delivery.md).
+
+## Graph (full mode)
 
 Code routes; the session is a leaf. The rules for the next slice, the ledger,
 and the brakes are `backlog.mjs`'s.

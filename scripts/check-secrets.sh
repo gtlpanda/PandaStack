@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # check-secrets.sh — grep for keys and tokens.
 #   scripts/check-secrets.sh            scan all git-tracked files (or all files if not a repo)
+#   scripts/check-secrets.sh --worktree scan extant tracked and untracked nonignored files
 #   scripts/check-secrets.sh --staged   scan staged content only (used by the pre-commit hook)
 #   scripts/check-secrets.sh FILE...    scan the given files
 # Exit 1 on any hit, and on any file it could not read (fail closed).
@@ -30,15 +31,48 @@ ALLOW_MARK='allow-secret'   # append this comment to a line to whitelist it (e.g
 
 hits=0
 scan_stream() {  # scan_stream <label>; content on stdin
-  local label="$1" out
-  out="$(grep -nEIi "$REGEX" | grep -vE "$PLACEHOLDERS" || true)"
+  local label="$1" out status
+  if out="$(grep -nEIi "$REGEX")"; then
+    :
+  else
+    status=$?
+    if [ "$status" -eq 1 ]; then return 0; fi
+    echo "SECRET? $label: could not scan patterns; refusing" >&2
+    hits=$((hits + 1)); return 0
+  fi
+  if out="$(printf '%s\n' "$out" | grep -vE "$PLACEHOLDERS")"; then
+    :
+  else
+    status=$?
+    if [ "$status" -eq 1 ]; then return 0; fi
+    echo "SECRET? $label: could not filter placeholders; refusing" >&2
+    hits=$((hits + 1)); return 0
+  fi
   if [ -n "$out" ]; then
     printf 'SECRET? %s\n%s\n' "$label" "$out" | sed '2,$s/^/  /'
     hits=$((hits + 1))
   fi
 }
 
-if [ "${1:-}" = "--staged" ]; then
+if [ "${1:-}" = "--worktree" ]; then
+  tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
+  # Capture the list first so a failed Git query cannot become an empty clean scan.
+  if ! git -c core.fsmonitor=false ls-files --cached --others --exclude-standard -z > "$tmp"; then
+    echo "check-secrets: could not enumerate working-tree files; refusing" >&2
+    exit 1
+  fi
+  while IFS= read -r -d '' f; do
+    if [ ! -e "$f" ] && [ ! -L "$f" ]; then
+      # An indexed file may have been intentionally deleted before staging.
+      if git -c core.fsmonitor=false ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then continue; fi
+      echo "SECRET? $f: listed file is missing"; hits=$((hits + 1)); continue
+    fi
+    if [ -L "$f" ] || [ ! -f "$f" ] || [ ! -r "$f" ]; then
+      echo "SECRET? $f: not a readable regular file"; hits=$((hits + 1)); continue
+    fi
+    scan_stream "$f" < "$f"
+  done < "$tmp"
+elif [ "${1:-}" = "--staged" ]; then
   tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
   while IFS= read -r -d '' f; do
     [ -n "$f" ] || continue

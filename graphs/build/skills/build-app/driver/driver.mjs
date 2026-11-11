@@ -31,6 +31,7 @@ import {
   validateBacklog, ledgerPath, readLedger, writeLedger, nextSlice, frozenFiles, recordOutcome, brake, sliceState, resume, unblock,
 } from '../../../../../core/skills/backlog/backlog.mjs'
 import { defaultBase, finalQaPrompt, qaReport, prBody, pushAndOpenPr } from './finish.mjs'
+import { isPrFirstDelivery } from '../../../../hunt/skills/bughunt/gate.mjs'
 import { prepareHunt, readHunt, landHunt, keepAttempt, bughuntPrompt, bughuntLine } from '../../../../hunt/skills/bughunt/land.mjs'
 import { parseResetTime, planLimitWait } from './limits.mjs'
 import { buildEnv, git, run, isOurs } from './proc.mjs'
@@ -249,6 +250,20 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg) {
   let ledger
   const finishRun = async () => {
     const base = defaultBase(repo)
+    if (isPrFirstDelivery(repo)) {
+      const pendingChecks = ['full-regressions', 'final-qa', 'bughunt', 'review']
+      const pending = 'Full regressions, final QA, bug hunt and review are pending at the PR/merge stage; nothing is merged or deployed.'
+      if (noPr) return end(EXIT.done, 'ready_for_pr', `Every slice landed on ${integration}; --no-pr, so nothing was pushed. ${pending}`, { pendingChecks })
+      let pr
+      try {
+        pr = pushAndOpenPr({ repo, integration, base, gh: cfg.gh, draft: true,
+          title: `${app}: draft built from the backlog`,
+          body: prBody(backlog, ledger, 'Pending: final QA and full regressions must run in the PR before merge.', 'Pending: bug hunt and review must complete before merge.') })
+      } catch (e) {
+        return end(EXIT.pr, 'failed', `Every slice landed, but draft PR delivery failed: ${e.message}. ${pending}`, { pendingChecks })
+      }
+      return end(EXIT.done, 'awaiting_review', `Draft PR is open: ${pr}. ${pending}`, { pr, draft: true, pendingChecks })
+    }
     const branch = 'slice/final'
     log(`every slice landed on ${integration}; final QA over the whole branch against ${base}`)
     const stamp = freshBranch('final', branch)

@@ -15,7 +15,7 @@
 // also run the command themselves (`! gh pr merge ...`), which no hook sees.
 // It allows any call it cannot read (not a Bash call, bad input); once a
 // command matches, anything it cannot resolve is denied with the reason.
-import { readFileSync, existsSync, realpathSync } from 'node:fs'
+import { readFileSync, existsSync, realpathSync, lstatSync } from 'node:fs'
 import { resolve, isAbsolute } from 'node:path'
 import { homedir } from 'node:os'
 import { spawnSync } from 'node:child_process'
@@ -94,6 +94,22 @@ function branchTips(dir, branch) {
   return [...new Set([commitOf(dir, `refs/heads/${branch}`), commitOf(dir, `refs/remotes/origin/${branch}`)].filter(Boolean))]
 }
 
+// Opt-in affects draft creation only, never review evidence or release authority.
+export function isPrFirstDelivery(dir) {
+  const root = git(dir, ['rev-parse', '--show-toplevel'])
+  if (!root) return false
+  try {
+    const file = resolve(root, 'autobuild.json'), stat = lstatSync(file)
+    if (!stat.isFile() || stat.size > 1024 * 1024) return false
+    return JSON.parse(readFileSync(file, 'utf8'))?.deliveryMode === 'pr-first'
+  } catch { return false }
+}
+
+function prFirstDraft(dir, flags) {
+  const draft = [flags['--draft'], flags['-d']].filter(v => v !== undefined)
+  return draft.length > 0 && draft.every(v => v === true || v === 'true') && isPrFirstDelivery(dir)
+}
+
 function prCreate(dir, args, ghRepo) {
   const { flags } = parseFlags(args, [...GH_GLOBAL_VALUE, ...PR_CREATE_VALUE])
   if (flags['--dry-run'] !== undefined || flags['-w'] !== undefined || flags['--web'] !== undefined) return null
@@ -114,6 +130,15 @@ function prCreate(dir, args, ghRepo) {
   let base = flag(flags, '-B', '--base')
   if (typeof base === 'string' && unexpanded(base)) return deny(`cannot tell which branch \`--base ${base}\` is.`, LITERAL)
   base = typeof base === 'string' ? (commitOf(dir, `refs/remotes/origin/${base}`) ? `origin/${base}` : base) : `origin/${defaultBranches(dir)[0]}`
+  if (prFirstDraft(dir, flags)) {
+    // Conflicting aliases cannot select a different repo/head/base than the one checked.
+    for (const names of [GH_GLOBAL_VALUE, ['-H', '--head'], ['-B', '--base']]) {
+      const values = names.filter(n => flags[n] !== undefined).map(n => flags[n])
+      if (new Set(values).size > 1) return deny('conflicting repository/head/base flags cannot be checked.', 'Use one literal value for each scope.')
+    }
+    if (!commitOf(dir, base)) return deny(`the base ${base} is not in this clone, so the gate cannot tell what this draft PR contains.`, 'Fetch the base branch first.')
+    return null // Review, full regressions and hunt remain pending at the PR/merge stage.
+  }
   const statuses = tips.map(tip => ({ tip, s: reviewStatus(dir, tip, { base }) }))
   const ok = statuses.filter(x => x.s.docsOnly || x.s.hunted).map(x => x.tip)
   for (const { tip, s } of statuses) {

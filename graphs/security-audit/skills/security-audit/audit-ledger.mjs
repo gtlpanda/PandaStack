@@ -21,7 +21,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CARRIED, REASONS, Usage, advanceState, appendEvent, countStatuses, formatNext, git, isCommitId, loadRun, markIncomplete, nextStep, readJson, refuse, waveAllowance, writeJson } from './audit-run.mjs'
 import { BlockError, companions, ordinary, resolve as resolveBlock } from './blocks.mjs'
-import { QUICK_DEFERRED, QUICK_SUBSYSTEM_REF, rulesOf } from './audit-profile.mjs'
+import { PROFILES, QUICK_DEFERRED, QUICK_SUBSYSTEM_REF, rulesOf } from './audit-profile.mjs'
 import { canonicalCoverageId, isSafeRelativePath, validateFindingsFile, validateLedgerDocument, validateLedgerFile } from './upstream.mjs'
 
 import { json as inertJSON, fields as inertFields, exact as exactFields, fail as invalidData } from '../../../../core/skills/native-runtime/boundary.mjs'
@@ -247,6 +247,7 @@ export function inspectUnitInputs(inputs, ctx, options) {
   if (!['seed', 'mint'].includes(opts.kind) || !Array.isArray(rows) || rows.length > 1000 ||
     !isObj(context) || !isText(context.runDir) || !Array.isArray(context.scope) ||
     !context.scope.every(isText) || !isText(context.priorStatus) ||
+    (Object.hasOwn(context, 'profile') && !PROFILES.includes(context.profile)) ||
     Object.keys(context).some(k => !['runDir', 'scope', 'priorStatus', 'profile', 'skipPathCheck'].includes(k)) ||
     (Object.hasOwn(context, 'skipPathCheck') && typeof context.skipPathCheck !== 'boolean')) invalidData('INVALID_INPUT')
   const results = rows.map((input, index) => {

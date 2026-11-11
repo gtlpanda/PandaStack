@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Stop hook for autobuild loop sessions. Inert unless AUTOBUILD_ACTIVE=1 (or HARNESS_ACTIVE=1).
 //   - review sessions, or a new `BLOCKER <ID>:` line for the current feature → allow
-//   - otherwise run the full gate (fail fast):
+//   - otherwise run the selected full/PR-first commit gate (fail fast):
 //       fails                       → block, with the failure output
 //       passes, bookkeeping missing → block, with what is missing
 //         (passes:true via `autobuild mark-passed`, a progress entry, a feat(<ID>) commit, a clean tree)
@@ -56,9 +56,9 @@ if (session.stopAttempts > maxBlocks) {
 }
 
 const started = Date.now();
-const summary = runGate(config, { featureId: id, baseSha: session.baseSha, failFast: true });
+const summary = runGate(config, { featureId: id, baseSha: session.baseSha, failFast: true, phase: config.deliveryMode === "pr-first" ? "commit" : "full" });
 const seconds = Math.round((Date.now() - started) / 1000);
-session.lastGate = { at: new Date().toISOString(), ok: summary.ok, seconds, steps: summary.steps.map(({ name, ok, seconds: s }) => ({ name, ok, seconds: s })) };
+session.lastGate = { at: new Date().toISOString(), ok: summary.ok, seconds, phase: summary.phase, deferred: summary.deferred, steps: summary.steps.map(({ name, ok, seconds: s }) => ({ name, ok, seconds: s })) };
 writeSession(config, session);
 
 if (!summary.ok) {
@@ -82,5 +82,5 @@ const status = git(config, ["status", "--porcelain"]);
 if (status.output.trim() !== "") missing.push(`The working tree is not clean; commit everything for ${id}:\n${status.output.trim().split("\n").slice(0, 30).join("\n")}`);
 const head = git(config, ["log", "-1", "--format=%s"]);
 if (!head.output.trim().startsWith(`feat(${id}):`)) missing.push(`The last commit must be "feat(${id}): …" (it is "${head.output.trim()}").`);
-if (missing.length > 0) block(`Stop gate for ${id}: tests pass, but the feature is not finished:\n- ${missing.join("\n- ")}`);
+if (missing.length > 0) block(`Stop ${summary.phase} gate for ${id}: focused checks pass${summary.phase === "commit" ? "; PR full gates/review remain pending" : ""}, but the feature is not finished:\n- ${missing.join("\n- ")}`);
 allow();

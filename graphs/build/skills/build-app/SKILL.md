@@ -24,6 +24,15 @@ absolute paths section 1 finds in place of `REPO`, `STATE`, and `<app>` in
 every command below; they are placeholders, not shell variables. The driver
 is `"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/build-app/driver/driver.mjs"`.
 
+## PR-first delivery exception
+
+When the repository's `autobuild.json` opts into `"deliveryMode": "pr-first"`,
+the driver keeps each slice's checks but defers final QA, full regressions and
+hunt to the PR stage. It opens a draft PR with `awaiting_review`, or returns
+`ready_for_pr` without pushing for `--no-pr`. These statuses are incomplete
+review, never merge approval. This exception changes the finalization order
+below; full mode remains unchanged. Provider refusals are not retried.
+
 ## 1. Which repo and which app
 
 1. REPO is `git rev-parse --show-toplevel`; not a repo: stop and say so.

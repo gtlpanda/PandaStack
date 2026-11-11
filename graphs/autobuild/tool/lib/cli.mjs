@@ -19,19 +19,20 @@ const HOME = path.resolve(import.meta.dirname, "..");
 
 const HELP = `autobuild — autonomous, test-gated build loop for Claude Code or Codex
 
-  autobuild run [--backend claude|codex] [--model MODEL] [--max-iterations N]   run the loop (one headless session per feature)
+  autobuild run [--backend claude|codex] [--model MODEL] [--max-iterations N] [--delivery-mode full|pr-first]   run the loop (one headless session per feature)
   autobuild next                       print the feature the next session builds
   autobuild status                     passing count, next feature, blockers, last log lines
   autobuild test <ID> [ID...]          run features' frozen acceptance tests
-  autobuild check [--feature ID] [--base SHA] [--fail-fast] [--json] [--skip-browser]
+  autobuild check [--phase full|commit] [--feature ID] [--base SHA] [--fail-fast] [--json] [--skip-browser]
                                        run the full gate
   autobuild mark-passed <ID>           rerun a feature's test; set passes:true only if it passes
   autobuild init [--backend claude|codex] scaffold autobuild.json, PROGRESS.md and the CLAUDE.md rules
   autobuild selftest                   test the kit (limit parsing, guard) against this machine
 
-Exit codes of \`run\`: 0 done, 2 no progress, 3 blocked, 4 frozen files changed, 5 preflight,
+Exit codes of \`run\`: 0 verified completion or PR-first handoff, 2 no progress, 3 blocked, 4 frozen files changed, 5 preflight,
 6 total budget, 7 max iterations, 8 usage limit resets too far away, 9 billing, 10 auth,
-11 another loop running, 12 the bug hunt needs a human, 13 the final review did not finish, 130 interrupted.
+11 another loop running, 12 the bug hunt needs a human, 13 the final review did not finish,
+14 managed decision stopped, 15 provider refusal (nonretryable), 130 interrupted.
 Docs: ${path.join(HOME, "README.md")}`;
 
 function flag(args, name) {
@@ -47,7 +48,7 @@ export async function main(argv = process.argv.slice(2)) {
   const [command, ...args] = argv;
   switch (command) {
     case "run": {
-      const config = loadConfig(undefined, process.env, { backend: value(args, "--backend"), model: value(args, "--model") });
+      const config = loadConfig(undefined, process.env, { backend: value(args, "--backend"), model: value(args, "--model"), deliveryMode: value(args, "--delivery-mode") });
       const max = value(args, "--max-iterations");
       if (max) config.limits.maxIterations = Number(max);
       return runLoop(config);
@@ -78,6 +79,7 @@ export async function main(argv = process.argv.slice(2)) {
       const blockers = readBlockers(readProgress(config));
       const next = nextFeature(doc, blockers);
       console.log(`${countPassing(doc)}/${doc.features.length} features passing`);
+      console.log(`delivery: ${config.deliveryMode}${config.deliveryMode === "pr-first" ? " (full PR checks and review pending; not merge-ready)" : ""}`);
       console.log(`next: ${next ? `${next.id} — ${next.title}` : "none"}`);
       const review = huntStatus(config);
       console.log(`review coverage: ${review.hunted ? review.disposition : review.docsOnly ? "docs only" : "pending"}${review.dirty ? " (uncommitted changes are not reviewed)" : ""}`);
@@ -108,6 +110,7 @@ export async function main(argv = process.argv.slice(2)) {
       const config = loadConfig();
       const session = readSession(config);
       const summary = runGate(config, {
+        phase: value(args, "--phase") ?? "full",
         featureId: value(args, "--feature") ?? (session?.role === "builder" ? session.featureId : null),
         baseSha: value(args, "--base") ?? (session?.role === "builder" ? session.baseSha : null),
         failFast: flag(args, "--fail-fast"),
@@ -120,7 +123,8 @@ export async function main(argv = process.argv.slice(2)) {
           console.log(`${step.ok ? "PASS" : "FAIL"}  ${step.name} (${step.seconds}s)`);
           if (!step.ok) console.log(step.tail);
         }
-        console.log(summary.ok ? "\nGATE: PASS" : "\nGATE: FAIL");
+        console.log(summary.ok ? `\n${summary.phase === "commit" ? "COMMIT GATE" : "GATE"}: PASS` : "\nGATE: FAIL");
+        if (summary.deferred.length) console.log(`Pending PR checks: ${summary.deferred.map(step => step.name).join(", ")}`);
       }
       return summary.ok ? 0 : 1;
     }

@@ -14,6 +14,7 @@ export function sessionConfigEnv(config) {
   const backend = config.backend ?? "claude";
   return {
     AUTOBUILD_BACKEND: backend,
+    AUTOBUILD_DELIVERY_MODE: config.deliveryMode ?? "full",
     AUTOBUILD_MODEL: config.model,
     AUTOBUILD_SUBAGENT_MODEL: config.subagentModel,
     AUTOBUILD_PROBE_MODEL: config.probeModel,

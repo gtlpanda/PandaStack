@@ -65,13 +65,22 @@ export function prBody(backlog, ledger, qaLine, huntLine = null) {
 
 // Pushes the integration branch and returns the open PR's URL, creating the PR
 // when there is none. Throws with the reason.
-export function pushAndOpenPr({ repo, integration, base, gh, title, body }) {
+export function pushAndOpenPr({ repo, integration, base, gh, title, body, draft = false }) {
   if (!git(repo, ['remote', 'get-url', 'origin']).ok) throw new Error('the repo has no origin remote')
   const push = git(repo, ['push', '-q', '-u', 'origin', integration], { timeoutMs: 10 * 60_000 })
   if (!push.ok) throw new Error(`git push failed: ${push.out.trim().slice(0, 500)}`)
-  const open = run(gh, ['pr', 'list', '--head', integration, '--state', 'open', '--json', 'url', '--jq', '.[0].url'], { cwd: repo, timeoutMs: 120_000 })
-  if (open.ok && open.stdout.trim()) return open.stdout.trim()
-  const made = run(gh, ['pr', 'create', '--base', base, '--head', integration, '--title', title, '--body', body], { cwd: repo, timeoutMs: 120_000 })
+  const open = run(gh, ['pr', 'list', '--head', integration, '--state', 'open', '--json', draft ? 'url,isDraft' : 'url', ...(draft ? [] : ['--jq', '.[0].url'])], { cwd: repo, timeoutMs: 120_000 })
+  if (draft) {
+    if (!open.ok) throw new Error('could not inspect existing draft PRs; review remains pending')
+    let prs
+    try { prs = JSON.parse(open.stdout) } catch { throw new Error('could not read existing draft PRs; review remains pending') }
+    if (!Array.isArray(prs) || prs.length > 1) throw new Error('could not identify one draft PR; review remains pending')
+    if (prs.length) {
+      if (prs[0].isDraft !== true || typeof prs[0].url !== 'string' || !/^https?:\/\//.test(prs[0].url)) throw new Error('the existing PR is not a verified draft; review remains pending')
+      return prs[0].url
+    }
+  } else if (open.ok && open.stdout.trim()) return open.stdout.trim()
+  const made = run(gh, ['pr', 'create', ...(draft ? ['--draft'] : []), '--base', base, '--head', integration, '--title', title, '--body', body], { cwd: repo, timeoutMs: 120_000 })
   const url = made.stdout.trim().split('\n').pop() || ''
   if (!made.ok || !/^https?:\/\//.test(url)) throw new Error(`gh pr create failed: ${made.out.trim().slice(0, 500)}`)
   return url

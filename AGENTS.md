@@ -1,3 +1,33 @@
+# Hotfix release authorization (2026-11-11)
+
+The user explicitly requested this hotfix on main with updated docs and README.
+Root may commit documentation, push this branch, open its PR, and merge the
+reviewed head after required CI passes. This supersedes the older no-push/merge
+restriction for this release only. Preserve all blocked-reproduction and provider
+refusal restrictions; do not report an unfinished hunt as complete.
+
+# Temporary PR-first delivery override (user authorized 2026-11-11)
+
+The user's latest priority is reliable delivery today. They explicitly authorized
+changing quality gate scheduling/configuration so code can reach a PR before
+long regression runs and broad reviews. Implement the bounded PR-first hotfix
+directly with parallel agents; the previous pinned-builder-only/full-gate-before-
+commit requirements are superseded for this hotfix and its focused validation.
+Root owns coordination and commits. Preserve unfinished work and all existing
+test assertions. Keep focused acceptance, secret checks, frozen-input integrity
+and Git-control protection before a feature commit. Defer full regressions and
+broad review/hunt to the PR/merge stage, explicitly reporting them as pending.
+Only opt-in PR-first mode may defer these quality checks; ordinary full mode
+remains compatible. Draft PR creation may precede review; merge/deploy still
+require their checks and authorization. No automatic push/merge/deploy in this
+hotfix. Do not alter the immutable pinned host.
+
+This does NOT authorize retrying, translating or rerouting any provider-refused
+work or any previously blocked reproduction. Preserve the F2 shared-repository
+Git ownership/trust restriction, nested-capture orphan/overflow and filesystem-
+race restrictions. No safety-filter bypass, provider fallback, target audit,
+target application changes or false verification/completion claims.
+
 # Active priority: security-audit repairs and full Codex workflow parity
 
 The user has paused Phase 2 expansion and prioritized security-audit execution

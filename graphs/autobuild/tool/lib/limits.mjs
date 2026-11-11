@@ -19,6 +19,11 @@ const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "
  *   normal       anything else (success, max turns, budget cap): judged by the loop's own checks
  */
 export function classifyOutcome({ stopFailure = null, result = null, text = "" } = {}) {
+  const refusal = result?.providerRefusal;
+  if (refusal?.kind === 'provider_refusal' && refusal.retryable === false &&
+      ['error', 'turn.failed'].includes(refusal.event) && Number.isSafeInteger(refusal.line) && refusal.line > 0) {
+    return { kind: 'provider_refusal', retryable: false, message: 'Provider declined this work; automatic retry is blocked.' };
+  }
   const error = String(stopFailure?.error ?? "").toLowerCase();
   const message = [stopFailure?.last_assistant_message, stopFailure?.error_details, result?.result, typeof text === "string" ? text.slice(-20000) : ""]
     .filter(Boolean)

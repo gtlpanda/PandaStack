@@ -1,19 +1,16 @@
 // Static inventory only: no installer changes, runtime probes or provider ports.
 import { lstatSync, statSync, realpathSync, readdirSync, openSync, fstatSync, readSync, closeSync } from 'node:fs'
-import { join, isAbsolute, relative, sep } from 'node:path'
+import { join, isAbsolute } from 'node:path'
 import { createHash } from 'node:crypto'
 import { TextDecoder } from 'node:util'
 import { fields, exact, json, record, fail } from './boundary.mjs'
 import { sanitizeSettings } from '../run-records/records.mjs'
 import { INPUT, catalogData, discoveryData, safeText, safeFilename, eligible, blockers } from './catalog-data.mjs'
+import { catalogPathContains as contained, catalogPathsEqual } from './catalog-paths.mjs'
 export { validateCatalog } from './catalog-data.mjs'
 
 const MAX_BYTES = 1048576
 const missing = error => error.code === 'ENOENT' || error.code === 'ENOTDIR'
-const contained = (root, path) => {
-  const rest = relative(root, path)
-  return rest === '' || (!isAbsolute(rest) && rest !== '..' && !rest.startsWith('..' + sep))
-}
 function options(input, keys) {
   const value = fields(input, INPUT)
   exact(value, keys, INPUT)
@@ -100,7 +97,7 @@ function inspectEntry(path, offering, source, root) {
       catch (e) { return missing(e) || e.code === 'ELOOP' ? 'broken' : 'unreadable' }
       if (source.status === 'unreadable') return 'unreadable'
       // Compare destinations without opening the contents of a wrong target.
-      return canonical === source.canonical ? 'linked' : 'wrong-target'
+      return source.canonical && catalogPathsEqual(canonical, source.canonical) ? 'linked' : 'wrong-target'
     }
     if (!stat.isDirectory()) return 'unreadable'
     const canonical = realpathSync(path)

@@ -728,3 +728,70 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   handling, security, consistency and selected completeness. This is offline
   static evidence only; source membership/bytes do not establish native readiness,
   permission enforcement, authenticated account/payer or race resistance.
+
+- D113 (SA-02d): The selected bridge, owner association and runtime extensions
+  already exist in the clean incoming checkout. Review and repair only this
+  contract; preserve stage integration and all frozen inputs. Add focused
+  workflow-harness regressions for reserve-signal lifetime, inert boundary data,
+  controlled drain/fatal precedence and actual journal/report ownership using
+  ordinary in-process metadata fixtures. The unchanged nine-case acceptance
+  currently fails before bridge construction with INVALID_JOURNAL_INPUT; retain
+  that evidence and investigate fixture setup without modifying frozen helpers.
+  Run selected acceptance and focused checks only, then unchanged tracked and
+  explicit new-file secret scans. Record evidence here and in the priority log;
+  no broader documentation, gates, flags, staging, commits or provider work.
+- D114 (SA-02d evidence): New reserve-lifetime regression first failed with two
+  accessor/Proxy hook calls; the runtime now retains reserve cancellation without
+  inspecting unvalidated reply fields, and inert validation remains with the
+  leaf owner. Twelve new checks plus 25 existing focused checks pass (37/0),
+  and unchanged NR-02 acceptance passes 19/0. Corrected one new test expectation:
+  explicit uncertainty may perform its first report refresh after cancellation;
+  repeated joins after host refresh preserve both rows and control exactly.
+  Selected SA-02d acceptance remains 0/9 with INVALID_JOURNAL_INPUT during setup.
+  A direct unchanged newInit probe returns an empty runDir; an ordinary Node
+  --version subprocess probe reports status 0 plus EPERM. Do not edit frozen
+  fixtures, weaken path validation or bypass the execution restriction. Required
+  Explore request failed with Unknown model gpt-6.1-sol; no fallback. Local
+  review and in-process actual-owner checks are not independent acceptance.
+
+- D115 (SA-LT01): The clean incoming checkout already implements lifecycle
+  feedback, prompt delivery and partition/global bindings. Limit this iteration
+  to its boundary review and focused implementation tests. A new regression
+  observed a supplied null profile accepted instead of INVALID_INPUT; reject
+  present profiles outside the existing PROFILES vocabulary before any row is
+  validated, preserving absent-profile compatibility and unitFromInput rules.
+  Use inert in-process fixtures and the existing pure unit factory for additional
+  evidence. Initial selected acceptance is 4/10; six cases fail with an empty
+  fixture runDir. Do not modify frozen fixtures or bypass process restrictions.
+  External host retains full gates, feature flags, staging, commits and review.
+
+- D116 (SA-RV01): Follow the explicit host selection despite the selected
+  contract's preserved preparation-status heading. Extract only pure historical
+  review accounting, validate the entire historical document before crediting
+  any passing ID, and retain current truthy passing semantics and the original
+  range anchor. Add workflow-harness tests before implementation; run the frozen
+  selected acceptance and focused pure tests only. Initial acceptance fails in
+  all 21 cases at ordinary fixture Git setup with spawnSync git EPERM; do not
+  change fixtures or bypass that execution restriction. Keep documentation here
+  and in PROGRESS-security-audit.md. Host owns full gates, flags and commits;
+  no target changes, providers, fallback or prohibited reproductions.
+
+- D117 (SA-RF01): Explicit host selection and the frozen acceptance own this
+  session despite preserved preparation headings in the contract/fixtures.
+  Implement trusted top-level protocol refusal, terminal ordinary-loop handling,
+  and one native status owner for immutable repository admission stop, partial
+  reports and explicit live-owner saved-evidence adoption. Keep all authority in
+  existing branded repository ownership; no new scheduler, clearing, replay or
+  fallback. Add focused workflow-harness tests and run only selected acceptance
+  and relevant focused tests. Initial integration fixtures fail at spawnSync git
+  EPERM; preserve them and record the evidence limit without alternate transport.
+  Record plan and results here and in PROGRESS-security-audit.md; full gates,
+  flags, staging and commits remain external-host work. No target execution or
+  actual incident adoption and no prohibited reproduction is authorized.
+
+- D118 (temporary PR-first delivery): User explicitly authorized changing gates
+  to unblock shipping on 2026-11-11. Use opt-in focused commit checks and defer
+  full regressions/broad review/hunt to the PR, keeping their status pending.
+  Root may implement/test/commit this coordinated repair directly; earlier
+  full-gate-before-commit choreography is superseded for this hotfix. No provider
+  refusal bypass, blocked reproduction, protected push or merge waiver follows.

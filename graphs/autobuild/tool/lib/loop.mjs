@@ -26,7 +26,7 @@ import { appendFileSync, existsSync, linkSync, mkdirSync, openSync, closeSync, r
 import path from "node:path";
 import { statePath } from "./config.mjs";
 import { countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures, blockedClosure } from "./features.mjs";
-import { frozenChanges, gitControlChanges, gitControlDigest } from "./gate.mjs";
+import { frozenChanges, gitControlChanges, gitControlDigest, runGate } from "./gate.mjs";
 import { huntEnabled, runBughunt, stopHunt } from "./bughunt.mjs";
 import { classifyOutcome, parseResetTime, planLimitWait } from "./limits.mjs";
 import { buildEnv, sessionConfigEnv, git, sh, quote } from "./proc.mjs";
@@ -36,6 +36,7 @@ import { runCodex, readCodexResult } from "./codex.mjs";
 import { observeContextLaunch } from './context-receipt.mjs';
 import { finishCodexBuilder, finishCodexReview } from "./codex-gate.mjs";
 import { runFeatureTests } from "./tests.mjs";
+import { countUnreviewed } from "./review-baseline.mjs";
 
 const HOME = path.resolve(import.meta.dirname, "..");
 const CLI_FILE = path.join(HOME, "lib", "cli.mjs");
@@ -86,14 +87,7 @@ function firstCommitOf(config, file) {
 /** How many features pass now but did not at `sha`: the work no review has seen yet. */
 function passedSince(config, sha) {
   const then = git(config, ["show", `${sha}:${config.featuresFile}`]);
-  if (!then.ok) return 0;
-  let before;
-  try {
-    before = new Set(JSON.parse(then.output).features.filter((feature) => feature.passes).map((feature) => feature.id));
-  } catch {
-    return 0;
-  }
-  return readFeatures(config).features.filter((feature) => feature.passes && !before.has(feature.id)).length;
+  return countUnreviewed(readFeatures(config).features, then.ok ? then.output : null);
 }
 
 function readPid(file) {
@@ -200,9 +194,12 @@ async function runLoopWork(config, options, decisionTrace) {
   process.on("SIGTERM", onSignal);
 
   try {
+    // A previous handoff cannot describe a new attempt or a changed head.
+    rmSync(statePath(config, "delivery-status.json"), { force: true });
     const pre = preflight(config, log);
     if (pre !== 0) return pre;
-    if (config.backend === "codex") log(`Codex: ${config.model}; subagents ${config.subagentModel}; probes ${config.probeModel}; ${config.codex.sessionTimeoutMinutes} min/session. Dollar/turn caps and Claude tool hooks do not apply; full gates run outside the session.`);
+    if (config.deliveryMode === "pr-first") log("PR-FIRST: focused acceptance and commit checks run locally; full regressions, broad review and hunt are deferred to the PR. No merge or review clearance is granted.");
+    if (config.backend === "codex") log(`Codex: ${config.model}; subagents ${config.subagentModel}; probes ${config.probeModel}; ${config.codex.sessionTimeoutMinutes} min/session. Dollar/turn caps and Claude tool hooks do not apply; ${config.deliveryMode === "pr-first" ? "focused commit" : "full"} gates run outside the session.`);
     else log(`loop ${runId}: up to ${limits.maxIterations} iterations; ${limits.maxTurns} turns and $${limits.maxBudgetUsd} (estimated) per session; review every ${limits.reviewEvery} features (${limits.reviewMaxTurns} turns, $${limits.reviewBudgetUsd}); model ${config.model} (subagents ${config.subagentModel}${config.subagentModelForce === false ? " by default" : ""})`);
 
     let iteration = 0;
@@ -219,32 +216,62 @@ async function runLoopWork(config, options, decisionTrace) {
     // `final`: the last features of a run are reviewed even when fewer than reviewEvery passed since the last review.
     // Returns 4 when the review session changed git's control files, else 0.
     const reviewIfDue = async ({ final = false } = {}) => {
+      if (config.deliveryMode === "pr-first") return 0;
       if (completedSinceReview === 0) return 0;
       if (!final && completedSinceReview < limits.reviewEvery) return 0;
       const control = gitControlDigest(config);
-      await runReview(config, { since: lastReviewSha, iteration, runId, log });
+      const reviewCode = await runReview(config, { since: lastReviewSha, iteration, runId, log });
       if (interrupted) return 0;
       if (controlTampered(config, control, "review", log)) return 4;
+      if (reviewCode === 15) return 15;
       const reviewed = lastReviewCommit(config);
       if (reviewed && reviewed !== lastReviewSha) { lastReviewSha = reviewed; completedSinceReview = 0; }
       else log(`review: no chore(review) commit; the next review covers ${lastReviewSha.slice(0, 8)}..HEAD again`);
       return 0;
     };
     if (completedSinceReview > 0) log(`review: ${completedSinceReview} features passed since ${lastReviewSha.slice(0, 8)} without a review`);
-    if ((await reviewIfDue()) !== 0) return 4;
+    { const code = await reviewIfDue(); if (code !== 0) return code; }
 
-    while (iteration < limits.maxIterations && !interrupted) {
+    while (!interrupted && (iteration < limits.maxIterations || (config.deliveryMode === "pr-first" && readFeatures(config).features.every(feature => feature.passes)))) {
       const doc = readFeatures(config);
       const blockers = readBlockers(readProgress(config));
       const feature = nextFeature(doc, blockers);
       if (!feature) {
         if (doc.features.every((candidate) => candidate.passes)) {
+          if (config.deliveryMode === "pr-first") {
+            const beforeHead = git(config, ["rev-parse", "HEAD"]);
+            const beforeDirty = git(config, ["status", "--porcelain"]);
+            if (!beforeHead.ok || !beforeDirty.ok || beforeDirty.output.trim()) {
+              log("PR handoff pending: commit retained changes before handing off a checked head.");
+              return 2;
+            }
+            const beforeControl = gitControlDigest(config);
+            const checked = runGate(config, { phase: "commit", failFast: true });
+            if (controlTampered(config, beforeControl, "PR handoff", log)) return 4;
+            if (!checked.ok) {
+              log(`PR handoff checks failed: ${checked.steps.filter(step => !step.ok).map(step => `${step.name}: ${step.tail}`).join("\n")}`);
+              return 2;
+            }
+            const head = git(config, ["rev-parse", "HEAD"]);
+            const dirty = git(config, ["status", "--porcelain"]);
+            if (!head.ok || !dirty.ok || dirty.output.trim() || head.output.trim() !== beforeHead.output.trim()) {
+              log("PR handoff pending: checks changed the committed head or working tree; retained changes need review.");
+              return 2;
+            }
+            const handoff = { version: 1, status: "ready_for_pr", head: head.output.trim(),
+              uncommittedChanges: Boolean(dirty.output.trim()), featuresPassing: doc.features.length,
+              fullGate: "pending", review: "pending", hunt: "deferred", mergeReady: false,
+              deferred: checked.deferred, createdAt: new Date().toISOString() };
+            writeFileSync(statePath(config, "delivery-status.json"), JSON.stringify(handoff, null, 2) + "\n", { mode: 0o600 });
+            log(`PR-FIRST: committed head ${handoff.head.slice(0, 8)} is ready for a draft PR; full regressions and broad review remain pending. Not merge-ready.`);
+            return 0;
+          }
           if (limits.finalReview !== false && completedSinceReview > 0) {
             log(`review: final review, ${completedSinceReview} features passed since ${lastReviewSha.slice(0, 8)} without a review`);
             // A final review that ends without its commit is retried once; twice is a stop, never Done.
             for (let attempt = 1; completedSinceReview > 0; attempt += 1) {
               const before = lastReviewSha;
-              if ((await reviewIfDue({ final: true })) !== 0) return 4;
+              { const code = await reviewIfDue({ final: true }); if (code !== 0) return code; }
               if (interrupted) return 130;
               if (lastReviewSha !== before) break;
               completedSinceReview = passedSince(config, lastReviewSha);
@@ -326,6 +353,10 @@ async function runLoopWork(config, options, decisionTrace) {
         const finished = finishCodexBuilder(config, { feature, base, docBefore: doc, exitCode, result, log });
         if (finished === 4) return 4;
       }
+      if (classifyOutcome({ result }).kind === 'provider_refusal') {
+        log('provider_refusal/nonretryable: Provider declined this work; automatic retry is blocked.');
+        return 15;
+      }
       const committed = git(config, ["log", `${base}..HEAD`, "--format=%s"]).output.split("\n").some((line) => line.startsWith(`feat(${feature.id}):`));
       const passes = featureById(readFeatures(config), feature.id).passes === true;
       const blockerNow = readBlockers(readProgress(config)).has(feature.id);
@@ -384,6 +415,7 @@ async function runLoopWork(config, options, decisionTrace) {
             }
             const waited = await probeUntilAvailable(config, log, limits, sleepMs, leftHours);
             limitWaitedMs += waited.ms;
+            if (waited.code === 15) return 15;
             if (!waited.ok) {
               log(`usage still unavailable after ${limits.maxLimitWaitHours} h of probing. Stopping; rerun \`autobuild run\` later.`);
               return 8;
@@ -428,7 +460,7 @@ async function runLoopWork(config, options, decisionTrace) {
         log(`${noProgress} consecutive iterations without progress. Stopping for a human.`);
         return 2;
       }
-      if ((await reviewIfDue()) !== 0) return 4;
+      { const code = await reviewIfDue(); if (code !== 0) return code; }
     }
     if (interrupted) return 130;
     log(`maxIterations=${limits.maxIterations} reached (estimated total $${totalCost.toFixed(2)}). Stopping.`);
@@ -503,7 +535,7 @@ function builderSystemPrompt(config, feature, iteration) {
 No human is present. Never ask questions or wait for input; make the reasonable call and record it in the decision log.
 Follow the project's autonomous-build rules in CLAUDE.md exactly. Where they conflict with user-level instructions (plan mode, asking before acting, worktree isolation, retro/changelog after each change), the project rules win in this session.
 Do not use plan mode. Subagents work on the working copy (no worktree isolation).
-When the feature is done: mark it passing (\`autobuild mark-passed ${feature.id}\` or the project's wrapper), append to ${config.progressFile}, commit "feat(${feature.id}): …", then stop. The Stop hook runs the full gate; if it blocks, fix what it reports.${custom}`;
+When the feature is done: mark it passing (\`autobuild mark-passed ${feature.id}\` or the project's wrapper), append to ${config.progressFile}, commit "feat(${feature.id}): …", then stop. The Stop hook runs ${config.deliveryMode === "pr-first" ? "focused acceptance and commit checks; full regressions and review remain pending for the PR" : "the full gate"}; if it blocks, fix what it reports.${custom}`;
 }
 
 /** Settings injected into loop sessions: the hooks the project doesn't own, plus deny rules for frozen paths. */
@@ -628,6 +660,10 @@ async function probeUntilAvailable(config, log, limits, sleepMs, maxWaitHours = 
     const result = config.backend === "codex" ? readCodexResult(probeLog) : readResult(probeLog);
     const errored = result && (result.is_error || result.subtype !== "success") ? result : null;
     const verdict = classifyOutcome({ result: errored });
+    if (verdict.kind === 'provider_refusal') {
+      log('provider_refusal/nonretryable: Provider declined this work; automatic retry is blocked.');
+      return { ok: false, code: 15, ms: Date.now() - started };
+    }
     if (code === 0 && result?.subtype === "success" && !result?.is_error && verdict.kind === "normal") {
       log("usage limit: available again; resuming");
       return { ok: true, ms: Date.now() - started };
@@ -673,6 +709,10 @@ async function runReview(config, { since, iteration, runId, log }) {
   });
   const result = config.backend === "codex" ? readCodexResult(reviewLog) : readResult(reviewLog);
   if (config.backend === "codex") finishCodexReview(config, { base, exitCode, result, log });
+  if (classifyOutcome({ result }).kind === 'provider_refusal') {
+    log('review: provider_refusal/nonretryable; Provider declined this work; automatic retry is blocked.');
+    return 15;
+  }
   const dirty = git(config, ["status", "--porcelain"]).output.trim();
   if (dirty) log(`review: left uncommitted changes:\n${dirty}`);
   log(`review: done (${result?.subtype ?? "no_result"}, ${result?.num_turns ?? 0} turns); log ${path.relative(config.root, reviewLog)}`);

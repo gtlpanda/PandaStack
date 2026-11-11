@@ -1348,3 +1348,324 @@ No sysctl or AppArmor policy was disabled and no test or assertion was skipped.
 This supersedes the prior pending-amendment status only. CI success must still
 be observed on the new commit before merge. The runner retirement date remains
 April17,2027; a later compatible maintained image is still needed.
+
+## OC-01 — Windows WSL discovery comparison correction (2026-11-11)
+
+- Resumed from clean candidate `5743cde73892ba432bdac07411affaa7d5d1184f`.
+  The unchanged external host `b31a8514208b03fdcfc488e618e7eff6516a796d` ran
+  `autobuild check --feature OC-01 --base 5743cde73892ba432bdac07411affaa7d5d1184f --json`: all ten steps passed, exit 0.
+  This first pass covers the pre-correction revision, not the subsequent edits.
+- Actual read-only Windows preflight found the installed security-audit link
+  reported `wrong-target` with a `\\wsl$` installation root and `linked` with
+  the equivalent `\\wsl.localhost` root. Independent review also identified
+  that Windows relative-path comparison folds case in WSL Linux path components.
+- Catalog equality and containment now share comparison-only handling for the
+  two reserved WSL UNC hosts, including extended UNC spelling. Distribution and
+  Linux path components remain exact; filesystem reads keep their original
+  resolved paths. No device/inode identity inference or arbitrary host aliasing.
+  Microsoft documents these WSL host spellings in its
+  [release notes](https://learn.microsoft.com/en-us/windows/wsl/release-notes#build-21354).
+- Focused validation: eight unchanged OC-01 acceptance cases, six new pure path
+  groups, sixteen existing catalog groups and fourteen CLI groups passed (44
+  checks, exit 0). The six pure groups also passed with Windows Node 24.22.1.
+  Both actual Windows root spellings now produce `linked`, readiness `unknown`,
+  and exit 2 for the still-uncertified security-audit offering. A syntax error in
+  two new trailing-backslash test literals was corrected before the passing run.
+- Independent `catalog_review` review found no actionable issues in the correction.
+  Tracked and explicitly named new files passed the unchanged secret scanner;
+  `git diff --check` passed. Full host revalidation of the correction follows.
+- Evidence: `/var/tmp/pandastack-oc01-host-check-zl5nsw9a/` contains original host
+  output, Windows before/after observations, focused output and reconciliation.
+  No model worker, provider fallback, target audit, blocked reproduction, gate
+  change, feature flag or commit was made by this correction. Full native audit
+  execution and all-offering parity remain incomplete.
+- Final corrected-candidate host revalidation: **all ten steps passed**, exit 0.
+  Recorded implementation/test/progress hashes stayed unchanged throughout the
+  check. Evidence: `corrected-run.json` and `corrected-gate.jsonl` in the directory
+  above. This final note was appended afterward; implementation and test bytes
+  remain the verified bytes. Host feature acceptance/commit remains pending.
+
+## OC-01 — Inventory every offering and distinguish visibility from native readiness
+
+Autobuild resume, 2026-11-11: retained the incoming OC-01 correction in
+`catalog.mjs`, the new `catalog-paths.mjs`, and its six new workflow-harness
+test groups. No additional source change was needed after focused verification
+and local review. Reserved WSL host aliases share comparison keys; distribution
+and Linux path components remain case-sensitive. Reads retain their resolved
+paths, and visibility never certifies native readiness. No installer changes.
+
+Exact checks in this session:
+
+```sh
+node acceptance/native-runtime/oc-01-catalog.test.mjs
+# exit 0; 8 passed, 0 failed
+node --input-type=module -e 'await import("./tests/native-catalog-paths.test.mjs"); await import("./tests/native-offering-catalog.test.mjs"); await import("./tests/native-preflight-cli.test.mjs"); const {summary}=await import("./scripts/workflow-harness.mjs"); const {pass,fail}=summary(); console.log(`OC-01 FOCUSED: ${pass} passed, ${fail} failed`); process.exitCode=fail?1:0'
+# exit 0; OC-01 FOCUSED: 36 passed, 0 failed
+```
+
+The six pure comparison groups, sixteen discovery/validation groups and fourteen
+offline CLI groups plus eight acceptance cases establish 44 passing checks.
+This session did not repeat the earlier Windows runtime observations or full
+host gates. The supplied previous baseline feedback ends in `TEST: FAIL` but
+omits the failing assertion; `.harness/security-audit/codex-feedback.txt` has
+the same truncated detail. That failure is not claimed resolved or waived.
+The older saved corrected host check records `ok: true`, which is historical
+evidence only, not a replacement for the next host gate.
+
+Local sanity review: data flow, edge/error handling, static-path security,
+consistency and selected implementation completeness PASS within the offline
+contract. The requested independent Explore review could not start:
+`Unknown model gpt-6.1-sol`. No fallback agent/provider was launched; independent
+review remains host-owned. Decision: retain the passing correction and report
+the missing baseline failure detail rather than alter unrelated frozen code.
+
+Limits remain unchanged: no target application execution or changes, provider
+calls, account/auth/billing inference, runtime certification, hostile containment
+or filesystem-race evidence. No blocked reproduction, broader feature, pinned
+host edit, frozen-file change, feature flag, staging or commit. Full gates and
+final acceptance remain with the external host.
+
+Final hygiene: `bash scripts/check-secrets.sh` and
+`bash scripts/check-secrets.sh core/skills/native-runtime/catalog-paths.mjs tests/native-catalog-paths.test.mjs`
+each exited 0 with `check-secrets: clean`, covering tracked files and explicitly
+both new untracked source/test files. `git diff --check`,
+`git diff --cached --exit-code`, and `node --check` on all three changed/new
+source/test files exited 0. Changed inventory remains the four incoming paths:
+this progress log, `catalog.mjs`, `catalog-paths.mjs`, and
+`tests/native-catalog-paths.test.mjs`. This session only appended this log entry.
+
+## SA-02d — Connect native audit checkpoints with actual owners, controlled pauses and cooperative cancellation
+
+The clean incoming checkout already contained the actual journal/report bridge,
+owner association and runtime pause/cancellation extensions. This iteration
+repaired the reserve-signal extension: it read `value.state` before the checkpoint
+reply passed inert validation. The new regression observed two getter/Proxy hook
+calls before the repair and zero afterward. Reserve ownership now stays linked
+until leaf cleanup without inspecting the unvalidated reply; terminal leaves
+still detach their listeners, and pending persistence still receives cancellation.
+No graph, journal schema, vendor, validator, baseline or frozen acceptance changed.
+
+Added twelve workflow-harness checks in
+`tests/native-checkpoint-signals.test.mjs` (five) and
+`graphs/security-audit/tests/native-checkpoint-owners.test.mjs` (seven).
+The latter use actual journal, control, report and runtime owners over inert
+metadata, with the trusted QA/audit graphs and no subprocess fixture setup.
+They cover grant recovery with same-invocation replay, actual freshness before
+absent/prepared admission, binding conflicts, cancelled queued admission, exact
+known-failure receipts, closed-owner refusal, two-callback cooperative cancellation,
+fatal uncertainty superseding controlled pause, and the contract's ordinary owned
+empty-directory publication conflict followed by rendering repair and receipt replay.
+These are additional implementation checks, not substitutes for frozen acceptance.
+
+Exact final test commands and results:
+
+```sh
+node --input-type=module -e 'await import("./tests/native-checkpoint-signals.test.mjs"); await import("./graphs/security-audit/tests/native-checkpoint-owners.test.mjs"); await import("./tests/native-runtime-executor.test.mjs"); await import("./graphs/security-audit/tests/journal-owner-paths.test.mjs"); const {summary}=await import("./scripts/workflow-harness.mjs"); const {pass,fail}=summary(); console.log(`SA-02d FOCUSED: ${pass} passed, ${fail} failed`); process.exitCode=fail?1:0'
+# exit 0; SA-02d FOCUSED: 37 passed, 0 failed
+node acceptance/native-runtime/nr-02-runtime.test.mjs
+# exit 0; 19 passed, 0 failed
+node acceptance/native-runtime/sa-02d-native-checkpoints.test.mjs
+# exit 1; 0 passed, 9 failed
+# Error: Audit journal: INVALID_JOURNAL_INPUT
+# at openAuditJournal .../dispatch-journal.mjs:158:10
+# at setup .../sa-02d-native-checkpoints.test.mjs:16:37
+```
+
+The selected nine cases fail in fixture setup before bridge construction, both
+before and after the repair. Full final output is retained at
+`/tmp/sa02d-selected-acceptance.log`. A direct unchanged `newInit()` observation
+returned `{"fixtureRunDir":""}`. Separately, an ordinary
+`spawnSync(process.execPath,["--version"])` probe returned
+`{"status":0,"error":"EPERM","stdout":"v24.21.0\n","stderr":""}`.
+Frozen fixture repair or subprocess restriction bypass is not authorized.
+SA-02d acceptance is NOT claimed passing; the external host must rerun it in its
+own environment. The first new cancellation test incorrectly expected no control
+change before initial report refresh; it now explicitly refreshes through the
+actual host owner before asserting repeated uncertainty joins are idempotent.
+
+Local sanity review: data flow PASS; edge/error handling PASS; inert boundary
+security PASS; consistency PASS; selected implementation behavior PASS within
+focused evidence. Static inspection retains durable commit before publication,
+preauthorization publication failure rejecting/joining only the owned callback,
+and fatal owner/journal errors instead of report-pause downgrades. This inspection
+is not execution proof of the preauthorization operational-failure path.
+Independent Explore review could not start: the requested `gpt-6.1-sol` model
+returned `Unknown model`; no fallback agent/provider was launched. Independent
+review, frozen acceptance and full gates remain host-owned and outstanding.
+
+No target application changes or execution, live/fallback providers, blocked
+capture/orphan/overflow/filesystem-race reproduction, hostile containment proof,
+C2 verification-reserve policy claim or broader roadmap implementation. Existing
+stage integration is untouched. No pinned-host edit, feature flag, staging,
+commit, push, branch change or Git-control mutation.
+
+Final hygiene: `bash scripts/check-secrets.sh` and
+`bash scripts/check-secrets.sh tests/native-checkpoint-signals.test.mjs graphs/security-audit/tests/native-checkpoint-owners.test.mjs`
+both exited 0 with `check-secrets: clean`, covering tracked files and both new
+untracked source/test paths explicitly. `git diff --check`, `git diff --cached
+--exit-code`, and `node --check` for the changed runtime and both new test files
+exited 0. Final changed inventory: `core/skills/native-runtime/runtime.mjs`, the
+two added test files above, `DECISIONS.md` and this progress log. No other paths
+were modified.
+
+## SA-LT01 — Expose per-record lifecycle feedback and deliver legal critic transitions
+
+Iteration 2 reviewed the existing owning feedback APIs, actual criticInput and
+workflow prompt, and partition/global context bindings. The only production
+change rejects an explicitly supplied invalid profile in inspectUnitInputs before
+per-row validation, using the existing PROFILES vocabulary. Previously null
+passed the context envelope and fell through rulesOf to standard behavior. The
+new regression first failed with `Missing expected exception (invalid): null`;
+after the fix all nine new implementation cases pass. Absent profile remains
+compatible. unitFromInput, publication/application gates, schemas, upstream
+validators, vendor and frozen tests remain unchanged.
+
+Added `graphs/security-audit/tests/lifecycle-feedback-boundaries.test.mjs` using
+scripts/workflow-harness.mjs and the existing pure unitInput/refsOf factories.
+These nine tests cover exact detached sibling JSON and lifecycle identities,
+null/empty/one-sided lifecycle refusal, all valid duplicate slots, planned-only
+mint and actual ordinary path/block checks, zero publication, inert descriptors
+and Proxy refusal without hooks, finite byte/depth/row/ID/diagnostic limits,
+invalid options/context, exact partition/global unit membership, hash-bound
+context tampering refusal, actual serializer measurement, pre-dispatch malformed
+grammar refusal and absent-context compatibility. Static temporary source text
+is read as data only. No subprocess fixture setup is used by these new tests.
+
+Exact final verification commands and results:
+
+```sh
+node --input-type=module -e 'await import("./graphs/security-audit/tests/lifecycle-feedback-boundaries.test.mjs"); await import("./graphs/security-audit/tests/lifecycle-status-types.test.mjs"); await import("./graphs/security-audit/tests/critic-partitions.test.mjs"); const {summary}=await import("./scripts/workflow-harness.mjs"); const {pass,fail}=summary(); console.log(`SA-LT01 FOCUSED: ${pass} passed, ${fail} failed`); process.exitCode=fail?1:0'
+# exit 0; SA-LT01 FOCUSED: 33 passed, 0 failed (9 new + 24 existing)
+node acceptance/security-audit/sa-05a-critic-partitions.test.mjs
+# exit 0; 5 passed, 0 failed
+node acceptance/security-audit/sa-lt01-feedback.test.mjs
+# exit 1; 4 passed, 6 failed
+# ENOENT: no such file or directory, scandir ''
+# Native runtime: INVALID_INPUT. (inspectUnitInputs context validation)
+# Refusal:  has no run-metadata.json: it is not a run directory
+```
+
+Selected acceptance has the same six failures before and after this repair.
+Four pure cases pass. The six run-backed cases receive an empty fixture runDir;
+the first fails at snapshot's scandir, four refuse the empty context, and the
+criticInput case fails loading metadata during seeded setup. Full final output:
+`/tmp/sa-lt01-selected-acceptance.log`. The frozen fixture's advanceState also
+created a root `stage-state.json` from that empty path; this session removed its
+own untracked artifact after verification. A separate ordinary Node --version
+probe returned status 0, error EPERM and stdout `v24.21.0\n`. No frozen fixture
+repair or execution restriction bypass was attempted. Selected acceptance is
+NOT claimed passing; it requires the host's environment and final review.
+
+Local sanity review: data flow PASS (context validation before row validation);
+edge/error handling PASS (safe whole-call INVALID_INPUT); security PASS (inert
+boundary and no authority added); consistency PASS (existing profile vocabulary);
+selected implementation completeness PASS within the focused evidence above.
+The required Explore request failed with `Unknown model gpt-6.1-sol`; no alternate
+agent/model/provider was launched and no independent-review claim is made.
+
+These tests prove pure diagnostics and deterministic fake workflow wiring only,
+not all-batch admissibility, native dispatch/recovery, persisted two-attempt slot
+repair, provider capability, target execution or hostile containment. No deferred
+revival, retry application, new scheduler, target changes, live/fallback provider,
+capture/orphan/overflow/filesystem-race reproduction, broader roadmap work or
+pinned-host mutation. Full gates, feature pass flags, staging, commits and final
+review remain with the external host.
+
+Final hygiene: unchanged `bash scripts/check-secrets.sh` and explicit
+`bash scripts/check-secrets.sh graphs/security-audit/tests/lifecycle-feedback-boundaries.test.mjs`
+both exit 0, `check-secrets: clean`. `git diff --check`,
+`git diff --cached --exit-code`, and `node --check` for audit-ledger.mjs and the
+new test file exit 0. Final changed inventory: audit-ledger.mjs, the new lifecycle
+feedback test, DECISIONS.md and this progress entry. No frozen file changed;
+the index remains empty of staged changes.
+
+## SA-RV01 — Require review when historical selected backlog is unavailable
+
+Implemented conservative review accounting in the existing autobuild loop through
+the narrow pure helper `graphs/autobuild/tool/lib/review-baseline.mjs`. Missing
+historical output, invalid JSON, wrong document/row structure, duplicate or empty
+IDs and nonboolean historical passes now leave every current passing row
+outstanding. Valid history preserves the passing-ID set difference, extra fields,
+empty lists and exact IDs. Current truthy passing semantics remain unchanged.
+The selected review SHA, first-addition fallback, startup/final review gates,
+acknowledgment, two-attempt failure handling and hunt behavior are unchanged.
+
+Added ten implementation checks in
+`graphs/autobuild/tests/review-baseline.test.mjs`, discovered by the unchanged
+workflow harness. They cover whole-document invalidation in both row orders,
+invalid removed rows, duplicate passing/nonpassing IDs, compatibility and current
+input behavior. Initial test-first run: exit 1, 0 passed / 10 failed because the
+helper did not exist. Final focused verification:
+
+```sh
+node --input-type=module -e 'await import("./graphs/autobuild/tests/review-baseline.test.mjs"); const {summary}=await import("./scripts/workflow-harness.mjs"); const {pass,fail}=summary(); console.log(`SA-RV01 FOCUSED: ${pass} passed, ${fail} failed`); process.exitCode=fail?1:0'
+# exit 0; SA-RV01 FOCUSED: 10 passed, 0 failed
+node acceptance/security-audit/review-baseline-correction.test.mjs
+# exit 1; tests 21, pass 0, fail 21
+# Error: spawnSync git EPERM
+# at project (graphs/autobuild/tool/test-fixtures/project.mjs:22:3)
+# spawnargs: [ 'init', '-q', '-b', 'autobuild' ]
+```
+
+The unchanged selected acceptance has the same setup failure before and after
+implementation. Every case fails during ordinary temporary Git fixture creation,
+before loop execution; none supplies integration evidence. Full outputs are
+`/tmp/sa-rv01-acceptance-before.log` and `/tmp/sa-rv01-acceptance-after.log`.
+No fixture repair, alternative process transport or permission bypass attempted.
+Selected acceptance is NOT claimed passing. Host execution must establish actual
+startup/final review ordering, old-SHA retention, acknowledgment, restart, exit13
+and fake-hunt integration before acceptance.
+
+Local static sanity review: data flow PASS (Git result to whole-history validator
+to current count, reused at startup and final retry); edge/error handling PASS
+(unknown history grants no credit, malformed current data still surfaces);
+security PASS (data parsing only, no new execution or authority); consistency
+PASS (historical booleans and exact IDs, existing current truthiness); scoped
+implementation completeness PASS with integration evidence unavailable above.
+The required Explore review request failed with `Unknown model gpt-6.1-sol`.
+No fallback model/provider was launched; no independent-review claim is made.
+
+This is pure accounting evidence and static wiring review only. No target
+application changes/execution, live providers, fallback providers, blocked
+capture/orphan/overflow/filesystem-race or F2 shared-repository Git ownership/trust
+reproduction. Those blocked statuses and evidence limitations remain unchanged.
+No frozen acceptance, baseline, vendor, validator, schema, gate or pinned-host
+file changed. Full gates, pass flags, staging, commits and final review remain
+with the external host.
+
+Final hygiene: unchanged `bash scripts/check-secrets.sh` (tracked files) and
+`bash scripts/check-secrets.sh graphs/autobuild/tool/lib/review-baseline.mjs graphs/autobuild/tests/review-baseline.test.mjs`
+(both new untracked source/test files) exit 0, `check-secrets: clean`.
+`node --check` for loop.mjs, review-baseline.mjs and review-baseline.test.mjs,
+`git diff --check` and `git diff --cached --exit-code` all exit 0.
+Changed inventory: loop.mjs, the new helper and test file, DECISIONS.md and this
+progress entry. No staged changes; selected feature flag remains host-owned.
+
+## SA-RF01 — Durable provider refusal and honest partial status
+
+Trusted top-level Codex refusal events stop builder/review/probe retry paths.
+Native hunts retain an immutable repository receipt, bounded provisional status
+and report, stop future admission, and preserve a known refusal even if optional
+status data is corrupt. Generic adoption composition is implemented; the old
+incident has not been adopted or rerun. No blocked reproduction was executed.
+
+Independent review corrected first-refusal ownership and optional-status
+precedence. Final focused native tests:23 passed. Frozen acceptance:20 passed,
+exit0, with evidence /var/tmp/pandastack-refusal-check-3eeuosnh/run.json.
+The original hunt remains incomplete and no security finding is verified by
+these protocol fixtures. Full PR regressions/review remain pending.
+
+## Temporary PR-first delivery — user-authorized 2026-11-11
+
+User moved broad quality checks to the PR stage to unblock code delivery.
+Opt-in deliveryMode pr-first keeps focused acceptance and commitGate before
+feature commits, defers full regressions/review/hunt, and records a clean-head
+handoff with mergeReady:false. Explicit draft PR creation is allowed; merge
+checks are preserved. Full mode and default full check behavior remain intact.
+PandaStack opts in, scans tracked and new files for secrets, and runs its original
+full configured gate in PR CI. The old builder was stopped before config edits.
+
+Focused verification covers core mode selection, both backend environments,
+current acceptance, deferred checks, draft PR hooks, build-app delivery, clean
+head binding, stale readiness and full-mode compatibility. Full regressions are
+intentionally pending in the PR; no push/merge has been performed for this change.

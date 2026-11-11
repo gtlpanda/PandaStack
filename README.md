@@ -92,11 +92,12 @@ may not support these controls; this does not change host-imposed limits.
   and your approvals; a Fable advisor is called only at decision points
   (confirm a finding, gate a plan, unstick a loop, diagnose a failed deploy);
   Sonnet and Haiku subagents do the focused work. Every node defaults to high effort.
-- **Nothing unreviewed reaches a PR.** The review gate, a hook in every repo,
-  refuses `gh pr create` until a finished `/bughunt` covers the head, and
-  `gh pr merge` until that hunt passes. It also refuses pushes straight to the
-  default branch. CI (`scripts/test.sh`) and branch protection guard this
-  repo's own `main`.
+- **Review before merge, with an optional draft-first path.** Full mode requires
+  a finished `/bughunt` before opening a PR. Opt-in PR-first mode allows a draft
+  PR after focused commit checks; full regressions and broad review remain
+  pending in the PR. The merge hook still requires a passing hunt and refuses
+  pushes straight to the default branch. Required CI runs the full configured
+  gate on this repo's PRs and `main`.
 - **You stay in charge of the irreversible.** You approve every plan and every
   merge (for one exact commit); a rollback is only ever recommended, with evidence.
 
@@ -108,7 +109,7 @@ may not support these controls; this does not change host-imposed limits.
 | build | [`graphs/release/`](graphs/release/README.md) | `/release-pr [PR#]` | scribe (docs in the PR) → readiness on the exact head → merger, once → deploy-watcher, evidence for the merge commit | routing tested with mocked agents; run live once on a real PR (reported by the owner) |
 | build | [`graphs/hunt/`](graphs/hunt/README.md) | `/bughunt [PR# \| branch \| a..b]` | intake (exact commits, hunks, routing signals, a worktree at the head) → impact-mapper → one hunter per lens the change calls for (logic, contract, concurrency, security, errors, regression), in parallel → findings merged under stable ids in code → a blind skeptic per finding, the advisor refereeing the contested ones → a reproducer's failing test, run by `evidence.mjs` at the head and the merge-base in a sandbox, then re-run by the session → (`--propose`, `--fix`) a root-cause repair per reproduced bug in an isolated worktree, proven by the reproduction (passes with it, fails without it) and the suite, and in fix mode reviewed by an independent verifier with adversarial tests → a report with a computed disposition | live-run on a 10-case benchmark: 6 of 6 planted bugs found and reproduced, 0 false positives on bug-free changes, $9.64 for discovery |
 | build | [`graphs/build/`](graphs/build/README.md) | `/build-app` | the driver, detached: one fresh headless `/dev --slice` session per backlog slice, its own checks (commit prefix, clean tree, frozen tests, its own verify), fast-forward onto `integration/<app>`, usage-limit waits, the backlog brakes; then one QA pass over the whole branch, the push, and one PR for you | live-run once end to end: a 7-slice CLI in 1 h 40 min (retro 24) |
-| build | [`graphs/autobuild/`](graphs/autobuild/README.md) | `autobuild run [--backend codex]` (`/autobuild` sets a project up) | one fresh session per feature from `features.json`, independent full gates, usage-limit pauses, periodic/final reviews; Claude uses guard/Stop hooks; Codex uses host-owned passing flags/commits; both finish with the same hunt graph and PR ledger | Both covered by provider integration tests, including reproduced fixes and unchanged PR gate acceptance; live results recorded separately |
+| build | [`graphs/autobuild/`](graphs/autobuild/README.md) | `autobuild run [--backend codex]` (`/autobuild` sets a project up) | one fresh session per feature from `features.json`, independent gates, usage-limit pauses; full mode runs periodic/final reviews, opt-in PR-first mode defers broad checks to the PR; Claude uses guard/Stop hooks; Codex uses host-owned passing flags/commits; full mode finishes with the shared hunt graph and PR ledger; PR-first reports pending review | Both covered by provider integration tests, including reproduced fixes and unchanged PR gate acceptance; live results recorded separately |
 | security | [`graphs/security-audit/`](graphs/security-audit/README.md) | `/security-audit --full` (explicit request only) | [Cloudflare's security-audit skill](https://github.com/cloudflare/security-audit-skill), vendored at a pinned commit and run by read-only agents (`Read, Grep, Glob`) over a read-only snapshot of `HEAD`, one stage per Workflow run with code between stages: four researchers and a synthesizer build a coverage ledger → hunting waves, a coverage critic after each, a minter for the gaps → one fresh verifier per candidate, then per record → `findings.json` gated by both upstream validators → `REPORT.md`, `NEEDS-VALIDATION.md` and `FINDINGS-DETAIL.md` written by code, never by a model; `task` and `export-remediation` give `/dev` the text for one finding. Source only: no target code runs, so nothing is `confirmed` and a report with none is not a clean bill of health | offline end to end in `scripts/test.sh`; two live audits of a small fixture through headless `claude -p` (28 and 30 agents, $2.93 and $3.05, about 9.5 minutes each; retro 42); the sandbox and the `quick` and `deep` profiles are later changes |
 | marketing | [`graphs/seo/`](graphs/seo/README.md) | `seo-check.mjs check <dir> --site <url>` | so far only the check: a built site's title, description, canonical, Open Graph, and JSON-LD tags, duplicates across pages, the sitemaps (which decide the strict pages), and robots.txt, `SEO-CHECK: PASS\|FAIL`; the audit graph not built yet | check tested offline |
 
@@ -128,12 +129,40 @@ Opus/Fable → `gpt-6-astra`, Sonnet → `gpt-6.1-sol`, Haiku → `gpt-6-luna`.
 Override the main model with `--model`; Claude remains the default backend.
 
 Codex runs with the workspace-write sandbox. The host independently checks the
-full gate and commits passing work. Claude tool hooks and dollar/turn caps do
-not transfer; Codex uses session timeouts and iteration limits. Its final hunt uses the shared graph
+selected gate phase and commits passing work. Full mode runs the full gate;
+PR-first mode runs focused acceptance and configured commit checks. Claude tool hooks and dollar/turn caps do
+not transfer; Codex uses session timeouts and iteration limits. In full mode, its final hunt uses the shared graph
 and writes the same validated PR-review ledger; the host executes evidence and
 repair checks.
 See the [Codex setup and backend differences](graphs/autobuild/tool/README.md#codex-backend)
 for model overrides, skill installation, limits and frozen-file checks.
+
+## Ship a draft PR before broad review
+
+PandaStack supports opt-in **PR-first delivery** for Claude and Codex autobuild.
+It keeps current-feature acceptance, frozen-input checks and Git-control checks
+before commits. Configure fast secret/lint checks in `commitGate`; full
+regressions, periodic/final review and the final hunt wait until the PR stage.
+PandaStack's own `autobuild.json` currently enables this mode.
+
+```bash
+autobuild run --backend codex --delivery-mode pr-first
+autobuild status
+# In PR CI, run the original complete gate:
+autobuild check --phase full
+```
+
+Set `"deliveryMode": "pr-first"` in the project's `autobuild.json` to also enable
+explicit draft PR creation through the review hook. A command-line override
+selects the loop mode only. Autobuild itself commits and reports `ready_for_pr`;
+it does not push or open a PR. The build-app driver can open a draft and report
+`awaiting_review`, or avoid pushing with `--no-pr`.
+
+These statuses mean **review is pending**, not that the branch is merge-ready.
+Full mode remains the default for other projects. Provider refusals are terminal;
+changing delivery mode does not clear a refusal or retry blocked work.
+See the [PR-first setup and recovery guide](docs/pr-first-delivery.md) for config,
+CI, status meanings, rollback and current limitations.
 
 ## The build-app loop
 
@@ -227,16 +256,17 @@ One repo, one install. Each piece, where it lives, and the state it keeps:
 | The rules | `CLAUDE.md` | `~/.claude/CLAUDE.md` (one link) | at most 200 lines; `validate.sh` pins its rails |
 | Settings | `settings.json` | merged into your own `~/.claude/settings.json` | your values win; `permissions` untouched |
 | Status line | `core/bin/statusline.sh` | `~/.claude/bin/statusline.sh` | none |
-| CI and branch protection | `.github/workflows/test.yml` | GitHub | `scripts/test.sh` on every PR and push to `main`; `main` requires the `test` check, admins included |
+| CI and branch protection | `.github/workflows/test.yml` | GitHub | `autobuild check --phase full` (including `scripts/test.sh`) on every PR and push to `main`; `main` requires the `test` check, admins included |
 
-How a change reaches `main`, for this repo and any repo you work in:
-1. `/bughunt` on the branch. Fix what it finds.
-2. `gh pr create`: the gate allows it once a finished hunt covers the head.
-   A change that touches only docs needs no hunt.
-3. CI runs on the exact head.
-4. `gh pr merge --match-head-commit <sha>`: the gate allows it only on a hunt
-   whose disposition is `pass`. Anything else is merged by a person, by
-   choice, after reading the hunt's report.
+How a change reaches `main`:
+1. Build and run the selected commit checks. In full mode, finish `/bughunt`
+   before opening a PR; a docs-only change needs no hunt.
+2. With repository PR-first opt-in, use `gh pr create --draft` to open the PR
+   while broad review is pending. No review evidence is fabricated.
+3. Full CI and review run against the exact PR head. Resolve failures before merge.
+4. The automated merge hook still requires a hunt disposition of `pass`.
+   Any exceptional release requires the owner's explicit decision with the
+   remaining evidence limitations disclosed; PR-first is not a merge waiver.
 
 ## Kit
 
@@ -261,7 +291,7 @@ because a graph does the job:
 | build | `/dev <task>`: planned, built tests-first, each acceptance criterion proven, QA'd |
 | deep-qa | the QA graph, through `/loop` |
 | regression-check | `/verify` |
-| commit-push-pr | `/bughunt`, then `gh pr create` (the review gate refuses an unhunted PR) |
+| commit-push-pr | `/bughunt`, then `gh pr create`; PR-first opt-in permits an earlier draft |
 
 ## Install
 
