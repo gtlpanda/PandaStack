@@ -844,3 +844,5 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   roadmap resumes with Phase 2. AGENTS.md's active-priority section now selects
   features.json, and tests/agents-active-priority.test.mjs keeps that section in
   step with autobuild.json (bughunt F1 on 0278090 found them contradicting).
+  SPEC.md carried the same stale section (bughunt F2 on 47851b2); it now matches
+  AGENTS.md, and the test checks both files.

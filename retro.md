@@ -3348,6 +3348,9 @@ first failed here because it counted this machine's real Codex; it now uses vers
   while AGENTS.md still said Phase 2 was paused. The user closed the Codex parity
   priority (D122); AGENTS.md now selects features.json, and
   tests/agents-active-priority.test.mjs (2 cases) fails on the old text.
+- /bughunt F2 (MEDIUM, reproduced) on the next head: SPEC.md, which the prompt
+  reads first, carried the same stale section. It now matches AGENTS.md, and the
+  test checks both files (3 cases; the SPEC.md case fails on the old text).
 - An earlier hunt on the same head ended manual_review (logic lens skipped one
   area); a fresh hunt covered it and found F1.
 
