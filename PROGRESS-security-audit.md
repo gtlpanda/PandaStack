@@ -738,3 +738,76 @@ returned exit 0, `check-secrets: clean`. The explicit scan of both new source/te
 files also returned exit 0. `git diff --check` passed. The frozen-path diff check
 returned exit 0, including acceptance, spec, feature flags, project rules,
 scripts, native runtime, vendor path and existing journal/partial-report tests.
+
+## SR-01 — Provide bounded manifest-scoped source and context reads
+
+Implemented only `graphs/security-audit/skills/security-audit/source-reader.mjs`
+and added `graphs/security-audit/tests/source-reader.test.mjs`. The reader captures
+a detached manifest through existing finite canonical JSON validation, enforces
+exact shapes, ordering, uniqueness and finite sizes, and binds the separately
+supplied manifest digest. It reuses the upstream relative-path grammar. Factory
+validation checks distinct nonoverlapping source/context roots component by
+component, without reading artifact bodies or scanning unrelated entries.
+
+Each page/search rechecks the addressed root and file chain, permission bits,
+regular-file type and declared size. It hashes the complete addressed file with
+65536-byte chunks before returning only the bounded selected range. Source pages
+are lossless base64, source listing is frozen metadata with explicit cursors,
+literal search uses byte offsets and boundary overlap, and context lookup uses
+only captured manifest/artifact IDs. Failures expose fixed codes/messages;
+handles close after errors and close is idempotent. No source/context body cache,
+arbitrary path fallback, journal storage access or execution path was added.
+
+Verification (2026-11-10, Node v24.21.0):
+
+```sh
+node acceptance/security-audit/sr-01-reader.test.mjs
+# exit 0: 8 passed, 0 failed
+node --input-type=module -e 'for (const file of ["source-reader", "snapshot-protection", "snapshot-root-path"]) await import(`./graphs/security-audit/tests/${file}.test.mjs`); const {summary}=await import("./scripts/workflow-harness.mjs"); console.log(summary()); process.exitCode=summary().fail ? 1 : 0'
+# exit 0: 24 passed, 0 failed (12 new reader + 12 existing snapshot checks)
+node --check graphs/security-audit/skills/security-audit/source-reader.mjs
+node --check graphs/security-audit/tests/source-reader.test.mjs
+git diff --check
+# each exit 0
+bash scripts/check-secrets.sh graphs/security-audit/skills/security-audit/source-reader.mjs graphs/security-audit/tests/source-reader.test.mjs
+# exit 0: check-secrets: clean; explicit scan of both new untracked files
+```
+
+Logs: `/tmp/sr-01-acceptance.log`, `/tmp/sr-01-focused.log`. Tests were prepared
+before implementation: initial selected acceptance had eight failures and the
+initial implementation run had twelve failures, all for the absent module
+(`/tmp/sr-01-acceptance-red.log`, `/tmp/sr-01-focused-red.log`). The final focused
+tests prove exact binary/empty/EOF pages, UTF8 inventory ordering and detachment,
+literal byte search/resume, source/context separation, no filesystem work for
+unlisted IDs, static symlink/type/mode refusal, size/hash drift, input bounds,
+hook-free rejection and file-handle cleanup. Synchronous read observations on
+an inert 180000-byte file record exactly two full-file reads for one page and
+one search, each with chunks at most 65536 bytes; changing only the unseen tail
+then refuses both operations. Pure manifest cases exercise per-file, aggregate,
+entry-count and canonical-byte ceilings without creating large artifact bodies.
+
+Local static review: data flow PASS; edge/error handling PASS; security PASS;
+schema/field consistency PASS; library-slice completeness PASS. The required
+Explore subagent request failed with `Unknown model gpt-6.1-sol`; no alternative
+model/provider was used. This is not independent review evidence.
+
+Limits: host snapshot protection, manifest/sourceRef provenance binding and
+context sanitization/issuance remain prerequisites. Reader hashes prove integrity
+consistency, not Git provenance. Mode and static ancestor checks do not prove
+hostile same-user isolation or concurrent replacement protection. Full source
+files above 16MiB remain explicitly unavailable; per-call bounds do not establish
+an aggregate CPU quota. No MCP/provider transport, broader runtime tool
+confinement, account/cost evidence or overall Codex parity is established. No
+target application changes/execution, live/fallback providers, blocked capture
+or filesystem-race reproduction, pinned-host changes, Git staging/commits or
+feature-pass flag edits occurred. Snapshot owners, prior acceptance/baselines,
+vendors, validators and schemas are unchanged. All prior blocked statuses and
+evidence limits remain. Full gates, flags, staging, commits and final independent
+review belong to the external host.
+
+Final hygiene: unchanged `bash scripts/check-secrets.sh` returned exit 0,
+`check-secrets: clean` (`/tmp/sr-01-secrets-tracked.log`). The explicit scan of
+both new source/test files also returned exit 0 as recorded above. The tracked
+diff outside DECISIONS.md and this progress file is empty, and the index is
+unchanged: `git diff --exit-code -- . ':!DECISIONS.md' ':!PROGRESS-security-audit.md'`
+and `git diff --cached --exit-code` returned exit 0. Frozen files are preserved.

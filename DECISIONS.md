@@ -619,3 +619,26 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   binding semantics; require current identity for opted-in controls and every
   new control API, including legacy getControl. The corrected focused run is
   82/0 (19 new checks). No frozen baseline was changed.
+- D104 (SR-01): Implement only the host-selected source-reader library, treating
+  the selected contract as authoritative despite its retained proposal heading.
+  Reuse upstream relative-path validation and journal-data finite canonical JSON;
+  keep snapshot creation/protection, vendors and validators unchanged. Capture
+  detached manifest data, check static ancestor chains and hash each complete
+  addressed file through bounded chunks before releasing bounded raw pages or
+  literal matches. Context lookup uses only issued IDs. Tests use inert local
+  files, sequential changes and synchronous I/O observations, never target code,
+  providers or blocked race/capture reproductions. Record decisions and evidence
+  here and in PROGRESS-security-audit.md; external host owns full gates, flags,
+  staging, commits and final review. No broader roadmap or unrelated docs edits.
+- D105 (SR-01 evidence): All eight unchanged selected acceptance cases and 24
+  focused workflow-harness checks pass (12 new reader and 12 existing snapshot
+  checks). The initial runs failed eight and twelve cases respectively because
+  the reader module was absent. Whole-file read observations use a 180000-byte
+  inert file and at most 65536-byte chunks; same-size tail changes refuse both
+  page and search delivery. Manifest bounds use pure data, not large target
+  exports. Local static review passes the five CLAUDE.md sanity categories.
+  The required Explore request returned Unknown model gpt-6.1-sol; no fallback
+  or independent review claim. Static protections and inert sequential tests do
+  not prove Git provenance, context sanitization, provider confinement, concurrent
+  replacement protection or any previously blocked scenario. All such limits
+  and the external host's final review/full gates remain in force.

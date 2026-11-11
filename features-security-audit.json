@@ -152,7 +152,7 @@
       ],
       "test": "acceptance/security-audit/sr-01-reader.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SA-05a",
