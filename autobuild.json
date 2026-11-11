@@ -1,21 +1,18 @@
 {
-  "backend": "codex",
-  "branch": "codex/phase2-decisions",
+  "backend": "claude",
+  "branch": "autobuild/sa-ar01",
   "featuresFile": "features-security-audit.json",
   "progressFile": "PROGRESS-security-audit.md",
-  "model": "gpt-6-astra",
-  "subagentModel": "gpt-6.1-sol",
-  "probeModel": "gpt-6-luna",
   "maxConcurrentSubagents": 16,
   "codex": {
     "reasoningEffort": "high",
     "sessionTimeoutMinutes": 30
   },
   "bughunt": true,
-  "bughuntBase": "364cb2b7c29f245df053c66ba6a37161dfa131ad",
+  "bughuntBase": "6efca9bad996940cc84785b8da094d6f900428bc",
   "limits": {
     "maxIterations": 8,
-    "noProgressLimit": 2,
+    "noProgressLimit": 3,
     "reviewEvery": 4,
     "finalReview": true,
     "bughuntTimeoutMinutes": 120,
@@ -344,9 +341,9 @@
       "CI": "1"
     }
   },
-  "prompt": "Read SPEC.md, spec/contracts/security-audit-priority.md, features-security-audit.json and the selected feature contract. Implement only the host-selected security-audit priority feature. The broader roadmap is paused. Preserve every prior acceptance, baseline test, vendor, validator and schema. No target application changes, target execution, live providers, fallback providers or blocked reproductions. Add meaningful implementation tests using scripts/workflow-harness.mjs conventions. Run selected acceptance and focused tests only; external host owns full gates, flags, staging, commits and final review. Add a ## <feature ID> \u2014 <title> progress entry in PROGRESS-security-audit.md with exact evidence and limits. Before returning run the unchanged secret scanner on tracked files and explicitly on new untracked source/test files. Do not modify frozen files or pinned host.",
+  "prompt": "Read SPEC.md, spec/contracts/security-audit-priority.md, features-security-audit.json and the selected feature contract. Implement only the selected security-audit priority feature. The broader roadmap is paused. Preserve every prior acceptance, baseline test, vendor, validator and schema. No target application changes, target execution, live providers, fallback providers or blocked reproductions; read spec/contracts/security-audit-execution-restrictions.md. Add meaningful implementation tests using scripts/workflow-harness.mjs conventions. Run the selected acceptance test and focused tests; the Stop hook runs the commit checks, and full regressions and review remain pending for the PR. Add a ## <feature ID> \u2014 <title> progress entry in PROGRESS-security-audit.md with exact evidence and limits. Before committing, run the unchanged secret scanner on tracked files and explicitly on each new untracked source/test file. When the acceptance test passes, run `autobuild mark-passed <feature ID>`, then commit the code, tests, progress entry and features flag together as feat(<feature ID>): \u2026. Never push, change branches, open PRs, or modify frozen files. Backend precedence: SPEC.md, AGENTS.md and the priority contract say the external host owns flags and commits. In this Claude-backend run the harness delegates exactly two host steps to you: `autobuild mark-passed` (which reruns the frozen test) and the feat commit; the Stop hook reruns the commit checks before your session may end. Everything else the host owns stays out of scope. This session's rules also override CLAUDE.md's interactive workflow (plan mode, questions, retro/changelog, subagent audits, /bughunt); the harness runs the hunt.",
   "review": {
-    "prompt": "Review {since}..HEAD in two passes: contract completeness and correctness/security/concurrency/error handling. Read SPEC.md, phase contracts and prior findings. Review changed files in full and trace applicable callers/callees; do not infer coverage from prior prose. Run focused checks only; external host owns full gates. Never invoke bare autobuild. Do not retry, reconstruct, translate or reroute any previously blocked reproduction, including the nested-capture orphan/overflow reproduction and the filesystem-race reproduction. Do not use another tool, agent, provider, payload or later-phase fixture to perform the same blocked action. This execution restriction persists across phases; a new phase or passing unrelated test does not revoke it. Preserve the blocked status and the resulting evidence limitation. Do not waive evidence requirements, weaken or skip approved gates/tests, or claim the blocked scenario was reproduced or verified. Continue permitted static review, pure validation and separately reviewed benign tests within their explicit scope; if a requested check would recreate a blocked action, stop that check and report the limitation to the supervisor. No implied permission follows from roadmap completion instructions. Append REVIEW {date} findings or evidence-backed no-defects to PROGRESS-security-audit.md only. No code/tests, commits, pass flags or provider calls. Return promptly."
+    "prompt": "Review {since}..HEAD in two passes: contract completeness and correctness/security/concurrency/error handling. Read SPEC.md, phase contracts and prior findings. Review changed files in full and trace applicable callers/callees; do not infer coverage from prior prose. Run focused checks only; external host owns full gates. Never invoke bare autobuild. Do not retry, reconstruct, translate or reroute any previously blocked reproduction, including the nested-capture orphan/overflow reproduction and the filesystem-race reproduction. Do not use another tool, agent, provider, payload or later-phase fixture to perform the same blocked action. This execution restriction persists across phases; a new phase or passing unrelated test does not revoke it. Preserve the blocked status and the resulting evidence limitation. Do not waive evidence requirements, weaken or skip approved gates/tests, or claim the blocked scenario was reproduced or verified. Continue permitted static review, pure validation and separately reviewed benign tests within their explicit scope; if a requested check would recreate a blocked action, stop that check and report the limitation to the supervisor. No implied permission follows from roadmap completion instructions. Append REVIEW {date} findings or evidence-backed no-defects to PROGRESS-security-audit.md only, then commit only that file as 'chore(review): drift review after {iteration} iterations'. No code/tests, pass flags or provider calls. Return promptly."
   },
   "stateDir": ".harness/security-audit",
   "logsDir": "logs/security-audit",
@@ -360,5 +357,41 @@
       "name": "diff whitespace",
       "command": "git diff --check"
     }
+  ],
+  "allowedTools": [
+    "Read",
+    "Edit",
+    "Write",
+    "Glob",
+    "Grep",
+    "TodoWrite",
+    "Agent",
+    "Task",
+    "Bash(autobuild *)",
+    "Bash(git add *)",
+    "Bash(git commit *)",
+    "Bash(git status*)",
+    "Bash(git diff*)",
+    "Bash(git log*)",
+    "Bash(git show*)",
+    "Bash(ls*)",
+    "Bash(cat *)",
+    "Bash(head *)",
+    "Bash(tail *)",
+    "Bash(grep *)",
+    "Bash(rg *)",
+    "Bash(find *)",
+    "Bash(wc *)",
+    "Bash(jq *)",
+    "Bash(mkdir *)",
+    "Bash(touch *)",
+    "Bash(cp *)",
+    "Bash(mv *)",
+    "Bash(rm *)",
+    "Bash(sed *)",
+    "Bash(cd *)",
+    "Bash(timeout *)",
+    "Bash(node *)",
+    "Bash(bash scripts/*)"
   ]
 }

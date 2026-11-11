@@ -795,3 +795,23 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   Root may implement/test/commit this coordinated repair directly; earlier
   full-gate-before-commit choreography is superseded for this hotfix. No provider
   refusal bypass, blocked reproduction, protected push or merge waiver follows.
+
+- D119 (SA-AR01 launch, 2026-11-11): User chose the Claude backend for SA-AR01,
+  branch autobuild/sa-ar01 from main 6efca9b, bughuntBase 6efca9b. Resolved by
+  doctor: model opus, subagents sonnet, advisor fable, probe claude-haiku-5-5,
+  effort high (central); maxConcurrentSubagents 16 (project). Limits:
+  maxIterations 8, noProgressLimit 3 (was 2), PR-first delivery unchanged. Codex
+  model ids were removed from autobuild.json so central Claude settings apply.
+  Because SPEC.md, AGENTS.md and the priority contract assign flags and commits to
+  the external host, the builder prompt delegates exactly `autobuild mark-passed`
+  and the feat commit to the Claude session, with the Stop hook rerunning the
+  commit checks; the review prompt commits only its chore(review) progress entry.
+  First launch uses --max-iterations 1 per ROADMAP delivery step 4; inspect the
+  commit, pass flag and stop attempts before a longer run. Pushes, PRs and merges
+  stay with the human.
+  Dry run 1 (20261111T204207Z, $5.23 est): INCOMPLETE with 20 permission
+  denials. This repo had no `allowedTools`, which Codex never needed, so the
+  Claude builder (dontAsk) could not edit or run `node --test`. Added the tool
+  template's allowlist plus `Bash(node *)` and `Bash(bash scripts/*)`; the guard
+  hook and deny rules still block frozen files, push, curl, wget and rm -rf.
+
