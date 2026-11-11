@@ -4,6 +4,7 @@ import { join, isAbsolute, delimiter } from 'node:path'
 import { readAgentConfig, validateAgentConfig } from '../../../scripts/agent-config.mjs'
 import { renderAgentConfig, ROOT } from '../../../scripts/configure-agents.mjs'
 import { resolveManagedModels, resolveManagedConfig } from '../../../graphs/autobuild/tool/lib/config.mjs'
+import { findInstalls, assessInstalls } from '../../../graphs/autobuild/tool/lib/codex-installs.mjs'
 import { sanitizeSettings } from './records.mjs'
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -137,6 +138,12 @@ export async function inspectDoctor({ repo, backend = 'codex', pandaRoot = ROOT,
         capabilityProbe ? 'Managed provider probe completed.' : 'Managed provider executable was found; execution was not performed.')
     }
   } catch { check('binary', 'fail', 'Managed provider probe failed.') }
+  // Informational only, so readiness never depends on what else this machine has
+  // installed. autobuild's preflight is what refuses an older Codex shadowing a newer one.
+  if (backend === 'codex') {
+    const installs = findInstalls(bin, path, repo)
+    if (installs.length) check('codex-cli', 'pass', assessInstalls(installs).message)
+  }
   for (const key of controls) {
     const control = result.runtime.controls[key]
     check(`control-${key}`, control.status === 'supported' ? 'pass' : control.status === 'unsupported' ? 'fail' : 'unknown', control.evidence)

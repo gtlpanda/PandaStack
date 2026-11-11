@@ -33,6 +33,7 @@ import { buildEnv, sessionConfigEnv, git, sh, quote } from "./proc.mjs";
 import { isOurs } from "../../../build/skills/build-app/driver/proc.mjs";
 import { clearStopFailure, readStopFailure, writeSession } from "./session.mjs";
 import { runCodex, readCodexResult } from "./codex.mjs";
+import { checkCodexLaunch } from "./codex-installs.mjs";
 import { observeContextLaunch } from './context-receipt.mjs';
 import { finishCodexBuilder, finishCodexReview } from "./codex-gate.mjs";
 import { runFeatureTests } from "./tests.mjs";
@@ -505,6 +506,12 @@ function preflight(config, log) {
   if (!claude.ok) {
     log(`preflight: ${bin} not found on PATH`);
     failed = true;
+  } else if (config.backend === "codex") {
+    // Log which Codex runs. Refuse only when it is older than another install on PATH;
+    // a lone outdated Codex is logged, not refused.
+    const codex = checkCodexLaunch(bin, buildEnv(config).PATH, config.root);
+    log(`preflight: ${codex.message}`);
+    if (!codex.ok) failed = true;
   }
   for (const check of config.preflight ?? []) {
     const result = sh(config, check.command, { timeoutMs: 120_000 });

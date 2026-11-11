@@ -3288,3 +3288,47 @@ Locally: run-child-context went from 3/2 to 5/0, native-offering-catalog from 15
 machine (Git 2.43 and the Windows mount are both present), so CI is their proof. Two
 other p1-14 cases (33, 39) fail locally on pristine main but pass in CI; they are not
 touched.
+
+## 47. Catch a stale Codex CLI before an overnight run (2026-11-11)
+
+Overnight Codex runs hit `Unknown model gpt-6.1-sol for spawn_agent` in 20 autobuild
+sessions (2026-11-10 to 11). The default model mapping was not the cause. Tested on this machine:
+- Codex 0.154.0 (`/usr/bin/codex`) rejects gpt-6.1-sol for spawn_agent; 0.167.0
+  (`~/.npm-global/bin/codex`) accepts it both top-level and for spawn_agent.
+- `~/.npm-global/bin` was on PATH only in `~/.profile`, so non-login shells (tmux,
+  most terminals) found 0.154.0. All 20 sessions with that spawn_agent error record
+  cli_version 0.154.0 (counted from `~/.codex/sessions`, excluding a reproduction probe).
+
+The machine is fixed (old global removed, PATH set in `~/.bashrc`). This change makes
+the Codex in use visible at launch, and refuses the run when it is shadowing a newer
+install. It would NOT have refused the incident itself: the launching shell saw only
+the old Codex, which is the single-install case, so preflight would only have logged
+`Codex in use: /usr/bin/codex (0.154.0).` (replayed). Refusing a lone stale CLI needs a
+spawn-model probe at launch; that is a separate follow-up.
+- `graphs/autobuild/tool/lib/codex-installs.mjs`: lists every `codex` on PATH (one per
+  real file, relative entries anchored at the launch directory), reads versions from
+  the npm `package.json` without executing anything, and compares X.Y.Z numerically.
+- autobuild preflight logs the Codex in use plus other installs, and fails (exit 5,
+  no session) when another install is known to be newer. Unknown versions only warn;
+  an explicit `AUTOBUILD_CODEX_BIN` path is used alone, with no listing or warning.
+- doctor adds an informational `codex-cli` check that always passes, because frozen
+  phase 1 acceptance tests pin doctor readiness under the machine's real PATH.
+
+Review fixes: resolve real paths with `realpathSync.native`, because plain
+`realpathSync` collapses `..` before symlinks and dropped a `link/../bin` install that
+the kernel finds; and escape control characters in printed paths, since PATH can
+come from project config.
+
+CI then failed on frozen `acceptance/phase1/p1-06.test.mjs`: it copies doctor's exact
+module dependencies into an alternate root, and the new `codex-installs.mjs` import
+was missing (`ERR_MODULE_NOT_FOUND`). The fixture now lists that module. This is not
+a weakened contract: the test still proves doctor works from a source checkout without
+central config. Local `/verify` (scripts/test.sh) missed it because it does not run the
+CI gate's acceptance steps; `autobuild check --phase full` does.
+
+Tests: 13 unit cases (codex-installs.test.mjs), 1 loop case (codex.test.mjs: refused
+when shadowed, passes when ordered), 2 doctor cases (no subprocess, readiness
+unchanged). The loop and doctor cases fail with the wiring reverted. The loop test
+first failed here because it counted this machine's real Codex; it now uses version
+999.0.0 and passes with and without a real Codex on PATH.
+
