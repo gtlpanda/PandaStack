@@ -119,6 +119,75 @@
       "test": "acceptance/native-runtime/nr-02-runtime.test.mjs",
       "testKind": "node",
       "passes": false
+    },
+    {
+      "id": "SA-02c",
+      "title": "Persist opt-in audit grant controls and report freshness barriers",
+      "description": "Implement C1 journal controls only. C2 native reserve policy and runtime draining remain separately required. Preserve legacy v1 semantics and owning lease; bounded explicit v2 opt-in, immutable maximum, CAS increases only while paused/quiescent, reserved settlement capacity and current owning report acknowledgement.",
+      "contract": "spec/contracts/security-audit-control-budget.md",
+      "dependencies": [
+        "SA-02b"
+      ],
+      "acceptance": [
+        "Nine ordinary cases pass, including zero authorized grant and maximum as known values.",
+        "Unknown outcomes and stale reports block new admission; terminal settlement and replay remain possible within reserved capacity.",
+        "Actual budget evidence binds partial-report generations without acknowledgement cycles; no native verification-reserve enforcement claim yet."
+      ],
+      "test": "acceptance/security-audit/sa-02c-control-budget.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "SR-01",
+      "title": "Provide bounded manifest-scoped source and context reads",
+      "description": "Implement source-reader library only with existing path grammar and finite JSON utilities. Static root/ancestor/file protections, exact full-file hashes and bounded lossless pages; no provider, MCP, target execution or filesystem-race proof.",
+      "contract": "spec/contracts/security-audit-source-reader.md",
+      "dependencies": [
+        "SA-01b"
+      ],
+      "acceptance": [
+        "Eight reviewed ordinary/pure cases pass for source/context separation, pagination, literal byte search and complete hash verification.",
+        "No arbitrary filesystem roots, path traversal, static symlinks, writable artifacts or unlisted reads accepted.",
+        "Reader integrity is not Git provenance, runtime tool confinement or hostile concurrent replacement proof."
+      ],
+      "test": "acceptance/security-audit/sr-01-reader.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "SA-05a",
+      "title": "Partition full critic evidence and require global semantic reconciliation",
+      "description": "Implement pure partition planner and narrow optional context in owning security-audit graph. Use exact executable arguments and real serializer measurement; preserve legacy behavior when context absent. No durable scheduling or existing clipping test amendments in this slice.",
+      "contract": "spec/contracts/security-audit-critic-partitions.md",
+      "dependencies": [
+        "NR-02"
+      ],
+      "acceptance": [
+        "Five cases pass, including 122-unit full evidence exceeding historical failed prompt size and each generated script at most 500000 bytes.",
+        "Retain every linked evidence value and require all partitions plus global reconciliation before pure completion; global cannot erase pending proposals.",
+        "Actual graph prompts distinguish partition scope and global cross-subsystem review while preserving upstream schema and source-only frame.",
+        "Durable manifests, production full-evidence adapter, reader wiring and reserve integration remain mandatory later work."
+      ],
+      "test": "acceptance/security-audit/sa-05a-critic-partitions.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "OC-01",
+      "title": "Inventory every offering and distinguish visibility from native readiness",
+      "description": "Implement offline catalog/discovery/preflight projection only. Preserve Claude installer and use existing settings resolver. Historical inventory plus new native-runtime shared library; all offered workflows and ancillary assets remain explicitly uncertified until their runtime gates pass.",
+      "contract": "spec/contracts/native-offering-catalog.md",
+      "dependencies": [
+        "NR-01"
+      ],
+      "acceptance": [
+        "Eight offline cases compare exact current offering, workflow, asset, fixed target and SKILL content sets.",
+        "Static linked/copy/drift/missing/wrong-target visibility remains distinct from native support; source reads require canonical containment.",
+        "Auth, account, payer and runtime observations remain unknown; no ready claim, provider call or installer mutation."
+      ],
+      "test": "acceptance/native-runtime/oc-01-catalog.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
