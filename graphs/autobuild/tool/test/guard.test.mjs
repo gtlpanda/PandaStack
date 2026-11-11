@@ -101,7 +101,21 @@ test("the guard is inert outside loop sessions", () => {
 test("the kit itself stays frozen even when it lives under the temp dir sessions may write to", () => {
   const kit = copyKit(mkdtempSync(path.join(tmpdir(), "autobuild-kit-")));
   const guard = path.join(kit, "hooks", "guard.mjs");
+  for (const file of ["agent-config.json", "scripts/agent-config.mjs"]) {
+    const target = path.resolve(kit, "../../..", file);
+    assert.equal(decide("Write", { file_path: target }, "builder", "1", guard), "deny");
+    assert.equal(decide("Bash", { command: `echo x > ${target}` }, "builder", "1", guard), "deny");
+  }
   assert.equal(decide("Bash", { command: `echo x > ${path.join(kit, "lib", "cli.mjs")}` }, "builder", "1", guard), "deny");
   assert.equal(decide("Write", { file_path: path.join(kit, "hooks", "guard.mjs") }, "builder", "1", guard), "deny");
   assert.equal(decide("Write", { file_path: path.join(tmpdir(), "scratch.txt") }, "builder", "1", guard), "allow", "the rest of the temp dir stays writable");
+});
+
+
+test("an invalid central config denies active calls instead of crashing before the guard can respond", () => {
+  const kit = copyKit(mkdtempSync(path.join(tmpdir(), "autobuild-config-guard-")));
+  const guard = path.join(kit, "hooks", "guard.mjs");
+  writeFileSync(path.resolve(kit, "../../../agent-config.json"), "{broken");
+  assert.equal(decide("Write", { file_path: path.join(root, "src/allowed.js") }, "builder", "1", guard), "deny");
+  assert.equal(decide("Write", { file_path: path.join(root, "src/allowed.js") }, "builder", "", guard), "allow");
 });

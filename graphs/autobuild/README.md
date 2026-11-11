@@ -11,16 +11,17 @@ to the host, which independently verifies the full gate and protected files afte
 - **The skill:** `/autobuild` (`skills/autobuild/`), the playbook: close planning in one batch,
   write the spec and contracts, freeze the tests, configure, dry-run, run, check on it.
 
-With the default Claude backend, before it reports done, the loop runs `/bughunt --fix` over the whole branch and lands only
+With either backend, before it reports done, the loop runs `/bughunt --fix` over the whole branch and lands only
 verified fixes, through the hunt's landing module (`graphs/hunt/skills/bughunt/land.mjs`), the same
 checks `/build-app` uses. Exit 12 means the hunt needs a human. Off: `"bughunt": false` or
 `AUTOBUILD_BUGHUNT=0`.
 
 With `autobuild run --backend codex`, all builder, review and probe sessions use the
-saved Codex CLI login. Opus/Sonnet/Haiku roles map to Astra/Sol/Luna, with explicit
-model overrides available. A native Codex audit checks the whole branch and can fix
-verified defects before the host runs the full gate and commits. Unresolved findings
-exit 12. This audit does not produce the Claude Workflow PR-review ledger.
+saved Codex CLI login. Opus/Fable, Sonnet and Haiku roles map to Astra, Sol and Luna,
+with explicit overrides. Codex runs the same hunt graph through fresh CLI leaves;
+the host executes reproductions and independent repair checks and saves the shared
+PR-review ledger. Unresolved findings or incomplete coverage exit 12. No Claude
+installation or fallback is needed. The host verifies no-fix and cached hunts too.
 
 New projects: `autobuild init --backend codex`. Existing projects can resume with the
 run flag without changing configuration. Read the [Codex reference](tool/README.md#codex-backend)
@@ -34,5 +35,7 @@ Tests: `scripts/test-autobuild.sh` (run by `scripts/test.sh`), against fake Clau
 throwaway git repos, including the hunt's landing (a verified fix lands, an unverified or
 frozen-file change never does, a manual review exits 12, the off switches). Codex tests
 also cover model routing, host commits, gate retries/side effects, quota recovery,
-timeouts, native audits and cache validation. A real Codex smoke run exercised
-build → review → final audit with saved ChatGPT authentication.
+timeouts, shared ledgers, genuine reproduction/repair and cache validation. The
+native runner suite also tests provisional-ledger refusal, interrupted execution
+and structured-output validation. Live provider results are recorded separately
+from scripted tests in the parity verification receipt.

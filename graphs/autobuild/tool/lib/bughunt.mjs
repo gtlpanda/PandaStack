@@ -15,7 +15,9 @@ import { prepareHunt, readHunt, landHunt, keepAttempt, bughuntPrompt, bughuntLin
 import { sessionSettings, sliceArgs, runClaude, sessionVerdict, stopSessions, NO_BG_CEILING } from "../../../build/skills/build-app/driver/session.mjs";
 import { defaultBase } from "../../../build/skills/build-app/driver/finish.mjs";
 import { statePath } from "./config.mjs";
-import { gitControlChanges, gitControlDigest } from "./gate.mjs";
+import { runGate, frozenChanges, gitControlChanges, gitControlDigest } from "./gate.mjs";
+import { runNativeHunt, withNativeRepoLock } from "../../../hunt/skills/bughunt/native-runner.mjs";
+import { reviewStatus } from "../../../hunt/skills/bughunt/review-status.mjs";
 import { buildEnv, git, quote } from "./proc.mjs";
 
 /** Exit code when the bug hunt needs a human: findings left open, or the hunt could not run or land. */
@@ -27,6 +29,14 @@ const CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(process.env.HOME |
 
 export function huntEnabled(config, env = process.env) {
   return config.bughunt !== false && env.AUTOBUILD_BUGHUNT !== "0";
+}
+
+/** Read-only review coverage, independent of feature completion or audit memos. */
+export function huntStatus(config) {
+  const base = config.bughuntBase || defaultBase(config.root);
+  const resolved = git(config, ["rev-parse", "--verify", "-q", `${base}^{commit}`]).ok ? base : `origin/${base}`;
+  const status = reviewStatus(config.root, "HEAD", { base: resolved });
+  return { ...status, dirty: Boolean(git(config, ["status", "--porcelain"]).output.trim()) };
 }
 
 // The landing in progress, if any. It checks a branch out detached and restores the build branch
@@ -70,16 +80,23 @@ function readJson(file) {
  * Runs the hunt once per head and returns an exit code: 0 when it passed (or had nothing to
  * review), HUNT_EXIT when it needs a human, 8/9/10 when the API stopped it, 130 when stopped.
  */
-export async function runBughunt(config, { log, runId, stopped = () => false }) {
+export async function runBughunt(config, options) {
+  try {
+    // Acquire before intake/prepare can reset analysis or repair worktrees.
+    return await withNativeRepoLock(config.root, lockToken => runBughuntLocked(config, { ...options, lockToken }));
+  } catch (error) {
+    if (error.code !== "HUNT_LOCKED") throw error;
+    options.log(`bug hunt: ${error.message}`);
+    return HUNT_EXIT;
+  }
+}
+
+async function runBughuntLocked(config, { log, runId, stopped = () => false, lockToken }) {
   const repo = realpathSync(config.root);
   const record = statePath(config, "bughunt.json");
   const target = git(config, ["rev-parse", "--abbrev-ref", "HEAD"]).output.trim();
   const head0 = git(config, ["rev-parse", "HEAD"]).output.trim();
   const previous = readJson(record);
-  if (previous && Number.isInteger(previous.code) && sameHuntHead(config, previous.head, head0)) {
-    log(`bug hunt: already ran at ${head0.slice(0, 8)} (${previous.disposition ?? "skipped"}); not repeated`);
-    return previous.code;
-  }
   if (target === "HEAD") {
     log("bug hunt: HEAD is detached; check out the build branch and rerun");
     return HUNT_EXIT;
@@ -94,6 +111,27 @@ export async function runBughunt(config, { log, runId, stopped = () => false }) 
   if (!resolves(base) && !resolves(`origin/${base}`)) {
     log(`bug hunt: no base branch ${base} to compare ${target} against; set "bughuntBase" in autobuild.json (the branch a PR would merge into), or "bughunt": false`);
     return HUNT_EXIT;
+  }
+  // A memo is not review evidence. Recheck the actual ledger and host gate.
+  if (previous && Number.isInteger(previous.code) && sameHuntHead(config, previous.head, head0)) {
+    const status = reviewStatus(repo, head0, { base: resolves(base) ? base : `origin/${base}` });
+    if (status.hunted) {
+      if (previous.code !== 0) {
+        log(`bug hunt: already ran at ${head0.slice(0, 8)} (${previous.disposition ?? "skipped"}); not repeated`);
+        return previous.code;
+      }
+      if (status.disposition === "pass") {
+        const control = gitControlDigest(config);
+        const gate = runGate(config, { baseSha: head0, failFast: true });
+        if (git(config, ["rev-parse", "HEAD"]).output.trim() !== head0 || gitControlChanges(config, control).length) return 4;
+        if (!gate.ok || git(config, ["status", "--porcelain"]).output.trim()) {
+          log(`bug hunt: cached review, host gate: FAIL\n${gate.steps.filter(s => !s.ok).map(s => `${s.name}: ${s.tail}`).join("\n")}`);
+          return HUNT_EXIT;
+        }
+        log(`bug hunt: already ran at ${head0.slice(0, 8)} (pass); cached ledger and full host gate: PASS`);
+        return 0;
+      }
+    }
   }
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
   const prep = prepareHunt({ repo, target, base, stamp, log });
@@ -119,16 +157,17 @@ export async function runBughunt(config, { log, runId, stopped = () => false }) 
   rmSync(stopFailure, { force: true });
   const logFile = path.join(config.root, config.logsDir, `${runId}-bughunt.jsonl`);
   const prompt = bughuntPrompt({ repo, stateDir: prep.stateDir, configDir: CONFIG_DIR, branch: prep.branch, label: "an autobuild run", scope: `the branch ${target}` });
-  log(`bug hunt: /bughunt --fix over ${target} against ${base} (state ${prep.stateDir}; up to $${config.limits.bughuntBudgetUsd})`);
+  log(`bug hunt: /bughunt --fix over ${target} against ${base} (backend ${config.backend}; state ${prep.stateDir})`);
   const control = gitControlDigest(config);
-  const code = await runClaude({
-    bin: config.claudeBin,
-    repo,
-    logFile,
-    timeoutMs: config.limits.bughuntTimeoutMinutes * 60_000,
-    args: [...sliceArgs({ prompt, model: config.model, settingsFile }), "--max-budget-usd", String(config.limits.bughuntBudgetUsd)],
-    env: buildEnv(config, { ...NO_BG_CEILING, HARNESS_BUILD_ACTIVE: "1", HARNESS_BUILD_GUARD: guardFile, HARNESS_BUILD_STOP_FAILURE: stopFailure }),
-  });
+  const code = config.backend === "codex"
+    ? (await runNativeHunt({ repo, tree: path.join(prep.stateDir, "tree"), configDir: CONFIG_DIR,
+        stateDir: prep.stateDir, mode: "fix", fixBranch: prep.branch, config, log, runId, stopped, lockToken })).code
+    : await runClaude({
+        bin: config.claudeBin, repo, logFile,
+        timeoutMs: config.limits.bughuntTimeoutMinutes * 60_000,
+        args: [...sliceArgs({ prompt, model: config.model, settingsFile }), "--max-budget-usd", String(config.limits.bughuntBudgetUsd)],
+        env: buildEnv(config, { ...NO_BG_CEILING, HARNESS_BUILD_ACTIVE: "1", HARNESS_BUILD_GUARD: guardFile, HARNESS_BUILD_STOP_FAILURE: stopFailure }),
+      });
   const keep = (why) => `${why}; its branch is kept as ${keepAttempt(repo, prep.branch, stamp)}`;
   const tampered = gitControlChanges(config, control);
   if (tampered.length) {
@@ -141,11 +180,28 @@ export async function runBughunt(config, { log, runId, stopped = () => false }) 
   }
 
   const { ledger, lastRun, finished } = readHunt({ stateDir: prep.stateDir, key: prep.key, head: prep.head });
-  if (!finished) {
+  if (!finished || (config.backend === "codex" && code !== 0)) {
     const verdict = sessionVerdict(logFile, stopFailure);
     const byKind = { usage_limit: 8, billing: 9, auth: 10 };
     log(keep(`bug hunt: did not finish (exit ${code}${lastRun ? `; its last run: ${lastRun.status}${lastRun.reason ? `: ${lastRun.reason}` : ""}` : "; it saved no run"}${verdict.message ? `, ${verdict.message}` : ""}); rerun \`autobuild run\` to retry it`));
-    return byKind[verdict.kind] ?? HUNT_EXIT;
+    return config.backend === "codex" && [8, 9, 10, 130].includes(code) ? code : byKind[verdict.kind] ?? HUNT_EXIT;
+  }
+
+  // Review/repair leaves write only isolated scopes, never the original checkout.
+  const originalFrozen = frozenChanges(config, head0);
+  if (git(config, ["rev-parse", "HEAD"]).output.trim() !== head0 ||
+      git(config, ["status", "--porcelain"]).output.trim() || !originalFrozen.ok || originalFrozen.changed.length) {
+    log(keep("bug hunt: original checkout changed during review; nothing landed"));
+    return 4;
+  }
+  // No-fix hunts verify too; landHunt verifies the candidate when fixes exist.
+  if (git(config, ["rev-list", "--count", `${target}..${prep.branch}`]).output.trim() === "0") {
+    const hostGate = runGate(config, { baseSha: head0, failFast: true });
+    if (git(config, ["rev-parse", "HEAD"]).output.trim() !== head0 || gitControlChanges(config, control).length) return 4;
+    if (!hostGate.ok || git(config, ["status", "--porcelain"]).output.trim()) {
+      log(keep(`bug hunt: host gate: FAIL\n${hostGate.steps.filter(s => !s.ok).map(s => `${s.name}: ${s.tail}`).join("\n")}`));
+      return HUNT_EXIT;
+    }
   }
 
   // Passes only on the gate's own last line, never on an exit code alone: a CLI that ran nothing exits 0 too.

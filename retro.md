@@ -3102,3 +3102,77 @@ host-owned gate/mark/commit. Existing Claude paths remain available. Codex skill
 link installed; README/skill explain sandbox, hook, accounting and PR-ledger differences.
 Live smoke ran real Astra through builder, review and audit successfully. Audit found
 and fixed dirty-tree cache acceptance and gate side effects on frozen files.
+
+## Autobuild end-to-end provider parity — 2026-11-09
+
+Replaced the separate Codex final audit with a host adapter for the existing
+hunt graph: specialist reviews, blind skepticism, reproductions, isolated
+repairs, independent verification, shared ledger and checked landing. Added
+standalone native invocation, safe Codex-only skill installation, review-aware
+status, Fable mapping and honest backend-limit documentation.
+
+Caught real strict-schema HTTP 400, premature ledger publication and competing
+review preparation that could replace active repair work. Added fail-closed
+publication and shared pre-preparation locks across providers. Full suite:
+1425 workflow, 106 autobuild, 138 install and 22 secret cases passed; validation
+passed. Real Codex build/hunt/resume and reproduced repair/verified landing
+passed through the unchanged review gate. Details and limits are in
+`graphs/autobuild/tool/PARITY-VERIFICATION.md`.
+
+## Monorepo regression evidence — 2026-11-09
+
+The shared hunt evidence verifier now discovers runnable immediate Node subprojects
+when the root has no test-class step. Suite exports use private dependency
+containers with links to installed package entries, including sibling libraries;
+tool caches remain local to the export. Malformed manifests and symlinked package
+paths fail closed. Existing manifest/test protections and counterfactual checks
+remain in force. Discovered bare Vitest scripts request serial file execution
+only when the installed runner advertises support, preserving existing config
+loaders and test selection.
+
+Nine executed fixtures cover cross-package baseline/candidate failures, both-package regressions, sibling dependencies,
+protected manifests, invalid discovery, installed-skill symlinks, unchanged
+installed cache sentinels and old/new Vitest flag capabilities. Existing
+evidence/repair checks passed 53 cases. Real installed Vitest also passed a CJS
+config fixture. An isolated export of Cherry `5db164d` passed client 1,292 tests
+and server 5,899 tests; server retained 3 expected failures and 333 skips.
+This local proof does not replace the complete host database acceptance gate.
+Self-review caught inherited command-display labels and symlink entrypoint
+detection; independent review caught the forced-loader CJS incompatibility.
+Independent re-audit passed after the compatibility fix and independently reran
+all eight fixtures successfully.
+
+## 44. Central agent configuration (2026-11-09)
+
+Added agent-config.json: a shared concurrency default of 8 and separate Claude
+orchestrator, advisor and worker model/effort settings, with named Haiku checker
+overrides. configure-agents.mjs sync materializes native Claude settings, agent
+frontmatter, workflow nodes and phase labels; check rejects drift. Explicit Claude
+and Codex launchers apply the config without replacing personal configuration.
+Autobuild and build-app consume the central defaults; project overrides remain.
+Codex's native hunt pool now uses the same configurable limit and isolates its
+model/effort routing from Claude workflow pins. Autobuild defaults to retaining
+advisor pins rather than forcing every worker onto one model.
+
+Verification: full validation, installer (138), secrets (22), and workflow (1430)
+checks passed. The first autobuild run found three copied-kit fixture failures:
+the copies lacked the new config dependency. Added the dependency and protection
+for shared config files; the complete autobuild rerun passed 107/107, including invalid central-config fail-closed behavior. Native hunt
+suite passed 18/18, including bounded fan-out and permit release after failures.
+Five central-config tests cover invalid inputs, distinct roles, drift/idempotence,
+project precedence and fake-CLI launch/exit behavior. Installed CLI version smoke
+checks passed (Codex 0.167.0, Claude 2.1.321); no paid model sessions were run.
+Self-review checked data flow, invalid inputs, preservation of tools/permissions,
+configuration precedence, generated metadata and both native execution paths.
+The final affected routing/configuration rerun passed 272/272.
+
+## P1-01: safe run and event contracts
+
+Added a pure ESM record module and skill documentation, plus five implementation
+test groups discovered by the existing workflow harness. Records enforce required
+metadata, safe identifiers, absolute paths, explicit revision unknowns, calendar
+validity, and event/exit-code consistency. Settings snapshots copy only allowlisted
+values and provenance. Lesson: Date.parse normalizes impossible calendar dates;
+validate the parsed calendar components as well. Read-only sanity review found no
+issues across data flow, errors, security, consistency, and completeness. Full
+gate results and remaining limitations are recorded in PROGRESS.md.

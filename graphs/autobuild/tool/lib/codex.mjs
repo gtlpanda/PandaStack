@@ -1,7 +1,11 @@
+import { withTrackedRun } from '../../../../core/skills/run-records/tracking.mjs';
+import { autobuildTracking } from '../../../../core/skills/run-records/adapters.mjs';
 // Codex sessions use the saved CLI login. No Claude flags, hooks or API fallback.
+import { codexConcurrencyArgs } from "../../../../scripts/agent-config.mjs";
 import { spawn } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync } from "node:fs";
 import { buildEnv } from "./proc.mjs";
+import { observeContextLaunch } from './context-receipt.mjs';
 
 export function codexArgs(config, { prompt, appendSystemPrompt = "", role = "builder", outputFile, schemaFile } = {}) {
   const probe = role === "probe";
@@ -9,6 +13,7 @@ export function codexArgs(config, { prompt, appendSystemPrompt = "", role = "bui
     "-c", 'approval_policy="never"', "--model", probe ? config.probeModel : config.model,
     "-c", `model_reasoning_effort=${JSON.stringify(probe ? "high" : config.codex.reasoningEffort)}`,
     "-c", `agents.default_subagent_model=${JSON.stringify(config.subagentModel)}`];
+  args.push(...codexConcurrencyArgs(config.maxConcurrentSubagents));
   if (outputFile) args.push("--output-last-message", outputFile);
   if (schemaFile) args.push("--output-schema", schemaFile);
   const rules = probe ? "Do not use tools. Reply OK." : [
@@ -24,6 +29,11 @@ export function codexArgs(config, { prompt, appendSystemPrompt = "", role = "bui
 }
 
 export async function runCodex(config, options, track = (child) => child) {
+  if (options.role === "probe") return runCodexWork(config, options, track);
+  return withTrackedRun(autobuildTracking(config, "session"), () => runCodexWork(config, options, track));
+}
+
+async function runCodexWork(config, options, track) {
   const { args, input } = codexArgs(config, options);
   const out = openSync(options.logFile, "w");
   const err = openSync(`${options.logFile}.stderr`, "w");
@@ -31,8 +41,10 @@ export async function runCodex(config, options, track = (child) => child) {
   // A nested CLI must not attach itself to its parent's thread.
   delete env.CODEX_THREAD_ID;
   try {
+    options.beforeLaunch?.();
     return await new Promise((resolve) => {
       const child = track(spawn(config.codexBin, args, { cwd: config.root, env, detached: true, stdio: ["pipe", out, err] }));
+      const written = observeContextLaunch(child, options, { stdin: true });
       const killGroup = (signal) => {
         if (!child.pid) return;
         try { process.kill(-child.pid, signal); } catch (error) { if (error.code !== "ESRCH") throw error; }
@@ -48,7 +60,8 @@ export async function runCodex(config, options, track = (child) => child) {
       child.once("close", (code) => finish(code ?? 1));
       child.once("error", () => finish(127));
       child.stdin.on("error", () => {}); // early CLI failure can close stdin before the prompt is sent
-      child.stdin.end(input);
+      try { child.stdin.end(input, written); }
+      catch (error) { written(error); throw error; }
     });
   } finally {
     closeSync(out);

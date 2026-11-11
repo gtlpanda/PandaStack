@@ -52,7 +52,11 @@ const fail = (summary, problems = []) => { throw Object.assign(new Error(summary
 // candidates.json is what merge-wave wrote (audit-ledger.mjs mergeCandidates): { fingerprint, proposed_verdict, hunter_ids, units, record }, one entry per
 // fingerprint, sorted, plus what a carried prior record adds (carried_from) and what consolidation adds (merged). It is read as an untrusted file.
 export function readPool(runDir) {
-  const pool = readJson(join(runDir, CANDIDATES_FILE))
+  return parsePool(readJson(join(runDir, CANDIDATES_FILE)))
+}
+
+// Validate an already bounded, detached artifact without a second filesystem read.
+export function parsePool(pool) {
   if (pool === undefined) return []
   const ok = Array.isArray(pool) && pool.every(c => isObj(c) && isText(c.fingerprint) && ['confirmed', 'needs_validation'].includes(c.proposed_verdict) && Array.isArray(c.hunter_ids) && c.hunter_ids.every(isText) &&
     Array.isArray(c.units) && c.units.every(isText) && isObj(c.record)) && new Set(pool.map(c => c.fingerprint)).size === pool.length
@@ -189,7 +193,10 @@ const isDecisions = d => isObj(d) && d.version === 1 && isObj(d.rounds) && Numbe
 
 // The decisions on disk, or null when there are none yet. A file that is not what the stages wrote is refused by name: it is never edited by hand and never read as empty.
 export function decisionsOf(runDir) {
-  const d = readJson(join(runDir, DECISIONS_FILE))
+  return parseDecisions(readJson(join(runDir, DECISIONS_FILE)))
+}
+
+export function parseDecisions(d) {
   if (d === undefined) return null
   if (!isDecisions(d)) refuse(`${DECISIONS_FILE} is not what the stages wrote ({version: 1, rounds, entries: [one per candidate]}); it is never edited by hand`)
   return d

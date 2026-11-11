@@ -64,13 +64,12 @@ await test('helpers marked shared are identical to harness-repair.js', () => {
     assert.equal(blockOf(src, start), blockOf(qa, start), `shared block drifted: ${start}`)
   }
 })
-await test('every node pins agentType, model, effort high, and a schema, matching the agent files', async () => {
+await test('every node pins agentType, model, configured effort, and a schema, matching the agent files', async () => {
   const { calls } = await run(fn, { extractor: [BRIEF()], questioner: [QS()] }, ARGS)
   for (const c of calls) {
     assert.ok(c.schema && c.schema.type === 'object', `call without schema: ${c.label}`)
     assert.equal(c.model, agentField(c.agentType, 'model'), `${c.agentType}: model drift`)
     assert.equal(c.effort, agentField(c.agentType, 'effort'), `${c.agentType}: effort drift`)
-    assert.equal(c.effort, 'high')
   }
   assert.equal(types(calls), 'extractor,questioner')
 })

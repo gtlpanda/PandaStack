@@ -1,0 +1,126 @@
+// Observation only: storage failures must never change runner execution.
+import { AsyncLocalStorage } from 'node:async_hooks'
+import { randomUUID } from 'node:crypto'
+import { realpathSync, lstatSync, statSync } from 'node:fs'
+import { resolve, dirname, basename, join, relative, isAbsolute, sep } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { createRun } from './records.mjs'
+import { createRunStore } from './store.mjs'
+
+const context = new AsyncLocalStorage()
+export const currentRunId = () => context.getStore() ?? null
+const warn = () => { try { process.stderr.write('PandaStack: run tracking unavailable; execution continues.\n') } catch {} }
+function git(repo, ...args) {
+  return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 3000, maxBuffer: 8192 })
+}
+function gitPath(repo, ...args) {
+  const output = git(repo, ...args)
+  // A pathname may itself end in LF, CR, tab or space. Only Git's final LF
+  // belongs to the protocol, and missing termination is indeterminate.
+  if (!output.endsWith('\n')) throw Error('Invalid Git path output')
+  return output.slice(0, -1)
+}
+function revision(repo) {
+  try { return git(repo, 'rev-parse', '--verify', 'HEAD').trim() } catch { return null }
+}
+
+function repositoryAbsent(directory, error) {
+  // Only the complete ordinary absence diagnostic permits fallback. Other
+  // failures may contain these words in a filename or additional diagnostics.
+  if (error.status !== 128 || String(error.stderr) !==
+    'fatal: not a git repository (or any of the parent directories): .git\n') return false
+  // Failed controlled discovery cannot prove absence. Successful discovery is
+  // still authoritative, and the caller's environment is never changed.
+  if (['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_CEILING_DIRECTORIES',
+    'GIT_DISCOVERY_ACROSS_FILESYSTEM'].some(key => process.env[key] !== undefined)) return false
+  for (let ancestor = directory; ; ancestor = dirname(ancestor)) {
+    try { lstatSync(join(ancestor, '.git')); return false }
+    catch (failure) { if (failure.code !== 'ENOENT') throw failure }
+    // lstat notices broken symlinks too; only absent entries all the way to
+    // the filesystem root allow the canonical supplied-directory fallback.
+    if (dirname(ancestor) === ancestor) return true
+  }
+}
+
+function placementRoot(directory) {
+  let root
+  try { root = gitPath(directory, 'rev-parse', '--show-toplevel') }
+  catch (error) {
+    // Only a known non-Git directory gets the supplied-directory fallback.
+    // Permission, timeout and invalid repository failures are indeterminate.
+    if (repositoryAbsent(directory, error)) {
+      return { root: directory, namespace: null }
+    }
+    throw error
+  }
+  const owner = realpathSync(gitPath(directory, 'rev-parse', '--absolute-git-dir'))
+  // Trust the metadata owner, never a caller-created namespace symlink target.
+  return { root: realpathSync(root), namespace: join(owner, 'pandastack-runs') }
+}
+
+function prospectiveDirectory(directory) {
+  const suffix = []
+  let ancestor = directory
+  for (;;) {
+    try { lstatSync(ancestor); break }
+    catch (error) {
+      if (error.code !== 'ENOENT' || dirname(ancestor) === ancestor) throw error
+      suffix.unshift(basename(ancestor))
+      ancestor = dirname(ancestor)
+    }
+  }
+  // Broken/looping symlinks and non-directory ancestors must not be mistaken
+  // for a missing suffix. All checks happen before the store can create paths.
+  const canonical = realpathSync(ancestor)
+  if (!statSync(canonical).isDirectory()) throw Error('Invalid tracking ancestor')
+  return resolve(canonical, ...suffix)
+}
+
+function contains(root, candidate) {
+  const path = relative(root, candidate)
+  return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path))
+}
+
+function managedStoreDirectory(options, repo, runnerRoot) {
+  const roots = [placementRoot(repo), placementRoot(runnerRoot)]
+  const selected = options.storeDir ?? process.env.PANDASTACK_RUNS_DIR ??
+    gitPath(repo, 'rev-parse', '--path-format=absolute', '--git-path', 'pandastack-runs')
+  if (typeof selected !== 'string' || !selected || selected.includes('\0')) throw Error('Invalid tracking directory')
+  // Match the store's lexical normalization, but keep its original no-follow path.
+  const directory = resolve(selected)
+  const candidate = prospectiveDirectory(directory)
+  const metadata = roots.some(({ namespace }) => namespace && contains(namespace, candidate))
+  if (!metadata && roots.some(({ root }) => contains(root, candidate))) throw Error('Tracking inside worktree')
+  return directory
+}
+
+export async function withTrackedRun(options, work) {
+  let store, id, warned = false
+  const warning = () => { if (!warned) { warned = true; warn() } }
+  const event = (type, exitCode) => store.appendEvent({ schemaVersion: 1, id: randomUUID(), runId: id, type, at: new Date().toISOString(), exitCode })
+  try {
+    const repo = realpathSync(resolve(options.repo))
+    const runnerRoot = realpathSync(resolve(options.runnerRoot))
+    id = options.runId ?? randomUUID()
+    store = createRunStore(managedStoreDirectory(options, repo, runnerRoot))
+    const run = createRun({ id, repo, runnerRoot, revision: revision(repo), runnerRevision: revision(runnerRoot),
+      workflow: options.workflow, backend: options.backend, settings: options.settings,
+      parentRunId: options.parentRunId === undefined ? currentRunId() : options.parentRunId, startedAt: new Date().toISOString() })
+    // A caller-supplied ID cannot resume an earlier invocation, even in the same millisecond.
+    if (!store.putRun(run).created) throw Error('Existing invocation')
+    event('started', null)
+  } catch { store = null; id = null; warning() }
+  return context.run(id, async () => {
+    let code
+    try { code = await work() }
+    catch (error) {
+      if (store) { try { event('failed', 1) } catch { warning() } }
+      throw error
+    }
+    if (store) {
+      try { event(code === 0 ? 'finished' : code === 130 ? 'cancelled' : 'failed', code) }
+      catch { warning() }
+    }
+    return code
+  })
+}

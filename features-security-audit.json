@@ -1,0 +1,247 @@
+{
+  "features": [
+    {
+      "id": "SA-01",
+      "title": "Reject unprotected audit snapshots before agent spend",
+      "description": "Implement only spec/contracts/security-audit-snapshot.md. Actual permission bits must be checked after export before metadata publication. Preserve source bytes, budget refusal, owned cleanup, all prior tests and source-only limits. No target code or provider execution.",
+      "contract": "spec/contracts/security-audit-snapshot.md",
+      "dependencies": [],
+      "acceptance": [
+        "Pass six frozen independent cases, including actual Linux and Windows-mounted mode observations.",
+        "Init refuses a snapshot that fails inspection before metadata/stage publication; exact export tree is checked.",
+        "No mode inspection result is represented as arbitrary same-user containment or tool isolation."
+      ],
+      "test": "acceptance/security-audit/sa-01-snapshot.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "SA-01b",
+      "title": "Reject static symlink ancestors in audit snapshot paths",
+      "description": "Close the independently reviewed exported inspector path gap under spec/contracts/security-audit-root-path.md. Preserve SA-01 and all existing tests. No race, capture, target execution or provider work.",
+      "contract": "spec/contracts/security-audit-root-path.md",
+      "dependencies": [
+        "SA-01"
+      ],
+      "acceptance": [
+        "Three reviewed static fixtures pass: ancestor symlink refusal, explicit dot component refusal, canonical trailing-separator control.",
+        "Inspect ancestors without following symlinks before subtree enumeration; preserve original init gating and diagnostic vocabulary."
+      ],
+      "test": "acceptance/security-audit/sa-01b-root-path.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "SA-02a",
+      "title": "Persist individual audit dispatch intent and returned results",
+      "description": "Implement the journal contract only; actual private ownership, per-row durable transitions and conservative unknown replay. Keep existing audit metadata and upstream validators unchanged. No providers, crash-lock takeover, process-race or capture reproduction.",
+      "contract": "spec/contracts/security-audit-journal.md",
+      "dependencies": [
+        "SA-01b"
+      ],
+      "acceptance": [
+        "Pass fourteen frozen ordinary journal cases and preserve all existing gates.",
+        "Persist dispatched state before callback and terminal result before returning; completed results replay without callback; uncertain calls stay held.",
+        "Finite per-record and aggregate bounds support more than 1 MiB combined payload; unsafe input/identity/path refuses without adoption.",
+        "Clearly retain lack of abnormal-process lock recovery until its later reviewed integration."
+      ],
+      "test": "acceptance/security-audit/sa-02a-journal.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "SA-02a1",
+      "title": "Bind journal reads and bound stored payloads before allocation",
+      "description": "Correct reviewed J1/J2 only under the journal-read contract. Preserve journal API, owning lease, per-record and total limits, all existing tests and unknown-call accounting. No large database, capture, race or provider reproduction.",
+      "contract": "spec/contracts/security-audit-journal-read.md",
+      "dependencies": [
+        "SA-02a"
+      ],
+      "acceptance": [
+        "Three ordinary reader consistency cases pass; changed valid current identity refuses CONFLICT and exact restoration preserves receipts.",
+        "Independent static review verifies every variable-width stored row field is size-bounded and aggregate capacity checked before materialization; exact logical accounting remains afterward.",
+        "Existing journal and full host gates remain unchanged; tests do not claim hostile identity or filesystem-race protection."
+      ],
+      "test": "acceptance/security-audit/sa-02a1-journal-read.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "NR-01",
+      "title": "Preserve original workflow schemas through native JSON output",
+      "description": "Implement only the pure shared native schema contract. Preserve all six graph schemas, vendored validators and existing hunt converter. No runtime, provider, filesystem or installer changes.",
+      "contract": "spec/contracts/native-runtime-schema.md",
+      "dependencies": [
+        "SA-02a"
+      ],
+      "acceptance": [
+        "Pass fifteen frozen pure schema cases.",
+        "Preserve optional omission, explicit null unions and open records without coercion or field loss.",
+        "Reject unsupported schemas and unsafe non-JSON values before executing hooks or Proxy traps; bound bytes, depth and diagnostics.",
+        "Fixed strict JSON-string wire envelope decodes once and validates the original schema."
+      ],
+      "test": "acceptance/native-runtime/nr-01-schema.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "SA-02b",
+      "title": "Publish readable partial audit reports from durable checkpoints",
+      "description": "Implement partial context, renderer, content-addressed publisher and freshness reader in the existing report owner. Preserve final report behavior and all audit authority bytes; unavailable evidence remains unknown. This helper slice does not claim native callback control integration.",
+      "contract": "spec/contracts/security-audit-partial-reports.md",
+      "dependencies": [
+        "SA-02a1"
+      ],
+      "acceptance": [
+        "Eleven ordinary partial-report cases pass using owning fixtures and journal API.",
+        "Retain pending lead identities, distinguish raw transport results from validated dispositions, and bind every rendered input.",
+        "Publish immutable generations and pointer last; stale, invalid or unavailable evidence cannot be reported current.",
+        "Output failures preserve completed receipts and allow rendering-only recovery; actual no-new-dispatch gate is a later mandatory integration."
+      ],
+      "test": "acceptance/security-audit/sa-02b-partial-reports.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "NR-02",
+      "title": "Execute trusted workflows through bounded native callback ports",
+      "description": "Implement the pinned six-template registry and shared native executor only. Preserve graph logic, original schemas, provider uncertainty, nested concurrency, durable replay and independent permission profiles. Fake ports only; no provider, installer migration or existing native hunt/autobuild rewrite.",
+      "contract": "spec/contracts/native-runtime-executor.md",
+      "dependencies": [
+        "NR-01"
+      ],
+      "acceptance": [
+        "Nineteen frozen ordinary/pure cases exercise actual trusted QA, dev-child, release refusal and audit workflows.",
+        "Nested workflows share one concurrency cap without parent permit deadlock; call identities are stable and binding conflicts refuse replay.",
+        "Durable checkpoint or transport uncertainty escapes graph catches; deadlines and abort bound pending operations and prevent late dispatch.",
+        "Use original NR-01 schema validation, exact transport receipts, explicit profile refusal and no model/provider fallback."
+      ],
+      "test": "acceptance/native-runtime/nr-02-runtime.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "SA-02c",
+      "title": "Persist opt-in audit grant controls and report freshness barriers",
+      "description": "Implement C1 journal controls only. C2 native reserve policy and runtime draining remain separately required. Preserve legacy v1 semantics and owning lease; bounded explicit v2 opt-in, immutable maximum, CAS increases only while paused/quiescent, reserved settlement capacity and current owning report acknowledgement.",
+      "contract": "spec/contracts/security-audit-control-budget.md",
+      "dependencies": [
+        "SA-02b"
+      ],
+      "acceptance": [
+        "Nine ordinary cases pass, including zero authorized grant and maximum as known values.",
+        "Unknown outcomes and stale reports block new admission; terminal settlement and replay remain possible within reserved capacity.",
+        "Actual budget evidence binds partial-report generations without acknowledgement cycles; no native verification-reserve enforcement claim yet."
+      ],
+      "test": "acceptance/security-audit/sa-02c-control-budget.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "SR-01",
+      "title": "Provide bounded manifest-scoped source and context reads",
+      "description": "Implement source-reader library only with existing path grammar and finite JSON utilities. Static root/ancestor/file protections, exact full-file hashes and bounded lossless pages; no provider, MCP, target execution or filesystem-race proof.",
+      "contract": "spec/contracts/security-audit-source-reader.md",
+      "dependencies": [
+        "SA-01b"
+      ],
+      "acceptance": [
+        "Eight reviewed ordinary/pure cases pass for source/context separation, pagination, literal byte search and complete hash verification.",
+        "No arbitrary filesystem roots, path traversal, static symlinks, writable artifacts or unlisted reads accepted.",
+        "Reader integrity is not Git provenance, runtime tool confinement or hostile concurrent replacement proof."
+      ],
+      "test": "acceptance/security-audit/sr-01-reader.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "SR-01a",
+      "title": "Reject statically aliased source/context roots by directory identity",
+      "description": "Correct SR-ROOT-ALIAS-01: retain frozen SR01 lexical/path/mode/hash boundaries and add exact reliable bigint directory identities across opposite root ancestor chains. Pure metadata validation; no actual Windows/DrvFS alias, race or containment claim.",
+      "contract": "spec/contracts/security-audit-root-identities.md",
+      "dependencies": [
+        "SR-01"
+      ],
+      "acceptance": [
+        "Four serial ordinary/pure cases pass: distinct siblings share parents; identical root identities and opposite-chain overlap refuse; unusable identities fail closed.",
+        "No lossy Number/lowercase/realpath-only identity inference. Preserve all frozen SR01 tests and baseline gates.",
+        "Pure substituted metadata tests prove decision predicates only; no previously blocked filesystem or capture reproduction."
+      ],
+      "test": "acceptance/security-audit/sr-01a-root-identities.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "SA-05a",
+      "title": "Partition full critic evidence and require global semantic reconciliation",
+      "description": "Implement pure partition planner and narrow optional context in owning security-audit graph. Use exact executable arguments and real serializer measurement; preserve legacy behavior when context absent. No durable scheduling or existing clipping test amendments in this slice.",
+      "contract": "spec/contracts/security-audit-critic-partitions.md",
+      "dependencies": [
+        "NR-02"
+      ],
+      "acceptance": [
+        "Five cases pass, including 122-unit full evidence exceeding historical failed prompt size and each generated script at most 500000 bytes.",
+        "Retain every linked evidence value and require all partitions plus global reconciliation before pure completion; global cannot erase pending proposals.",
+        "Actual graph prompts distinguish partition scope and global cross-subsystem review while preserving upstream schema and source-only frame.",
+        "Durable manifests, production full-evidence adapter, reader wiring and reserve integration remain mandatory later work."
+      ],
+      "test": "acceptance/security-audit/sa-05a-critic-partitions.test.mjs",
+      "testKind": "node",
+      "passes": true
+    },
+    {
+      "id": "OC-01",
+      "title": "Inventory every offering and distinguish visibility from native readiness",
+      "description": "Implement offline catalog/discovery/preflight projection only. Preserve Claude installer and use existing settings resolver. Historical inventory plus new native-runtime shared library; all offered workflows and ancillary assets remain explicitly uncertified until their runtime gates pass.",
+      "contract": "spec/contracts/native-offering-catalog.md",
+      "dependencies": [
+        "NR-01"
+      ],
+      "acceptance": [
+        "Eight offline cases compare exact current offering, workflow, asset, fixed target and SKILL content sets.",
+        "Static linked/copy/drift/missing/wrong-target visibility remains distinct from native support; source reads require canonical containment.",
+        "Auth, account, payer and runtime observations remain unknown; no ready claim, provider call or installer mutation."
+      ],
+      "test": "acceptance/native-runtime/oc-01-catalog.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "SA-02d",
+      "title": "Connect native audit checkpoints with actual owners, controlled pauses and cooperative cancellation",
+      "description": "Implement actual native journal/report bridge and narrowly selected NR02 pause and reserve-signal extension. Preserve existing frozen contracts/tests and fatal precedence. No alternate scheduler, provider, grant bypass or previously blocked reproduction.",
+      "contract": "spec/contracts/security-audit-native-checkpoints.md",
+      "dependencies": [
+        "NR-02",
+        "SA-02c"
+      ],
+      "acceptance": [
+        "Nine ordinary actual-owner fixtures pass using existing trusted graphs and inert provider ports.",
+        "Actual freshness precedes authorization; durable terminal receipts survive controlled publication failure and same invocation resumes without repeated callbacks.",
+        "Concurrent controlled pause drains authorized siblings; external cancellation joins only owned deferred callbacks and retains uncertain charges.",
+        "Owner association rejects forged, Proxy, closed and mismatched handles before hooks. No real provider, hostile filesystem containment or C2 reserve-policy claim."
+      ],
+      "test": "acceptance/native-runtime/sa-02d-native-checkpoints.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "SA-LT01",
+      "title": "Expose per-record lifecycle feedback and deliver legal critic transitions",
+      "description": "Reuse owning unitFromInput and vendored validation. Preserve valid sibling input bytes, reject lifecycle null/empty rather than normalize identity, and provide shared legal transition vocabulary in actual critic prompts and partition/global hashes. Retry application remains separate.",
+      "contract": "spec/contracts/security-audit-lifecycle-feedback.md",
+      "dependencies": [
+        "SA-05a"
+      ],
+      "acceptance": [
+        "Ten ordinary/pure cases pass with unchanged original validators and frozen gates.",
+        "Accepted sibling records retain original bytes and identity; all duplicate slots reject; no partial run publication.",
+        "Deferred units remain non-reopenable; malformed transition context dispatches nobody.",
+        "Actual criticInput, graph prompt and partition/global planner use shared owner context, bound before hash and unchanged500000-byte measurement."
+      ],
+      "test": "acceptance/security-audit/sa-lt01-feedback.test.mjs",
+      "testKind": "node",
+      "passes": false
+    }
+  ]
+}

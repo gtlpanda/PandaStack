@@ -1,3 +1,7 @@
+import { withTrackedRun, currentRunId } from '../../../../core/skills/run-records/tracking.mjs';
+import { autobuildTracking } from '../../../../core/skills/run-records/adapters.mjs';
+import { createDecisionTrace } from '../../../../core/skills/decisions/observations.mjs';
+import { prepareDecisionGate, decisionRevision, validateDecisionFeature } from './decisions.mjs';
 // The autobuild loop: one fresh headless Claude session per feature, until every feature
 // passes, the iteration cap is hit, NO_PROGRESS_LIMIT sessions in a row make no progress,
 // or something needs a human. A usage limit is a pause, not a failure: the loop sleeps
@@ -10,24 +14,27 @@
 //   9 billing / spend limit      10 auth problem              11 another loop is running
 //   12 the bug hunt needs a human (findings left open, or it could not run or land)
 //   13 the final review ended twice without its commit (the last features are unreviewed)
+//   14 a managed decision could not safely release the selected builder
 //   130 interrupted
 //
 // Once every feature passes (and the final review ran), lib/bughunt.mjs runs /bughunt --fix over
 // the branch and lands its verified fixes before the loop reports done.
 
+import { claudeAgentSettings, readAgentConfig, validateConcurrency } from "../../../../scripts/agent-config.mjs";
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, linkSync, mkdirSync, openSync, closeSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, linkSync, mkdirSync, openSync, closeSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { statePath } from "./config.mjs";
 import { countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures, blockedClosure } from "./features.mjs";
 import { frozenChanges, gitControlChanges, gitControlDigest } from "./gate.mjs";
 import { huntEnabled, runBughunt, stopHunt } from "./bughunt.mjs";
 import { classifyOutcome, parseResetTime, planLimitWait } from "./limits.mjs";
-import { buildEnv, git, sh, quote } from "./proc.mjs";
+import { buildEnv, sessionConfigEnv, git, sh, quote } from "./proc.mjs";
 import { isOurs } from "../../../build/skills/build-app/driver/proc.mjs";
 import { clearStopFailure, readStopFailure, writeSession } from "./session.mjs";
 import { runCodex, readCodexResult } from "./codex.mjs";
-import { finishCodexBuilder, finishCodexReview, runCodexHunt } from "./codex-gate.mjs";
+import { observeContextLaunch } from './context-receipt.mjs';
+import { finishCodexBuilder, finishCodexReview } from "./codex-gate.mjs";
 import { runFeatureTests } from "./tests.mjs";
 
 const HOME = path.resolve(import.meta.dirname, "..");
@@ -141,6 +148,17 @@ function takeLock(pidFile) {
 }
 
 export async function runLoop(config, options = {}) {
+  return withTrackedRun(autobuildTracking(config, "autobuild"), async () => {
+    let decisionTrace;
+    try {
+      decisionTrace = createDecisionTrace({ repo: realpathSync(config.root), revision: decisionRevision(config), invocationRunId: currentRunId() });
+    } catch { /* Observations cannot change queue or work behavior. */ }
+    try { return await runLoopWork(config, options, decisionTrace); }
+    finally { try { decisionTrace?.close(); } catch { /* Missing closure is incomplete evidence. */ } }
+  });
+}
+
+async function runLoopWork(config, options, decisionTrace) {
   const runId = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
   const logsDir = path.join(config.root, config.logsDir);
   mkdirSync(logsDir, { recursive: true });
@@ -165,9 +183,13 @@ export async function runLoop(config, options = {}) {
     if (readPid(pidFile) === process.pid) rmSync(pidFile, { force: true });
   };
   let interrupted = false;
+  let waitingForDecision = false;
+  const decisionAbort = new AbortController();
   const onSignal = () => {
     if (interrupted) return;
     interrupted = true;
+    decisionAbort.abort();
+    if (waitingForDecision) return;
     log("interrupted; stopping the running session");
     stopSessions().finally(() => {
       cleanup();
@@ -234,9 +256,7 @@ export async function runLoop(config, options = {}) {
             if (interrupted) return 130;
           }
           if (huntEnabled(config)) {
-            const hunted = config.backend === "codex"
-              ? await runCodexHunt(config, { log, runId, run: (options) => runCodex(config, options, track), stopped: () => interrupted })
-              : await runBughunt(config, { log, runId, stopped: () => interrupted });
+            const hunted = await runBughunt(config, { log, runId, stopped: () => interrupted });
             if (interrupted) return 130;
             if (hunted !== 0) {
               log(`every feature passes, but the bug hunt needs attention (exit ${hunted}); see the bug hunt lines above and ${config.progressFile}.`);
@@ -250,25 +270,46 @@ export async function runLoop(config, options = {}) {
         return 3;
       }
 
-      const base = git(config, ["rev-parse", "HEAD"]).output.trim();
+      let decisionGate;
+      try {
+        waitingForDecision = true;
+        decisionGate = await prepareDecisionGate({ config, feature, trace: decisionTrace, signal: decisionAbort.signal });
+      } catch (error) {
+        log(`decision gate stopped: ${error.code ?? 'IO_ERROR'}`);
+        return interrupted ? 130 : 14;
+      } finally { waitingForDecision = false; }
+
       const passingBefore = countPassing(doc);
       const label = `${String(iteration + 1).padStart(2, "0")}-${feature.id}`;
       const iterLog = path.join(logsDir, `${runId}-iter-${label}${limitWaitedMs > 0 || transientStreak > 0 ? `-retry-${Date.now()}` : ""}.jsonl`);
-      writeSession(config, { role: "builder", featureId: feature.id, iteration: iteration + 1, baseSha: base, startedAt: new Date().toISOString(), progressAtStart: readProgress(config), stopAttempts: 0 });
-      clearStopFailure(config);
-
-      log(`iteration ${iteration + 1}: ${feature.id} — ${feature.title} (base ${base.slice(0, 8)}, ${passingBefore} passing)`);
-      const started = Date.now();
-      const control = gitControlDigest(config);
-      const exitCode = await runClaude(config, {
-        role: "builder",
-        prompt: config.prompt,
-        appendSystemPrompt: builderSystemPrompt(config, feature, iteration + 1),
-        maxTurns: limits.maxTurns,
-        maxBudgetUsd: limits.maxBudgetUsd,
-        allowedTools: config.allowedTools,
-        logFile: iterLog,
-      });
+      let exitCode, base, started, control, gateFailure;
+      try {
+        base = git(config, ["rev-parse", "HEAD"]).output.trim();
+        writeSession(config, { role: "builder", featureId: feature.id, iteration: iteration + 1, baseSha: base, startedAt: new Date().toISOString(), progressAtStart: readProgress(config), stopAttempts: 0 });
+        clearStopFailure(config);
+        log(`iteration ${iteration + 1}: ${feature.id} — ${feature.title} (base ${base.slice(0, 8)}, ${passingBefore} passing)`);
+        started = Date.now();
+        control = gitControlDigest(config);
+        exitCode = await runClaude(config, {
+          role: "builder",
+          prompt: decisionGate ? config.prompt + decisionGate.context : config.prompt,
+          beforeLaunch: decisionGate ? () => {
+            try { decisionGate.beforeLaunch(); }
+            catch (error) { gateFailure = error; throw error; }
+          } : undefined,
+          onContextSupplied: decisionGate?.onContextSupplied,
+          onContextUncertain: decisionGate?.onContextUncertain,
+          appendSystemPrompt: builderSystemPrompt(config, feature, iteration + 1),
+          maxTurns: limits.maxTurns,
+          maxBudgetUsd: limits.maxBudgetUsd,
+          allowedTools: config.allowedTools,
+          logFile: iterLog,
+        });
+      } catch (error) {
+        if (error !== gateFailure) throw error;
+        log(`decision gate stopped: ${error.code ?? 'IO_ERROR'}`);
+        return interrupted ? 130 : 14;
+      } finally { decisionGate?.close(); }
       if (interrupted) return 130;
       const elapsed = Math.round((Date.now() - started) / 1000);
       const result = config.backend === "codex" ? readCodexResult(iterLog) : readResult(iterLog);
@@ -401,6 +442,11 @@ export async function runLoop(config, options = {}) {
 
 function preflight(config, log) {
   let failed = false;
+  try { if (config.decisions !== undefined) validateDecisionFeature(config, readFeatures(config)); }
+  catch {
+    log('preflight: invalid decisions featureId or configuration');
+    return 5;
+  }
   if (readFeatures(config).features.length === 0) {
     log(`preflight: ${config.featuresFile} lists no features; write the feature list and its frozen tests first (the /autobuild skill)`);
     failed = true;
@@ -462,6 +508,9 @@ When the feature is done: mark it passing (\`autobuild mark-passed ${feature.id}
 
 /** Settings injected into loop sessions: the hooks the project doesn't own, plus deny rules for frozen paths. */
 export function sessionSettings(config) {
+  const agents = readAgentConfig();
+  const native = claudeAgentSettings(agents);
+  const concurrent = String(validateConcurrency(config.maxConcurrentSubagents ?? agents.maxConcurrentSubagents));
   const hook = (file, timeout, extra = {}) => [{ hooks: [{ type: "command", command: `node "${path.join(HOME, "hooks", file)}"`, timeout, ...extra }] }];
   const hooks = { StopFailure: hook("stop-failure.mjs", 30) };
   if (config.hooks === "inject") {
@@ -476,15 +525,23 @@ export function sessionSettings(config) {
     .flatMap((entry) => (writable.some((file) => file.startsWith(`${entry}/`)) ? [`Edit(/${entry})`] : [`Edit(/${entry})`, `Edit(/${entry}/**)`]));
   // The subagent model lives here, not in the process env: a user's ~/.claude/settings.json `env`
   // overrides the process env, and these --settings override the user's.
-  const env = { CLAUDE_CODE_SUBAGENT_MODEL: config.subagentModel, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: config.subagentModelForce === false ? "0" : "1", CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL: config.subagentModel };
-  return { env, hooks, permissions: { deny: [...deny, "Bash(git push)", "Bash(git push *)", "Bash(rm -rf *)", "Bash(curl *)", "Bash(wget *)", "Bash(npx *)"] } };
+  const env = { ...native.env, CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: concurrent, CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS: concurrent, CLAUDE_CODE_SUBAGENT_MODEL: config.subagentModel, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: config.subagentModelForce === false ? "0" : "1", CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL: config.subagentModelForce === false ? "" : config.subagentModel };
+  // Hooks and mark-passed reload configuration without the original CLI args.
+  // Pin the accepted selection in --settings as well as the child process environment.
+  Object.assign(env, sessionConfigEnv(config));
+  return { ...native, model: config.model ?? native.model, env, hooks, permissions: { deny: [...deny, "Bash(git push)", "Bash(git push *)", "Bash(rm -rf *)", "Bash(curl *)", "Bash(wget *)", "Bash(npx *)"] } };
 }
 
-async function runClaude(config, { role, prompt, appendSystemPrompt, maxTurns, maxBudgetUsd, allowedTools, logFile }) {
+async function runClaude(config, options) {
+  if (config.backend === "codex") return runClaudeWork(config, options);
+  return withTrackedRun(autobuildTracking(config, "session"), () => runClaudeWork(config, options));
+}
+
+async function runClaudeWork(config, { role, prompt, appendSystemPrompt, maxTurns, maxBudgetUsd, allowedTools, logFile, beforeLaunch, onContextSupplied, onContextUncertain }) {
   if (config.backend === "codex") {
     const feedback = statePath(config, "codex-feedback.txt");
     if (role === "builder" && existsSync(feedback)) prompt += `\nPrevious gate feedback:\n${readFileSync(feedback, "utf8")}`;
-    return runCodex(config, { role, prompt, appendSystemPrompt, logFile }, track);
+    return runCodex(config, { role, prompt, appendSystemPrompt, logFile, beforeLaunch, onContextSupplied, onContextUncertain }, track);
   }
   const settingsFile = statePath(config, `session-settings.json`);
   writeFileSync(settingsFile, `${JSON.stringify(sessionSettings(config), null, 2)}\n`);
@@ -494,6 +551,7 @@ async function runClaude(config, { role, prompt, appendSystemPrompt, maxTurns, m
     AUTOBUILD_ROLE: role,
     HARNESS_ROLE: role,
     AUTOBUILD_HOME: HOME,
+    ...sessionConfigEnv(config),
     CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
     CLAUDE_CODE_RETRY_WATCHDOG: "1",
     CLAUDE_CODE_RETRY_WATCHDOG_MAX_WAIT_MS: String(config.limits.watchdogMaxWaitMs),
@@ -514,8 +572,10 @@ async function runClaude(config, { role, prompt, appendSystemPrompt, maxTurns, m
   const out = openSync(logFile, "w");
   const err = openSync(`${logFile}.stderr`, "w");
   try {
+    beforeLaunch?.();
     return await new Promise((resolve) => {
       const child = track(spawn(config.claudeBin, args, { cwd: config.root, env, stdio: ["ignore", out, err] }));
+      observeContextLaunch(child, { onContextSupplied, onContextUncertain });
       child.on("close", (code) => resolve(code ?? 1));
       child.on("error", () => resolve(127));
     });

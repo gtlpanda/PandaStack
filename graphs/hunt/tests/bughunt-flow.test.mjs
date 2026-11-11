@@ -106,13 +106,12 @@ await test('each LENS_TOKENS value is the lens-token line in its lens reference,
   const table = [...readFileSync(join(dir, 'SKILL.md'), 'utf8').matchAll(/^\| `([a-z]+)` \|/gm)].map(m => m[1])
   assert.deepEqual(table.sort(), Object.keys(TOKENS).sort())
 })
-await test('every node pins agentType, model, effort high, and a schema, matching the agent files', async () => {
+await test('every node pins agentType, model, configured effort, and a schema, matching the agent files', async () => {
   const { calls } = await go({ 'impact-mapper': [IMPACT()], hunter: huntersBy({ logic: HUNT('logic'), regression: HUNT('regression'), security: HUNT('security') }) }, ARGS())
   for (const c of calls) {
     assert.ok(c.schema && c.schema.type === 'object', `call without schema: ${c.label}`)
     assert.equal(c.model, agentField(c.agentType, 'model'), `${c.agentType}: model drift`)
     assert.equal(c.effort, agentField(c.agentType, 'effort'), `${c.agentType}: effort drift`)
-    assert.equal(c.effort, 'high')
   }
 })
 

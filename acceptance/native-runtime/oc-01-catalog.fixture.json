@@ -1,0 +1,1858 @@
+{
+  "schemaVersion": 1,
+  "status": "PROPOSED_CATALOG_NOT_RUNTIME_CERTIFICATION",
+  "inventorySha256": "a7c3e748655ca3c588c7d436402a025ec7c270a7b0ad09f61e12749b2de13262",
+  "offerings": [
+    {
+      "id": "backlog",
+      "kind": "shared-reference-contract",
+      "source": "core/skills/backlog",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/backlog"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "core/skills/backlog/SKILL.md",
+        "core/skills/backlog/backlog.mjs"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "9a3415be9a6e352e0a63847f131e81acd134c27304b21a61822d6573b79770da"
+    },
+    {
+      "id": "bug-lenses",
+      "kind": "shared-reference-contract",
+      "source": "core/skills/bug-lenses",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/bug-lenses"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "core/skills/bug-lenses/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "7ffdad25631a6855cb2e2cd2601f466d7c39d301c94fae2447de94aa5b8250c5"
+    },
+    {
+      "id": "decisions",
+      "kind": "shared-library-no-entry-skill",
+      "source": "core/skills/decisions",
+      "entrySkill": false,
+      "installTargets": [
+        "skills/decisions"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "core/skills/decisions/records.mjs",
+        "core/skills/decisions/queue.mjs",
+        "core/skills/decisions/routing.mjs",
+        "core/skills/decisions/output.mjs",
+        "core/skills/decisions/config.mjs",
+        "core/skills/decisions/codex-delivery.mjs",
+        "core/skills/decisions/queue-storage.mjs",
+        "core/skills/decisions/observations.mjs"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": null
+    },
+    {
+      "id": "default-stack",
+      "kind": "shared-reference-contract",
+      "source": "core/skills/default-stack",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/default-stack"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "core/skills/default-stack/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "4a0e12de638485fec8c51dadcdcb67f961921ba6ba7f6121e0b27d037682d130"
+    },
+    {
+      "id": "findings",
+      "kind": "shared-reference-contract",
+      "source": "core/skills/findings",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/findings"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "core/skills/findings/SKILL.md",
+        "core/skills/findings/findings.mjs"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "5c1395055f810a1ab0f582f2e629aa443bd7436a253c3d0fe79500cdde2017ec"
+    },
+    {
+      "id": "gtm-brief",
+      "kind": "shared-reference-contract",
+      "source": "core/skills/gtm-brief",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/gtm-brief"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "core/skills/gtm-brief/SKILL.md",
+        "core/skills/gtm-brief/gtm-brief.mjs"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "a25824f9508b37c529da3b1d332f99647c1919e6b446a613e289199387b530a2"
+    },
+    {
+      "id": "harness-review",
+      "kind": "guided-offering",
+      "source": "core/skills/harness-review",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/harness-review"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "core/skills/harness-review/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "23fbc36676dc8bc8618307fd04e77bef7f4b2dba5e177ef7979e5b0eb9c33875"
+    },
+    {
+      "id": "knowledge-map",
+      "kind": "shared-reference-contract",
+      "source": "core/skills/knowledge-map",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/knowledge-map"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "core/skills/knowledge-map/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "b41c22f867d4fde4627f7520236c9695c647d77f70291372818894e2681b5815"
+    },
+    {
+      "id": "run-records",
+      "kind": "shared-reference-contract",
+      "source": "core/skills/run-records",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/run-records"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "core/skills/run-records/SKILL.md",
+        "core/skills/run-records/records.mjs",
+        "core/skills/run-records/tracking.mjs",
+        "core/skills/run-records/doctor.mjs",
+        "core/skills/run-records/adapters.mjs",
+        "core/skills/run-records/store.mjs"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "e010ebcbc30f16942ae567cd43afd09beac250da9960fa84d59e4aae57d40101"
+    },
+    {
+      "id": "verify",
+      "kind": "guided-offering",
+      "source": "core/skills/verify",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/verify"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "core/skills/verify/SKILL.md",
+        "core/skills/verify/scope-record.mjs",
+        "core/skills/verify/retention.sh",
+        "core/skills/verify/retention.mjs",
+        "core/skills/verify/capture-owner.sh",
+        "core/skills/verify/packages.mjs",
+        "core/skills/verify/verify.sh"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "d1097210c0ba1615dded62398c129c2e6c1520eabf44be773ae9985683c189a1"
+    },
+    {
+      "id": "workflow-state",
+      "kind": "guided-offering",
+      "source": "core/skills/workflow-state",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/workflow-state"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "core/skills/workflow-state/SKILL.md",
+        "core/skills/workflow-state/run-script.mjs"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "5045607fcd3b9d003d44795c22170955e479edb5d6e8440cefbb758413729c8c"
+    },
+    {
+      "id": "build-bot-integration",
+      "kind": "guided-offering",
+      "source": "kit/skills/build-bot-integration",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/build-bot-integration"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/build-bot-integration/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "4a9e556e5d8b48685d8a619d7b182cb956a80283e0863c77f007b6b8fea07eea"
+    },
+    {
+      "id": "build-scraper",
+      "kind": "guided-offering",
+      "source": "kit/skills/build-scraper",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/build-scraper"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/build-scraper/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "e279bea22c772774afe385ae1c42ea026e5c91a6b5a88b3bcef2ca486ad2203a"
+    },
+    {
+      "id": "clean-gone",
+      "kind": "guided-offering",
+      "source": "kit/skills/clean-gone",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/clean-gone"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/clean-gone/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "00381a31b9ac72a0337e18a1a4974275f776d0b7216095cd21a5a0afe9772b9e"
+    },
+    {
+      "id": "commit",
+      "kind": "guided-offering",
+      "source": "kit/skills/commit",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/commit"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/commit/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "3017ce9d10808c2a387c36d98bdd56c69b049f7788151cbfd28905bd37367ba6"
+    },
+    {
+      "id": "copywriting",
+      "kind": "guided-offering",
+      "source": "kit/skills/copywriting",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/copywriting"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/copywriting/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "1fc2dbd6fe392b593a402d8bfe136cd77c62f1d4117ac643c2dc3cd2fbdc4a7c"
+    },
+    {
+      "id": "deep",
+      "kind": "guided-offering",
+      "source": "kit/skills/deep",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/deep"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/deep/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "72dc7958bfbbdc433b05f6082594daa5a04397f7dfffd4bbceff2065989b87b6"
+    },
+    {
+      "id": "deep-fix",
+      "kind": "guided-offering",
+      "source": "kit/skills/deep-fix",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/deep-fix"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/deep-fix/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "a3c82fd55ec377da1fa52bdbf4a065fb4181e2cdd487c640e1d6936d8514e76a"
+    },
+    {
+      "id": "dockerize",
+      "kind": "guided-offering",
+      "source": "kit/skills/dockerize",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/dockerize"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/dockerize/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "5694179ca9957a5a48c1497988ee8e912cb4cd6ccef295a13566afe17f55300a"
+    },
+    {
+      "id": "dry",
+      "kind": "guided-offering",
+      "source": "kit/skills/dry",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/dry"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/dry/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "55b636a2b92507b69e20cb925510a7ba076615c52623debf90c91af540f3c2a0"
+    },
+    {
+      "id": "error-audit",
+      "kind": "guided-offering",
+      "source": "kit/skills/error-audit",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/error-audit"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/error-audit/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "e28ba220b022cec9a443f878ae4b117bf7c0c8acaed92a426506a01ef710d297"
+    },
+    {
+      "id": "fix-scraper",
+      "kind": "guided-offering",
+      "source": "kit/skills/fix-scraper",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/fix-scraper"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/fix-scraper/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "806a0276e7c0556e2fc46dab15ce16c8edef1d45dbd1a2f01701a3dfece96ccf"
+    },
+    {
+      "id": "frontend-design",
+      "kind": "guided-offering",
+      "source": "kit/skills/frontend-design",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/frontend-design"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/frontend-design/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "d39adf3a983de7dafc75991590d54f091755f7e4163d5a5ed085ecd719157184"
+    },
+    {
+      "id": "init-agents",
+      "kind": "guided-offering",
+      "source": "kit/skills/init-agents",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/init-agents"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/init-agents/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "55e136f46d7cb0f56971aa7f956d689d8a20c5136bbbcbd62a64045be5db95b5"
+    },
+    {
+      "id": "init-ci",
+      "kind": "guided-offering",
+      "source": "kit/skills/init-ci",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/init-ci"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/init-ci/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "588f45c4f6bff7e4d9460c83f3a124719e2a12bb4f4fd9915f05582d16c829e3"
+    },
+    {
+      "id": "init-claude",
+      "kind": "guided-offering",
+      "source": "kit/skills/init-claude",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/init-claude"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/init-claude/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "c32c6468e27a9f073e2d196ebb736475066d641656312f15d6980ed362d91953"
+    },
+    {
+      "id": "init-env",
+      "kind": "guided-offering",
+      "source": "kit/skills/init-env",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/init-env"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/init-env/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "9ab66794eabe4a7837ca23b3b9ece0ce68df98703b4ad3cdfdf89b1d50e6074b"
+    },
+    {
+      "id": "init-monorepo",
+      "kind": "guided-offering",
+      "source": "kit/skills/init-monorepo",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/init-monorepo"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/init-monorepo/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "16beb8adcc7e96202696d4f775990327402f0b01dbf2c19268e8f589726b3a4a"
+    },
+    {
+      "id": "init-tasks",
+      "kind": "guided-offering",
+      "source": "kit/skills/init-tasks",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/init-tasks"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/init-tasks/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "7d583ad8bb59442ceacad1fa242d0ffadcc30ccbf97988b2885e4e6be4f6512e"
+    },
+    {
+      "id": "init-tests",
+      "kind": "guided-offering",
+      "source": "kit/skills/init-tests",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/init-tests"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/init-tests/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "6907ae69bd9726fa972121fcd2efa7d7c6a56f672e46d4c0d7f08d1d60c4f1fa"
+    },
+    {
+      "id": "logging",
+      "kind": "guided-offering",
+      "source": "kit/skills/logging",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/logging"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/logging/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "7d9feeb80c3dfd2f728327dfa515a639a93bffe921c4c48cc994c328e25ea85b"
+    },
+    {
+      "id": "release",
+      "kind": "guided-offering",
+      "source": "kit/skills/release",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/release"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/release/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "f6506cfa468bff2e5e360aa28ee14f71b62585c2f4b110028fe947431abd957f"
+    },
+    {
+      "id": "render",
+      "kind": "guided-offering",
+      "source": "kit/skills/render",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/render"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/render/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "5d6e94e8d5b004af0b2a6c9c9aee5494451efb5af444e4d30a9ba950324535f4"
+    },
+    {
+      "id": "scaffold-app",
+      "kind": "guided-offering",
+      "source": "kit/skills/scaffold-app",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/scaffold-app"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/scaffold-app/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "f83eb3cf4b149df07950df6f5a10b9a20c9974f98675582e7582352f3d036285"
+    },
+    {
+      "id": "security",
+      "kind": "guided-offering",
+      "source": "kit/skills/security",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/security"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/security/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "227ea9895141d0197d3d1abca6f7ca318f2e37825201cdaa5658e8bc650e26e4"
+    },
+    {
+      "id": "seo",
+      "kind": "guided-offering",
+      "source": "kit/skills/seo",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/seo"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/seo/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "c7f2174a6b2c92ccdf65135af6cd6772913c4b6e3d09dde0dce64c3d0f540460"
+    },
+    {
+      "id": "vendor-lens",
+      "kind": "guided-offering",
+      "source": "kit/skills/vendor-lens",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/vendor-lens"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "kit/skills/vendor-lens/SKILL.md"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "f32d71134b646dca5adc6de623a5709d8397eb399173a48ace239b9c93a2461f"
+    },
+    {
+      "id": "autobuild",
+      "kind": "executable-graph-or-cli",
+      "source": "graphs/autobuild/skills/autobuild",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/autobuild"
+      ],
+      "codexInstallEligible": true,
+      "nativeImplementation": "present-limited",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "graphs/autobuild/tool/lib/loop.mjs",
+        "graphs/autobuild/tool/lib/codex.mjs",
+        "graphs/autobuild/tool/lib/codex-gate.mjs"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "b144ee45dc9954e0db83aae2433c360cb3f81c6e0faea81dff4a7305a49a90ef"
+    },
+    {
+      "id": "blueprint",
+      "kind": "executable-graph-or-cli",
+      "source": "graphs/blueprint/skills/blueprint",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/blueprint"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "graphs/blueprint/workflows/blueprint-design.js",
+        "graphs/blueprint/skills/blueprint/write-docs.mjs"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "72b4513168007cb4e021314ed62eaea5f2399797c46ac3b5b6f646e49ea9843e"
+    },
+    {
+      "id": "build-app",
+      "kind": "executable-graph-or-cli",
+      "source": "graphs/build/skills/build-app",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/build-app"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "graphs/build/skills/build-app/driver/driver.mjs",
+        "graphs/build/skills/build-app/driver/session.mjs"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "55aac327cfecb8fe55447e838a757cf4d54048df9db4eed27d41734fd999ae13"
+    },
+    {
+      "id": "dev",
+      "kind": "executable-graph-or-cli",
+      "source": "graphs/dev/skills/dev",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/dev"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "graphs/dev/workflows/dev-build.js",
+        "graphs/qa/workflows/harness-repair.js"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "1e7d0b75fa3c85c6ec3b5161f979818d85bc0776b39635d0dc15db175dde5b7f"
+    },
+    {
+      "id": "bughunt",
+      "kind": "executable-graph-or-cli",
+      "source": "graphs/hunt/skills/bughunt",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/bughunt"
+      ],
+      "codexInstallEligible": true,
+      "nativeImplementation": "present-limited",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "graphs/hunt/skills/bughunt/native-cli.mjs",
+        "graphs/hunt/skills/bughunt/native-runner.mjs",
+        "graphs/hunt/workflows/bughunt-flow.js"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "fe3ac74e59b89390f93d729c0812adbc053a0fa8b2cd6dcced6f9fdbb08b3916"
+    },
+    {
+      "id": "release-pr",
+      "kind": "executable-graph-or-cli",
+      "source": "graphs/release/skills/release-pr",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/release-pr"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "graphs/release/workflows/release-flow.js"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "0b5064d39a6d3b953b51c152445b68eeac2d5273cdbf0a43776012e354f34b6e"
+    },
+    {
+      "id": "security-audit",
+      "kind": "executable-graph-or-cli",
+      "source": "graphs/security-audit/skills/security-audit",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/security-audit"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "graphs/security-audit/workflows/security-audit-flow.js",
+        "graphs/security-audit/skills/security-audit/audit-run.mjs",
+        "graphs/security-audit/skills/security-audit/audit-stage.mjs",
+        "graphs/security-audit/skills/security-audit/audit-report.mjs"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "d2c11a01333337852c169e47bf89fe9971667023e37d8ebeba7a4090c6dfab9d"
+    },
+    {
+      "id": "seo-check",
+      "kind": "executable-graph-or-cli",
+      "source": "graphs/seo/skills/seo-check",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/seo-check"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "graphs/seo/skills/seo-check/seo-check.mjs"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "274016cab0c1235ab4049844161b4fb7c36189927970612e38a47cbf96939dc7"
+    },
+    {
+      "id": "native-runtime",
+      "kind": "shared-library-no-entry-skill",
+      "source": "core/skills/native-runtime",
+      "entrySkill": false,
+      "installTargets": [
+        "skills/native-runtime"
+      ],
+      "codexInstallEligible": false,
+      "nativeImplementation": "not-certified",
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "core/skills/native-runtime/catalog.mjs"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": null
+    }
+  ],
+  "workflows": [
+    {
+      "source": "graphs/blueprint/workflows/blueprint-design.js",
+      "roles": [
+        "extractor",
+        "questioner",
+        "architect",
+        "slicer",
+        "advisor"
+      ],
+      "nativeReadiness": "unknown"
+    },
+    {
+      "source": "graphs/dev/workflows/dev-build.js",
+      "roles": [
+        "planner",
+        "advisor",
+        "scout",
+        "implementer",
+        "checker",
+        "acceptance-auditor",
+        "advisor"
+      ],
+      "nativeReadiness": "unknown"
+    },
+    {
+      "source": "graphs/hunt/workflows/bughunt-flow.js",
+      "roles": [
+        "impact-mapper",
+        "hunter",
+        "skeptic",
+        "advisor",
+        "reproducer",
+        "runner",
+        "repairer",
+        "fix-verifier"
+      ],
+      "nativeReadiness": "unknown"
+    },
+    {
+      "source": "graphs/qa/workflows/harness-repair.js",
+      "roles": [
+        "checker",
+        "fixer",
+        "reviewer",
+        "advisor",
+        "qa-auditor"
+      ],
+      "nativeReadiness": "unknown"
+    },
+    {
+      "source": "graphs/release/workflows/release-flow.js",
+      "roles": [
+        "release-checker",
+        "scribe",
+        "merger",
+        "deploy-watcher",
+        "advisor"
+      ],
+      "nativeReadiness": "unknown"
+    },
+    {
+      "source": "graphs/security-audit/workflows/security-audit-flow.js",
+      "roles": [
+        "audit-researcher",
+        "audit-synthesizer",
+        "audit-analyst",
+        "audit-researcher",
+        "audit-synthesizer",
+        "audit-synthesizer",
+        "audit-analyst",
+        "audit-researcher",
+        "audit-analyst"
+      ],
+      "nativeReadiness": "unknown"
+    }
+  ],
+  "assets": [
+    {
+      "target": "agents/advisor.md",
+      "source": "core/agents/advisor.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/checker.md",
+      "source": "core/agents/checker.md",
+      "kind": "agents"
+    },
+    {
+      "target": "bin/statusline.sh",
+      "source": "core/bin/statusline.sh",
+      "kind": "bin"
+    },
+    {
+      "target": "agents/agentic-ux-reviewer.md",
+      "source": "kit/agents/agentic-ux-reviewer.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/cloudfront-invalidator.md",
+      "source": "kit/agents/cloudfront-invalidator.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/design-lead.md",
+      "source": "kit/agents/design-lead.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/google-ads-strategist.md",
+      "source": "kit/agents/google-ads-strategist.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/icp-review.md",
+      "source": "kit/agents/icp-review.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/qa-engineer.md",
+      "source": "kit/agents/qa-engineer.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/terraform-staff-engineer.md",
+      "source": "kit/agents/terraform-staff-engineer.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/ui-design-reviewer.md",
+      "source": "kit/agents/ui-design-reviewer.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/ux-ai-framework-advisor.md",
+      "source": "kit/agents/ux-ai-framework-advisor.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/wiring-check.md",
+      "source": "kit/agents/wiring-check.md",
+      "kind": "agents"
+    },
+    {
+      "target": "commands/aws-arch-review.md",
+      "source": "kit/commands/aws-arch-review.md",
+      "kind": "commands"
+    },
+    {
+      "target": "commands/founding-sales.md",
+      "source": "kit/commands/founding-sales.md",
+      "kind": "commands"
+    },
+    {
+      "target": "agents/architect.md",
+      "source": "graphs/blueprint/agents/architect.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/extractor.md",
+      "source": "graphs/blueprint/agents/extractor.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/questioner.md",
+      "source": "graphs/blueprint/agents/questioner.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/slicer.md",
+      "source": "graphs/blueprint/agents/slicer.md",
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/blueprint-design.js",
+      "source": "graphs/blueprint/workflows/blueprint-design.js",
+      "kind": "workflows"
+    },
+    {
+      "target": "agents/acceptance-auditor.md",
+      "source": "graphs/dev/agents/acceptance-auditor.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/implementer.md",
+      "source": "graphs/dev/agents/implementer.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/planner.md",
+      "source": "graphs/dev/agents/planner.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/scout.md",
+      "source": "graphs/dev/agents/scout.md",
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/dev-build.js",
+      "source": "graphs/dev/workflows/dev-build.js",
+      "kind": "workflows"
+    },
+    {
+      "target": "agents/fix-verifier.md",
+      "source": "graphs/hunt/agents/fix-verifier.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/hunter.md",
+      "source": "graphs/hunt/agents/hunter.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/impact-mapper.md",
+      "source": "graphs/hunt/agents/impact-mapper.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/repairer.md",
+      "source": "graphs/hunt/agents/repairer.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/reproducer.md",
+      "source": "graphs/hunt/agents/reproducer.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/runner.md",
+      "source": "graphs/hunt/agents/runner.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/skeptic.md",
+      "source": "graphs/hunt/agents/skeptic.md",
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/bughunt-flow.js",
+      "source": "graphs/hunt/workflows/bughunt-flow.js",
+      "kind": "workflows"
+    },
+    {
+      "target": "agents/fixer.md",
+      "source": "graphs/qa/agents/fixer.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/qa-auditor.md",
+      "source": "graphs/qa/agents/qa-auditor.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/reviewer.md",
+      "source": "graphs/qa/agents/reviewer.md",
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/harness-repair.js",
+      "source": "graphs/qa/workflows/harness-repair.js",
+      "kind": "workflows"
+    },
+    {
+      "target": "agents/deploy-watcher.md",
+      "source": "graphs/release/agents/deploy-watcher.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/merger.md",
+      "source": "graphs/release/agents/merger.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/release-checker.md",
+      "source": "graphs/release/agents/release-checker.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/scribe.md",
+      "source": "graphs/release/agents/scribe.md",
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/release-flow.js",
+      "source": "graphs/release/workflows/release-flow.js",
+      "kind": "workflows"
+    },
+    {
+      "target": "agents/audit-analyst.md",
+      "source": "graphs/security-audit/agents/audit-analyst.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/audit-researcher.md",
+      "source": "graphs/security-audit/agents/audit-researcher.md",
+      "kind": "agents"
+    },
+    {
+      "target": "agents/audit-synthesizer.md",
+      "source": "graphs/security-audit/agents/audit-synthesizer.md",
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/security-audit-flow.js",
+      "source": "graphs/security-audit/workflows/security-audit-flow.js",
+      "kind": "workflows"
+    }
+  ],
+  "fixedTargets": [
+    {
+      "target": "settings.json",
+      "source": "settings.json",
+      "classification": "Claude global configuration/instructions; native equivalents not installed"
+    },
+    {
+      "target": "CLAUDE.md",
+      "source": "CLAUDE.md",
+      "classification": "Claude global configuration/instructions; native equivalents not installed"
+    },
+    {
+      "target": "loop.md",
+      "source": "loop.md",
+      "classification": "Claude global configuration/instructions; native equivalents not installed"
+    },
+    {
+      "target": "local-bin/autobuild",
+      "source": "graphs/autobuild/tool/bin/autobuild",
+      "classification": "dual-backend CLI; intentionally not PATH-linked by --codex mode"
+    }
+  ],
+  "installerTargets": [
+    {
+      "target": "skills/backlog",
+      "source": "core/skills/backlog",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/bug-lenses",
+      "source": "core/skills/bug-lenses",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/decisions",
+      "source": "core/skills/decisions",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/default-stack",
+      "source": "core/skills/default-stack",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/findings",
+      "source": "core/skills/findings",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/gtm-brief",
+      "source": "core/skills/gtm-brief",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/harness-review",
+      "source": "core/skills/harness-review",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/knowledge-map",
+      "source": "core/skills/knowledge-map",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/run-records",
+      "source": "core/skills/run-records",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/verify",
+      "source": "core/skills/verify",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/workflow-state",
+      "source": "core/skills/workflow-state",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "agents/advisor.md",
+      "source": "core/agents/advisor.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/checker.md",
+      "source": "core/agents/checker.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "bin/statusline.sh",
+      "source": "core/bin/statusline.sh",
+      "codexInstaller": false,
+      "kind": "bin"
+    },
+    {
+      "target": "skills/build-bot-integration",
+      "source": "kit/skills/build-bot-integration",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/build-scraper",
+      "source": "kit/skills/build-scraper",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/clean-gone",
+      "source": "kit/skills/clean-gone",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/commit",
+      "source": "kit/skills/commit",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/copywriting",
+      "source": "kit/skills/copywriting",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/deep",
+      "source": "kit/skills/deep",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/deep-fix",
+      "source": "kit/skills/deep-fix",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/dockerize",
+      "source": "kit/skills/dockerize",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/dry",
+      "source": "kit/skills/dry",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/error-audit",
+      "source": "kit/skills/error-audit",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/fix-scraper",
+      "source": "kit/skills/fix-scraper",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/frontend-design",
+      "source": "kit/skills/frontend-design",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/init-agents",
+      "source": "kit/skills/init-agents",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/init-ci",
+      "source": "kit/skills/init-ci",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/init-claude",
+      "source": "kit/skills/init-claude",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/init-env",
+      "source": "kit/skills/init-env",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/init-monorepo",
+      "source": "kit/skills/init-monorepo",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/init-tasks",
+      "source": "kit/skills/init-tasks",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/init-tests",
+      "source": "kit/skills/init-tests",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/logging",
+      "source": "kit/skills/logging",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/release",
+      "source": "kit/skills/release",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/render",
+      "source": "kit/skills/render",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/scaffold-app",
+      "source": "kit/skills/scaffold-app",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/security",
+      "source": "kit/skills/security",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/seo",
+      "source": "kit/skills/seo",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/vendor-lens",
+      "source": "kit/skills/vendor-lens",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "agents/agentic-ux-reviewer.md",
+      "source": "kit/agents/agentic-ux-reviewer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/cloudfront-invalidator.md",
+      "source": "kit/agents/cloudfront-invalidator.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/design-lead.md",
+      "source": "kit/agents/design-lead.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/google-ads-strategist.md",
+      "source": "kit/agents/google-ads-strategist.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/icp-review.md",
+      "source": "kit/agents/icp-review.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/qa-engineer.md",
+      "source": "kit/agents/qa-engineer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/terraform-staff-engineer.md",
+      "source": "kit/agents/terraform-staff-engineer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/ui-design-reviewer.md",
+      "source": "kit/agents/ui-design-reviewer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/ux-ai-framework-advisor.md",
+      "source": "kit/agents/ux-ai-framework-advisor.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/wiring-check.md",
+      "source": "kit/agents/wiring-check.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "commands/aws-arch-review.md",
+      "source": "kit/commands/aws-arch-review.md",
+      "codexInstaller": false,
+      "kind": "commands"
+    },
+    {
+      "target": "commands/founding-sales.md",
+      "source": "kit/commands/founding-sales.md",
+      "codexInstaller": false,
+      "kind": "commands"
+    },
+    {
+      "target": "skills/autobuild",
+      "source": "graphs/autobuild/skills/autobuild",
+      "codexInstaller": true,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/blueprint",
+      "source": "graphs/blueprint/skills/blueprint",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "agents/architect.md",
+      "source": "graphs/blueprint/agents/architect.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/extractor.md",
+      "source": "graphs/blueprint/agents/extractor.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/questioner.md",
+      "source": "graphs/blueprint/agents/questioner.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/slicer.md",
+      "source": "graphs/blueprint/agents/slicer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/blueprint-design.js",
+      "source": "graphs/blueprint/workflows/blueprint-design.js",
+      "codexInstaller": false,
+      "kind": "workflows"
+    },
+    {
+      "target": "skills/build-app",
+      "source": "graphs/build/skills/build-app",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/dev",
+      "source": "graphs/dev/skills/dev",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "agents/acceptance-auditor.md",
+      "source": "graphs/dev/agents/acceptance-auditor.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/implementer.md",
+      "source": "graphs/dev/agents/implementer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/planner.md",
+      "source": "graphs/dev/agents/planner.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/scout.md",
+      "source": "graphs/dev/agents/scout.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/dev-build.js",
+      "source": "graphs/dev/workflows/dev-build.js",
+      "codexInstaller": false,
+      "kind": "workflows"
+    },
+    {
+      "target": "skills/bughunt",
+      "source": "graphs/hunt/skills/bughunt",
+      "codexInstaller": true,
+      "kind": "skills"
+    },
+    {
+      "target": "agents/fix-verifier.md",
+      "source": "graphs/hunt/agents/fix-verifier.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/hunter.md",
+      "source": "graphs/hunt/agents/hunter.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/impact-mapper.md",
+      "source": "graphs/hunt/agents/impact-mapper.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/repairer.md",
+      "source": "graphs/hunt/agents/repairer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/reproducer.md",
+      "source": "graphs/hunt/agents/reproducer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/runner.md",
+      "source": "graphs/hunt/agents/runner.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/skeptic.md",
+      "source": "graphs/hunt/agents/skeptic.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/bughunt-flow.js",
+      "source": "graphs/hunt/workflows/bughunt-flow.js",
+      "codexInstaller": false,
+      "kind": "workflows"
+    },
+    {
+      "target": "agents/fixer.md",
+      "source": "graphs/qa/agents/fixer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/qa-auditor.md",
+      "source": "graphs/qa/agents/qa-auditor.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/reviewer.md",
+      "source": "graphs/qa/agents/reviewer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/harness-repair.js",
+      "source": "graphs/qa/workflows/harness-repair.js",
+      "codexInstaller": false,
+      "kind": "workflows"
+    },
+    {
+      "target": "skills/release-pr",
+      "source": "graphs/release/skills/release-pr",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "agents/deploy-watcher.md",
+      "source": "graphs/release/agents/deploy-watcher.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/merger.md",
+      "source": "graphs/release/agents/merger.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/release-checker.md",
+      "source": "graphs/release/agents/release-checker.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/scribe.md",
+      "source": "graphs/release/agents/scribe.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/release-flow.js",
+      "source": "graphs/release/workflows/release-flow.js",
+      "codexInstaller": false,
+      "kind": "workflows"
+    },
+    {
+      "target": "skills/security-audit",
+      "source": "graphs/security-audit/skills/security-audit",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "agents/audit-analyst.md",
+      "source": "graphs/security-audit/agents/audit-analyst.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/audit-researcher.md",
+      "source": "graphs/security-audit/agents/audit-researcher.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "agents/audit-synthesizer.md",
+      "source": "graphs/security-audit/agents/audit-synthesizer.md",
+      "codexInstaller": false,
+      "kind": "agents"
+    },
+    {
+      "target": "workflows/security-audit-flow.js",
+      "source": "graphs/security-audit/workflows/security-audit-flow.js",
+      "codexInstaller": false,
+      "kind": "workflows"
+    },
+    {
+      "target": "skills/seo-check",
+      "source": "graphs/seo/skills/seo-check",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/native-runtime",
+      "source": "core/skills/native-runtime",
+      "codexInstaller": false,
+      "kind": "skills"
+    }
+  ],
+  "aliases": [
+    {
+      "id": "loop",
+      "source": "loop.md",
+      "targetOffering": null,
+      "kind": "separate-fixed-instruction-not-certified-alias"
+    }
+  ],
+  "limits": [
+    "Dependencies/runtimes require explicit source-owner binding before executable readiness; empty lists are incomplete catalog data, not no-dependency certification.",
+    "Present native implementation forautobuild/bughunt does not establish full current environment readiness.",
+    "Security runtime and native schema/executor mock tests do not certify installed production support.",
+    "Historical inventory has45directories; native-runtime is the explicitly declared added shared-library directory required by this feature. Refresh exact fullsource catalog atfreeze afterNR01/NR02; no ignored unexpected directories."
+  ]
+}

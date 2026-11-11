@@ -18,6 +18,7 @@
 #
 # Usage:
 #   ./install.sh              link; back up anything in the way
+#   ./install.sh --codex      link only autobuild/bughunt skills into ~/.agents/skills
 #   ./install.sh --dry-run    print what would happen, change nothing
 #   ./install.sh --skip=a,b   install, but leave these targets alone (e.g.
 #                             --skip=settings.json,CLAUDE.md, or skills/verify)
@@ -25,11 +26,12 @@
 #
 # Env: CLAUDE_CONFIG_DIR overrides the target (default: $HOME/.claude).
 #      PANDASTACK_BIN_DIR overrides where command-line tools go (default: $HOME/.local/bin).
+#      PANDASTACK_CODEX_SKILLS_DIR overrides the --codex skills directory.
 #      HARNESS_NO_GIT_CONFIG=1 skips enabling the repo's pre-commit hook.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-${HOME:-}/.claude}"
 CLAUDE_DIR="${CLAUDE_DIR%/}"
 BACKUP_ROOT="$CLAUDE_DIR/backups"
 MANIFEST=".harness-manifest"
@@ -49,6 +51,7 @@ LOCAL_BIN="${PANDASTACK_BIN_DIR:-${HOME:+$HOME/.local/bin}}"
 LOCAL_BIN="${LOCAL_BIN%/}"
 
 DRY_RUN=0
+CODEX_MODE=0
 MODE=install
 SKIP=()      # rel paths (or a whole DIR_TARGETS name) that install leaves alone
 
@@ -57,6 +60,7 @@ usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' 
 for arg in "$@"; do
   case "$arg" in
     --dry-run)   DRY_RUN=1 ;;
+    --codex)     CODEX_MODE=1 ;;
     --uninstall) MODE=uninstall ;;
     --skip=*)
       # An empty value (e.g. --skip="$UNSET") must not fall through to a full install.
@@ -66,6 +70,24 @@ for arg in "$@"; do
     *) echo "unknown argument: $arg" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+# Codex installs only entry skills supported by the native CLI. It never copies
+# Claude settings/hooks, changes git configuration, or installs other agent assets.
+if [ "$CODEX_MODE" -eq 1 ]; then
+  CODEX_SKILLS_DIR="${PANDASTACK_CODEX_SKILLS_DIR:-${HOME:+$HOME/.agents/skills}}"
+  [ -n "$CODEX_SKILLS_DIR" ] || { echo "--codex needs HOME or PANDASTACK_CODEX_SKILLS_DIR" >&2; exit 2; }
+  case "$CODEX_SKILLS_DIR" in /*) ;; *) echo "PANDASTACK_CODEX_SKILLS_DIR must be absolute" >&2; exit 2 ;; esac
+  case "/$CODEX_SKILLS_DIR/" in */../*|*/./*) echo "Codex skills directory must not contain . or .. components" >&2; exit 2 ;; esac
+  CODEX_SKILLS_DIR="$(printf '%s' "$CODEX_SKILLS_DIR" | sed 's://*:/:g; s:/$::')"
+  [ -n "$CODEX_SKILLS_DIR" ] || { echo "Codex skills directory cannot be /" >&2; exit 2; }
+  CLAUDE_DIR="$(dirname "$CODEX_SKILLS_DIR")"
+  BACKUP_ROOT="$CLAUDE_DIR/.pandastack-codex-backups-$(basename "$CODEX_SKILLS_DIR")"
+  FILE_TARGETS=()
+  DIR_TARGETS=(skills)
+  LOCAL_BIN=""
+elif [ -z "${HOME:-}" ] && [ -z "${CLAUDE_CONFIG_DIR:-}" ]; then
+  echo "install needs HOME or CLAUDE_CONFIG_DIR" >&2; exit 2
+fi
 
 [ "$MODE" = install ] || [ "${#SKIP[@]}" -eq 0 ] || { echo "--skip only applies to install" >&2; exit 2; }
 
@@ -82,6 +104,20 @@ physical() { [ -d "$1" ] && (cd "$1" && pwd -P) || true; }
 # itself, or write through a symlinked target dir (skills/, bin/, ...) into some other tree.
 guard_layout() {
   local p t
+  if [ "$CODEX_MODE" -eq 1 ]; then
+    # Refuse an aliased skills tree even when its entries already work: never
+    # write through ~/.agents/skills -> ~/.claude/skills (including uninstall).
+    for t in "$CODEX_SKILLS_DIR" "$BACKUP_ROOT"; do
+      p="$t"
+      while [ "$p" != / ]; do
+        [ ! -L "$p" ] || die "--codex refuses symlinked directory $p; existing shared skill links can be used as-is, or choose a real PANDASTACK_CODEX_SKILLS_DIR"
+        [ ! -e "$p" ] || [ -d "$p" ] || die "--codex needs a directory at $p"
+        p="$(dirname "$p")"
+      done
+      case "$t" in "$REPO_DIR"|"$REPO_DIR"/*) die "$t resolves inside the repo; refusing" ;; esac
+    done
+    return
+  fi
   p="$(physical "$CLAUDE_DIR")"
   case "$p" in "$REPO_DIR"|"$REPO_DIR"/*)
     die "$CLAUDE_DIR resolves inside the repo ($REPO_DIR); refusing" ;;
@@ -98,6 +134,10 @@ guard_layout() {
 
 # Where rel path $1 lives: under LOCAL_BIN for local-bin/<name>, else under ~/.claude.
 dest_of() {
+  if [ "$CODEX_MODE" -eq 1 ]; then
+    case "$1" in skills/autobuild|skills/bughunt) printf '%s/%s\n' "$CODEX_SKILLS_DIR" "${1#skills/}" ;; *) die "unsupported Codex target: $1" ;; esac
+    return
+  fi
   case "$1" in
     local-bin/*) printf '%s\n' "$LOCAL_BIN/${1#local-bin/}" ;;
     *) printf '%s\n' "$CLAUDE_DIR/$1" ;;
@@ -108,6 +148,11 @@ dest_of() {
 # rel path (see dest_of); src is the path in the repo. Both are relative.
 list_targets() {
   local t root entry name
+  if [ "$CODEX_MODE" -eq 1 ]; then
+    printf 'skills/autobuild\tgraphs/autobuild/skills/autobuild\n'
+    printf 'skills/bughunt\tgraphs/hunt/skills/bughunt\n'
+    return
+  fi
   for t in "${FILE_TARGETS[@]}"; do printf '%s\t%s\n' "$t" "$t"; done
   if [ -n "$LOCAL_BIN" ]; then for t in "${PATH_TOOLS[@]}"; do printf 'local-bin/%s\n' "$t"; done; fi
   for root in "${SOURCE_ROOTS[@]}"; do
@@ -153,7 +198,8 @@ check_skips() {
   targets="$(list_targets | cut -f1)"
   for s in ${SKIP[@]+"${SKIP[@]}"}; do
     known=0
-    for t in "${DIR_TARGETS[@]}" local-bin; do [ "$s" = "$t" ] && known=1; done
+    for t in "${DIR_TARGETS[@]}"; do [ "$s" = "$t" ] && known=1; done
+    if [ "$CODEX_MODE" -eq 0 ] && [ "$s" = local-bin ]; then known=1; fi
     [ "$known" -eq 1 ] || grep -qxF -- "$s" <<< "$targets" || die "--skip: '$s' is not an install target (see the table in README.md)"
   done
 }
@@ -280,6 +326,7 @@ unmerge_settings() {
 # Remove symlinks under managed dirs that point into the repo but whose source
 # is gone (e.g. a skill renamed or deleted in the repo).
 prune_dangling() {
+  [ "$CODEX_MODE" -eq 0 ] || return 0
   local t link
   for t in "${DIR_TARGETS[@]}"; do
     [ -d "$CLAUDE_DIR/$t" ] || continue
@@ -295,6 +342,7 @@ prune_dangling() {
 }
 
 enable_git_hooks() {
+  [ "$CODEX_MODE" -eq 0 ] || return 0
   [ "${HARNESS_NO_GIT_CONFIG:-0}" = "1" ] && return 0
   git -C "$REPO_DIR" rev-parse --git-dir >/dev/null 2>&1 || return 0
   if [ "$(git -C "$REPO_DIR" config --get core.hooksPath || true)" != ".githooks" ]; then
@@ -307,7 +355,7 @@ do_install() {
   local rel src dest stale on_path=0 linked=0 skipped=0 rc
   log "repo:   $REPO_DIR"
   log "target: $CLAUDE_DIR"
-  [ -n "$LOCAL_BIN" ] || log "note: HOME is not set, so command-line tools (autobuild) are not linked; set PANDASTACK_BIN_DIR to link them"
+  [ "$CODEX_MODE" -eq 1 ] || [ -n "$LOCAL_BIN" ] || log "note: HOME is not set, so command-line tools (autobuild) are not linked; set PANDASTACK_BIN_DIR to link them"
   guard_layout
   check_duplicates
   check_skips
@@ -366,6 +414,7 @@ latest_backup_with_manifest() {
 
 do_uninstall() {
   local rel dest removed=0 backup restored=0 remaining=()
+  if [ "$CODEX_MODE" -eq 1 ]; then guard_layout; fi
   log "repo:   $REPO_DIR"
   log "target: $CLAUDE_DIR"
   while IFS=$'\t' read -r rel _; do
@@ -375,7 +424,7 @@ do_uninstall() {
     fi
   done < <(list_targets)
   prune_dangling
-  unmerge_settings
+  if [ "$CODEX_MODE" -eq 0 ]; then unmerge_settings; fi
 
   backup="$(latest_backup_with_manifest)"
   if [ -z "$backup" ]; then
@@ -386,6 +435,9 @@ do_uninstall() {
   log "restoring from: $backup"
   while IFS= read -r rel; do
     [ -n "$rel" ] || continue
+    if [ "$CODEX_MODE" -eq 1 ]; then
+      case "$rel" in skills/autobuild|skills/bughunt) ;; *) die "unsupported Codex backup target: $rel" ;; esac
+    fi
     if [ -z "$LOCAL_BIN" ] && [ "${rel#local-bin/}" != "$rel" ]; then
       warn "'$rel' kept in the backup: HOME is not set; set PANDASTACK_BIN_DIR and run --uninstall again to restore it"
       remaining+=("$rel"); continue

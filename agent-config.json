@@ -1,0 +1,13 @@
+{
+  "maxConcurrentSubagents": 16,
+  "claude": {
+    "orchestrator": { "model": "opus", "effort": "high" },
+    "advisor": { "model": "fable", "effort": "high" },
+    "subagents": { "model": "sonnet", "effort": "high" },
+    "agentOverrides": {
+      "checker": { "model": "haiku" },
+      "runner": { "model": "haiku" },
+      "release-checker": { "model": "haiku" }
+    }
+  }
+}

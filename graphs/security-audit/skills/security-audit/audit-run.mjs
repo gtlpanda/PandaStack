@@ -37,6 +37,7 @@ import { fileURLToPath } from 'node:url'
 import { buildEnv, git as rawGit, tail } from '../../../build/skills/build-app/driver/proc.mjs'
 import { VENDOR_DIR, isSafeRelativePath, validateFindingsFile, validateLedgerFile } from './upstream.mjs'
 import { PROFILES, QUICK_DEFERRED, rulesOf } from './audit-profile.mjs'
+import { inspectSnapshotProtection } from './snapshot-protection.mjs'
 
 // Every git call here runs without the target's hooks or fsmonitor: both are config a repo may set with a
 // relative path, which resolves inside the checkout, the code under audit. A local copy of the flags in
@@ -562,14 +563,26 @@ export function formatNext(n) {
 // ---------- reading a run back ----------
 export function loadRun(runDir) {
   const meta = readJson(join(runDir, 'run-metadata.json'))
+  validateRunMetadata(meta, runDir)
+  const state = readJson(join(runDir, 'stage-state.json'))
+  validateRunState(state, runDir)
+  return { meta, state, ledger: readJson(join(runDir, 'coverage-ledger.json')), findings: readJson(join(runDir, 'findings.json')) }
+}
+
+// Shared read-only authority validation; partial reports must not load optional files.
+export function validateRunAuthority(meta, state, runDir) {
+  validateRunMetadata(meta, runDir)
+  validateRunState(state, runDir)
+}
+function validateRunMetadata(meta, runDir) {
   if (meta === undefined) refuse(`${runDir} has no run-metadata.json: it is not a run directory`)
   if (typeof meta !== 'object' || meta === null || !RUN_STATUSES.includes(meta.run_status)) refuse(`${runDir}/run-metadata.json has no valid run_status (${RUN_STATUSES.join(', ')})`)
-  const state = readJson(join(runDir, 'stage-state.json'))
+}
+function validateRunState(state, runDir) {
   if (state === undefined) refuse(`${runDir} has no stage-state.json`)
   if (typeof state !== 'object' || state === null || state.version !== 1 || !STEPS.includes(state.last) || !isInt(state.wave) || ![null, 'post-wave', 'final-clean'].includes(state.critic_kind)) {
     refuse('stage-state.json is not { version: 1, last: <step>, wave: <integer>, critic_kind: null | post-wave | final-clean }')
   }
-  return { meta, state, ledger: readJson(join(runDir, 'coverage-ledger.json')), findings: readJson(join(runDir, 'findings.json')) }
 }
 
 function statusLines(runDir) {
@@ -595,7 +608,7 @@ function statusLines(runDir) {
 }
 
 // ---------- check ----------
-function metadataProblems(m) {
+export function metadataProblems(m) {
   const p = []
   const need = (ok, what) => { if (!ok) p.push(`run-metadata.json: ${what}`) }
   need(isStr(m.run_id) && isStr(m.repo) && isStr(m.target), 'run_id, repo and target must be non-empty strings')
@@ -676,6 +689,10 @@ export function init(opts) {
   try {
     const gate = budgetGate(opts.profile, opts.budget)   // before any snapshot or agent: a run that cannot be funded does no work
     const snapshot = gate.ok ? exportTree(f.top, f.commit, join(runDir, 'tree')) : null
+    if (gate.ok) {
+      const protection = inspectSnapshotProtection(join(runDir, 'tree'))
+      if (!protection.ok) refuse('snapshot permission inspection failed: audit initialization refused')
+    }
     const priors = gate.ok ? discoverPriors([[join(f.common, 'security-audit'), 'default'], ...(opts.out ? [[dirname(runDir), 'beside --out']] : [])], runDir, opts.prior, f.repo) : null
     const pin = JSON.parse(readFileSync(join(VENDOR_DIR, 'UPSTREAM.json'), 'utf8'))
     const metadata = {

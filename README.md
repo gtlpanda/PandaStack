@@ -11,7 +11,7 @@
 > ```
 > /blueprint <idea>   read the doc or idea → one up-front interview → binding decisions → gated design → gated backlog → your one approval
 > /build-app          the approved backlog, unattended: one /dev per slice → final QA → /bughunt --fix → one PR
-> autobuild run       a feature list with frozen tests → Claude or Codex sessions → full gates → final branch audit
+> autobuild run       a feature list with frozen tests → Claude or Codex sessions → full gates → shared bughunt ledger
 > /dev <task>         plan it (you approve) → build it tests-first → prove every acceptance criterion → QA
 > /loop               keep a branch green: check → fix → review → QA, until it passes or needs you
 > /release-pr [PR#]   docs into the PR → you approve the exact commit → merge once → verify the deploy
@@ -19,6 +19,65 @@
 > ```
 >
 > Install: `git clone https://github.com/gtlpanda/PandaStack.git && cd PandaStack && ./install.sh`
+
+
+## Engineering roadmap
+
+See [ROADMAP.md](ROADMAP.md) for the phased coordination, evaluation, and reliability
+roadmap. Each phase will be built and validated using PandaStack autobuild, with
+frozen acceptance tests, a branch bug hunt, and a recorded dogfood demonstration.
+Implementation has not started.
+
+## Central agent settings
+
+Edit `agent-config.json` in this checkout, then run:
+
+```sh
+node scripts/configure-agents.mjs sync
+node scripts/configure-agents.mjs check
+```
+
+`maxConcurrentSubagents` defaults to **8** for both providers. Claude has separate
+`claude.orchestrator`, `claude.advisor`, and `claude.subagents` objects, each with
+`model` and `effort`. Defaults are Opus/high, Fable/high, and Sonnet/high.
+`claude.agentOverrides` keeps checker, runner, and release-checker on Haiku; remove
+an override to make that agent use the worker default. Effort accepts `low`,
+`medium`, `high`, `xhigh`, or `max`; the selected model must support the value.
+
+Sync updates Claude settings, graph agent frontmatter, workflow nodes, and phase
+labels together. Tools and permissions stay unchanged. Workflow scripts cannot
+read configuration files at runtime, so their pins are generated; `validate.sh`
+rejects drift. The standalone `kit/agents` catalog keeps its own definitions.
+
+Autobuild and `/build-app` read the central defaults when started. Existing
+`autobuild.json` model overrides still win; `maxConcurrentSubagents` can also be
+overridden there. `subagentModelForce` now defaults to `false`, preserving the
+advisor and checker pins; an existing explicit `true` still forces one model.
+Codex native hunts use the configured worker pool and Codex models/effort, separate
+from the generated Claude workflow pins.
+
+For interactive sessions launched with the central settings explicitly applied:
+
+```sh
+node /path/to/PandaStack/scripts/configure-agents.mjs claude
+node /path/to/PandaStack/scripts/configure-agents.mjs codex
+```
+
+The Claude launcher syncs the definitions and injects native settings. Install the
+PandaStack agents/workflows with `./install.sh` first. Existing installations that
+symlink settings see synced changes; the installer preserves existing values in a
+user-owned settings file, so use the launcher to apply the central settings over
+those values. Explicit trailing CLI options can override launcher defaults.
+The Codex launcher passes the concurrency setting without changing your personal
+Codex config. Plain `codex` and already-running desktop chats keep their own config.
+
+Concurrency is per session/pool, not a machine-wide or lifetime quota. Claude uses
+`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` and
+`CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS` (verified in installed CLI 2.1.321);
+workflow-local pools, such as security-audit's `--max-parallel`, may be lower.
+Codex uses [`agents.max_concurrent_threads_per_session`](https://learn.chatgpt.com/docs/config-file/config-reference),
+which counts spawned threads and excludes the primary thread. Older CLI releases
+may not support these controls; this does not change host-imposed limits.
 
 ## What drives it
 
@@ -32,7 +91,7 @@
 - **The right model for each job.** An Opus orchestrator owns state, commits,
   and your approvals; a Fable advisor is called only at decision points
   (confirm a finding, gate a plan, unstick a loop, diagnose a failed deploy);
-  Sonnet and Haiku subagents do the focused work. Every node is configured for high effort.
+  Sonnet and Haiku subagents do the focused work. Every node defaults to high effort.
 - **Nothing unreviewed reaches a PR.** The review gate, a hook in every repo,
   refuses `gh pr create` until a finished `/bughunt` covers the head, and
   `gh pr merge` until that hunt passes. It also refuses pushes straight to the
@@ -49,7 +108,7 @@
 | build | [`graphs/release/`](graphs/release/README.md) | `/release-pr [PR#]` | scribe (docs in the PR) → readiness on the exact head → merger, once → deploy-watcher, evidence for the merge commit | routing tested with mocked agents; run live once on a real PR (reported by the owner) |
 | build | [`graphs/hunt/`](graphs/hunt/README.md) | `/bughunt [PR# \| branch \| a..b]` | intake (exact commits, hunks, routing signals, a worktree at the head) → impact-mapper → one hunter per lens the change calls for (logic, contract, concurrency, security, errors, regression), in parallel → findings merged under stable ids in code → a blind skeptic per finding, the advisor refereeing the contested ones → a reproducer's failing test, run by `evidence.mjs` at the head and the merge-base in a sandbox, then re-run by the session → (`--propose`, `--fix`) a root-cause repair per reproduced bug in an isolated worktree, proven by the reproduction (passes with it, fails without it) and the suite, and in fix mode reviewed by an independent verifier with adversarial tests → a report with a computed disposition | live-run on a 10-case benchmark: 6 of 6 planted bugs found and reproduced, 0 false positives on bug-free changes, $9.64 for discovery |
 | build | [`graphs/build/`](graphs/build/README.md) | `/build-app` | the driver, detached: one fresh headless `/dev --slice` session per backlog slice, its own checks (commit prefix, clean tree, frozen tests, its own verify), fast-forward onto `integration/<app>`, usage-limit waits, the backlog brakes; then one QA pass over the whole branch, the push, and one PR for you | live-run once end to end: a 7-slice CLI in 1 h 40 min (retro 24) |
-| build | [`graphs/autobuild/`](graphs/autobuild/README.md) | `autobuild run [--backend codex]` (`/autobuild` sets a project up) | one fresh session per feature from `features.json`, independent full gates, usage-limit pauses, periodic/final reviews; Claude uses guard/Stop hooks and `/bughunt --fix`; Codex uses host-owned passing flags/commits and a native final audit | Claude used for real builds; Codex live-tested through build, review and final audit; both covered by the autobuild regression suite |
+| build | [`graphs/autobuild/`](graphs/autobuild/README.md) | `autobuild run [--backend codex]` (`/autobuild` sets a project up) | one fresh session per feature from `features.json`, independent full gates, usage-limit pauses, periodic/final reviews; Claude uses guard/Stop hooks; Codex uses host-owned passing flags/commits; both finish with the same hunt graph and PR ledger | Both covered by provider integration tests, including reproduced fixes and unchanged PR gate acceptance; live results recorded separately |
 | security | [`graphs/security-audit/`](graphs/security-audit/README.md) | `/security-audit --full` (explicit request only) | [Cloudflare's security-audit skill](https://github.com/cloudflare/security-audit-skill), vendored at a pinned commit and run by read-only agents (`Read, Grep, Glob`) over a read-only snapshot of `HEAD`, one stage per Workflow run with code between stages: four researchers and a synthesizer build a coverage ledger → hunting waves, a coverage critic after each, a minter for the gaps → one fresh verifier per candidate, then per record → `findings.json` gated by both upstream validators → `REPORT.md`, `NEEDS-VALIDATION.md` and `FINDINGS-DETAIL.md` written by code, never by a model; `task` and `export-remediation` give `/dev` the text for one finding. Source only: no target code runs, so nothing is `confirmed` and a report with none is not a clean bill of health | offline end to end in `scripts/test.sh`; two live audits of a small fixture through headless `claude -p` (28 and 30 agents, $2.93 and $3.05, about 9.5 minutes each; retro 42); the sandbox and the `quick` and `deep` profiles are later changes |
 | marketing | [`graphs/seo/`](graphs/seo/README.md) | `seo-check.mjs check <dir> --site <url>` | so far only the check: a built site's title, description, canonical, Open Graph, and JSON-LD tags, duplicates across pages, the sitemaps (which decide the strict pages), and robots.txt, `SEO-CHECK: PASS\|FAIL`; the audit graph not built yet | check tested offline |
 
@@ -65,13 +124,14 @@ autobuild run --backend codex
 
 For a new project, use `autobuild init --backend codex`. Existing configuration
 and completed features are preserved. Model roles translate automatically:
-Opus → `gpt-6-astra`, Sonnet → `gpt-6.1-sol`, Haiku → `gpt-6-luna`.
+Opus/Fable → `gpt-6-astra`, Sonnet → `gpt-6.1-sol`, Haiku → `gpt-6-luna`.
 Override the main model with `--model`; Claude remains the default backend.
 
 Codex runs with the workspace-write sandbox. The host independently checks the
 full gate and commits passing work. Claude tool hooks and dollar/turn caps do
-not transfer; Codex uses session timeouts and iteration limits. Its native final
-audit does not generate the separate Claude Workflow PR-review ledger.
+not transfer; Codex uses session timeouts and iteration limits. Its final hunt uses the shared graph
+and writes the same validated PR-review ledger; the host executes evidence and
+repair checks.
 See the [Codex setup and backend differences](graphs/autobuild/tool/README.md#codex-backend)
 for model overrides, skill installation, limits and frozen-file checks.
 
@@ -211,6 +271,28 @@ cd PandaStack
 ./install.sh --dry-run   # see what would change
 ./install.sh             # link it
 ```
+
+For Codex, install just the supported entry skills:
+
+```bash
+./install.sh --codex --dry-run
+./install.sh --codex
+./install.sh --codex --uninstall  # remove these links and restore conflicts
+```
+
+This links only `autobuild` and `bughunt` into `~/.agents/skills`; it does not
+copy Claude settings, hooks, credentials, agent definitions or workflows, change
+git hooks, or install a PATH command. The linked skills use this checkout's native
+runners. Set `PANDASTACK_CODEX_SKILLS_DIR` to an absolute directory for another
+skill location (for example `$HOME/.codex/skills`). Conflicting entries are backed
+up beside that directory under `.pandastack-codex-backups-<directory-name>/`;
+foreign skills and replacements made after installation are preserved. `--skip`
+accepts `skills`, `skills/autobuild`, or `skills/bughunt` in this mode.
+
+A symlinked destination or ancestor is refused, including the common
+`~/.agents/skills -> ~/.claude/skills` arrangement. If those shared entry links
+already work, leave them as-is; otherwise choose a real dedicated skills directory.
+No account installation is needed to run the repository's CLI directly.
 
 If `~/.claude/settings.json` is already a file of your own, it is **merged,
 not replaced**:
@@ -354,8 +436,107 @@ scripts/validate.sh       # JSON valid, frontmatter complete, CLAUDE.md under 20
 scripts/test-install.sh   # install / re-install / uninstall against a temp HOME
 scripts/test-secrets.sh   # proves the scanner and pre-commit hook block real key formats
 scripts/test-workflow.sh  # runs every graphs/*/tests/*.test.mjs against scripted agents; checks every workflow parses
-scripts/test-autobuild.sh # autobuild's suite against fake Claude/Codex CLIs, including gates, reviews and audits
+scripts/test-autobuild.sh # autobuild's suite against fake Claude/Codex CLIs, including gates, reviews and shared hunts
 scripts/check-secrets.sh  # the scanner itself (prints "check-secrets: clean" or lists hits); also the pre-commit hook
 ```
 
 The test scripts end with an explicit `PASS`/`FAIL` line.
+
+### Managed configuration doctor
+
+Run `node scripts/pandastack.mjs doctor --repo "/absolute/project path" --backend codex --json`
+(or `--backend claude`; omit `--json` for human output). `--model MODEL` applies the
+same main-model override as managed autobuild launches. Doctor reads central and
+project configuration, checks generated agent files without updating them, and
+reports effective settings with their sources. It does not inspect credentials or
+make model calls. Exit codes are 0 for ready, 2 for degraded/blocked, and 1 for
+invalid invocation or unexpected failure.
+
+Default inspection checks executable availability using the managed binary and
+PATH selection without executing provider code, including `--version`. It reports
+runtime version as null and model, effort, and concurrency controls as unknown,
+with explicit evidence that execution was not performed. Missing executables remain
+blocked; otherwise valid configuration is degraded until a trusted capability probe
+supplies evidence. Earlier live version outputs describe prior behavior; current
+default inspection deliberately leaves version unknown. The library's injected probe
+is a trusted integration/testing boundary, not evidence read from project files;
+for bare executable names it supplies discovery evidence as well. Explicit binary
+paths are checked locally even with injection. These reports describe managed
+launch configuration, not interactive sessions or account-level model access.
+
+### Local run lifecycle records
+
+Autobuild roots and managed Claude/Codex builder/review sessions, plus build-app
+roots and managed Claude sessions, write immutable metadata through
+`core/skills/run-records/tracking.mjs`. Session parent IDs use async-scoped context;
+each invocation gets a fresh ID. Availability probes and native hunt graph leaves
+are not captured. Existing runner logs and ledgers remain authoritative.
+
+The default store is Git's per-worktree `pandastack-runs` path. Set
+`PANDASTACK_RUNS_DIR` to an absolute directory for a shared local store; library
+callers can override it with `storeDir`. Use `createRunStore(directory).listRuns()`
+and `readEvents(id)` from `core/skills/run-records/store.mjs` to inspect records.
+Managed tracking rejects stores inside either the project or runner working tree,
+including ignored directories, before creating any paths. The exact Git metadata
+`pandastack-runs` namespace and its descendants remain supported, including linked
+worktrees. For non-Git directories, the supplied canonical directories are protected.
+Choose an external shared store; rejected placement emits the usual tracking warning
+and executes work unrecorded. The direct `createRunStore` API has no placement restriction.
+Store operations require Linux/WSL with `/proc/self/fd` directory anchors and fail
+closed when those anchors are unavailable. Writes synchronize directory parents
+and the publication directory; immutable replay retries the publication sync.
+Only allowlisted settings are stored, never prompts, commands, output or credentials.
+Effective merged adapter settings use runtime provenance where original provenance
+is unavailable. Build-app records its selected model, including `HARNESS_BUILD_MODEL`.
+
+Storage failures emit a bounded warning and preserve execution outcomes. Exceptions
+are rethrown unchanged; interruption or a crash can leave a started record without
+a terminal event. A conflicting supplied run ID does not modify the earlier run.
+Focused tests under `tests/run-tracking.test.mjs` are discovered by normal workflow
+CI. Fake-provider coverage does not establish native provider support or live
+readiness; supervisor-run acceptance and live dogfood evidence remain required.
+
+### Opt-in managed decision waiting
+
+Autobuild can wait for explicitly assigned ordinary questions immediately before
+one named feature's builder. Configure `decisions` as described in the
+[autobuild decision gate guide](graphs/autobuild/tool/README.md#managed-decision-gate).
+It waits without a model process, acknowledges the matching queue receipt before
+launch, and supplies only delimited untrusted question/selected-answer data.
+Approval requests require manual handoff and never release this gate.
+
+Use a private external Linux/WSL local directory for the shared SQLite queue.
+`decisions.runId` is a stable logical retry group, separate from fresh Phase 1
+invocation/session IDs. Version 2 `PANDASTACK_DECISION` lines correlate waiting,
+received and failed waits without answer text or actor data. These observations
+do not yet establish complete trace coverage or model consumption. Queue failures
+stop the builder; observational failures preserve queue and work behavior.
+Native active-session delivery is not supplied by this gate. Unsupported
+interactive adapters, including Claude, require explicit manual handoff; terminal
+session resume is a separate capability. There is no provider fallback.
+
+The separate [Codex delivery adapter](core/skills/decisions/codex-delivery.mjs)
+accepts a caller-owned connected app-server transport and exact thread/active-turn
+IDs. It reserves an ordinary question's dispatch durably before `turn/steer`, sends
+only delimited untrusted question/selected-answer data, and commits the validated
+turn receipt with queue acknowledgment. Identical acknowledged delivery/target
+replay sends nothing. It never discovers or attaches to arbitrary sessions.
+
+An interrupted or uncertain dispatch, mismatched receipt, or changed target
+requires `MANUAL_HANDOFF`; there is no automatic resend or reset API. Reconcile
+against the owned session before choosing further work. Ordinary queue ack cannot
+clear an inflight native reservation. This is not an exactly-once remote-effects
+guarantee, model-consumption proof, or merge/publish/deploy permission. Claude
+interactive delivery remains unsupported. Adapter tests use synthetic owned
+transports; the supervisor owns the final ephemeral-session live smoke and full
+gates. Native receipts are separate from managed-launch trace receipts.
+
+Observation output failures preserve decision results. Failed closing emissions
+return and replay an incomplete snapshot without emitting again. The default
+stdout sink handles asynchronous write errors; an earlier returned snapshot does
+not prove a later write succeeded. On ordinary completion the owning autobuild
+CLI waits up to one second for pending observation writes, allowing temporary
+backpressure to clear. Broken output or the deadline marks pending traces
+incomplete and preserves the workflow exit code, without output replay. The
+decision ack CLI retains the safe `MANUAL_HANDOFF` code for uncertain native
+dispatch; it leaves acknowledgment unset.

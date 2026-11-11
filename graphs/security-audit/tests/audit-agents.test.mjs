@@ -1,3 +1,4 @@
+import { readAgentConfig, agentRole } from '../../../scripts/agent-config.mjs'
 // audit-agents.test.mjs - the three leaves of the security-audit graph: what each agent file pins, and that the pin holds
 // for every agent of the graph. These agents read hostile source, so their tool list is the boundary: `tools:` is parsed
 // here as a list (scripts/workflow-harness.mjs agentField reads only a first token), and the test asserts the whole list.
@@ -28,11 +29,11 @@ await test('the graph ships exactly audit-analyst, audit-researcher and audit-sy
   assert.deepEqual(readdirSync(AGENT_DIR).sort(), NAMES.map(n => `${n}.md`))
   for (const n of NAMES) assert.equal(agent(n).fields.name, n)
 })
-await test('each agent is sonnet at high effort and its tools are exactly Read, Grep, Glob: no Bash, Write, Edit, network, MCP, or sub-agent tool', () => {
+await test('each agent uses its configured model and effort and its tools are exactly Read, Grep, Glob: no Bash, Write, Edit, network, MCP, or sub-agent tool', () => {
   for (const n of NAMES) {
     const { fields } = agent(n)
-    assert.equal(fields.model, 'sonnet', n)
-    assert.equal(fields.effort, 'high', n)
+    assert.equal(fields.model, agentRole(readAgentConfig(), n).model, n)
+    assert.equal(fields.effort, agentRole(readAgentConfig(), n).effort, n)
     assert.deepEqual(toolList(fields), ['Read', 'Grep', 'Glob'], n)
     assert.deepEqual(Object.keys(fields).sort(), ['description', 'effort', 'model', 'name', 'tools'], `${n}: no skills, hooks, or other key the runtime might read as extra power`)
   }

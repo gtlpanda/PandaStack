@@ -16,6 +16,20 @@ pass=0; fail=0
 check() { if eval "$2"; then echo "  ok   $1"; pass=$((pass+1)); else echo "  FAIL $1" >&2; fail=$((fail+1)); fi; }
 snapshot() { (cd "$HOME" && find . -print | sort; find . -type l -exec sh -c 'printf "%s -> %s\n" "$1" "$(readlink "$1")"' _ {} \; | sort); }
 
+# Copy fixture sources without ever traversing the owning Git metadata.
+copy_repo_fixture() (
+  local destination="$1" entry
+  unset GLOBIGNORE
+  shopt -u failglob
+  shopt -s dotglob nullglob
+  mkdir -p -- "$destination"
+  for entry in "$REPO"/*; do
+    [ "${entry##*/}" = .git ] && continue
+    cp -pPR -- "$entry" "$destination/"
+  done
+  chmod "$(stat -c %a "$REPO" 2>/dev/null || stat -f %Lp "$REPO")" "$destination"
+)
+
 echo "== seed a pre-existing ~/.claude with things in the way"
 mkdir -p "$CD/skills/legacy" "$CD/skills/verify" "$CD/skills/review" "$CD/agents"
 echo '{"model":"old","hooks":{}}' > "$CD/settings.json"
@@ -88,7 +102,7 @@ check "second uninstall exits 0"       'true'
 check "settings.json untouched"        '[ "$(cat "$CD/settings.json")" = "{\"model\":\"old\",\"hooks\":{}}" ]'
 
 echo "== 6. regression: target that resolves into the repo is refused (audit C1/H4)"
-RCOPY="$TMP/repocopy"; cp -R "$REPO" "$RCOPY"; rm -rf "$RCOPY/.git"
+RCOPY="$TMP/repocopy"; copy_repo_fixture "$RCOPY"
 H2="$TMP/home2"; mkdir -p "$H2"; ln -s "$RCOPY" "$H2/.claude"
 check "refuses ~/.claude -> repo"      '! HOME="$H2" "$RCOPY/install.sh" >/dev/null 2>&1'
 check "repo skills untouched"          '[ -f "$RCOPY/core/skills/verify/SKILL.md" ] && [ ! -L "$RCOPY/core/skills/verify" ]'
@@ -165,7 +179,7 @@ HOME="$H10" "$REPO/install.sh" --skip=settings.json --dry-run >"$TMP/dry10.log"
 check "--skip + --dry-run changes nothing" '[ "$(cat "$H10/.claude/settings.json")" = "MINE" ] && [ ! -e "$H10/.claude/loop.md" ] && grep -q "skip (--skip): settings.json" "$TMP/dry10.log"'
 
 echo "== 13. every graph is installed; a name shipped by two sources is refused"
-GCOPY="$TMP/graphcopy"; cp -R "$REPO" "$GCOPY"; rm -rf "$GCOPY/.git"
+GCOPY="$TMP/graphcopy"; copy_repo_fixture "$GCOPY"
 GCOPY="$(cd "$GCOPY" && pwd -P)"   # install.sh records physical paths (/var -> /private/var on macOS)
 mkdir -p "$GCOPY/graphs/fake/agents"; printf -- '---\nname: extra\n---\n' > "$GCOPY/graphs/fake/agents/extra.md"
 H11="$TMP/home11"; mkdir -p "$H11/.claude"
@@ -230,7 +244,7 @@ H15c="$TMP/home15c"; mkdir -p "$H15c/.claude"; echo '{"model": "m"}' > "$H15c/.c
 HOME="$H15c" "$REPO/install.sh" --skip=skills/bughunt >"$TMP/install15c.log" 2>&1
 check "--skip=skills/bughunt: no gate hook" '! grep -q "gate.mjs" "$H15c/.claude/settings.json" && grep -q "review gate hook is not merged" "$TMP/install15c.log"'
 # A chain: merge 1, an edit, merge 2 (ours changed), then uninstall: the edit stays, our hooks go.
-GC="$TMP/gcopy15"; cp -R "$REPO" "$GC"; rm -rf "$GC/.git"
+GC="$TMP/gcopy15"; copy_repo_fixture "$GC"
 H15d="$TMP/home15d"; mkdir -p "$H15d/.claude"; echo '{"model": "m"}' > "$H15d/.claude/settings.json"
 HOME="$H15d" "$GC/install.sh" >/dev/null 2>&1
 jq '.model = "edited"' "$H15d/.claude/settings.json" > "$TMP/t15" && cat "$TMP/t15" > "$H15d/.claude/settings.json"

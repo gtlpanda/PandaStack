@@ -1,13 +1,16 @@
+import { withTrackedRun } from '../../../../../core/skills/run-records/tracking.mjs'
+import { buildSessionTracking } from '../../../../../core/skills/run-records/adapters.mjs'
 // One headless Claude session: the settings it runs with, starting it, and
 // reading its result. runClaude, readResult, and probeUntilAvailable follow the
 // autobuild kit's lib/loop.mjs; the settings are this driver's own.
+import { claudeAgentSettings } from '../../../../../scripts/agent-config.mjs'
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync, openSync, closeSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildEnv } from './proc.mjs'
 import { classifyOutcome, parseResetTime, planLimitWait } from './limits.mjs'
 
-// Pinned agents keep their pins (haiku, fable), unpinned ones get Sonnet, and an
+// Generated agent pins keep their role settings; unpinned agents use the central default. An
 // inherited CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL is blanked: set, it forces every
 // workflow agent onto one model (measured 2026-11-05). --settings overrides the
 // user's settings.json env.
@@ -15,18 +18,14 @@ import { classifyOutcome, parseResetTime, planLimitWait } from './limits.mjs'
 // after its last turn unless the ceiling is 0 (measured 2026-11-05: a design run
 // was killed at 10 min). The driver's own session timeout is the outer limit.
 export const NO_BG_CEILING = { CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '0' }
-export const SESSION_ENV = {
-  CLAUDE_CODE_SUBAGENT_MODEL: 'claude-sonnet-5-5',
-  CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0',
-  CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL: '',
-  ...NO_BG_CEILING,
-}
+export const SESSION_ENV = { ...claudeAgentSettings().env, ...NO_BG_CEILING }
 // A second layer under the guard hook; command-text rules alone are not a boundary.
 export const DENY = ['Bash(git push)', 'Bash(git push *)', 'Bash(git remote *)', 'Bash(git reset --hard*)', 'Bash(git rebase*)', 'Bash(rm -rf /*)', 'Bash(rm -rf ~*)']
 
 export function sessionSettings(hooksDir) {
   const hook = (file, timeout) => ({ type: 'command', command: `node "${join(hooksDir, file)}"`, timeout })
   return {
+    ...claudeAgentSettings(),
     env: SESSION_ENV,
     hooks: {
       PreToolUse: [{ matcher: 'Bash|Edit|Write|MultiEdit|NotebookEdit', hooks: [hook('guard.mjs', 30)] }],
@@ -55,7 +54,13 @@ export async function stopSessions(graceMs = 30_000) {
 // stdout goes to logFile (stream-json), stderr to logFile.stderr.
 // pidFile, when given, holds the session's pid while it runs, so a driver
 // started after a crash can tell an orphaned session is still at work.
-export async function runClaude({ bin, repo, args, env, logFile, timeoutMs, pidFile }) {
+export async function runClaude(options) {
+  // Availability probes omit managed --settings; their coverage is deferred.
+  if (!options.args.includes('--settings')) return runClaudeWork(options)
+  return withTrackedRun(buildSessionTracking(options), () => runClaudeWork(options))
+}
+
+async function runClaudeWork({ bin, repo, args, env, logFile, timeoutMs, pidFile }) {
   const out = openSync(logFile, 'w')
   const err = openSync(`${logFile}.stderr`, 'w')
   try {

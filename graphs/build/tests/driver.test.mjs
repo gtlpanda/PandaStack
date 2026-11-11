@@ -1,3 +1,4 @@
+import { claudeAgentSettings } from '../../../scripts/agent-config.mjs'
 // driver.test.mjs — the /build-app driver end to end against a throwaway git repo
 // and a fake `claude` (fixtures/fake-claude.mjs). Run by scripts/test-workflow.mjs.
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
@@ -106,7 +107,8 @@ await test('each session gets bypassPermissions, the injected settings, and a cl
   assert.equal(calls[1].env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS, '0')
   assert.ok(c.args.includes('--append-system-prompt'))
   const settings = JSON.parse(readFileSync(c.args[c.args.indexOf('--settings') + 1], 'utf8'))
-  assert.deepEqual(settings.env, { CLAUDE_CODE_SUBAGENT_MODEL: 'claude-sonnet-5-5', CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0', CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL: '', CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '0' })
+  assert.deepEqual(settings.env, { ...claudeAgentSettings().env, CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '0' })
+  assert.equal(settings.effortLevel, claudeAgentSettings().effortLevel)
   assert.match(settings.hooks.PreToolUse[0].hooks[0].command, /hooks\/guard\.mjs"$/)
   assert.match(settings.hooks.StopFailure[0].hooks[0].command, /hooks\/stop-failure\.mjs"$/)
   assert.ok(settings.permissions.deny.includes('Bash(git push *)'))

@@ -21,6 +21,85 @@ Set up a new project with the `/autobuild` skill (`graphs/autobuild/skills/autob
 
 ## How one iteration works
 
+### Managed decision gate
+
+Opt in by adding this complete object to the project's `autobuild.json`:
+
+```json
+{
+  "decisions": {
+    "store": "/home/example/.local/state/pandastack/decisions",
+    "runId": "workflow-example-1",
+    "featureId": "F-1",
+    "ids": ["color-choice"],
+    "timeoutMs": 60000
+  }
+}
+```
+
+Use an absolute normalized store path, a nonempty list of distinct request IDs,
+and an integer timeout from 0 to 2147483647 milliseconds per request. The feature
+must exist exactly once. Omit `decisions` to retain the ordinary loop behavior.
+Config loading and default doctor validate structure without opening a queue,
+creating storage or running a provider; successful inspection does not establish
+queue readiness.
+
+Prepare requests through `pandastack decision request --store DIR --file JSON`
+using the canonical project path, configured logical `runId`, and exact current
+Git HEAD. Submit an ordinary answer with `pandastack decision answer --store DIR
+--id ID --file JSON`. Request and answer JSON formats are in the
+[Phase 2 contract](../../../spec/contracts/phase2.md). Inputs are data, never commands.
+
+Immediately before that feature's builder, the host waits without a model
+process, binds recipient and revision, and acknowledges receipt before launch.
+The builder receives delimited untrusted question/selected-answer data. Approval
+requests stop with `MANUAL_HANDOFF` before acknowledgment or launch. Ordinary
+answers and matching approval scope never grant merge, publish, deploy or command
+permission; actor text is attribution, not authenticated consent.
+
+Use a fresh logical `runId` for a new workflow. For an incomplete feature retry,
+keep the same canonical repo, runId, feature, request and revision: they determine
+the durable delivery ID. Invocation UUIDs and provider session IDs are fresh and
+do not enter that identity. Feature commits remain the execution checkpoint;
+completed features and subsequent builders do not reuse the old answer/context.
+HEAD is rechecked before each acknowledgment and immediately before spawn.
+Timeout, cancellation, expiry, wrong routing or stale revision stop before launch
+(exit 14; interruption exits 130). Reconcile the request or answer it, then retry.
+Arbitrary answer effects are not exactly-once; consumers need durable checkpoints.
+
+Keep the queue outside project and runner worktrees, on Linux/WSL local POSIX
+storage. A newly created private leaf uses mode 0700, with database and sidecars
+mode 0600. Preexisting unsafe permissions, ownership, symlinks and nonregular
+files are refused. Shared parents such as `/tmp/` are permitted. The trust boundary
+is one OS user, not a remote authorization service. Keep secrets out of decisions
+and protect provider logs/context as you would other task input.
+
+The host emits one-line `PANDASTACK_DECISION` JSON v2 observations for `waiting`,
+`received` and `wait_failed`, with a persisted random queue namespace, logical
+identity, actual Phase 1 outer ID (or null), fresh trace/span/event IDs and
+monotonic elapsed milliseconds. No answer text, actor or raw errors are emitted.
+`context_supplied` binds the received answer to a fresh launch ID and the actual
+nested Phase 1 session ID (or null). Claude records successful spawn with context
+argv; Codex additionally requires successful stdin write completion. Failed spawns
+produce no receipt. Unknown writes and EPIPE leave trace coverage incomplete.
+Receipts prove host transport only, not model consumption or exactly-once action.
+
+Every ordinary invocation closes with `trace_closed`, including opt-out and
+completed-feature skips. The close lists started spans, all preceding intended
+events (including failed sink attempts), and context receipts in emission order.
+A complete close with empty lists establishes known zero for that invocation;
+missing closure never does. Open spans, observer failures, uncertain transport,
+or missing outer tracking make coverage incomplete. A null child ID preserves
+the transport fact but leaves child attribution unknown. Workflow success is
+separate from trace completeness. Observations are best-effort and never
+authorize work; failed observation output cannot replace the provider result.
+Owned Codex active-turn delivery is a separate adapter; Claude interactive delivery
+remains unsupported/unproven and requires manual handoff. Terminal-session resume
+is separate. Never fall back to another provider. Live demonstrations are owned by
+the supervisor; mocked checks are not live evidence.
+
+### Builder lifecycle
+
 1. **Pick the feature.** `next`: the first feature with `passes: false` whose dependencies pass and that has no `BLOCKER <ID>:` line in `PROGRESS.md`.
 2. **Start a session.**
    - Fresh `claude -p "<prompt>"` with `--permission-mode dontAsk`, the configured allowlist, turn and budget caps.
@@ -83,14 +162,15 @@ Dollar figures in logs are Claude Code's list-price estimates. On a subscription
 
 ## autobuild.json
 
-See `templates/autobuild.json`. Defaults are in `lib/config.mjs`.
+See `templates/autobuild.json`. Agent defaults come from the root `agent-config.json`; other defaults are in `lib/config.mjs`. Run `node scripts/configure-agents.mjs sync` from the PandaStack checkout after changing Claude roles.
 
 | Key | Meaning |
 |---|---|
 | `featuresFile`, `progressFile`, `stateDir` (`.harness`), `logsDir` (`logs`) | Where things live. |
 | `branch` | The loop refuses to run on any other branch. |
 | `prompt`, `systemPrompt` | The session prompt, and extra appended system text. |
-| `model`, `subagentModel`, `subagentModelForce`, `probeModel` | Models. `subagentModel` is set through the injected settings, which override a subagent model pinned in `~/.claude/settings.json`. With `subagentModelForce: true` (default) every subagent runs on it; with `false` it is the default, and a session may pass `model` (`"sonnet"`, `"opus"`) on a single Agent call. |
+| `model`, `subagentModel`, `subagentModelForce`, `probeModel` | Models. `subagentModel` is set through the injected settings, which override a subagent model pinned in `~/.claude/settings.json`. With `subagentModelForce: true` every subagent runs on it (including advisors); with `false` (default) it is the default, and a session may pass `model` (`"sonnet"`, `"opus"`) on a single Agent call. |
+| `maxConcurrentSubagents` | Positive integer override of the central concurrency limit (default 8). Applied to Claude Agent and Workflow gates, Codex spawned threads, and the native Codex hunt pool. |
 | `hooks` | `"inject"` (default) or `"project"` (the project's settings own the guard and Stop gate). |
 | `limits` | `maxIterations`, `maxTurns`, `maxBudgetUsd` (per session), `totalBudgetUsd`, `noProgressLimit`, `reviewEvery`, `finalReview`, `reviewMaxTurns`, `reviewBudgetUsd`, `maxStopBlocks`, `maxLimitWaitHours`, `limitMarginMinutes`, `probeEveryMinutes`, `transientWaitMinutes`, `maxTransientRetries`, `watchdogMaxWaitMs`. Env overrides: `MAX_ITERATIONS`, `MAX_TURNS`, `MAX_BUDGET_USD`, `TOTAL_BUDGET_USD`, `NO_PROGRESS_LIMIT`, `REVIEW_EVERY` (or `AUTOBUILD_*`). |
 | `env` | `pathPrepend`, `ldLibraryPath` (`~` expanded) and `vars` for every command and session. |
@@ -199,20 +279,43 @@ Authentication stays with Codex; there is no Claude or API-key fallback.
   it mark the current feature passing and commit. Gate failures are given to
   the next attempt; uncommitted implementation work is kept.
 - Reviews may change only the progress file; the host verifies and commits it.
-  The native final Codex branch audit can repair defects, returns a structured
-  report, and must pass the full gate. Unresolved findings stop with exit 12.
-  Reports live in `.harness/codex-audit-result.json` and session JSONL logs.
-  This audit does **not** create the Claude Workflow hunt ledger. A later PR
-  still needs the separate PandaStack review-gate workflow.
+  Both providers then run the same final hunt graph: impact map, specialist lenses,
+  blind skeptics, referee, reproduction, repair and independent fix verification.
+  Codex uses fresh CLI sessions for leaves; deterministic evidence/recheck commands
+  run on the host. Both save the same validated findings ledger under the git
+  common directory's `bughunt/` state and use the same landing checks. A successful
+  hunt satisfies the unchanged PR review gate. The old `.harness/codex-audit*`
+  files are historical only and never accepted as review evidence.
+  Missing coverage, malformed responses and unresolved findings stop the run.
+  The host also reruns the full gate for a no-fix or cached passing hunt.
+  `autobuild status` reports review coverage separately from passing features.
 - Codex reports token usage, not dollar cost. Claude's per-session dollar and
   turn caps do not apply. A non-null `totalBudgetUsd` is rejected: remove it
   explicitly to use Codex. Use iteration/no-progress caps and the wall-clock
-  timeout instead. Probe timeout is two minutes. Model/subagent usage still
+  timeout instead. The whole hunt is bounded by `bughuntTimeoutMinutes`; each
+  model leaf is also bounded by `codex.sessionTimeoutMinutes`. Probe timeout is two minutes. Model/subagent usage still
   counts against your Codex account's limits.
 - Availability probes also use Codex (Luna); protocol errors drive quota/auth
   handling. No text from ordinary assistant/tool messages is classified as a
   quota failure.
 
 The skill source remains `graphs/autobuild/skills/autobuild`. Codex can discover
-it through `~/.agents/skills/autobuild` or `~/.codex/skills/autobuild`; link that
-single directory if it isn't already exposed by your shared skills setup.
+it through `~/.agents/skills/autobuild` or `~/.codex/skills/autobuild`. Use the
+explicit Codex installation mode documented in the repository README; it does
+not copy Claude credentials, settings or hooks.
+
+### Parity contract
+
+| Stage | Shared guarantee | Provider mechanism |
+|---|---|---|
+| Build | Frozen acceptance tests, full gate, durable progress | Claude hooks; Codex host-owned flags/commit |
+| Drift review | Completed review before done | Provider CLI; Codex host validates progress-only edits |
+| Final hunt | Same graph, evidence, blind challenges and repair verification | Claude Workflow or Codex host graph adapter |
+| Tests and Docker | Real host results, never model assertions | Host evidence/full gate |
+| PR handoff | Exact-head shared ledger and unchanged review gate | Provider-independent |
+| Resume | Committed work retained; cached success rechecks ledger and full gate | No provider fallback; incomplete review stays incomplete |
+| Limits | Explicit bounded execution and honest failure | Claude USD/turn caps; Codex time/iteration bounds and token telemetry |
+
+This is workflow parity, not a claim that the two CLIs implement identical
+permission hooks, pricing or model capability. Browser QA beyond configured
+gates and repository-specific documentation/publication rules still apply.

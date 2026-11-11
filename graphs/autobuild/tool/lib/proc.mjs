@@ -8,6 +8,19 @@ import { buildEnv as sessionEnv } from "../../../build/skills/build-app/driver/p
 /** The kit's own bin directory, so sessions and gate commands can always run `autobuild`. */
 const KIT_BIN = path.resolve(import.meta.dirname, "..", "bin");
 
+/** Already-validated launch selection for child config reloads, applied after project env. */
+export function sessionConfigEnv(config) {
+  // sessionSettings also accepts partial Claude configs outside the launch path.
+  const backend = config.backend ?? "claude";
+  return {
+    AUTOBUILD_BACKEND: backend,
+    AUTOBUILD_MODEL: config.model,
+    AUTOBUILD_SUBAGENT_MODEL: config.subagentModel,
+    AUTOBUILD_PROBE_MODEL: config.probeModel,
+    [`AUTOBUILD_${backend.toUpperCase()}_BIN`]: config[`${backend}Bin`],
+  };
+}
+
 /**
  * The environment for tools and headless sessions:
  * - no inherited Claude session identity (nested sessions misbehave),

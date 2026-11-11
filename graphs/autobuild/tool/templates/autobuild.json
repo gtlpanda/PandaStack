@@ -4,8 +4,6 @@
   "progressFile": "PROGRESS.md",
   "branch": "autobuild",
   "prompt": "Read CLAUDE.md, SPEC.md, features.json, PROGRESS.md. Build the next feature.",
-  "model": "claude-opus-5-5",
-  "subagentModel": "claude-sonnet-5-5",
   "hooks": "inject",
   "limits": { "maxIterations": 40, "maxTurns": 200, "maxBudgetUsd": 50, "noProgressLimit": 3, "reviewEvery": 5 },
   "env": { "pathPrepend": [], "ldLibraryPath": [], "vars": { "CI": "1" } },

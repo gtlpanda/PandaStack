@@ -40,6 +40,29 @@ in:
   worktree, the caller's own verify), the fast-forward, and the summary line.
   The caller runs the session itself.
 
+## Native Codex runner
+
+`skills/bughunt/native-cli.mjs --repo <repo> --base <ref> --backend codex`
+(default mode `discover`) runs this same graph without Claude's Workflow tool.
+`--mode propose` and `--mode fix` retain repairs in isolated worktrees; the CLI
+never pushes or lands. Autobuild uses the existing checked landing module.
+
+The adapter uses source-owned agent/lens instructions, fresh restricted Codex
+leaves, strict JSON output and host-side evidence commands. It publishes a
+provisional incomplete ledger during rechecks, then the finished ledger only
+after its report succeeds. Models cannot certify their own test executions.
+The existing review-status reader remains unchanged.
+
+Autobuild (both providers) and the native CLI acquire one repository lock before
+intake can replace analysis/fix trees. A retained `native-hunt.lock` or per-target
+`native.lock` stops preparation. Inspect its owner PID and retained work before
+removing the exact stale lock after its owner has stopped; never delete an active
+review's lock. Manual Claude Workflow use must make the same check before intake.
+
+Codex uses saved CLI login and Astra/Sol model roles, with host execution replacing
+the runner-model leaf. Its timeout and token accounting differ from Claude's
+USD/turn caps. See the [autobuild reference](../autobuild/tool/README.md).
+
 ## The review gate
 
 `gate.mjs` is a PreToolUse hook on Bash. `settings.json` registers it, and

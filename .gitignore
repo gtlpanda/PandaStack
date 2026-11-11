@@ -13,3 +13,7 @@ settings.local.json
 
 # Personal task tracking (todo.md, lessons.md). Kept local.
 /tasks/
+
+# Phase 1 autobuild runtime artifacts
+/.harness/
+/logs/

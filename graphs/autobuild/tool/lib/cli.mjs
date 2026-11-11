@@ -9,9 +9,11 @@ import { CONFIG_FILE, findProjectRoot, loadConfig, statePath } from "./config.mj
 import { blockedClosure, countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures } from "./features.mjs";
 import { runGate } from "./gate.mjs";
 import { runLoop } from "./loop.mjs";
+import { huntStatus } from "./bughunt.mjs";
 import { readSession } from "./session.mjs";
 import { runFeatureTests } from "./tests.mjs";
 import { tail } from "./proc.mjs";
+import { flushDecisionOutput } from '../../../../core/skills/decisions/output.mjs';
 
 const HOME = path.resolve(import.meta.dirname, "..");
 
@@ -64,7 +66,7 @@ export async function main(argv = process.argv.slice(2)) {
         return 0;
       }
       if (doc.features.every((feature) => feature.passes)) {
-        console.log(JSON.stringify({ done: true, passing: doc.features.length }));
+        console.log(JSON.stringify({ done: true, passing: doc.features.length, review: huntStatus(config) }));
         return 10;
       }
       console.log(JSON.stringify({ stuck: true, blocked: [...blockedClosure(doc, blockers)] }, null, 2));
@@ -77,6 +79,9 @@ export async function main(argv = process.argv.slice(2)) {
       const next = nextFeature(doc, blockers);
       console.log(`${countPassing(doc)}/${doc.features.length} features passing`);
       console.log(`next: ${next ? `${next.id} — ${next.title}` : "none"}`);
+      const review = huntStatus(config);
+      console.log(`review coverage: ${review.hunted ? review.disposition : review.docsOnly ? "docs only" : "pending"}${review.dirty ? " (uncommitted changes are not reviewed)" : ""}`);
+      if (review.reason) console.log(`review: ${review.reason}`);
       if (blockers.size) console.log(`blocked: ${[...blockers].join(", ")}`);
       const pidFile = statePath(config, "loop.pid");
       console.log(`loop running: ${existsSync(pidFile) ? `yes (pid ${readFileSync(pidFile, "utf8").trim()})` : "no"}`);
@@ -221,9 +226,12 @@ const isEntry = (() => {
 })();
 if (isEntry) {
   main()
-    .then((code) => process.exit(code ?? 0))
     .catch((error) => {
       console.error(error instanceof Error ? error.message : error);
-      process.exit(1);
+      return 1;
+    })
+    .then(async (code) => {
+      try { await flushDecisionOutput(); } catch { /* Output cannot replace the workflow result. */ }
+      process.exit(code ?? 0);
     });
 }

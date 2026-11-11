@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { withTrackedRun } from '../../../../../core/skills/run-records/tracking.mjs'
+import { buildTracking } from '../../../../../core/skills/run-records/adapters.mjs'
+import { readAgentConfig } from '../../../../../scripts/agent-config.mjs'
 // driver.mjs — the /build-app driver: builds an approved backlog unattended, one
 // slice per fresh headless `claude -p "/dev --slice ..."` session, landing each on
 // integration/<app> only after its own checks pass.
@@ -43,7 +46,7 @@ function settingsFromEnv(env = process.env) {
   const num = (k, d) => (env[k] !== undefined && Number.isFinite(Number(env[k])) ? Number(env[k]) : d)
   return {
     bin: env.HARNESS_BUILD_CLAUDE_BIN || 'claude',
-    model: env.HARNESS_BUILD_MODEL || 'opus',
+    model: env.HARNESS_BUILD_MODEL || readAgentConfig().claude.orchestrator.model,
     verifyCommand: env.HARNESS_BUILD_VERIFY || `bash "${join(CONFIG_DIR, 'skills', 'verify', 'verify.sh')}"`,
     sessionTimeoutMs: num('HARNESS_BUILD_SESSION_TIMEOUT_MS', 6 * 3_600_000),
     maxSleepMs: num('HARNESS_BUILD_MAX_SLEEP_MS', Infinity),
@@ -98,7 +101,11 @@ function reconcile(repo, integration, backlog, ledger, log) {
   return ledger
 }
 
-export async function runDriver({ repo: given, app, noPr: noPrFlag = null }, cfg = settingsFromEnv()) {
+export async function runDriver(options, cfg = settingsFromEnv()) {
+  return withTrackedRun(buildTracking(options.repo, cfg.model, 'build-app'), () => runDriverWork(options, cfg))
+}
+
+async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg) {
   // One real path: the guard compares file paths against it.
   const repo = realpathSync(resolve(given))
   const integration = `integration/${app}`
