@@ -3,7 +3,7 @@
 A long-running, test-gated build loop for a project with a spec, a feature list, and frozen
 acceptance tests written before the code. One fresh headless Claude or Codex session builds
 one feature. Claude uses a Stop hook and tool guard. Codex leaves passing flags and commits
-to the host, which independently verifies the full gate and protected files after each session.
+to the host, which independently verifies the selected gate and protected files after each session.
 
 - **The tool:** `tool/` (`bin/autobuild`, `lib/`, `hooks/`, `templates/`, `test/`), imported from
   its own repo with history (`git subtree`). `install.sh` links `bin/autobuild` into `~/.local/bin`.
@@ -11,7 +11,7 @@ to the host, which independently verifies the full gate and protected files afte
 - **The skill:** `/autobuild` (`skills/autobuild/`), the playbook: close planning in one batch,
   write the spec and contracts, freeze the tests, configure, dry-run, run, check on it.
 
-With either backend, before it reports done, the loop runs `/bughunt --fix` over the whole branch and lands only
+In default full mode, with either backend, before it reports done, the loop runs `/bughunt --fix` over the whole branch and lands only
 verified fixes, through the hunt's landing module (`graphs/hunt/skills/bughunt/land.mjs`), the same
 checks `/build-app` uses. Exit 12 means the hunt needs a human. Off: `"bughunt": false` or
 `AUTOBUILD_BUGHUNT=0`.
@@ -26,6 +26,22 @@ installation or fallback is needed. The host verifies no-fix and cached hunts to
 New projects: `autobuild init --backend codex`. Existing projects can resume with the
 run flag without changing configuration. Read the [Codex reference](tool/README.md#codex-backend)
 for sandbox boundaries, model settings and the differences in budget enforcement.
+
+## PR-first delivery
+
+Opt in with `deliveryMode: "pr-first"` in `autobuild.json`, or run with
+`--delivery-mode pr-first`. The host runs current acceptance and `commitGate`
+before committing; full regressions and broad review/hunt remain pending for the
+PR. A clean checked head produces `ready_for_pr` and `mergeReady: false` in
+`delivery-status.json`; autobuild does not push or create a PR itself.
+`autobuild check` still means the full gate; use `--phase commit --feature ID`
+for a focused check. Set the repository config as well to allow explicit draft
+PR creation through the review hook. See the [setup and recovery guide](../../docs/pr-first-delivery.md).
+
+Provider refusals are nonretryable (exit15 for builder/review/probe, exit12 for
+native hunt). Saved native refusal receipts stop later hunt entry; partial
+reports remain provisional, and corrupt optional report data cannot hide a
+known refusal. No provider fallback or automatic refusal clearing is provided.
 
 **Autobuild or `/build-app`?** Autobuild builds from a hand-written feature list with frozen
 tests, on one branch, for as long as it takes (it pauses on usage limits and resumes). `/build-app`

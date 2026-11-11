@@ -354,7 +354,7 @@
   "commitGate": [
     {
       "name": "secret scan",
-      "command": "bash -o pipefail -c 'git ls-files --cached --others --exclude-standard -z | xargs -0 -r bash scripts/check-secrets.sh'"
+      "command": "bash scripts/check-secrets.sh --worktree"
     },
     {
       "name": "diff whitespace",
