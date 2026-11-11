@@ -753,3 +753,14 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   fixtures, weaken path validation or bypass the execution restriction. Required
   Explore request failed with Unknown model gpt-6.1-sol; no fallback. Local
   review and in-process actual-owner checks are not independent acceptance.
+
+- D115 (SA-LT01): The clean incoming checkout already implements lifecycle
+  feedback, prompt delivery and partition/global bindings. Limit this iteration
+  to its boundary review and focused implementation tests. A new regression
+  observed a supplied null profile accepted instead of INVALID_INPUT; reject
+  present profiles outside the existing PROFILES vocabulary before any row is
+  validated, preserving absent-profile compatibility and unitFromInput rules.
+  Use inert in-process fixtures and the existing pure unit factory for additional
+  evidence. Initial selected acceptance is 4/10; six cases fail with an empty
+  fixture runDir. Do not modify frozen fixtures or bypass process restrictions.
+  External host retains full gates, feature flags, staging, commits and review.

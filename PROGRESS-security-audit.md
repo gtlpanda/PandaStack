@@ -1507,3 +1507,74 @@ untracked source/test paths explicitly. `git diff --check`, `git diff --cached
 exited 0. Final changed inventory: `core/skills/native-runtime/runtime.mjs`, the
 two added test files above, `DECISIONS.md` and this progress log. No other paths
 were modified.
+
+## SA-LT01 — Expose per-record lifecycle feedback and deliver legal critic transitions
+
+Iteration 2 reviewed the existing owning feedback APIs, actual criticInput and
+workflow prompt, and partition/global context bindings. The only production
+change rejects an explicitly supplied invalid profile in inspectUnitInputs before
+per-row validation, using the existing PROFILES vocabulary. Previously null
+passed the context envelope and fell through rulesOf to standard behavior. The
+new regression first failed with `Missing expected exception (invalid): null`;
+after the fix all nine new implementation cases pass. Absent profile remains
+compatible. unitFromInput, publication/application gates, schemas, upstream
+validators, vendor and frozen tests remain unchanged.
+
+Added `graphs/security-audit/tests/lifecycle-feedback-boundaries.test.mjs` using
+scripts/workflow-harness.mjs and the existing pure unitInput/refsOf factories.
+These nine tests cover exact detached sibling JSON and lifecycle identities,
+null/empty/one-sided lifecycle refusal, all valid duplicate slots, planned-only
+mint and actual ordinary path/block checks, zero publication, inert descriptors
+and Proxy refusal without hooks, finite byte/depth/row/ID/diagnostic limits,
+invalid options/context, exact partition/global unit membership, hash-bound
+context tampering refusal, actual serializer measurement, pre-dispatch malformed
+grammar refusal and absent-context compatibility. Static temporary source text
+is read as data only. No subprocess fixture setup is used by these new tests.
+
+Exact final verification commands and results:
+
+```sh
+node --input-type=module -e 'await import("./graphs/security-audit/tests/lifecycle-feedback-boundaries.test.mjs"); await import("./graphs/security-audit/tests/lifecycle-status-types.test.mjs"); await import("./graphs/security-audit/tests/critic-partitions.test.mjs"); const {summary}=await import("./scripts/workflow-harness.mjs"); const {pass,fail}=summary(); console.log(`SA-LT01 FOCUSED: ${pass} passed, ${fail} failed`); process.exitCode=fail?1:0'
+# exit 0; SA-LT01 FOCUSED: 33 passed, 0 failed (9 new + 24 existing)
+node acceptance/security-audit/sa-05a-critic-partitions.test.mjs
+# exit 0; 5 passed, 0 failed
+node acceptance/security-audit/sa-lt01-feedback.test.mjs
+# exit 1; 4 passed, 6 failed
+# ENOENT: no such file or directory, scandir ''
+# Native runtime: INVALID_INPUT. (inspectUnitInputs context validation)
+# Refusal:  has no run-metadata.json: it is not a run directory
+```
+
+Selected acceptance has the same six failures before and after this repair.
+Four pure cases pass. The six run-backed cases receive an empty fixture runDir;
+the first fails at snapshot's scandir, four refuse the empty context, and the
+criticInput case fails loading metadata during seeded setup. Full final output:
+`/tmp/sa-lt01-selected-acceptance.log`. The frozen fixture's advanceState also
+created a root `stage-state.json` from that empty path; this session removed its
+own untracked artifact after verification. A separate ordinary Node --version
+probe returned status 0, error EPERM and stdout `v24.21.0\n`. No frozen fixture
+repair or execution restriction bypass was attempted. Selected acceptance is
+NOT claimed passing; it requires the host's environment and final review.
+
+Local sanity review: data flow PASS (context validation before row validation);
+edge/error handling PASS (safe whole-call INVALID_INPUT); security PASS (inert
+boundary and no authority added); consistency PASS (existing profile vocabulary);
+selected implementation completeness PASS within the focused evidence above.
+The required Explore request failed with `Unknown model gpt-6.1-sol`; no alternate
+agent/model/provider was launched and no independent-review claim is made.
+
+These tests prove pure diagnostics and deterministic fake workflow wiring only,
+not all-batch admissibility, native dispatch/recovery, persisted two-attempt slot
+repair, provider capability, target execution or hostile containment. No deferred
+revival, retry application, new scheduler, target changes, live/fallback provider,
+capture/orphan/overflow/filesystem-race reproduction, broader roadmap work or
+pinned-host mutation. Full gates, feature pass flags, staging, commits and final
+review remain with the external host.
+
+Final hygiene: unchanged `bash scripts/check-secrets.sh` and explicit
+`bash scripts/check-secrets.sh graphs/security-audit/tests/lifecycle-feedback-boundaries.test.mjs`
+both exit 0, `check-secrets: clean`. `git diff --check`,
+`git diff --cached --exit-code`, and `node --check` for audit-ledger.mjs and the
+new test file exit 0. Final changed inventory: audit-ledger.mjs, the new lifecycle
+feedback test, DECISIONS.md and this progress entry. No frozen file changed;
+the index remains empty of staged changes.
