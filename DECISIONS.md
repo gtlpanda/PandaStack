@@ -728,3 +728,28 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   handling, security, consistency and selected completeness. This is offline
   static evidence only; source membership/bytes do not establish native readiness,
   permission enforcement, authenticated account/payer or race resistance.
+
+- D113 (SA-02d): The selected bridge, owner association and runtime extensions
+  already exist in the clean incoming checkout. Review and repair only this
+  contract; preserve stage integration and all frozen inputs. Add focused
+  workflow-harness regressions for reserve-signal lifetime, inert boundary data,
+  controlled drain/fatal precedence and actual journal/report ownership using
+  ordinary in-process metadata fixtures. The unchanged nine-case acceptance
+  currently fails before bridge construction with INVALID_JOURNAL_INPUT; retain
+  that evidence and investigate fixture setup without modifying frozen helpers.
+  Run selected acceptance and focused checks only, then unchanged tracked and
+  explicit new-file secret scans. Record evidence here and in the priority log;
+  no broader documentation, gates, flags, staging, commits or provider work.
+- D114 (SA-02d evidence): New reserve-lifetime regression first failed with two
+  accessor/Proxy hook calls; the runtime now retains reserve cancellation without
+  inspecting unvalidated reply fields, and inert validation remains with the
+  leaf owner. Twelve new checks plus 25 existing focused checks pass (37/0),
+  and unchanged NR-02 acceptance passes 19/0. Corrected one new test expectation:
+  explicit uncertainty may perform its first report refresh after cancellation;
+  repeated joins after host refresh preserve both rows and control exactly.
+  Selected SA-02d acceptance remains 0/9 with INVALID_JOURNAL_INPUT during setup.
+  A direct unchanged newInit probe returns an empty runDir; an ordinary Node
+  --version subprocess probe reports status 0 plus EPERM. Do not edit frozen
+  fixtures, weaken path validation or bypass the execution restriction. Required
+  Explore request failed with Unknown model gpt-6.1-sol; no fallback. Local
+  review and in-process actual-owner checks are not independent acceptance.

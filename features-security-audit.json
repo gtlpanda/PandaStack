@@ -223,7 +223,7 @@
       ],
       "test": "acceptance/native-runtime/sa-02d-native-checkpoints.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SA-LT01",

@@ -1433,3 +1433,77 @@ both new untracked source/test files. `git diff --check`,
 source/test files exited 0. Changed inventory remains the four incoming paths:
 this progress log, `catalog.mjs`, `catalog-paths.mjs`, and
 `tests/native-catalog-paths.test.mjs`. This session only appended this log entry.
+
+## SA-02d — Connect native audit checkpoints with actual owners, controlled pauses and cooperative cancellation
+
+The clean incoming checkout already contained the actual journal/report bridge,
+owner association and runtime pause/cancellation extensions. This iteration
+repaired the reserve-signal extension: it read `value.state` before the checkpoint
+reply passed inert validation. The new regression observed two getter/Proxy hook
+calls before the repair and zero afterward. Reserve ownership now stays linked
+until leaf cleanup without inspecting the unvalidated reply; terminal leaves
+still detach their listeners, and pending persistence still receives cancellation.
+No graph, journal schema, vendor, validator, baseline or frozen acceptance changed.
+
+Added twelve workflow-harness checks in
+`tests/native-checkpoint-signals.test.mjs` (five) and
+`graphs/security-audit/tests/native-checkpoint-owners.test.mjs` (seven).
+The latter use actual journal, control, report and runtime owners over inert
+metadata, with the trusted QA/audit graphs and no subprocess fixture setup.
+They cover grant recovery with same-invocation replay, actual freshness before
+absent/prepared admission, binding conflicts, cancelled queued admission, exact
+known-failure receipts, closed-owner refusal, two-callback cooperative cancellation,
+fatal uncertainty superseding controlled pause, and the contract's ordinary owned
+empty-directory publication conflict followed by rendering repair and receipt replay.
+These are additional implementation checks, not substitutes for frozen acceptance.
+
+Exact final test commands and results:
+
+```sh
+node --input-type=module -e 'await import("./tests/native-checkpoint-signals.test.mjs"); await import("./graphs/security-audit/tests/native-checkpoint-owners.test.mjs"); await import("./tests/native-runtime-executor.test.mjs"); await import("./graphs/security-audit/tests/journal-owner-paths.test.mjs"); const {summary}=await import("./scripts/workflow-harness.mjs"); const {pass,fail}=summary(); console.log(`SA-02d FOCUSED: ${pass} passed, ${fail} failed`); process.exitCode=fail?1:0'
+# exit 0; SA-02d FOCUSED: 37 passed, 0 failed
+node acceptance/native-runtime/nr-02-runtime.test.mjs
+# exit 0; 19 passed, 0 failed
+node acceptance/native-runtime/sa-02d-native-checkpoints.test.mjs
+# exit 1; 0 passed, 9 failed
+# Error: Audit journal: INVALID_JOURNAL_INPUT
+# at openAuditJournal .../dispatch-journal.mjs:158:10
+# at setup .../sa-02d-native-checkpoints.test.mjs:16:37
+```
+
+The selected nine cases fail in fixture setup before bridge construction, both
+before and after the repair. Full final output is retained at
+`/tmp/sa02d-selected-acceptance.log`. A direct unchanged `newInit()` observation
+returned `{"fixtureRunDir":""}`. Separately, an ordinary
+`spawnSync(process.execPath,["--version"])` probe returned
+`{"status":0,"error":"EPERM","stdout":"v24.21.0\n","stderr":""}`.
+Frozen fixture repair or subprocess restriction bypass is not authorized.
+SA-02d acceptance is NOT claimed passing; the external host must rerun it in its
+own environment. The first new cancellation test incorrectly expected no control
+change before initial report refresh; it now explicitly refreshes through the
+actual host owner before asserting repeated uncertainty joins are idempotent.
+
+Local sanity review: data flow PASS; edge/error handling PASS; inert boundary
+security PASS; consistency PASS; selected implementation behavior PASS within
+focused evidence. Static inspection retains durable commit before publication,
+preauthorization publication failure rejecting/joining only the owned callback,
+and fatal owner/journal errors instead of report-pause downgrades. This inspection
+is not execution proof of the preauthorization operational-failure path.
+Independent Explore review could not start: the requested `gpt-6.1-sol` model
+returned `Unknown model`; no fallback agent/provider was launched. Independent
+review, frozen acceptance and full gates remain host-owned and outstanding.
+
+No target application changes or execution, live/fallback providers, blocked
+capture/orphan/overflow/filesystem-race reproduction, hostile containment proof,
+C2 verification-reserve policy claim or broader roadmap implementation. Existing
+stage integration is untouched. No pinned-host edit, feature flag, staging,
+commit, push, branch change or Git-control mutation.
+
+Final hygiene: `bash scripts/check-secrets.sh` and
+`bash scripts/check-secrets.sh tests/native-checkpoint-signals.test.mjs graphs/security-audit/tests/native-checkpoint-owners.test.mjs`
+both exited 0 with `check-secrets: clean`, covering tracked files and both new
+untracked source/test paths explicitly. `git diff --check`, `git diff --cached
+--exit-code`, and `node --check` for the changed runtime and both new test files
+exited 0. Final changed inventory: `core/skills/native-runtime/runtime.mjs`, the
+two added test files above, `DECISIONS.md` and this progress log. No other paths
+were modified.
