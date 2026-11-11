@@ -52,7 +52,7 @@
     },
     {
       "name": "Accepted Phase 2 regression acceptance",
-      "command": "node --test acceptance/phase2/p2-01.test.mjs acceptance/phase2/p2-02.test.mjs acceptance/phase2/p2-03.test.mjs acceptance/phase2/p2-04.test.mjs acceptance/phase2/p2-05.test.mjs acceptance/phase2/p2-06.test.mjs acceptance/phase2/p2-07.test.mjs acceptance/phase2/p2-08.test.mjs acceptance/phase2/p2-09.test.mjs acceptance/phase2/p2-10.test.mjs acceptance/phase2/p2-11.test.mjs acceptance/phase2/p2-12.test.mjs acceptance/phase2/p2-13.test.mjs acceptance/phase2/p2-14.test.mjs"
+      "command": "node --test acceptance/phase2/p2-01.test.mjs acceptance/phase2/p2-02.test.mjs acceptance/phase2/p2-03.test.mjs acceptance/phase2/p2-04.test.mjs acceptance/phase2/p2-05.test.mjs acceptance/phase2/p2-06.test.mjs acceptance/phase2/p2-07.test.mjs acceptance/phase2/p2-08.test.mjs acceptance/phase2/p2-09.test.mjs acceptance/phase2/p2-10.test.mjs acceptance/phase2/p2-11.test.mjs acceptance/phase2/p2-12.test.mjs acceptance/phase2/p2-13.test.mjs acceptance/phase2/p2-14.test.mjs acceptance/phase2/p2-15.test.mjs acceptance/phase2/p2-16.test.mjs"
     }
   ],
   "preflight": [

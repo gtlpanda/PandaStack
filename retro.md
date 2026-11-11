@@ -3357,5 +3357,11 @@ first failed here because it counted this machine's real Codex; it now uses vers
 - An earlier hunt on the same head ended manual_review (logic lens skipped one
   area); a fresh hunt covered it and found F1.
 
+- /bughunt F3 (LOW) on 38f90c6: P2-15/P2-16 were missing from the "Accepted Phase 2
+  regression acceptance" gate list. Its claim that a regression would go unnoticed
+  is wrong: the gate's "passing features" step (gate.mjs:176-180) already runs
+  every passing feature's test (15 files, including both). They were added to the
+  list anyway, to match the convention for p2-01..p2-14.
+
 Remaining for Phase 2: the dogfood scenario and docs/dogfood/phase-02.md.
 
