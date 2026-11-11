@@ -48,6 +48,11 @@ base avoids reusing a saved builder session's older base. Configure your PR CI t
 run the full check as a required job. PandaStack's `test` job does this, including
 its unchanged baseline suite and accepted-feature tests.
 
+The Linux CI runner reports the Windows-mounted permission case as skipped when
+no Windows mount exists; Linux permission cases still run. Set
+`SA_SNAPSHOT_MOUNT_PARENT` on a WSL host to run that platform check explicitly.
+A missing explicitly configured mount remains a failure, never a silent skip.
+
 ## Delivery status
 
 Autobuild requires a clean committed tree before final handoff and verifies the

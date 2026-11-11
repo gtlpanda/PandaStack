@@ -3176,3 +3176,30 @@ values and provenance. Lesson: Date.parse normalizes impossible calendar dates;
 validate the parsed calendar components as well. Read-only sanity review found no
 issues across data flow, errors, security, consistency, and completeness. Full
 gate results and remaining limitations are recorded in PROGRESS.md.
+
+## 46. main CI repair after the PR-first merge (2026-11-11)
+
+PR #46 merged as 5a8b7f6 with CI red. #47's gate excerpt showed the hidden failures,
+and every one was a test expectation, not product behavior:
+- `tests/run-child-context.test.mjs`: 2 cases pinned the child settings keys. #46 added
+  `AUTOBUILD_DELIVERY_MODE` on purpose. The tests now expect it and check that it
+  defaults to `full`.
+- `acceptance/native-runtime/oc-01-catalog.fixture.json`: autobuild and build-app were
+  `drifted`. The old entry hashes equal those SKILL.md files at eebe45a and the new
+  ones equal them at 5a8b7f6; the only commit touching either is #46's 4b92102.
+- `acceptance/phase1/p1-14.test.mjs`: 4 broken-gitdir cases. CI's Git prints `gitfile
+  does not point to a valid repository` where older Git prints `not a git repository`.
+  The test still requires exit 128 and one of those two diagnoses; other text fails.
+- `acceptance/security-audit/sa-01-snapshot.test.mjs`: the Windows-mount case defaulted
+  to one machine's `/mnt/c/Users/...` path. It now skips only when
+  `SA_SNAPSHOT_MOUNT_PARENT` is unset and that path is absent. An explicit missing mount
+  still fails, and Linux permission cases always run.
+
+Taken over from an unfinished Codex repair (uncommitted in another checkout). Its CI
+`--verbose` flag was dropped, because #47 already makes CI print the failing lines.
+
+Locally: run-child-context went from 3/2 to 5/0, native-offering-catalog from 15/1 to
+16/0, and oc-01 from 7/1 to 8/0. p1-14 and sa-01 can't show their failure on this
+machine (Git 2.43 and the Windows mount are both present), so CI is their proof. Two
+other p1-14 cases (33, 39) fail locally on pristine main but pass in CI; they are not
+touched.
