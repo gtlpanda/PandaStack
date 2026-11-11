@@ -6,7 +6,7 @@
   "model": "gpt-6-astra",
   "subagentModel": "gpt-6.1-sol",
   "probeModel": "gpt-6-luna",
-  "maxConcurrentSubagents": 8,
+  "maxConcurrentSubagents": 16,
   "codex": {
     "reasoningEffort": "high",
     "sessionTimeoutMinutes": 30

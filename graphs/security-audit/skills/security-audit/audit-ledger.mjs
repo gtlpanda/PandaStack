@@ -24,6 +24,8 @@ import { BlockError, companions, ordinary, resolve as resolveBlock } from './blo
 import { QUICK_DEFERRED, QUICK_SUBSYSTEM_REF, rulesOf } from './audit-profile.mjs'
 import { canonicalCoverageId, isSafeRelativePath, validateFindingsFile, validateLedgerDocument, validateLedgerFile } from './upstream.mjs'
 
+import { json as inertJSON, fields as inertFields, exact as exactFields, fail as invalidData } from '../../../../core/skills/native-runtime/boundary.mjs'
+
 export const LEDGER_FILE = 'coverage-ledger.json'
 export const ARCHITECTURE_WORD_CAP = 1100          // RECONNAISSANCE.md: "a hard cap of about 1,000 words"; my reading of "about" is 10%
 export const MAX_UNIT_ATTEMPTS = 2                 // PandaStack's: a hunter result that fails twice defers its unit (plan section 4.3)
@@ -202,6 +204,68 @@ export function unitFromInput(input, ctx) {
   }
   const errors = validateLedgerDocument([clone(unit)]).map(plain)
   return errors.length ? { problems: errors } : { unit }
+}
+
+// Read-only diagnostics share the existing unit/critic validators. No feedback
+// entry grants permission to publish a ledger or revive terminal work.
+const TRANSITION_CODES = Object.freeze({ deferred: 'DEFERRED_NOT_REOPENABLE',
+  out_of_scope: 'TERMINAL_SCOPE', not_applicable: 'TERMINAL_SCOPE',
+  planned: 'NO_LIVE_EVIDENCE', in_progress: 'NO_LIVE_EVIDENCE',
+  blocked: null, covered: null, candidate: null })
+function feedbackLedger(input) {
+  const rows = inertJSON(input, 'INVALID_INPUT')
+  if (!Array.isArray(rows) || rows.length > 1000) invalidData('INVALID_INPUT')
+  const ids = new Set()
+  for (const row of rows) {
+    if (!isObj(row) || !isText(row.coverage_id) || ids.has(row.coverage_id) ||
+      typeof row.status !== 'string' || !Object.hasOwn(TRANSITION_CODES, row.status)) invalidData('INVALID_INPUT')
+    ids.add(row.coverage_id)
+  }
+  return rows
+}
+export function criticTransitionContext(ledger) {
+  const rows = feedbackLedger(ledger).sort(byId)
+  return { reassignableIds: rows.filter(r => TRANSITION_CODES[r.status] === null).map(r => r.coverage_id),
+    nonReassignable: rows.filter(r => TRANSITION_CODES[r.status] !== null).map(r => ({
+      coverageId: r.coverage_id, status: r.status, code: TRANSITION_CODES[r.status] })), maxSemanticAttempts: 2 }
+}
+export function inspectCriticTransitions(ledger, critic) {
+  const rows = feedbackLedger(ledger), input = inertJSON(critic, 'INVALID_INPUT')
+  if (criticResultProblems(input).length || input.reassign_ids.length > 1000) invalidData('INVALID_INPUT')
+  const units = new Map(rows.map(r => [r.coverage_id, r])), acceptedReassignIds = [], rejected = []
+  for (const coverageId of new Set(input.reassign_ids)) {
+    const unit = units.get(coverageId), code = unit ? TRANSITION_CODES[unit.status] : 'UNKNOWN_UNIT'
+    if (code === null) acceptedReassignIds.push(coverageId)
+    else rejected.push({ coverageId, code })
+  }
+  return { acceptedReassignIds, rejected }
+}
+export function inspectUnitInputs(inputs, ctx, options) {
+  const rows = inertJSON(inputs, 'INVALID_INPUT'), context = inertJSON(ctx, 'INVALID_INPUT')
+  const opts = inertFields(options, 'INVALID_INPUT')
+  exactFields(opts, ['kind'], 'INVALID_INPUT')
+  if (!['seed', 'mint'].includes(opts.kind) || !Array.isArray(rows) || rows.length > 1000 ||
+    !isObj(context) || !isText(context.runDir) || !Array.isArray(context.scope) ||
+    !context.scope.every(isText) || !isText(context.priorStatus) ||
+    Object.keys(context).some(k => !['runDir', 'scope', 'priorStatus', 'profile', 'skipPathCheck'].includes(k)) ||
+    (Object.hasOwn(context, 'skipPathCheck') && typeof context.skipPathCheck !== 'boolean')) invalidData('INVALID_INPUT')
+  const results = rows.map((input, index) => {
+    let built
+    try { built = unitFromInput(input, context) } catch { built = { problems: ['Unit validation failed.'] } }
+    const problems = [...(built.problems || [])]
+    if (opts.kind === 'mint' && isObj(input) && input.status !== undefined && input.status !== 'planned') problems.push('Mint input must be planned.')
+    return { index, input, coverageId: built.unit?.coverage_id, problems }
+  })
+  const counts = new Map()
+  for (const r of results) if (!r.problems.length) counts.set(r.coverageId, (counts.get(r.coverageId) || 0) + 1)
+  const accepted = [], rejected = []
+  for (const r of results) {
+    if (!r.problems.length && counts.get(r.coverageId) > 1) r.problems.push('Duplicate canonical coverage identity.')
+    if (r.problems.length) rejected.push({ index: r.index, problems: r.problems.slice(0, 40).map(p =>
+      typeof p === 'string' ? p.replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 400) : 'Invalid unit.') })
+    else accepted.push({ index: r.index, input: r.input, coverageId: r.coverageId })
+  }
+  return { accepted, rejected }
 }
 
 // ---------- seed ----------

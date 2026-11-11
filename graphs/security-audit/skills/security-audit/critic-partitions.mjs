@@ -2,7 +2,7 @@
 // persistence, reader grants and scheduling; this module dispatches nothing.
 import { createHash } from 'node:crypto'
 import { canonical, fields, record } from './journal-data.mjs'
-import { criticResultProblems } from './audit-ledger.mjs'
+import { criticResultProblems, criticTransitionContext } from './audit-ledger.mjs'
 
 const CAP = 500000
 const DATA_LIMIT = 32 * 1024 * 1024
@@ -53,7 +53,9 @@ function graphInput(m, items, critic_context) {
     profile: m.identity.profile, parts: m.shared.parts,
     ledger: items.filter(i => i.kind === 'unit').map(i => i.value),
     candidates: items.filter(i => i.kind === 'candidate').map(i => i.value),
-    prior: { records: items.filter(i => i.kind === 'prior').map(i => i.value) }, critic_context }
+    prior: { records: items.filter(i => i.kind === 'prior').map(i => i.value) }, critic_context,
+    transitionContext: criticTransitionContext((critic_context.mode === 'reconciliation' ? m.items : items)
+      .filter(i => i.kind === 'unit').map(i => ({ coverage_id: i.value.coverage_id, status: i.value.status }))) }
 }
 
 function partition(m, owners, number) {

@@ -5,6 +5,8 @@
 co_pid() { [[ $1 =~ ^[1-9][0-9]{0,9}$ ]] && (( ${#1} < 10 || $1 <= 2147483647 )); }
 co_start() { [[ $1 =~ ^[1-9][0-9]{0,19}$ ]]; }
 co_uuid() { [[ $1 =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; }
+# The umask builtin prints exactly four octal digits. Only that shape is accepted.
+co_umask() { [[ $1 =~ ^0[0-7]{3}$ ]]; }
 co_parse_record() {
   local LC_ALL=C text=$1 rest part
   (( ${#text} <= 256 )) || return 1
@@ -110,16 +112,23 @@ capture_request() {
   timeout --foreground --kill-after=1 1 bash -c 'printf "STOP\n" > "$1"' capture-stop "$leaf/stop" </dev/null >/dev/null 2>&1 || return 125
 }
 co_anchor() {
-  local leaf=$1 grant code anchor_grant_fd anchor_release_fd release_deadline
-  shift
+  local leaf=$1 payload_umask=$2 grant code anchor_grant_fd anchor_release_fd release_deadline
+  shift 2
   # The waiting anchor is granted once, only after its parent writes metadata.
   trap ':' TERM INT HUP
+  # Control artifacts stay private. The root-observed umask token is only a file
+  # creation mask for the payload below; it is never a signal target or a grant.
+  co_umask "$payload_umask" || exit 125
+  umask 077 || exit 125
   exec {anchor_grant_fd}<>"$leaf/.grant" || exit 125
   IFS= read -r -t 3 -u "$anchor_grant_fd" grant || exit 125
   exec {anchor_grant_fd}>&-
   [[ $grant == GO ]] || exit 125
+  umask "$payload_umask" || exit 125
   VERIFY_CAPTURE_SCOPE_DIR=$leaf "$@" </dev/null 2>&1
   code=$?
+  # Re-harden before any status write, even if the payload changed this shell's umask.
+  umask 077 || exit 125
   # Payload stdout/stderr is settled before publishing status. No relay process.
   exec 1>/dev/null 2>/dev/null
   if ! { printf '%s\n' "$code" > "$leaf/.status.pending" && mv -- "$leaf/.status.pending" "$leaf/.status"; }; then
@@ -184,6 +193,9 @@ co_root() {
   local -a entries
   shopt -s nullglob dotglob; entries=("$leaf"/*); shopt -u dotglob
   ((${#entries[@]} == 0)) || return 125
+  # Observe the caller's own umask before hardening; only the payload gets it back.
+  local payload_umask
+  payload_umask=$(umask) && co_umask "$payload_umask" || return 125
   umask 077
   local LOCAL_LEAF=$leaf LOCAL_OWNER_PID=$BASHPID LOCAL_OWNER_START LOCAL_ANCHOR_PID LOCAL_ANCHOR_START LOCAL_PGID
   local CO_CLOSING=0 CO_FAILURE='' STOP_FD GRANT_FD RELEASE_FD boot scope message='' status deadline
@@ -197,7 +209,7 @@ co_root() {
   exec {STOP_FD}<>"$leaf/stop" {GRANT_FD}<>"$leaf/.grant" {RELEASE_FD}<>"$leaf/.release" || return 125
   if [[ -e $leaf/.closing ]]; then co_mark_failure closing; return 125; fi
   # setsid is used once; this wrapper itself remains outside the payload group.
-  setsid bash "${BASH_SOURCE[0]}" anchor "$leaf" -- "$@" {STOP_FD}>&- {GRANT_FD}>&- {RELEASE_FD}>&- &
+  setsid bash "${BASH_SOURCE[0]}" anchor "$leaf" "$payload_umask" -- "$@" {STOP_FD}>&- {GRANT_FD}>&- {RELEASE_FD}>&- &
   LOCAL_ANCHOR_PID=$!; LOCAL_PGID=$LOCAL_ANCHOR_PID
   if co_proc "$LOCAL_ANCHOR_PID"; then LOCAL_ANCHOR_START=$CO_PROC_START; fi
   deadline=$((SECONDS+2))
@@ -260,7 +272,7 @@ co_main() {
         [[ $VERIFY_CAPTURE_SCOPE_DIR == "$leaf" ]] && capture_join "$leaf" || return 125
         exec "$@" </dev/null 2>&1
       else co_root "$leaf" "$@"; fi ;;
-    anchor) [[ ${1:-} == -- && $# -ge 2 ]] || return 125; shift; co_anchor "$leaf" "$@" ;;
+    anchor) [[ ${2:-} == -- && $# -ge 3 ]] && co_umask "$1" || return 125; co_anchor "$leaf" "$1" "${@:3}" ;;
     *) return 125 ;;
   esac
 }

@@ -46,6 +46,8 @@ function completionFor(value, selection) {
 // further checkpoint/provider work may start, even if a late promise resolves.
 function runScope({ deadlineMs, nowMs, signal, onEvent, cap }) {
   const controller = new AbortController(), operations = new Set(), providers = new Set(), leaves = new Set(), queue = []
+  const lifetimes = new Map()
+  let pauseError = null
   let fatal = null, blocked = false, closing = false, active = 0, timer
   const observe = event => { try { Promise.resolve(onEvent(event)).catch(() => {}) } catch {} }
   const left = () => {
@@ -77,15 +79,26 @@ function runScope({ deadlineMs, nowMs, signal, onEvent, cap }) {
   if (signal?.aborted) abort()
   arm()
 
+  function pause(value) {
+    const p = json(value, 'CHECKPOINT_ERROR')
+    exact(p, ['state', 'blockers'], 'CHECKPOINT_ERROR')
+    if (p.state !== 'paused' || !Array.isArray(p.blockers) || !p.blockers.length ||
+      p.blockers.some((b, i) => !['paused_budget', 'paused_uncertain', 'report_stale'].includes(b) || (i && p.blockers[i - 1] >= b))) fail('CHECKPOINT_ERROR')
+    const blockers = [...new Set([...(pauseError?.blockers || []), ...p.blockers])].sort()
+    pauseError = Object.assign(error('CONTROL_PAUSED'), { blockers })
+    for (const waiter of queue.splice(0)) waiter.reject(pauseError)
+    return pauseError
+  }
   async function acquire() {
     ensure()
+    if (pauseError) throw pauseError
     if (active < cap) { active++; return }
     await new Promise((resolve, reject) => queue.push({ resolve, reject }))
     ensure()
   }
   function release() {
     active--
-    if (!fatal && queue.length) { active++; queue.shift().resolve() }
+    if (!fatal && !pauseError && queue.length) { active++; queue.shift().resolve() }
   }
 
   async function checkpoint(kind, callId, callback, cleanup = false) {
@@ -114,6 +127,11 @@ function runScope({ deadlineMs, nowMs, signal, onEvent, cap }) {
     try {
       const value = await pending
       if (!cleanup) ensure()
+      if (kind === 'reserve' && value?.state === 'dispatch') {
+        const cancel = () => op.abort()
+        controller.signal.addEventListener('abort', cancel, { once: true })
+        lifetimes.set(callId, () => controller.signal.removeEventListener('abort', cancel))
+      }
       return value
     } finally {
       clearTimeout(timeout)
@@ -150,10 +168,12 @@ function runScope({ deadlineMs, nowMs, signal, onEvent, cap }) {
       if (!joined) { fatal = error('CLEANUP_UNCONFIRMED'); controller.abort() }
     }
   }
-  return { ensure, stop, acquire, release, checkpoint, dispatch, drain, leaves,
+  return { ensure, stop, pause, acquire, release, checkpoint, dispatch, drain, leaves,
+    get pauseError() { return pauseError },
+    finish(callId) { lifetimes.get(callId)?.(); lifetimes.delete(callId) },
     get fatal() { return fatal }, get blocked() { return blocked },
     close() { closing = true; abort(); for (const cancel of [...operations]) cancel() },
-    dispose() { clearTimeout(timer); signal?.removeEventListener('abort', abort) },
+    dispose() { for (const remove of lifetimes.values()) remove(); lifetimes.clear(); clearTimeout(timer); signal?.removeEventListener('abort', abort) },
   }
 }
 
@@ -207,16 +227,23 @@ export function createNativeRuntime(options) {
         let dispatched = false, settled = false
         const { callId } = binding
         try {
+          if (scope.pauseError) throw scope.pauseError
           let reservation
           try {
             // Bound the completion itself, not the checkpoint wrapper around it:
             // a previously accepted exact-limit envelope must remain replayable.
             reservation = fields(await scope.checkpoint('reserve', callId,
               opSignal => store.reserve.call(checkpoints, json(binding), { signal: opSignal })), 'CHECKPOINT_ERROR')
-            exact(reservation, reservation?.state === 'completed' ? ['state', 'completion'] : ['state'], 'CHECKPOINT_ERROR')
-            if (!['dispatch', 'completed', 'uncertain'].includes(reservation.state)) fail('CHECKPOINT_ERROR')
+            exact(reservation, reservation?.state === 'completed' ? ['state', 'completion'] : reservation?.state === 'paused' ? ['state', 'blockers'] : ['state'], 'CHECKPOINT_ERROR')
+            if (!['dispatch', 'completed', 'uncertain', 'paused'].includes(reservation.state)) fail('CHECKPOINT_ERROR')
           } catch (e) { throw scope.stop(ownErrorCode(e) === 'CONFLICT' ? 'CONFLICT' : 'CHECKPOINT_ERROR') }
           scope.ensure()
+          if (reservation.state === 'paused') {
+            let paused
+            try { paused = scope.pause(reservation) }
+            catch { throw scope.stop('CHECKPOINT_ERROR') }
+            throw paused
+          }
           if (reservation.state === 'uncertain') throw scope.stop('CHECKPOINT_UNCERTAIN')
           let completion
           if (reservation.state === 'completed') {
@@ -233,9 +260,10 @@ export function createNativeRuntime(options) {
             } catch { throw scope.stop('DISPATCH_UNCERTAIN') }
             scope.ensure()
             try {
-              await scope.checkpoint('settle', callId,
+              const result = await scope.checkpoint('settle', callId,
                 opSignal => store.settle.call(checkpoints, callId, json(completion), { signal: opSignal }))
               settled = true
+              if (result !== undefined) scope.pause(result)
             } catch { throw scope.stop('CHECKPOINT_ERROR') }
           }
           scope.ensure()
@@ -251,7 +279,7 @@ export function createNativeRuntime(options) {
             } catch { /* Charged intent remains held; never substitute success. */ }
           }
           throw scope.fatal || e
-        } finally { scope.release() }
+        } finally { scope.finish(callId); scope.release() }
       })()
       scope.leaves.add(leaf)
       leaf.then(() => scope.leaves.delete(leaf), () => scope.leaves.delete(leaf))
@@ -294,6 +322,7 @@ export function createNativeRuntime(options) {
         await scope.drain()
         if (scope.fatal) { poison = scope.fatal; throw poison }
         scope.ensure()
+        if (scope.pauseError) throw scope.pauseError
         if (thrown) throw thrown
         return result
       } finally { scope.dispose() }

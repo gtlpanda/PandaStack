@@ -26,13 +26,13 @@
 // is planned and not applied). Every effect of apply is idempotent and the step is saved last, so a crash leaves the step behind its
 // effects, never ahead: applying the same result again finishes the stage, and changes nothing if it had finished.
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { isDeepStrictEqual } from 'node:util'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { LEDGER_FAILED, REASONS, RUNNERS, Usage, advanceState, appendEvent, formatNext, loadRun, markIncomplete, nextStep, readJson, recordSpend, reconGate, refuse, waveAllowance, writeJson } from './audit-run.mjs'
-import { applyCriticProblems, criticBudgetExhausted, criticResultProblems, deferHunting, seedProblems, stopHunting } from './audit-ledger.mjs'
+import { applyCriticProblems, criticTransitionContext, criticBudgetExhausted, criticResultProblems, deferHunting, seedProblems, stopHunting } from './audit-ledger.mjs'
 import { RECON_IDS, checkFacts } from './audit-facts.mjs'
 import { companions, ordinary, parts, resolve as resolveBlock } from './blocks.mjs'
 import { CLIP, architectureOf, baseInput, blockText, clipText, clipValue, profileName, profilePart } from './audit-inputs.mjs'
@@ -198,6 +198,7 @@ export function criticInput(runDir, run, next) {
   return {
     ...baseInput(runDir, run.meta, 'critic'), ...profileName(run.meta), kind: next.kind, wave: next.wave, hunted: next.hunted !== false, architecture_md: architectureOf(runDir), ledger: run.ledger.map(compactUnit),
     candidates: (Array.isArray(pool) ? pool : []).map(c => ({ fingerprint: c.fingerprint, proposed_verdict: c.proposed_verdict, units: c.units, hunter_ids: c.hunter_ids })),
+    transitionContext: criticTransitionContext(run.ledger.map(({ coverage_id, status }) => ({ coverage_id, status }))),
     prior: priorSummary(runDir), parts: { criticSection: blockText(CRITIC_SECTION), ...profilePart(run.meta) },
   }
 }
@@ -327,6 +328,87 @@ export function planStage(runDir) {
   }
   appendEvent(runDir, { cmd: 'plan', stage: next.step, result: 'ok', duration_ms: Date.now() - started, part: planned.part, stage_dir: stage.name, script_bytes: bytes })
   return { step: next.step, part: planned.part, stage, script, bytes, returned: join(stage.dir, 'returned.json') }
+}
+
+// ---------- native plan capture ----------
+// planNativeStage: planStage plus a capture marker in the stage directory, so a still-pending stage is returned as captured and never re-planned
+// against changed budget or evidence. It adds no scheduler: the step comes from nextStep via expectStage (inside planStage) and again here.
+// NOT solved here: the marker is written after planStage returns, so a crash between the two leaves an unmarked pending stage that this refuses
+// (explicitly, never guessed at); atomic creation and recovery of that window, and dispatch/spend integration, are separate work.
+export const NATIVE_CAPTURE_FILE = 'native-capture.json'
+const sha256File = file => createHash('sha256').update(readFileSync(file)).digest('hex')
+const HEX64 = /^[0-9a-f]{64}$/
+const nativeInvocation = m => createHash('sha256').update(`${m.stage}\n${m.step}\n${m.part}\n${m.input_sha256}\n${m.workflow_sha256}`).digest('hex')
+
+function readCapture(stage) {
+  let marker
+  try { marker = readJson(join(stage.dir, NATIVE_CAPTURE_FILE)) } catch { marker = null }
+  if (marker === undefined) return undefined
+  const ok = isObj(marker) && marker.version === 1 && marker.native === true && isText(marker.step) && isText(marker.part) && typeof marker.label === 'string' && marker.stage === stage.name &&
+    ['input_sha256', 'script_sha256', 'workflow_sha256', 'invocation_id'].every(k => typeof marker[k] === 'string' && HEX64.test(marker[k])) &&
+    Object.keys(marker).length === 11 && Number.isSafeInteger(marker.bytes) && marker.bytes > 0 && marker.bytes <= MAX_SCRIPT_BYTES
+  if (!ok) refuse(`${stage.name}/${NATIVE_CAPTURE_FILE} is not what planNativeStage wrote; it is not reset or replaced: a person must decide what to do with this stage`)
+  return marker
+}
+
+// result.json is written before the owning applier finishes its state writes.
+// This separate native receipt records that apply returned (or semantically
+// refused). Without it, reuse the saved result instead of buying another leaf.
+const NATIVE_APPLICATION_FILE = 'native-application.json'
+export function recordNativeApplication(plan, outcome) {
+  if (!['applied', 'rejected'].includes(outcome)) refuse('invalid native application outcome')
+  writeJson(join(plan.stage.dir, NATIVE_APPLICATION_FILE), {
+    version: 1, invocation_id: plan.invocationId, result_sha256: sha256File(join(plan.stage.dir, 'result.json')), outcome,
+  })
+}
+export function pendingNativeApplication(runDir) {
+  const stage = listStages(runDir).at(-1)
+  if (!stage?.done || !existsSync(join(stage.dir, NATIVE_CAPTURE_FILE))) return null
+  const marker = readCapture(stage)
+  const input = join(stage.dir, 'input.json'), script = join(stage.dir, 'run.js'), returned = join(stage.dir, 'result.json')
+  if (sha256File(input) !== marker.input_sha256 || sha256File(script) !== marker.script_sha256 ||
+    sha256File(WORKFLOW_FILE) !== marker.workflow_sha256 || marker.invocation_id !== nativeInvocation(marker)) refuse('native application capture changed; not replayed')
+  const captured = readJson(input)
+  if (captured.stage !== marker.step || captured.part !== marker.part || statSync(script).size !== marker.bytes) refuse('native application capture bindings changed; not replayed')
+  const receipt = readJson(join(stage.dir, NATIVE_APPLICATION_FILE))
+  if (receipt !== undefined) {
+    if (!isObj(receipt) || Object.keys(receipt).length !== 4 || receipt.version !== 1 ||
+      receipt.invocation_id !== marker.invocation_id || receipt.result_sha256 !== sha256File(returned) ||
+      !['applied', 'rejected'].includes(receipt.outcome)) refuse('native application receipt changed; not replanned')
+    return null
+  }
+  return { step: marker.step, part: marker.part, stage, script, bytes: marker.bytes, returned, captured: true, invocationId: marker.invocation_id }
+}
+
+export function planNativeStage(runDir) {
+  if (pendingNativeApplication(runDir)) refuse('a saved native stage result awaits application recovery; it cannot be replanned')
+  const run = loadRun(runDir)
+  const next = expectStage(run)
+  const last = listStages(runDir).at(-1)
+  if (last && !last.done) {
+    const marker = readCapture(last)
+    if (marker === undefined) refuse(`${last.name} is planned and not applied, and has no native capture marker: it may or may not have been dispatched, so it is not adopted; nothing was changed`)
+    if (marker.step !== next.step || marker.label !== last.label) refuse(`${last.name} was captured for ${marker.step}, and the next step is ${next.step}: not reset; nothing was changed`)
+    const input = join(last.dir, 'input.json'), script = join(last.dir, 'run.js')
+    if (!existsSync(input) || !existsSync(script)) refuse(`${last.name} is missing input.json or run.js: not replanned; nothing was changed`)
+    if (sha256File(input) !== marker.input_sha256) refuse(`${last.name}/input.json changed since it was captured: not replanned; nothing was changed`)
+    if (sha256File(script) !== marker.script_sha256) refuse(`${last.name}/run.js changed since it was captured: not replanned; nothing was changed`)
+    if (sha256File(WORKFLOW_FILE) !== marker.workflow_sha256) refuse(`the workflow source changed since ${last.name} was captured: not replanned; nothing was changed`)
+    const capturedInput = readJson(input)
+    if (marker.invocation_id !== nativeInvocation(marker) || statSync(script).size !== marker.bytes ||
+      capturedInput.stage !== marker.step || capturedInput.part !== marker.part) refuse(`${last.name} capture bindings changed: not replanned; nothing was changed`)
+    return { step: marker.step, part: marker.part, stage: last, script, bytes: marker.bytes, returned: join(last.dir, 'returned.json'), captured: true, invocationId: marker.invocation_id }
+
+  }
+  const out = planStage(runDir)
+  const input = join(out.stage.dir, 'input.json')
+  const inputDigest = sha256File(input), workflowDigest = sha256File(WORKFLOW_FILE)
+  writeJson(join(out.stage.dir, NATIVE_CAPTURE_FILE), {
+    version: 1, native: true, step: out.step, part: out.part, label: out.stage.label, stage: out.stage.name, bytes: out.bytes,
+    input_sha256: inputDigest, script_sha256: sha256File(out.script), workflow_sha256: workflowDigest,
+    invocation_id: createHash('sha256').update(`${out.stage.name}\n${out.step}\n${out.part}\n${inputDigest}\n${workflowDigest}`).digest('hex'),
+  })
+  return { ...out, captured: false, invocationId: readCapture(out.stage).invocation_id }
 }
 
 // ---------- apply ----------

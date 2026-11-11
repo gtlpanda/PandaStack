@@ -1072,3 +1072,253 @@ Final candidate inventory: DECISIONS.md, PROGRESS-security-audit.md,
 graphs/security-audit/workflows/security-audit-flow.js, and the two incoming
 untracked critic-partitions.mjs / critic-partitions.test.mjs files. No other
 tracked or untracked repository files changed. No flags, staging or commits.
+
+## OC-01 — Inventory every offering and distinguish visibility from native readiness
+
+Implemented `core/skills/native-runtime/catalog.mjs` with the four contracted
+exports and internal `catalog-data.mjs` validation. Added 16 implementation
+checks in `tests/native-offering-catalog.test.mjs` using the unchanged workflow
+harness. Validation reuses NR-01 inert finite JSON copying (1 MiB / depth 64),
+rejects hooks/Proxies, strict-key and reference conflicts, and returns fixed
+safe diagnostics. Discovery checks canonical source containment and hashes
+SKILL bytes through bounded chunks; external targets are classified without
+opening their contents. Libraries remain library-only. Preflight validates
+matching discovery and the existing settings projection with the owning
+settings predicates, preserving selected values/provenance while runtime,
+auth/account/payer and native readiness remain unknown or degraded.
+
+Exact current source evidence: frozen inventory fixture covers 46 offering
+skill directories (historical 45 plus native-runtime), six workflows, 46 other
+assets and four fixed targets. The unchanged acceptance checks compare those
+sets, installer targets and every current SKILL digest. An additional focused
+check discovers every declared source as present. No installer, schema,
+validator, vendor, prior acceptance or baseline file changed.
+
+Verification on Node v24.21.0:
+
+```sh
+node acceptance/native-runtime/oc-01-catalog.test.mjs
+# exit 0; 8 passed, 0 failed
+node --input-type=module -e 'await import("./tests/native-offering-catalog.test.mjs"); await import("./tests/native-runtime-schema.test.mjs"); const {summary}=await import("./scripts/workflow-harness.mjs"); const {pass,fail}=summary(); console.log(`OC-01 FOCUSED: ${pass} passed, ${fail} failed`); process.exitCode=fail?1:0'
+# exit 0; OC-01 FOCUSED: 24 passed, 0 failed (16 new + 8 existing)
+```
+
+Initial direct acceptance: eight failures from absent module; initial owning
+harness: ten failures from absent module. Initial `node --test` wrapper exited
+1 with a file-level `test failed` only. Direct execution of the unchanged
+node:test file provided the eight individual cases above; no assertion was
+skipped or modified. Initial logs: `/tmp/oc01-acceptance-red.log`,
+`/tmp/oc01-acceptance-red-direct.log`, `/tmp/oc01-focused-red.log`.
+
+Focused evidence includes inert input/hook refusal, cycles and finite bounds,
+manifest loading/errors/detachment, source and SKILL static symlink escapes,
+contained source aliases, copy refusal, source drift/missing identity, declared
+eligibility, deterministic safe unknown names, and strict preflight projection.
+Sequential synchronous I/O observations show wrong targets are not opened and
+an escaping source causes zero file opens. Substituted ordinary open/close
+errors prove diagnostic handling only; they are not filesystem-race fixtures.
+Local review corrected missing-SKILL link identity and safe close-error handling.
+
+Local sanity review: data flow PASS; edge/error handling PASS; security PASS;
+consistency PASS; selected implementation completeness PASS. The mandatory
+Explore agent request failed with `Unknown model gpt-6.1-sol`; no fallback was
+launched. Local review is not independent host review.
+
+Limits: `spec/offering-capabilities.json` is absent in this checkout and `spec`
+is frozen. The explicit-root loader is implemented and verified with temporary
+inert manifests; no production catalog was created or silently substituted.
+The frozen fixture remains the host-owned inventory authority. Offline source
+visibility is not runtime certification, provider capability, tool confinement,
+account/authentication/billing evidence, hostile same-user isolation or race
+resistance. No target application changes/execution, providers, blocked
+reproductions, pinned-host edits, runtime probes or broader roadmap work occurred.
+The host retains full gates, feature flags, staging, commits and final review.
+
+Final hygiene evidence:
+
+```sh
+node --check core/skills/native-runtime/catalog.mjs
+node --check core/skills/native-runtime/catalog-data.mjs
+node --check tests/native-offering-catalog.test.mjs
+git diff --check
+git diff --cached --exit-code
+# each exit 0; index unchanged
+bash scripts/check-secrets.sh
+bash scripts/check-secrets.sh core/skills/native-runtime/catalog.mjs core/skills/native-runtime/catalog-data.mjs tests/native-offering-catalog.test.mjs
+# each exit 0: check-secrets: clean
+```
+
+The unchanged scanner covered tracked working files and explicitly all three
+new untracked source/test files. Final changed inventory: DECISIONS.md,
+PROGRESS-security-audit.md, core/skills/native-runtime/catalog.mjs,
+core/skills/native-runtime/catalog-data.mjs and tests/native-offering-catalog.test.mjs.
+No flags, staging or commits were changed.
+
+## Direct implementation checkpoint — 2026-11-11 UTC
+
+The user explicitly stopped autobuild for this repair and requested direct work.
+No new autobuild run was launched. The current candidate retains the frozen
+acceptance/baseline files, feature flags and Git index; no commit or promotion
+is asserted. Security repairs remain ahead of broader Phase 2 expansion.
+
+Central and project maxConcurrentSubagents are now 16, with both generated
+Claude concurrency environment settings at 16. The configuration check reported
+zero drift and five configuration tests passed. This is a configured cap, not
+proof of sixteen effective concurrent native agents or provider throughput.
+
+Direct checkpoint/runtime and lifecycle work passed 61 selected checks, 52
+focused regressions and 66 follow-up checks. Seven unchanged direct regression
+gates subsequently passed: baseline, native hunt, Phase 1, hunt evidence,
+export/namespace, capture-descendant and accepted P2-01 through P2-14. Exact
+commands, exit codes and log paths are recorded externally in
+/tmp/pandastack-security-audit-priority-plan/direct-gates.json. These are direct
+regression results, not native provider capability or full parity evidence.
+
+The verify wrapper separately returned VERIFY: FAIL. Two shared-helper drift
+failures were corrected by restoring the exact shared block. Its remaining
+ordinary output-mode fixture mismatch concerns the wrapper's inherited umask077;
+the direct gates used umask022. Capture ownership implementation was not changed,
+and the wrapper failure is not waived or represented as a pass. The original
+/tmp ancestor Git metadata issue was avoided with a clean private /var/tmp test
+root; no unrelated metadata or validation was deleted.
+
+The latest user request explicitly authorizes Sonnet implementation workers,
+up to sixteen. A supervised three-worker direct batch uses the installed Claude
+CLI with model sonnet, no fallback, isolated file ownership and no shell/provider
+launch tools. This implementation assistance is not the security runner's
+provider transport and does not establish Codex workflow parity. Blocked capture
+and filesystem-race reproductions remain unexecuted and prohibited.
+
+The first supervised worker completed with exit0. Its selected task model was
+sonnet; CLI usage metadata records claude-sonnet-5-5 and claude-fable-5-2, so
+exclusive Sonnet execution is not asserted. No fallback model was configured.
+Root independently ran the final lifecycle implementation: 85 owning regression
+checks plus all10 frozen SA-LT01 acceptance checks passed, with source hashes
+stable across execution. New checks reject array-coerced status names in both
+the owning feedback validator and the actual critic workflow before dispatch.
+Evidence: sonnet-lifecycle-final-0.log and sonnet-lifecycle-final-1.log under the
+external priority-plan directory above. This proves ordinary validation and
+prompt wiring only, not model review quality or completed native audit recovery.
+
+All three supervised workers completed with exit0. The journal repair shares the
+existing path grammar with runIdentity, compares the root spelling admitted by
+the owning no-symlink open, and preserves branding/liveness/identity validation
+and safe errors. Nine ordinary static path/identity cases passed; they do not
+prove post-open replacement, filesystem races or hostile containment.
+
+The independent static reviewer identified a malformed reserve-pause envelope
+escaping the fatal latch through graph parallel catches. Root reproduced it
+with an inert fake-port regression (missing expected rejection), then fixed the
+reserve path to latch CHECKPOINT_ERROR. Valid pauses still remain CONTROL_PAUSED.
+The unapproved executionDigest extension and its tests were preserved externally
+as drafts and removed from the active candidate, restoring NR02's frozen exact
+selection shape and INVALID_SELECTION for null/extra selection fields.
+
+Final focused integration: 54 frozen journal/control/runtime/checkpoint cases
+and31 owning regression cases passed (sonnet-final-integration-{0,1}.log in the
+external priority-plan directory). Together with the final95 lifecycle checks,
+180 relevant checks passed. No frozen tests/contracts/gates, flags, Git index,
+pinned host or previously blocked reproductions were changed. The earlier
+seven full direct gates predate these final corrections; they were not rerun.
+The verify-wrapper failure remains separately recorded above.
+
+Remaining integration is explicit: production Codex leaf transport and source
+reader tools, role/profile selection, nextStep/stage composition, continuous
+reserve/spend policy, durable targeted retries/critic partition execution, and
+catalog/installer/preflight wiring are not completed by these library repairs.
+The current selected helper contracts defer those integrations; no broader
+Phase2 feature or full parity completion is claimed.
+
+## Direct blocker repairs — 2026-11-11, continued
+
+The user explicitly reserved the Terracotta security audit for another Codex
+session. This session repairs execution machinery using inert fixtures only;
+no Terracotta audit, application fixes, autobuild run, merge or deployment.
+
+The umask blocker is corrected in capture-owner.sh: capture the actual incoming
+mask, pass it as a validated private root-to-anchor argument, apply it only to
+the ordinary payload and restore077 before control/status writes. Root extended
+the same behavior to retention.sh's Bash-only launch, keeping the retention
+parent hardened and exec-replacing the owned child. Signal identity, membership,
+control reads and cancellation authority are unchanged. New ordinary/pure tests
+and the nine frozen P2-11/P2-12 checks passed. Two unchanged P2-13 normal-success
+cases also passed. No blocked capture/orphan/overflow or race test was run.
+
+The formerly failing partial-report tests were run unchanged through the real
+verify.sh wrapper in a disposable shell-project fixture: 18passed, VERIFY: PASS.
+Evidence: /var/tmp/pandastack-direct-3m8roses/verify-evidence-Iyq3vs/run-fSDzsk/manifest.json.
+This removes the observed wrapper failure; the full repository wrapper gate is
+running separately and has not yet been called passed.
+
+Added callable offline native-runtime/preflight-cli.mjs and14tests. It reports
+actual configured values/provenance and refuses missing/not-certified entries;
+auth, account and payer remain unknown. A conservative production catalog at
+spec/offering-capabilities.json copies the frozen inventory without promoting
+any implementation/readiness/eligibility value. Actual checkout preflight exits2
+for security-audit (not-certified, absent), and reports central concurrency16.
+The existing eight frozen catalog checks pass. No installer parity claim.
+
+Added native-reader-server.mjs, an owned authenticated loopback MCP reader over
+the existing manifest reader. Three ordinary HTTP fixtures pass; host-only stats
+retain refusal codes and request-limit exhaustion. Independent Sonnet static
+review led to exact media-type validation and joined close behavior. This does
+not establish provider tool confinement, context sanitization or concurrent
+replacement containment. No real Codex leaf uses this transport yet. Source
+reader overlap-search semantics and the reviewer's race hypothesis remain
+unmodified; the prohibited race reproduction was not attempted.
+
+Supervised Sonnet worker status and logs are at
+/tmp/pandastack-security-audit-priority-plan/blocker-workers/. Verification,
+preflight and reader-review workers finished; recovery integration is still
+active. No end-to-end security runner completion is claimed by these repairs.
+
+Full repository wrapper result: exit0, TEST: PASS, VERIFY: PASS. This supersedes
+the earlier open umask-wrapper failure. Evidence:
+/var/tmp/pandastack-direct-3m8roses/verify-evidence-MLnZIG/run-h0JKhy/manifest.json;
+log: /tmp/pandastack-security-audit-priority-plan/blocker-workers/full-verify.log.
+The gate used the unchanged scripts/test.sh with a clean private TMPDIR and
+installed ShellCheck on PATH. No gate/assertion was removed or weakened.
+
+The broad recovery worker reached its20-minute deadline (exit143) without a
+deliverable. It is not counted as completed work. A narrower Sonnet worker now
+owns only immutable native-stage planning and its focused tests. Recovery and
+native provider integration remain incomplete. No target audit was launched.
+
+## Instruction and status reconciliation — 2026-11-11 UTC
+
+Re-read the current user-supplied AGENTS instructions, SPEC.md and Phase 2
+contract. The last recorded external host selection remains OC-01. No next
+feature selection or completion is inferred from the user's GO. The leftover
+Claude critic worker was interrupted; its process is absent. Its unfinished
+source and any additive owner edits remain unverified and are not promoted.
+No additional provider was launched during this reconciliation.
+
+Focused OC-01 verification passed 16 implementation checks and all eight frozen
+acceptance cases. git diff --check passed; frozen acceptance/contracts/feature
+flags and scripts/test.sh have no diff. Evidence:
+/tmp/pandastack-security-audit-priority-plan/blocker-workers/oc01-current-focused.log.
+
+The earlier full-wrapper PASS predates later native-stage and critic edits; it
+is not full-gate evidence for the current working tree. Earlier focused stage
+results likewise predate the interrupted critic worker's additive owner edits.
+Host review, next selection, full gates, flags and completion remain host-owned.
+Full native audit execution and workflow parity are incomplete. No Terracotta
+audit or blocked capture/filesystem-race reproduction was run.
+
+## PR preparation and independent review
+
+The user explicitly requested a PR, review and merge. Three independent AI
+reviewers inspected the accumulated branch. The unfinished native critic
+module and owner additions were preserved externally and removed from the PR
+candidate. Catalog trailing-newline validation, interrupted native application
+replay, terminal report publication, and post-apply report freshness recovery
+were corrected with focused tests. The final stage subset passed19checks;
+runtime/configuration checks passed70, audit-focused checks passed135 before
+the last report-only correction, and selected frozen acceptance passed92.
+
+Two introduced suite-export defects remain: aggregate/individual blob stdout
+exceeds128MiB, and SHA256 source storage format is not preserved. Their P2-15
+and P2-16 corrective scope remains explicitly deferred. They prevent merge,
+regardless of baseline CI status. Final host acceptance remains distinct.
+See docs/reviews/security-audit-pr-readiness.md. No blocked reproduction,
+Terracotta audit, provider fallback or frozen-test amendment occurred.

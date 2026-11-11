@@ -1,5 +1,5 @@
 {
-  "maxConcurrentSubagents": 8,
+  "maxConcurrentSubagents": 16,
   "claude": {
     "orchestrator": { "model": "opus", "effort": "high" },
     "advisor": { "model": "fable", "effort": "high" },

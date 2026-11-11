@@ -1,6 +1,6 @@
 // Durable leaf receipts only. No scheduler, retries, providers or spend projection.
 import { readFileSync, lstatSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { loadRun, isCommitId } from './audit-run.mjs'
 import { openStorage } from './journal-storage.mjs'
 import { readPartialReport } from './audit-report.mjs'
@@ -9,6 +9,30 @@ import { BLOCKERS, inspectControl, readControl, publicControl, budgetEvidence, c
   withBlockers, transitionControl, reserveHistory, initializeControl } from './journal-control.mjs'
 import { BODY_LIMIT, TOTAL_LIMIT, ROW_LIMIT, fail, need, guarded, fields, record,
   canonical, parseCanonical, validId, pending, terminalEnvelope } from './journal-data.mjs'
+
+import { types } from 'node:util'
+
+// The ONE static provided-path grammar: shared by runIdentity (open and every read)
+// and by the owner assertion, so a spelling the owning reads refuse is never admitted.
+const needRunDir = runDir => need(typeof runDir === 'string' && runDir.length > 0 && !runDir.includes('\0') &&
+  !runDir.split('/').some(p => p === '.' || p === '..'), 'INVALID_JOURNAL_INPUT')
+
+const owners = new WeakMap()
+export function assertAuditJournalOwner(journal, runDir) {
+  // Brand first and OUTSIDE guarded(): INVALID_JOURNAL_OWNER is deliberately not a public
+  // journal error code (guarded would flatten it to IO_ERROR), and no property, method or
+  // trap of an unregistered or Proxy object may be touched before this refusal.
+  if (!journal || types.isProxy(journal) || !owners.has(journal)) fail('INVALID_JOURNAL_OWNER')
+  const owner = owners.get(journal)
+  owner.live()
+  guarded(() => {
+    needRunDir(runDir)
+    // Lexical identity with the root openStorage walked without symlinks at open. realpath
+    // would normalize away alias spellings that the owning reads and storage refuse.
+    need(resolve(runDir) === owner.root, 'CONFLICT')
+    owner.validate()
+  })
+}
 
 const nonempty = v => typeof v === 'string' && v.trim().length > 0
 const natural = n => Number.isSafeInteger(n) && n >= 0
@@ -31,8 +55,7 @@ export function validIdentity(identity) {
   return m
 }
 function runIdentity(runDir, grant = true) {
-  need(typeof runDir === 'string' && runDir.length > 0 && !runDir.includes('\0') &&
-    !runDir.split('/').some(p => p === '.' || p === '..'), 'INVALID_JOURNAL_INPUT')
+  needRunDir(runDir)
   const meta = readOwnedJson(join(runDir, 'run-metadata.json'))
   need(record(meta))
   const identity = validIdentity(Object.fromEntries(['version', 'run_id', 'repo', 'target', 'source_ref'].map(k => [k, meta[k]])))
@@ -173,7 +196,7 @@ export function openAuditJournal(options) {
         })
       })
     }
-    return {
+    const owner = {
       initControl(options) {
         return guarded(() => {
           live()
@@ -323,5 +346,9 @@ export function openAuditJournal(options) {
         })
       },
     }
+    // Same lexical root openStorage just retained without following links (grammar already
+    // admitted by runIdentity above); never a realpath.
+    owners.set(owner, { root: resolve(runDir), live, validate: currentIdentity })
+    return owner
   })
 }

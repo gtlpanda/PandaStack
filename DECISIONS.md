@@ -701,3 +701,30 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   passes 5/0 and owning checks pass 38/0. Existing audit-stage/security-audit-flow
   checks remain 12/49 in this sandbox; no waiver or full-gate pass is claimed.
   Preserve complete output in /tmp/sa05a-final-baseline.log for host review.
+
+- D111 (OC-01): Implement only offline catalog validation/loading, static offering
+  discovery and conservative preflight projection in native-runtime. Reuse NR-01
+  inert finite JSON copying and existing settings validation; keep resolver,
+  installer, schemas, vendors and frozen inventory/acceptance unchanged. Prepare
+  workflow-harness tests first. The fixed spec/offering-capabilities.json is not
+  present and spec is frozen: implement its explicit-root loader and test supplied
+  inert manifests without adding or synthesizing a production manifest. Catalog
+  fixture membership/hashes remain the host-owned inventory authority. Source
+  reads require canonical containment, including entry files; no runtime probes,
+  target execution or blocked reproductions. Record plan/evidence only here and
+  in PROGRESS-security-audit.md rather than unrelated documentation. External
+  host owns full gates, flags, staging, commits and final review.
+- D112 (OC-01 evidence): Eight unchanged selected acceptance cases and 24 focused
+  harness checks pass (16 new catalog checks plus eight unchanged NR-01 checks).
+  Initial direct acceptance was 0/8 and initial owning harness 0/10 because the
+  module was absent. Initial node --test wrapper exited 1 with only a file-level
+  'test failed'; running the same unchanged node:test file directly produced
+  case-level evidence. Local review retained canonical source identity when
+  SKILL.md is missing and made loader close errors safe IO_ERROR diagnostics.
+  The loader and projections use separate internal validation and I/O modules
+  to keep the four public operations and their trust boundaries reviewable.
+  Required Explore request returned Unknown model gpt-6.1-sol; no fallback or
+  independent review claim. Local sanity review passes data flow, edge/error
+  handling, security, consistency and selected completeness. This is offline
+  static evidence only; source membership/bytes do not establish native readiness,
+  permission enforcement, authenticated account/payer or race resistance.

@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # No optional language runtime is needed to verify a shell/Go/Python project.
 set -uo pipefail
+RETENTION_PAYLOAD_UMASK=$(umask)
 umask 077
 fail() { if [[ -n "${SESSION_VALIDATED:-}" ]]; then printf 'capture incomplete\n' >"$SESSION_VALIDATED/.incomplete" || :; fi; echo 'Verification evidence capture failed' >&2; exit 125; }
 CAPTURE_OWNER="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/capture-owner.sh"
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=capture-owner.sh
 source "$CAPTURE_OWNER" || fail
+co_umask "$RETENTION_PAYLOAD_UMASK" || fail
 for tool in stat sha256sum mktemp mkdir chmod head wc mv rm setsid sleep mkfifo rmdir; do command -v "$tool" >/dev/null 2>&1 || fail; done
 private_root() {
   local path="$1" current
@@ -81,7 +83,7 @@ case "${1:-}" in
     joined=true; scope="$VERIFY_CAPTURE_SCOPE_DIR"; capture_join "$scope" || fail
   else scope="$(mktemp -d "$dir/scope.XXXXXX")" || fail; fi
   set +m
-  bash "$CAPTURE_OWNER" run "$scope" -- "$@" >"$fifo" & pid=$!
+  (umask "$RETENTION_PAYLOAD_UMASK" && exec bash "$CAPTURE_OWNER" run "$scope" -- "$@") >"$fifo" & pid=$!
   owner="$(birth "$pid")" || owner=''
   stop_owned() {
     if [[ "$joined" == true ]]; then capture_request "$scope" || :
