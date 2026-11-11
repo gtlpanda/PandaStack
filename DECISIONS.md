@@ -764,3 +764,14 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   evidence. Initial selected acceptance is 4/10; six cases fail with an empty
   fixture runDir. Do not modify frozen fixtures or bypass process restrictions.
   External host retains full gates, feature flags, staging, commits and review.
+
+- D116 (SA-RV01): Follow the explicit host selection despite the selected
+  contract's preserved preparation-status heading. Extract only pure historical
+  review accounting, validate the entire historical document before crediting
+  any passing ID, and retain current truthy passing semantics and the original
+  range anchor. Add workflow-harness tests before implementation; run the frozen
+  selected acceptance and focused pure tests only. Initial acceptance fails in
+  all 21 cases at ordinary fixture Git setup with spawnSync git EPERM; do not
+  change fixtures or bypass that execution restriction. Keep documentation here
+  and in PROGRESS-security-audit.md. Host owns full gates, flags and commits;
+  no target changes, providers, fallback or prohibited reproductions.

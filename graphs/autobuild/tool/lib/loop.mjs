@@ -36,6 +36,7 @@ import { runCodex, readCodexResult } from "./codex.mjs";
 import { observeContextLaunch } from './context-receipt.mjs';
 import { finishCodexBuilder, finishCodexReview } from "./codex-gate.mjs";
 import { runFeatureTests } from "./tests.mjs";
+import { countUnreviewed } from "./review-baseline.mjs";
 
 const HOME = path.resolve(import.meta.dirname, "..");
 const CLI_FILE = path.join(HOME, "lib", "cli.mjs");
@@ -86,14 +87,7 @@ function firstCommitOf(config, file) {
 /** How many features pass now but did not at `sha`: the work no review has seen yet. */
 function passedSince(config, sha) {
   const then = git(config, ["show", `${sha}:${config.featuresFile}`]);
-  if (!then.ok) return 0;
-  let before;
-  try {
-    before = new Set(JSON.parse(then.output).features.filter((feature) => feature.passes).map((feature) => feature.id));
-  } catch {
-    return 0;
-  }
-  return readFeatures(config).features.filter((feature) => feature.passes && !before.has(feature.id)).length;
+  return countUnreviewed(readFeatures(config).features, then.ok ? then.output : null);
 }
 
 function readPid(file) {

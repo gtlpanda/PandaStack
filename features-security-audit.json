@@ -260,7 +260,7 @@
       ],
       "test": "acceptance/security-audit/review-baseline-correction.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     }
   ]
 }

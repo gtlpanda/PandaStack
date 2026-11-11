@@ -1578,3 +1578,65 @@ both exit 0, `check-secrets: clean`. `git diff --check`,
 new test file exit 0. Final changed inventory: audit-ledger.mjs, the new lifecycle
 feedback test, DECISIONS.md and this progress entry. No frozen file changed;
 the index remains empty of staged changes.
+
+## SA-RV01 — Require review when historical selected backlog is unavailable
+
+Implemented conservative review accounting in the existing autobuild loop through
+the narrow pure helper `graphs/autobuild/tool/lib/review-baseline.mjs`. Missing
+historical output, invalid JSON, wrong document/row structure, duplicate or empty
+IDs and nonboolean historical passes now leave every current passing row
+outstanding. Valid history preserves the passing-ID set difference, extra fields,
+empty lists and exact IDs. Current truthy passing semantics remain unchanged.
+The selected review SHA, first-addition fallback, startup/final review gates,
+acknowledgment, two-attempt failure handling and hunt behavior are unchanged.
+
+Added ten implementation checks in
+`graphs/autobuild/tests/review-baseline.test.mjs`, discovered by the unchanged
+workflow harness. They cover whole-document invalidation in both row orders,
+invalid removed rows, duplicate passing/nonpassing IDs, compatibility and current
+input behavior. Initial test-first run: exit 1, 0 passed / 10 failed because the
+helper did not exist. Final focused verification:
+
+```sh
+node --input-type=module -e 'await import("./graphs/autobuild/tests/review-baseline.test.mjs"); const {summary}=await import("./scripts/workflow-harness.mjs"); const {pass,fail}=summary(); console.log(`SA-RV01 FOCUSED: ${pass} passed, ${fail} failed`); process.exitCode=fail?1:0'
+# exit 0; SA-RV01 FOCUSED: 10 passed, 0 failed
+node acceptance/security-audit/review-baseline-correction.test.mjs
+# exit 1; tests 21, pass 0, fail 21
+# Error: spawnSync git EPERM
+# at project (graphs/autobuild/tool/test-fixtures/project.mjs:22:3)
+# spawnargs: [ 'init', '-q', '-b', 'autobuild' ]
+```
+
+The unchanged selected acceptance has the same setup failure before and after
+implementation. Every case fails during ordinary temporary Git fixture creation,
+before loop execution; none supplies integration evidence. Full outputs are
+`/tmp/sa-rv01-acceptance-before.log` and `/tmp/sa-rv01-acceptance-after.log`.
+No fixture repair, alternative process transport or permission bypass attempted.
+Selected acceptance is NOT claimed passing. Host execution must establish actual
+startup/final review ordering, old-SHA retention, acknowledgment, restart, exit13
+and fake-hunt integration before acceptance.
+
+Local static sanity review: data flow PASS (Git result to whole-history validator
+to current count, reused at startup and final retry); edge/error handling PASS
+(unknown history grants no credit, malformed current data still surfaces);
+security PASS (data parsing only, no new execution or authority); consistency
+PASS (historical booleans and exact IDs, existing current truthiness); scoped
+implementation completeness PASS with integration evidence unavailable above.
+The required Explore review request failed with `Unknown model gpt-6.1-sol`.
+No fallback model/provider was launched; no independent-review claim is made.
+
+This is pure accounting evidence and static wiring review only. No target
+application changes/execution, live providers, fallback providers, blocked
+capture/orphan/overflow/filesystem-race or F2 shared-repository Git ownership/trust
+reproduction. Those blocked statuses and evidence limitations remain unchanged.
+No frozen acceptance, baseline, vendor, validator, schema, gate or pinned-host
+file changed. Full gates, pass flags, staging, commits and final review remain
+with the external host.
+
+Final hygiene: unchanged `bash scripts/check-secrets.sh` (tracked files) and
+`bash scripts/check-secrets.sh graphs/autobuild/tool/lib/review-baseline.mjs graphs/autobuild/tests/review-baseline.test.mjs`
+(both new untracked source/test files) exit 0, `check-secrets: clean`.
+`node --check` for loop.mjs, review-baseline.mjs and review-baseline.test.mjs,
+`git diff --check` and `git diff --cached --exit-code` all exit 0.
+Changed inventory: loop.mjs, the new helper and test file, DECISIONS.md and this
+progress entry. No staged changes; selected feature flag remains host-owned.
