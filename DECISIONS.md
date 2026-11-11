@@ -665,3 +665,39 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   not prove Git provenance, context sanitization, provider confinement, concurrent
   replacement protection or any previously blocked scenario. All such limits
   and the external host's final review/full gates remain in force.
+- D108 (SA-05a): Treat the host-selected partition contract and its exact
+  executable-projection amendment as authoritative despite retained proposal
+  wording. Implement only pure planning/reconciliation and optional graph
+  context. Preserve legacy clipping, schemas, validators and scheduling. Reuse
+  finite canonical JSON validation; measure actual workflow serialization through
+  the trusted host callback. Prepare harness tests before implementation, including
+  linked prior ownership, tampered bindings and malformed context refusal. Record
+  evidence here and in PROGRESS-security-audit.md; leave gates, flags, staging,
+  commits and final review to the external host. No target/provider execution or
+  blocked reproduction; no unrelated roadmap or documentation changes.
+- D109 (SA-05a evidence): Selected acceptance is 5/0; final focused harness is
+  37/0 (14 new implementation checks, 17 legacy graph checks, six profile checks).
+  The exact 122-unit fixture measures 712332 bytes unpartitioned; greedy parts
+  are 77 units/495051 bytes and 45 units/322443 bytes, global 87671 bytes.
+  Red/green checks caught resolution of only one of several prior records with
+  the same fingerprint, and incomplete global context reaching dispatch; both
+  now refuse premature completion/dispatch. The wider focused regression run
+  remains 50/28: 25 missing run-metadata.json setup failures and three empty CLI
+  output failures. An ordinary Node --version subprocess probe reports EPERM
+  with status 0; do not bypass restrictions or change frozen fixtures. Removed
+  only the inspected incidental root stage-state.json created during that run.
+  Required Explore request returned Unknown model gpt-6.1-sol; no fallback.
+  Local review is not independent host review. Full-evidence adapter, durable
+  manifests/receipts, reader wiring, reserve policy, real provider evidence and
+  full gates remain later host-owned work; all blocked evidence limits persist.
+
+- D110 (SA-05a size correction): Reduce explanatory comments in the owning
+  workflow template, preserving every non-comment line of the incoming SA-05a
+  implementation, all prompts, validation and actual serializer measurement.
+  Keep the shared verbatim block intact. No stage/input elision, compression,
+  alternate template, limit change or frozen test change. Add a production
+  reconInput/literal-serializer harness regression: red 65952 bytes; green
+  60702 bytes against the unchanged strict 61000 bound. Selected acceptance
+  passes 5/0 and owning checks pass 38/0. Existing audit-stage/security-audit-flow
+  checks remain 12/49 in this sandbox; no waiver or full-gate pass is claimed.
+  Preserve complete output in /tmp/sa05a-final-baseline.log for host review.

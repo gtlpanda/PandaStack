@@ -873,3 +873,202 @@ and evidence limits remain. No target application changes/execution, providers,
 blocked capture/race reproduction, pinned-host changes, full gates, flags,
 staging or commits were performed. Prior acceptance, baselines, vendors,
 validators and schemas remain unchanged. The host owns full gates and promotion.
+## SA-05a — Partition full critic evidence and require global semantic reconciliation
+
+Implemented `graphs/security-audit/skills/security-audit/critic-partitions.mjs`
+with synchronous pure batch planning, reconciliation planning and acceptance.
+Finite canonical JSON rejects getters, proxies, hooks, exotic objects and cycles
+before measurement. Exact identity/owner envelopes and canonical SHA256 digests
+bind full records, shared data, executable partitions and global proposals.
+Greedy consecutive unit bundles retain every linked candidate/prior value and
+measure the actual graph args through the trusted serializer, with the unchanged
+500000-byte cap. The data envelope has a separate finite 32 MiB bound; it never
+clips evidence. Manifest reads rebuild bindings and full bundle projections.
+
+All required parts must validate before a global plan exists. Completion needs
+the matching global result; canonical union retains missing-unit proposals,
+reassignment follows manifest unit order, and prior fingerprints resolve only
+when global and every partition owning any matching prior record agree. A stop
+refusal or pending missing/reassignment work survives reconciliation. This is a
+pure barrier, not permission to advance the owning audit scheduler.
+
+The owning workflow now accepts optional validated partition/reconciliation
+context. Partition prompts identify only their full-detail subset. Global
+prompts require cross-subsystem gaps, conflicting conclusions and shared
+assumptions to be reviewed; full proposals and summaries stay in an untrusted
+context fence. They explain that full evidence needs a separately supplied
+trusted reader, references are not inspection, and summaries are not complete
+evidence. Malformed/incomplete context refuses before dispatch. Absent context
+retains legacy prompts/behavior. Source-only frame, upstream method/profile,
+CRITIC_SCHEMA, criticProblem and all existing validators remain unchanged.
+
+Verification (2026-11-10, Node v24.21.0):
+
+```sh
+node acceptance/security-audit/sa-05a-critic-partitions.test.mjs
+# exit 0: 5 passed, 0 failed
+node --input-type=module -e 'for (const file of ["critic-partitions", "security-audit-waves", "profile-rules"]) await import(`./graphs/security-audit/tests/${file}.test.mjs`); const {summary}=await import("./scripts/workflow-harness.mjs"); console.log(summary()); process.exitCode=summary().fail ? 1 : 0'
+# exit 0: { pass: 37, fail: 0 }
+node --check graphs/security-audit/skills/security-audit/critic-partitions.mjs
+node --check graphs/security-audit/tests/critic-partitions.test.mjs
+git diff --check
+git diff --cached --exit-code
+# each exit 0
+```
+
+Independent literal serializer measurement of the unchanged acceptance fixture's
+122 units against the final candidate template: unpartitioned script 712332
+bytes; part-1 contains 77 full units at 495051 bytes; part-2 contains 45 full
+units at 322443 bytes; global reconciliation with the fixture summaries is
+87671 bytes. No generated source was executed. Actual trusted graph calls used
+only scripted harness responses, never providers or target execution.
+
+Tests were prepared before implementation. Initial selected acceptance returned
+exit 1 (0/5, missing planner module); the new focused test import also returned
+exit 1 with ERR_MODULE_NOT_FOUND. Fourteen final new checks cover multi-owner
+prior evidence, duplicate prior fingerprints across disjoint owners, canonical
+proposal union, stop refusal, deterministic result ordering, unsafe JSON and
+exact envelopes, malformed/stale results, manifest/plan tampering, missing-part
+barriers, detached output, inclusive cap/refusal, oversized global proposals,
+UTF8/quoting measurement, graph context validation and fenced prompts.
+Additional red/green runs caught two defects: duplicate-fingerprint resolution
+returned ['same-prior'] instead of []; incomplete global context produced
+`unexpected agent call: audit-researcher (c1)`. Both now pass their new checks.
+
+The wider focused regression run did not pass and is not waived:
+
+```sh
+node --input-type=module -e 'for (const file of ["security-audit-waves", "audit-ledger-critic", "profile-rules", "blocks"]) await import(`./graphs/security-audit/tests/${file}.test.mjs`); const {summary}=await import("./scripts/workflow-harness.mjs"); console.log(summary()); process.exitCode=summary().fail ? 1 : 0'
+# exit 1: { pass: 50, fail: 28 }
+# 25 ledger fixture failures: has no run-metadata.json: it is not a run directory
+# Three blocks CLI failures: actual output '' instead of expected block,
+# guidance or prompt-size text.
+node --input-type=module -e 'import {spawnSync} from "node:child_process"; const r=spawnSync(process.execPath,["--version"],{encoding:"utf8"}); console.log(JSON.stringify({status:r.status,error:r.error?.code,stdout:r.stdout,stderr:r.stderr}))'
+# probe exit 0: {"status":0,"error":"EPERM","stdout":"v24.21.0\n","stderr":""}
+```
+
+The probe records the subprocess limitation, without claiming every fixture
+failure's root cause is established. No bypass or frozen-fixture modification
+was attempted. The incidental root `stage-state.json`, absent at session start,
+was inspected and removed. The host must rerun these existing checks.
+
+Local static sanity review: data flow PASS; edge/error handling PASS; security
+PASS; consistency PASS; selected pure-planner/context completeness PASS. The
+required Explore request returned `Unknown model gpt-6.1-sol`; no fallback was
+attempted. This is not independent review evidence; host final review remains.
+
+Limits: pure hashes establish consistency, not provenance or authentication.
+The trusted host owns serializer accuracy; the acceptance helper recomputes
+exact input/digest consistency but has no serializer callback to remeasure stored
+byte counts. Upstream unit/candidate semantic validation and complete owner
+association remain host prerequisites. This slice does not implement the
+production full-evidence adapter, durable manifest publication/receipts, native
+dispatch/resume integration, source reader wiring or verification reserves.
+Mocks prove deterministic barriers and prompt wiring, not model inspection,
+cross-subsystem review quality, source-only runtime confinement or same-user
+isolation. No target application changes/execution, live/fallback providers,
+blocked capture/race reproduction, pinned-host edits, full gates, flags, staging
+or commits occurred. Every frozen acceptance, baseline, vendor, validator and
+schema remains unchanged; external host owns final gates and promotion.
+
+Required unchanged secret scanner results:
+
+```sh
+bash scripts/check-secrets.sh
+bash scripts/check-secrets.sh graphs/security-audit/skills/security-audit/critic-partitions.mjs graphs/security-audit/tests/critic-partitions.test.mjs
+# each exit 0: check-secrets: clean
+# First scans tracked files; second explicitly scans both new untracked files.
+```
+
+Final changed-file inventory is exactly DECISIONS.md,
+PROGRESS-security-audit.md, the owning security-audit-flow.js, new
+critic-partitions.mjs and new critic-partitions.test.mjs. The Git index is
+unchanged. No frozen file was edited.
+
+
+## SA-05a — Partition full critic evidence and require global semantic reconciliation
+
+Same-feature supervisor size correction, 2026-11-10. The incoming optional
+critic implementation inflated the whole workflow template to 61682 bytes.
+Reduced explanatory comments in that owning template to 56432 bytes; retained
+all executable lines, prompt text, validation and schema bytes. A direct
+before/after comparison excluding only full-line comments passed. The shared
+verbatim helper block remains intact. No serializer or input elision, compressed
+source, alternate measurement, evidence clipping or threshold change was used.
+
+Added one meaningful workflow-harness case to critic-partitions.test.mjs. It
+uses production reconInput with actual upstream blocks and EXECUTION_BLOCKERS,
+measures the entire real template with the unchanged double-JSON serializer,
+and runs its four researcher callbacks only as scripted harness responses.
+The new case first failed at 65952 bytes (14 passed / 1 failed, exit 1), then
+passed at 60702 bytes, strictly below the existing 61000-byte bound. The frozen
+host fixture reported 65948 before correction; the four-byte difference is the
+new fixture's literal path, not a claim that the host regression ran locally.
+
+Final selected/focused commands and results:
+
+```sh
+node acceptance/security-audit/sa-05a-critic-partitions.test.mjs
+# exit 0: 5 passed, 0 failed
+node --input-type=module -e 'for (const file of ["critic-partitions", "security-audit-waves", "profile-rules"]) await import(`./graphs/security-audit/tests/${file}.test.mjs`); const {summary}=await import("./scripts/workflow-harness.mjs"); console.log(summary()); process.exitCode=summary().fail ? 1 : 0'
+# exit 0: { pass: 38, fail: 0 } (15 owning, 17 legacy waves, six profile)
+node --input-type=module -e 'for (const file of ["audit-stage", "security-audit-flow"]) await import(`./graphs/security-audit/tests/${file}.test.mjs`); const {summary}=await import("./scripts/workflow-harness.mjs"); console.log(summary()); process.exitCode=summary().fail ? 1 : 0' > /tmp/sa05a-final-baseline.log 2>&1
+# exit 1: { pass: 12, fail: 49 }
+# audit-stage: 7/28; security-audit-flow: 5/21.
+# Examples: ENOENT opening 'run-metadata.json' or 'stages/01-recon-facts/run.js';
+# expected 'NEXT: recon run=workflow', actual ''; expected CLI output, actual ''.
+# Both shared-helper drift checks pass in the final run.
+```
+
+An intermediate comment trim broke two shared-helper drift checks; restoring
+the entire shared block corrected both. All remaining final baseline failures
+are recorded in the complete log above, not waived or silently skipped. A
+separate ordinary subprocess diagnostic returned exit 0 with
+`{"status":0,"error":"EPERM","stdout":"v24.21.0\n","stderr":""}`.
+This establishes the subprocess limitation, not the cause of every failed
+fixture assertion. The required existing audit-stage regression was attempted
+and remains unverified locally; the host must rerun its unchanged full gates.
+Inspected and removed only incidental root recon-facts.json and stage-state.json
+created by those failed fixtures, both absent at session start.
+
+Independent literal serialization measurement of the exact 122-unit acceptance
+fixture against the final template: unpartitioned 707082 bytes; part-1 has 78
+units / 495200 bytes, part-2 has 44 units / 311794 bytes; global reconciliation
+82421 bytes. No generated source was executed for measurement. All input values,
+linked evidence and global proposals remain unmodified; the same strict 500000
+cap and selected acceptance assertions pass.
+
+Local static sanity review: data flow PASS; edge/error handling PASS; security
+PASS; consistency PASS; selected implementation completeness PASS. This is not
+independent review; the previously reported required-model unavailability is
+not resolved and no fallback was launched. Full-evidence production adapter,
+durable manifest/receipt integration, reader wiring and reserve integration
+remain later required work. Fake callbacks prove prompt/barrier wiring, not
+provider capability, model inspection, source-only runtime confinement or
+hostile same-user isolation. No target changes/execution, providers, blocked
+capture/race reproductions, pinned-host edits or broader roadmap work occurred.
+
+Frozen acceptance/baseline files, vendors, validators, schemas and gates remain
+unchanged. The external host retains full gates, feature flags, staging,
+commits and final review. The correction changes only the owning template's
+comments, the new owning test file and these decision/progress entries; the
+incoming critic-partitions.mjs implementation is unchanged.
+
+Final hygiene commands:
+
+```sh
+node --check graphs/security-audit/skills/security-audit/critic-partitions.mjs
+node --check graphs/security-audit/tests/critic-partitions.test.mjs
+git diff --check
+git diff --cached --exit-code
+# each exit 0; Git index unchanged
+bash scripts/check-secrets.sh
+bash scripts/check-secrets.sh graphs/security-audit/skills/security-audit/critic-partitions.mjs graphs/security-audit/tests/critic-partitions.test.mjs
+# each exit 0: check-secrets: clean
+# Tracked working files and both new untracked source/test files explicitly scanned.
+```
+
+Final candidate inventory: DECISIONS.md, PROGRESS-security-audit.md,
+graphs/security-audit/workflows/security-audit-flow.js, and the two incoming
+untracked critic-partitions.mjs / critic-partitions.test.mjs files. No other
+tracked or untracked repository files changed. No flags, staging or commits.
