@@ -3350,7 +3350,10 @@ first failed here because it counted this machine's real Codex; it now uses vers
   tests/agents-active-priority.test.mjs (2 cases) fails on the old text.
 - /bughunt F2 (MEDIUM, reproduced) on the next head: SPEC.md, which the prompt
   reads first, carried the same stale section. It now matches AGENTS.md, and the
-  test checks both files (3 cases; the SPEC.md case fails on the old text).
+  test checks both files (3 cases; the SPEC.md case fails on the old text). The
+  F2 reproduction still failed after that, because the new section named the
+  security-audit list as history; it now names only features.json, and the test
+  rejects any other feature list in the section.
 - An earlier hunt on the same head ended manual_review (logic lens skipped one
   area); a fresh hunt covered it and found F1.
 

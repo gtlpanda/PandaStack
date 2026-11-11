@@ -25,6 +25,8 @@ for (const doc of ['AGENTS.md', 'SPEC.md']) {
     const section = activePriority(readFileSync(join(ROOT, doc), 'utf8'))
     assert.ok(section, `${doc} must have a "# Active priority:" section`)
     assert.equal(selectedFeatureList(section), config.featuresFile)
+    // Naming any other feature list here invites a builder to pick it up.
+    assert.deepEqual([...new Set(section.match(/features[\w-]*\.json/g))], [config.featuresFile])
   })
 }
 
