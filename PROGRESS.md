@@ -2569,3 +2569,9 @@ blocked reproduction, concurrent actor, capture lifecycle, live provider, full
 gate or later-feature work ran. No frozen inputs, pass flags, staging, commits,
 branches, Git control or pinned host were changed. External host retains full
 gates, independent review, commits and final completion.
+
+## P2-15, P2-16 — flags set for behavior shipped in b7a6c8c (host, 2026-11-11)
+- `git worktree add --detach <tmp> b7a6c8c^`; `node --test acceptance/phase2/p2-15.test.mjs`: pass 0, fail 2.
+  `node --test acceptance/phase2/p2-16.test.mjs`: pass 1, fail 2.
+- On main 0bc2604: `autobuild mark-passed P2-15` (2/2) and `autobuild mark-passed P2-16` (3/3); features.json 16/16.
+- No implementation change in this commit. Decision D121.
