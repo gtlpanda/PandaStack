@@ -207,18 +207,14 @@ See `templates/autobuild.json`. Agent defaults come from the root `agent-config.
 | `install`, `preflight` | Run before the loop. Each preflight entry is `{name, command, hint}`. |
 | `runners` | Maps a feature's `testKind` to `{group, command}`. Test files are appended, and features in the same group run in one invocation. |
 | `gate` | `[{name, command}]`: typecheck, lint, regression, coverage… |
-<<<<<<< HEAD
 | `ciParity` | CI's own test steps, run in the full gate the way CI runs them: `{workflow, steps: [{job, step}], skip}` for GitHub Actions, or `{ciFile, env, steps: [{name, run, cwd, env}]}` for any other CI; optional `lockFile`, `excludeFlags`, `suiteFlags`. Required when the repo has a recognised CI configuration. See [CI parity](#ci-parity). |
 | `ciParityOptOut` | A reason, instead of `ciParity`, for a repo whose CI cannot be run locally or already runs this gate. |
-=======
 | `evidence` | `{dir, paths, maxFileBytes}`: where run evidence goes (default `<logsDir>/evidence`, gitignored) and what the commit guard refuses. See [Run evidence](#run-evidence). |
->>>>>>> 68b7a33
 | `browser` | `{runner, regressionCommand}`: the browser runner, plus the command that also runs the existing browser suite in the same invocation. |
 | `frozen` | Paths sessions may not change. `autobuild.json`, the feature list and the state dir are always frozen. |
 | `writable` | Exceptions, such as `PROGRESS.md` and `DECISIONS.md`. |
 | `allowedTools`, `disallowedTools`, `reviewTools` | Permission lists for builder and review sessions. |
 
-<<<<<<< HEAD
 ## CI parity
 
 A gate that sets its own environment or leaves slow tests out can pass while CI fails. So the full
@@ -279,7 +275,6 @@ For both:
 - **Done means the gate passed.** In full delivery mode the loop re-runs the full gate, parity
   included, before it reports done (stopping at the first failure); a failure exits 16, and a stop
   signal during it exits 130.
-=======
 ## Run evidence
 
 Verification logs, provenance and QA output belong outside git: committed, they bloat the repo and the
@@ -310,7 +305,6 @@ diffs that reviews and `/bughunt` read.
   size limit were checked.
 - **Nothing is assumed about layout.** A repo declares its evidence directories once, in
   `.gitattributes`; `/bughunt` intake reads the same declaration to leave them out of a hunt.
->>>>>>> 68b7a33
 
 ## features.json
 
