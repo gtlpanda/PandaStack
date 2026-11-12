@@ -3365,3 +3365,25 @@ first failed here because it counted this machine's real Codex; it now uses vers
 
 Remaining for Phase 2: the dogfood scenario and docs/dogfood/phase-02.md.
 
+## 50. Bughunt intake survives a release-sized range and skips only declared files (2026-11-12)
+
+cherry-crm's release range (origin/main..release/2026-11-11a) failed intake with `git diff failed`.
+Measured: the `-U0` patch is 747,511,390 bytes; the shared `run()` helper buffers 256 MiB, so spawnSync
+failed with ENOBUFS at 268,480,512 bytes, and `must()` printed the half-read diff instead of the error.
+- The patch is written with `git diff --output` to a temp file and parsed in 1 MiB chunks; only code
+  files keep their changed lines (for lens signals). `must()` now reports the spawn error first.
+- Skips are declaration-only and repo-agnostic: paths marked `bughunt-skip` or `linguist-generated` in
+  the MERGE-BASE's .gitattributes (`git check-attr --source`, so a PR cannot add its own), and the
+  operator's `--skip <glob>` flags. Only non-code kinds (data, docs, logs, images, patches, archives)
+  can be skipped; code is always hunted. No path or layout is built in.
+- Every skipped path is in `<state>/skipped.json` with its rule; intake prints a summary and `skipped=N`;
+  the ledger target and the report carry the counts and globs. The hunted head is unchanged, so the review
+  gate still covers the real PR head.
+- cherry-crm, real range: no flags `INTAKE: OK files=4537 skipped=0` (7.9 s, was FAIL); with four
+  `--skip docs/autobuild/*/<dir>/**` globs `files=770 skipped=3767`. The state dirs and worktrees created
+  were removed; cherry-crm's bughunt dirs and worktree list match their earlier state.
+- Tests: intake 26 cases (5 new), including a 290 MiB patch fixture that reproduces the original
+  `INTAKE: FAIL git diff failed` on origin/main's intake and passes now.
+- The bughunt SKILL.md change moved its pinned hash in spec/offering-capabilities.json and the frozen
+  oc-01 fixture (same brittle pin as #48).
+

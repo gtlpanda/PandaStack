@@ -3,12 +3,12 @@
 // the analysis worktree, and the CLI.
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync, chmodSync, rmSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync, chmodSync, rmSync, openSync, writeSync, closeSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
-import { slug, nameKey, parseArgs, changedFiles, routeLenses } from '../skills/bughunt/intake.mjs'
+import { slug, nameKey, parseArgs, changedFiles, routeLenses, skipReason, globRegex } from '../skills/bughunt/intake.mjs'
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), '..', 'skills', 'bughunt', 'intake.mjs')
 const sh = (cwd, ...args) => {
@@ -56,8 +56,10 @@ await test('nameKey: names that slug alike get different keys, and every key is 
   assert.notEqual(nameKey('', 'pr-7'), 'pr-7', 'a branch named pr-7 never shares PR #7\'s ledger')
 })
 await test('parseArgs takes one target flag at most and rejects bad values', () => {
-  assert.deepEqual(parseArgs(['/r', '--pr', '12']), { repo: '/r', pr: '12' })
-  assert.deepEqual(parseArgs(['/r', '--branch', 'b', '--base', 'dev']), { repo: '/r', branch: 'b', base: 'dev' })
+  assert.deepEqual(parseArgs(['/r', '--pr', '12']), { repo: '/r', pr: '12', skip: [] })
+  assert.deepEqual(parseArgs(['/r', '--branch', 'b', '--base', 'dev']), { repo: '/r', branch: 'b', base: 'dev', skip: [] })
+  assert.deepEqual(parseArgs(['/r', '--skip', 'a/**', '--skip', '*.log']).skip, ['a/**', '*.log'])
+  for (const bad of [['/r', '--skip', ''], ['/r', '--skip', ' '], ['/r', '--skip', 'a\nb'], ['/r', '--skip']]) assert.throws(() => parseArgs(bad), /usage/, JSON.stringify(bad))
   for (const bad of [[], ['--pr', '1'], ['/r', '--pr', '0'], ['/r', '--pr', 'x'], ['/r', '--pr', '1', '--branch', 'b'], ['/r', '--nope', 'x'], ['/r', '--base']]) {
     assert.throws(() => parseArgs(bad), /usage/, JSON.stringify(bad))
   }
@@ -66,7 +68,7 @@ await test('parseArgs takes one target flag at most and rejects bad values', () 
 console.log('== bughunt intake: a real diff')
 const repo = fixture()
 const mb = sh(repo, 'merge-base', 'main', 'HEAD')
-const files = changedFiles(repo, mb, 'HEAD')
+const { files } = changedFiles(repo, mb, 'HEAD')
 const byPath = Object.fromEntries(files.map(f => [f.path, f]))
 await test('every changed file is listed with its status, counts, and test or code kind', () => {
   assert.deepEqual(Object.keys(byPath).sort(), ['db/schema.sql', 'src/cart.js', 'src/old.js', 'tests/cart.test.js'])
@@ -108,7 +110,7 @@ await test('the current branch against main: the intake file, the key, the SHAs,
   const r = cli([repo])
   assert.equal(r.status, 0, r.stdout + r.stderr)
   const lines = r.stdout.trim().split('\n')
-  assert.match(lines.at(-1), /^INTAKE: OK key=feature-cart-fix-[0-9a-f]{6} files=4 lenses=logic,regression,(concurrency|security|contract)/)
+  assert.match(lines.at(-1), /^INTAKE: OK key=feature-cart-fix-[0-9a-f]{6} files=4 skipped=0 lenses=logic,regression,(concurrency|security|contract)/)
   const doc = JSON.parse(readFileSync(lines[0], 'utf8'))
   assert.equal(doc.key, nameKey('', 'feature/Cart-Fix'))
   assert.equal(doc.target.head, sh(repo, 'rev-parse', 'HEAD'))
@@ -184,7 +186,7 @@ await test('a deleted binary, a filename with a space, and one with a tab and a 
   put(r, 'tab\tq"uote.js', 'const b = 2\n')
   sh(r, 'add', '-A')
   sh(r, 'commit', '-qm', 'paths')
-  const fs = changedFiles(r, sh(r, 'merge-base', 'main', 'HEAD'), 'HEAD')
+  const { files: fs } = changedFiles(r, sh(r, 'merge-base', 'main', 'HEAD'), 'HEAD')
   assert.deepEqual(fs.map(f => [f.path, f.status]).sort(), [['del.bin', 'D'], ['my notes.md', 'A'], ['sp ace.js', 'A'], ['tab\tq"uote.js', 'A']])
   assert.equal(fs.find(f => f.path === 'my notes.md').isCode, false, 'docs with a space in the name are still docs')
   assert.deepEqual(fs.find(f => f.path === 'sp ace.js').addedLines, [[1, 'const a = 1']])
@@ -268,3 +270,118 @@ await test('intake never runs a hook or fsmonitor script the reviewed branch com
   assert.equal(res.status, 0, res.stdout + res.stderr)
   assert.ok(!existsSync(trap), existsSync(trap) ? readFileSync(trap, 'utf8') : '')
 })
+
+console.log('== bughunt intake: huge ranges and declared skips')
+// main declares its own run-evidence directory (bughunt-skip) and generated
+// output (linguist-generated). The branch adds evidence, code inside the
+// evidence directory, generated data and code, a log outside any declared
+// path, and a .gitattributes line declaring its own src/ skippable.
+function evidenceRepo() {
+  const r = mkdtempSync(join(tmpdir(), 'intake-evidence-'))
+  sh(r, 'init', '-q', '-b', 'main')
+  put(r, 'src/app.js', 'export const a = 1\n')
+  put(r, '.gitattributes', 'runs/*/evidence/** bughunt-skip\ngen/** linguist-generated\n')
+  sh(r, 'add', '-A')
+  sh(r, 'commit', '-qm', 'base')
+  sh(r, 'checkout', '-q', '-b', 'release')
+  put(r, 'src/app.js', 'export const a = 2\n')
+  put(r, 'runs/r1/SPEC.md', '# spec\n')
+  put(r, 'runs/r1/evidence/gate.json', '{"ok":true}\n')
+  put(r, 'runs/r1/evidence/shot.png', 'PNG\n')
+  put(r, 'runs/r1/evidence/check.mjs', 'export const hidden = true\n')
+  put(r, 'gen/data.json', '{"n":1}\n')
+  put(r, 'gen/build.js', 'export const generated = 1\n')
+  put(r, 'out/trace.log', 'trace\n')
+  put(r, '.gitattributes', 'runs/*/evidence/** bughunt-skip\ngen/** linguist-generated\nsrc/** bughunt-skip\n')
+  put(r, 'src/evil.json', '{"admin":true}\n')
+  sh(r, 'add', '-A')
+  sh(r, 'commit', '-qm', 'release')
+  return r
+}
+
+await test('globRegex: * and ? stay in a segment, ** crosses segments, the whole path must match', () => {
+  const m = (g, p) => globRegex(g).test(p)
+  assert.ok(m('runs/*/evidence/**', 'runs/r1/evidence/a/b.json'))
+  assert.ok(!m('runs/*/evidence/**', 'runs/r1/x/evidence/a.json'))
+  assert.ok(m('**/*.log', 'a/b/c.log') && m('**/*.log', 'c.log'))
+  assert.ok(!m('*.log', 'a/c.log'))
+  assert.ok(m('out/?.txt', 'out/a.txt') && !m('out/?.txt', 'out/ab.txt'))
+  assert.ok(!m('a.b', 'aXb'), 'dots are literal')
+  assert.ok(!m('src/**', 'xsrc/a.json'), 'anchored at the start')
+})
+
+await test('skipReason: only declared paths, and only non-code kinds', () => {
+  const declared = new Map([['gen/data.json', 'linguist-generated'], ['gen/build.js', 'linguist-generated'], ['runs/r/evidence/a.json', 'bughunt-skip']])
+  assert.equal(skipReason('runs/r/evidence/a.json', declared), 'bughunt-skip')
+  assert.equal(skipReason('gen/data.json', declared), 'linguist-generated')
+  assert.equal(skipReason('gen/build.js', declared), null, 'declared code is still hunted')
+  assert.equal(skipReason('runs/r/evidence/b.json', declared), null, 'nothing is skipped by convention or location alone')
+  assert.equal(skipReason('out/trace.log', declared, ['out/**']), '--skip out/**')
+  assert.equal(skipReason('out/run.sh', declared, ['out/**']), null, 'an operator glob cannot skip code either')
+  for (const p of ['a.json', 'a.jsonl', 'a.ndjson', 'a.txt', 'a.log', 'a.md', 'a.csv', 'a.tsv', 'a.PNG', 'a.jpeg', 'a.gif', 'a.webp', 'a.pdf', 'a.patch', 'a.diff', 'a.zip', 'a.gz', 'a.tgz', 'a.tar']) {
+    assert.equal(skipReason(p, new Map(), ['**']), '--skip **', p)
+  }
+  for (const p of ['a.js', 'a.mjs', 'a.ts', 'a.vue', 'a.py', 'a.sh', 'a.sql', 'a.html', 'a.svg', 'a.yml', 'a.toml', 'Makefile', 'Dockerfile']) {
+    assert.equal(skipReason(p, new Map(), ['**']), null, p)
+  }
+})
+
+await test("the merge-base's attributes decide; a PR's own .gitattributes and code stay hunted", () => {
+  const r = evidenceRepo()
+  const { files, skipped, attributes } = changedFiles(r, sh(r, 'merge-base', 'main', 'release'), 'release')
+  assert.equal(attributes, 'merge-base')
+  assert.deepEqual(skipped.map(f => [f.path, f.reason]).sort(), [
+    ['gen/data.json', 'linguist-generated'],
+    ['runs/r1/evidence/gate.json', 'bughunt-skip'],
+    ['runs/r1/evidence/shot.png', 'bughunt-skip'],
+  ])
+  const kept = files.map(f => f.path)
+  for (const p of ['src/app.js', 'src/evil.json', 'runs/r1/evidence/check.mjs', 'gen/build.js', '.gitattributes', 'runs/r1/SPEC.md', 'out/trace.log']) {
+    assert.ok(kept.includes(p), `${p} must be hunted`)
+  }
+  assert.equal(kept.length + skipped.length, 10, 'every changed file is either hunted or listed as skipped')
+  assert.deepEqual(files.find(f => f.path === 'runs/r1/evidence/check.mjs').addedLines, [[1, 'export const hidden = true']])
+  const withGlob = changedFiles(r, sh(r, 'merge-base', 'main', 'release'), 'release', { skip: ['out/**'] })
+  assert.deepEqual(withGlob.skipped.find(f => f.path === 'out/trace.log'), { path: 'out/trace.log', status: 'A', reason: '--skip out/**' })
+})
+
+await test('the CLI reports what it skipped and why, lists every path, and still targets the real head', () => {
+  const r = evidenceRepo()
+  const out = cli([r, '--range', 'main..release', '--skip', 'out/**'])
+  assert.equal(out.status, 0, out.stdout + out.stderr)
+  const lines = out.stdout.trim().split('\n')
+  assert.match(out.stdout, /skipped 4 non-code file\(s\) declared not worth hunting \(--skip out\/\*\* 1, bughunt-skip 2, linguist-generated 1\); every path is listed in .*skipped\.json/)
+  assert.match(lines.at(-1), /^INTAKE: OK key=\S+ files=6 skipped=4 lenses=/)
+  const doc = JSON.parse(readFileSync(lines[0], 'utf8'))
+  assert.equal(doc.target.head, sh(r, 'rev-parse', 'release'), 'the hunted head is the real head')
+  assert.deepEqual(doc.target.skipped.operatorGlobs, ['out/**'])
+  const list = JSON.parse(readFileSync(doc.target.skipped.list, 'utf8'))
+  assert.equal(list.head, doc.target.head)
+  assert.equal(list.files.length, 4)
+  assert.ok(!doc.files.some(f => list.files.some(s => s.path === f.path)), 'skipped files never reach the agents')
+})
+
+await test('a patch larger than any process buffer is parsed, and lines across read chunks stay whole', () => {
+  const r = mkdtempSync(join(tmpdir(), 'intake-huge-'))
+  sh(r, 'init', '-q', '-b', 'main')
+  put(r, 'README.txt', 'base\n')
+  sh(r, 'add', '-A')
+  sh(r, 'commit', '-qm', 'base')
+  sh(r, 'checkout', '-q', '-b', 'huge')
+  // 290 lines of 1 MiB: a ~290 MiB patch, past the 256 MiB spawn buffer that made
+  // intake fail with ENOBUFS. The odd length puts line ends mid-chunk.
+  const fd = openSync(join(r, 'data.txt'), 'w')
+  const line = 'x'.repeat((1 << 20) + 7) + '\n'
+  for (let i = 0; i < 290; i++) writeSync(fd, line)
+  closeSync(fd)
+  put(r, 'app.js', 'export const value = 1\n')
+  sh(r, 'add', '-A')
+  sh(r, 'commit', '-qm', 'huge')
+  const { files } = changedFiles(r, sh(r, 'merge-base', 'main', 'huge'), 'huge')
+  const data = files.find(f => f.path === 'data.txt')
+  assert.equal(data.added, 290)
+  assert.deepEqual(data.hunks, [[1, 290]])
+  assert.deepEqual(files.find(f => f.path === 'app.js').addedLines, [[1, 'export const value = 1']])
+  rmSync(r, { recursive: true, force: true })
+})
+

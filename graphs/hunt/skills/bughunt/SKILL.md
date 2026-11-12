@@ -66,13 +66,13 @@ opens only once a finished hunt covers its head, and it merges only once that
 hunt's disposition is `pass`. Run the hunt, fix what it finds, then open or
 merge.
 
-Usage: `/bughunt [<PR number> | <branch> | <base>..<head>] [--base <ref>] [--propose | --fix] [--approve F<n>,...] [--draft-pr]`.
+Usage: `/bughunt [<PR number> | <branch> | <base>..<head>] [--base <ref>] [--skip <glob>]... [--propose | --fix] [--approve F<n>,...] [--draft-pr]`.
 It reviews committed work only.
 
 ```bash
 REPO="$(git rev-parse --show-toplevel)"
 CONFIG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-node "$CONFIG/skills/bughunt/intake.mjs" "$REPO" <one of: --pr <n> | --branch <name> | --range <base>..<head>, or none for the current branch> [--base <ref>]
+node "$CONFIG/skills/bughunt/intake.mjs" "$REPO" <one of: --pr <n> | --branch <name> | --range <base>..<head>, or none for the current branch> [--base <ref>] [--skip <glob>]...
 ```
 
 - **Usage and errors.** A bare number is `--pr`, `a..b` is `--range`, and any
@@ -83,6 +83,14 @@ node "$CONFIG/skills/bughunt/intake.mjs" "$REPO" <one of: --pr <n> | --branch <n
     `<git common dir>/bughunt/<key>`, inside `.git` and never committed.
   - `D/tree` is a detached worktree at the head under review. The agents read
     only that, never your checked-out branch.
+- **Skipped files.** Intake skips only what is declared, and only non-code files (data, docs, logs,
+  images, patches, archives); code is always hunted.
+  - The merge-base's `.gitattributes` can mark paths `bughunt-skip` or `linguist-generated`. Attributes are read
+    at the merge-base, so a PR cannot declare its own files skippable.
+  - The human may pass `--skip <glob>` (repeatable; `*`, `?`, `**`) for generated output the base does not
+    declare yet. Pass one only when the human asks.
+  Relay the `skipped N ...` line: every skipped path is in `D/skipped.json`, and the report repeats the
+  count and the rules. The hunted head is still the PR's real head.
 - **Notes.** Relay every `note:` line it printed:
   - uncommitted changes, which are not reviewed;
   - a base it could not refresh from origin, which may be behind.
