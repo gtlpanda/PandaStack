@@ -5,13 +5,17 @@
 //   { "billing": true }     end like a spend limit
 //   { "overloaded": true }  end like repeated 529s
 //   { "build": "F-1" }      do the feature properly: file, mark-passed, progress entry, feat commit
+//   { "build": "F-1", "stopHook": true }  then run the injected Stop hook as Claude Code does: the
+//                           command and timeout from --settings; a hook past its timeout is killed
+//                           and the session ends anyway
+//   { "build": "F-1", "files": {path: text} }  also write those files before committing
 //   { "ok": true }          a successful no-op answer (the usage probe, or a review that commits nothing)
 //   { "review": true }      a review that appends a finding to PROGRESS.md and commits it as chore(review)
 //   { "hang": true }        write its pid to <script>.pid, then run until killed
 //   { "plant": "<path>" }   write an executable file at that path (relative to the project), commit nothing
 //   { "hunt": ... }         the bug hunt session, acted out by /build-app's fake (its format, its
 //                           <script>.hunt.calls record): fix commits, then a real findings ledger
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, chmodSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -60,10 +64,18 @@ if (step.hang) {
 if (step.build) {
   const id = step.build;
   writeFileSync(`${id}.done`, "built\n");
+  for (const [name, content] of Object.entries(step.files ?? {})) writeFileSync(name, content);
   execFileSync(process.execPath, [process.env.AUTOBUILD_CLI, "mark-passed", id], { stdio: "ignore" });
   appendFileSync("PROGRESS.md", `\n## ${id} — test feature (2026-10-11)\n- What: built\n`);
   execFileSync("git", ["add", "-A"]);
   execFileSync("git", ["commit", "-q", "-m", `feat(${id}): built`]);
+}
+if (step.stopHook) {
+  const argv = process.argv.slice(2);
+  const settings = JSON.parse(readFileSync(argv[argv.indexOf("--settings") + 1], "utf8"));
+  const hook = settings.hooks.Stop[0].hooks[0];
+  const ran = spawnSync("bash", ["-c", hook.command], { input: "{}", encoding: "utf8", timeout: hook.timeout * 1000, killSignal: "SIGKILL", env: { ...process.env, CLAUDE_PROJECT_DIR: process.cwd() } });
+  appendFileSync(`${scriptFile}.hook`, `${JSON.stringify({ timedOut: ran.error?.code === "ETIMEDOUT", status: ran.status, stdout: ran.stdout })}\n`);
 }
 if (step.review) {
   appendFileSync("PROGRESS.md", "\nREVIEW 2026-10-12: no drift found\n");

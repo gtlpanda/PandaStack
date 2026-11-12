@@ -15,7 +15,7 @@ import { prepareHunt, readHunt, landHunt, keepAttempt, bughuntPrompt, bughuntLin
 import { sessionSettings, sliceArgs, runClaude, sessionVerdict, stopSessions, NO_BG_CEILING } from "../../../build/skills/build-app/driver/session.mjs";
 import { defaultBase } from "../../../build/skills/build-app/driver/finish.mjs";
 import { statePath } from "./config.mjs";
-import { runGate, frozenChanges, gitControlChanges, gitControlDigest } from "./gate.mjs";
+import { runGate, frozenChanges, gitControlChanges, gitControlDigest, reuseLines } from "./gate.mjs";
 import { runNativeHunt, withNativeRepoLock } from "../../../hunt/skills/bughunt/native-runner.mjs";
 import { reviewStatus } from "../../../hunt/skills/bughunt/review-status.mjs";
 import { buildEnv, git, quote } from "./proc.mjs";
@@ -122,7 +122,8 @@ async function runBughuntLocked(config, { log, runId, stopped = () => false, loc
       }
       if (status.disposition === "pass") {
         const control = gitControlDigest(config);
-        const gate = runGate(config, { baseSha: head0, failFast: true });
+        const gate = runGate(config, { baseSha: head0, failFast: true, caller: "hunt-cached" });
+        for (const line of reuseLines(gate)) log(`bug hunt: host gate: ${line}`);
         if (git(config, ["rev-parse", "HEAD"]).output.trim() !== head0 || gitControlChanges(config, control).length) return 4;
         if (!gate.ok || git(config, ["status", "--porcelain"]).output.trim()) {
           log(`bug hunt: cached review, host gate: FAIL\n${gate.steps.filter(s => !s.ok).map(s => `${s.name}: ${s.tail}`).join("\n")}`);
@@ -201,7 +202,8 @@ async function runBughuntLocked(config, { log, runId, stopped = () => false, loc
   }
   // No-fix hunts verify too; landHunt verifies the candidate when fixes exist.
   if (git(config, ["rev-list", "--count", `${target}..${prep.branch}`]).output.trim() === "0") {
-    const hostGate = runGate(config, { baseSha: head0, failFast: true });
+    const hostGate = runGate(config, { baseSha: head0, failFast: true, caller: "hunt" });
+    for (const line of reuseLines(hostGate)) log(`bug hunt: host gate: ${line}`);
     if (git(config, ["rev-parse", "HEAD"]).output.trim() !== head0 || gitControlChanges(config, control).length) return 4;
     if (!hostGate.ok || git(config, ["status", "--porcelain"]).output.trim()) {
       log(keep(`bug hunt: host gate: FAIL\n${hostGate.steps.filter(s => !s.ok).map(s => `${s.name}: ${s.tail}`).join("\n")}`));

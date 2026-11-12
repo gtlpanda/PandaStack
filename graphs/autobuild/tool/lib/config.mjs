@@ -47,12 +47,20 @@ const STATIC_DEFAULTS = {
     transientWaitMinutes: 10,
     maxTransientRetries: 3,
     watchdogMaxWaitMs: 1_800_000,
+    fullGateEvery: null,
+    stopHookTimeoutSeconds: 2700,
   },
   env: { pathPrepend: [], ldLibraryPath: [], vars: {} },
   install: null,
   preflight: [],
   runners: {},
   gate: [],
+  // Gate scheduling. These defaults are the gate as it always ran: one step at a time, in order, every time.
+  gateConcurrency: 1,
+  gateMinFreeMb: 1024,
+  gateOrder: "config",
+  gateCache: false,
+  claudeGate: "hook",
   deliveryMode: "full",
   commitGate: [],
   browser: null,
@@ -150,6 +158,7 @@ export function resolveManagedConfig({ project: raw = {}, env = {}, overrides = 
   validateConcurrency(config.maxConcurrentSubagents);
   if (config.decisions !== undefined) config.decisions = validateDecisionConfig(config.decisions);
   validateCiParityConfig(config);
+  validateGateSchedule(config);
   if (env.EXPECTED_BRANCH) config.branch = env.EXPECTED_BRANCH;
   config.env.pathPrepend = (config.env.pathPrepend ?? []).map(expandHome);
   config.env.ldLibraryPath = (config.env.ldLibraryPath ?? []).map(expandHome);
@@ -159,7 +168,8 @@ export function resolveManagedConfig({ project: raw = {}, env = {}, overrides = 
   config.evidence = validateEvidenceConfig(config.evidence);
   // Where sessions write verification, provenance and QA output: outside git, and not
   // frozen (the state dir is), so the default is under the gitignored logs dir.
-  if (root) config.evidenceDir = path.resolve(root, config.evidence.dir ?? path.join(config.logsDir, "evidence"));
+  // The default joins like every other logsDir use, so it stays under the project root.
+  if (root) config.evidenceDir = config.evidence.dir === undefined ? path.join(root, config.logsDir, "evidence") : path.resolve(root, config.evidence.dir);
   return config;
 }
 
@@ -176,7 +186,7 @@ function validateCiParityConfig(raw) {
   if (!ciParity || typeof ciParity !== "object" || Array.isArray(ciParity)) throw new Error("ciParity must be an object");
   const github = ciParity.workflow !== undefined;
   if (github === (ciParity.ciFile !== undefined)) throw new Error("ciParity needs exactly one of workflow (GitHub Actions) or ciFile (any other CI)");
-  const shared = ["steps", "lockFile", "excludeFlags", "suiteFlags"];
+  const shared = ["steps", "lockFile", "excludeFlags", "suiteFlags", ...SCHEDULE_KEYS];
   const known = new Set(github ? ["workflow", "skip", ...shared] : ["ciFile", "env", ...shared]);
   const unknown = Object.keys(ciParity).filter((key) => !known.has(key));
   if (unknown.length) throw new Error(`ciParity has unknown keys: ${unknown.join(", ")}`);
@@ -201,6 +211,44 @@ function validateCiParityConfig(raw) {
     if (ciParity[key] !== undefined && (!Array.isArray(ciParity[key]) || ciParity[key].some((flag) => typeof flag !== "string" || !/^-{1,2}[A-Za-z]/.test(flag)))) throw new Error(`ciParity.${key} must be an array of option names`);
   }
   if (ciParity.lockFile !== undefined && (!text(ciParity.lockFile) || !path.isAbsolute(ciParity.lockFile))) throw new Error("ciParity.lockFile must be an absolute path");
+}
+
+// Gate scheduling keys (gate.mjs). On a gate entry, a runner, `browser` or `ciParity`:
+//   resources: names of what the step uses exclusively (steps sharing one never overlap);
+//   memoryMb: free memory the step needs before it starts; paths: globs of what can affect it.
+const SCHEDULE_KEYS = ["resources", "memoryMb", "paths"];
+const wholeNumber = (value, min) => Number.isInteger(value) && value >= min;
+
+function validateScheduleFields(entry, where) {
+  if (!entry || typeof entry !== "object") return;
+  for (const key of ["resources", "paths"]) {
+    if (entry[key] !== undefined && (!Array.isArray(entry[key]) || entry[key].some((item) => !text(item)))) throw new Error(`${where}.${key} must be an array of non-empty strings`);
+  }
+  if (entry.paths !== undefined && entry.paths.length === 0) throw new Error(`${where}.paths must name at least one glob (omit it to always run the step)`);
+  if (entry.memoryMb !== undefined && !wholeNumber(entry.memoryMb, 0)) throw new Error(`${where}.memoryMb must be a whole number of MiB`);
+}
+
+function validateGateSchedule(config) {
+  if (!wholeNumber(config.gateConcurrency, 1)) throw new Error("gateConcurrency must be a whole number of at least 1");
+  if (!wholeNumber(config.gateMinFreeMb, 0)) throw new Error("gateMinFreeMb must be a whole number of MiB");
+  if (!["config", "fastest"].includes(config.gateOrder)) throw new Error('gateOrder must be "config" or "fastest"');
+  if (typeof config.gateCache !== "boolean") throw new Error("gateCache must be true or false");
+  if (!["hook", "host"].includes(config.claudeGate)) throw new Error('claudeGate must be "hook" or "host"');
+  if (config.gateCacheIgnore !== undefined && (!Array.isArray(config.gateCacheIgnore) || config.gateCacheIgnore.some((item) => !text(item)))) throw new Error("gateCacheIgnore must be an array of paths");
+  if (config.limits.fullGateEvery != null && !wholeNumber(config.limits.fullGateEvery, 1)) throw new Error("limits.fullGateEvery must be a whole number of at least 1");
+  if (!wholeNumber(config.limits.stopHookTimeoutSeconds, 1)) throw new Error("limits.stopHookTimeoutSeconds must be a whole number of seconds");
+  const names = new Set();
+  (Array.isArray(config.gate) ? config.gate : []).forEach((entry, index) => {
+    validateScheduleFields(entry, `gate[${index}]`);
+    // Timings, the cache and "failed last time" are kept per name.
+    if (config.gateOrder === "fastest" || config.gateCache || config.gateConcurrency > 1) {
+      if (names.has(entry?.name)) throw new Error(`gate has two entries named "${entry.name}"; names must be unique when gateOrder, gateCache or gateConcurrency is set`);
+      names.add(entry?.name);
+    }
+  });
+  for (const [kind, runner] of Object.entries(config.runners ?? {})) validateScheduleFields(runner, `runners.${kind}`);
+  validateScheduleFields(config.browser, "browser");
+  validateScheduleFields(config.ciParity, "ciParity");
 }
 
 // Run evidence settings: where it goes (dir) and what the commit guard refuses

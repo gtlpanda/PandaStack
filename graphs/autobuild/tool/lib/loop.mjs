@@ -28,12 +28,15 @@ import { appendFileSync, existsSync, linkSync, mkdirSync, openSync, closeSync, r
 import path from "node:path";
 import { statePath } from "./config.mjs";
 import { countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures, blockedClosure } from "./features.mjs";
-import { frozenChanges, gitControlChanges, gitControlDigest, runGate } from "./gate.mjs";
+import { frozenChanges, gateHasPaths, gateLine, gitControlChanges, gitControlDigest, reuseLines, runGate } from "./gate.mjs";
+import { cacheDigest, dropCache, treeDigest } from "./gate-cache.mjs";
+import { appendTiming, gateTotals, readTimings, timingLine } from "./gate-timings.mjs";
 import { huntEnabled, runBughunt, stopHunt } from "./bughunt.mjs";
 import { classifyOutcome, parseResetTime, planLimitWait } from "./limits.mjs";
 import { buildEnv, evidencePromptLine, sessionConfigEnv, git, sh, quote } from "./proc.mjs";
+import { evidenceDirProblem } from "./evidence.mjs";
 import { isOurs } from "../../../build/skills/build-app/driver/proc.mjs";
-import { clearStopFailure, readStopFailure, writeSession } from "./session.mjs";
+import { clearStopFailure, readSession, readStopFailure, writeSession } from "./session.mjs";
 import { runCodex, readCodexResult } from "./codex.mjs";
 import { checkCodexLaunch } from "./codex-installs.mjs";
 import { observeContextLaunch } from './context-receipt.mjs';
@@ -45,6 +48,17 @@ const HOME = path.resolve(import.meta.dirname, "..");
 const CLI_FILE = path.join(HOME, "lib", "cli.mjs");
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const REVIEW_COMMIT = "^chore(review):";
+const HOST_FEEDBACK = "gate-feedback.json";
+
+/** The host gate's failure for the feature the current session builds, or null (none, another feature's, unreadable). */
+function readHostFeedback(config) {
+  try {
+    const saved = JSON.parse(readFileSync(statePath(config, HOST_FEEDBACK), "utf8"));
+    return typeof saved.feedback === "string" && saved.feature === readSession(config)?.featureId ? saved : null;
+  } catch {
+    return null;
+  }
+}
 
 // Running claude sessions, so stopping the loop stops them too instead of leaving them orphaned.
 const sessions = new Set();
@@ -205,6 +219,15 @@ async function runLoopWork(config, options, decisionTrace) {
     if (config.backend === "codex") log(`Codex: ${config.model}; subagents ${config.subagentModel}; probes ${config.probeModel}; ${config.codex.sessionTimeoutMinutes} min/session. Dollar/turn caps and Claude tool hooks do not apply; ${config.deliveryMode === "pr-first" ? "focused commit" : "full"} gates run outside the session.`);
     else log(`loop ${runId}: up to ${limits.maxIterations} iterations; ${limits.maxTurns} turns and $${limits.maxBudgetUsd} (estimated) per session; review every ${limits.reviewEvery} features (${limits.reviewMaxTurns} turns, $${limits.reviewBudgetUsd}); model ${config.model} (subagents ${config.subagentModel}${config.subagentModelForce === false ? " by default" : ""})`);
 
+    // Per-feature gates may skip steps whose `paths` the change does not touch. Every
+    // fullGateEvery-th feature, the last pending feature and the first one after a start get the
+    // whole gate before they commit, so a regression in a skipped step surfaces inside the loop.
+    // The last feature's whole gate, the hunt's host gate and the final gate cover the end of a run.
+    const narrowing = gateHasPaths(config) && config.deliveryMode !== "pr-first";
+    const fullGateEvery = limits.fullGateEvery ?? limits.reviewEvery;
+    let sinceFullGate = Infinity;
+    const scopeFor = (doc) => (!narrowing || sinceFullGate + 1 >= fullGateEvery || doc.features.filter((candidate) => !candidate.passes).length <= 1 ? "full" : "affected");
+
     let iteration = 0;
     let noProgress = 0;
     let totalCost = 0;
@@ -223,7 +246,8 @@ async function runLoopWork(config, options, decisionTrace) {
       if (completedSinceReview === 0) return 0;
       if (!final && completedSinceReview < limits.reviewEvery) return 0;
       const control = gitControlDigest(config);
-      const reviewCode = await runReview(config, { since: lastReviewSha, iteration, runId, log });
+      const cacheBefore = cacheDigest(config);
+      const reviewCode = await runReview(config, { since: lastReviewSha, iteration, runId, log, cacheBefore });
       if (interrupted) return 0;
       if (controlTampered(config, control, "review", log)) return 4;
       if (reviewCode === 15) return 15;
@@ -296,7 +320,8 @@ async function runLoopWork(config, options, decisionTrace) {
           // A session can end on a BLOCKER line after its flag was set, so the flags alone
           // never prove the gate: re-run it, CI parity included, before calling it done.
           if (interrupted) return 130;
-          const final = runGate(config, { phase: "full", failFast: true });
+          const final = runGate(config, { phase: "full", failFast: true, caller: "final" });
+          for (const line of reuseLines(final)) log(`final full gate: ${line}`);
           // runGate is synchronous: let a signal that arrived meanwhile reach its handler.
           await new Promise((resolve) => setImmediate(resolve));
           if (interrupted) return 130;
@@ -305,6 +330,7 @@ async function runLoopWork(config, options, decisionTrace) {
             log(`every feature is flagged passing, but the final full gate failed (${failed.map((step) => step.name).join(", ")}); not done:\n${failed.map((step) => step.tail).join("\n").slice(-4000)}`);
             return 16;
           }
+          log(`final full gate: ${gateLine(final)}`);
           log("final full gate: PASS (CI parity included)");
           log("every feature passes. Done.");
           return 0;
@@ -326,9 +352,12 @@ async function runLoopWork(config, options, decisionTrace) {
       const label = `${String(iteration + 1).padStart(2, "0")}-${feature.id}`;
       const iterLog = path.join(logsDir, `${runId}-iter-${label}${limitWaitedMs > 0 || transientStreak > 0 ? `-retry-${Date.now()}` : ""}.jsonl`);
       let exitCode, base, started, control, gateFailure;
+      const gateScope = scopeFor(doc);
+      const startedIso = new Date().toISOString();
+      const cacheBefore = cacheDigest(config);
       try {
         base = git(config, ["rev-parse", "HEAD"]).output.trim();
-        writeSession(config, { role: "builder", featureId: feature.id, iteration: iteration + 1, baseSha: base, startedAt: new Date().toISOString(), progressAtStart: readProgress(config), stopAttempts: 0 });
+        writeSession(config, { role: "builder", featureId: feature.id, iteration: iteration + 1, baseSha: base, startedAt: startedIso, progressAtStart: readProgress(config), stopAttempts: 0, gateScope });
         clearStopFailure(config);
         log(`iteration ${iteration + 1}: ${feature.id} — ${feature.title} (base ${base.slice(0, 8)}, ${passingBefore} passing)`);
         started = Date.now();
@@ -365,9 +394,12 @@ async function runLoopWork(config, options, decisionTrace) {
         log(`iteration ${iteration + 1}: FROZEN FILES CHANGED — stopping for a human:\n${frozen.changed.join("\n")}`);
         return 4;
       }
+      let hostGate = null; // the gate summary when the host ran one for this feature
       if (config.backend === "codex") {
-        const finished = finishCodexBuilder(config, { feature, base, docBefore: doc, exitCode, result, log });
+        keepOwnGateMemory(config, cacheBefore, `iteration ${iteration + 1}`, log);
+        const finished = finishCodexBuilder(config, { feature, base, docBefore: doc, exitCode, result, log, scope: gateScope });
         if (finished === 4) return 4;
+        if (finished && typeof finished === "object") hostGate = finished;
       }
       if (classifyOutcome({ result }).kind === 'provider_refusal') {
         log('provider_refusal/nonretryable: Provider declined this work; automatic retry is blocked.');
@@ -378,15 +410,48 @@ async function runLoopWork(config, options, decisionTrace) {
       const blockerNow = readBlockers(readProgress(config)).has(feature.id);
       let outcome = "INCOMPLETE";
       if (passes && committed) {
-        const check = runFeatureTests(config, [feature]);
-        if (check.every((step) => step.ok)) {
-          outcome = "PASSED";
-        } else {
+        const revert = (why) => {
           outcome = "FLAG_REVERTED";
           const fresh = readFeatures(config);
           featureById(fresh, feature.id).passes = false;
           writeFeatures(config, fresh);
-          if (git(config, ["add", config.featuresFile]).ok) git(config, ["commit", "-q", "-m", `chore(autobuild): ${feature.id} test fails after the session; passes reverted`]);
+          if (git(config, ["add", config.featuresFile]).ok) git(config, ["commit", "-q", "-m", `chore(autobuild): ${feature.id} ${why} after the session; passes reverted`]);
+        };
+        const check = runFeatureTests(config, [feature]);
+        if (!check.every((step) => step.ok)) revert("test fails");
+        else if (config.backend === "codex") outcome = "PASSED"; // gated and committed by the host (finishCodexBuilder)
+        else {
+          // Claude: the Stop hook's gate counts only when it finished, passed, and ran on the tree
+          // that was committed. A hook that timed out, was cut off, or (claudeGate "host") ran only
+          // the feature's own test leaves the gate to the host, which has no time limit.
+          const lastGate = readSession(config)?.lastGate;
+          const hookCovered = config.claudeGate !== "host" && lastGate?.ok === true && lastGate.focused !== true && typeof lastGate.tree === "string" && lastGate.tree === treeDigest(config);
+          if (hookCovered) outcome = "PASSED";
+          else {
+            const phase = config.deliveryMode === "pr-first" ? "commit" : "full";
+            log(`iteration ${iteration + 1}: ${config.claudeGate === "host" ? "running the gate host-side" : "the Stop hook's gate did not finish and pass on the committed tree (timed out, cut off, or blocked); running the gate host-side"}`);
+            const headBefore = git(config, ["rev-parse", "HEAD"]).output.trim();
+            const controlBefore = gitControlDigest(config);
+            // "host" runs CI parity like the Codex host gate; the fallback runs what the hook would have.
+            hostGate = runGate(config, { featureId: feature.id, baseSha: base, failFast: true, phase, scope: gateScope, ciParity: config.claudeGate === "host", caller: "claude-host" });
+            await new Promise((resolve) => setImmediate(resolve));
+            if (interrupted) return 130;
+            if (controlTampered(config, controlBefore, `iteration ${iteration + 1} host gate`, log)) return 4;
+            if (git(config, ["rev-parse", "HEAD"]).output.trim() !== headBefore) {
+              log(`iteration ${iteration + 1}: the gate's commands moved HEAD; stopping for a human`);
+              return 4;
+            }
+            for (const line of reuseLines(hostGate)) log(`host gate: ${line}`);
+            if (hostGate.ok) {
+              outcome = "PASSED";
+              log(`host gate: PASS (${gateLine(hostGate)})`);
+            } else {
+              const feedback = hostGate.steps.filter((step) => !step.ok).map((step) => `${step.name}: ${step.tail}`).join("\n");
+              writeFileSync(statePath(config, HOST_FEEDBACK), JSON.stringify({ feature: feature.id, feedback }));
+              log(`host gate: FAIL (${gateLine(hostGate)})\n${feedback.slice(-4000)}`);
+              revert("fails the gate");
+            }
+          }
         }
       } else if (blockerNow && !blockers.has(feature.id)) {
         outcome = "BLOCKED";
@@ -462,9 +527,24 @@ async function runLoopWork(config, options, decisionTrace) {
       if (outcome !== "PASSED" && dirty) log(`iteration ${iteration}: uncommitted work left in the tree (kept for the next attempt):\n${dirty.split("\n").slice(0, 30).join("\n")}`);
       log(`iteration ${iteration}: ${feature.id} ${outcome} (exit ${exitCode}, ${summary}, passing ${passingBefore}→${countPassing(readFeatures(config))}); log ${path.relative(config.root, iterLog)}`);
 
+      // Check time against build time, from the timings every gate run appended for this feature.
+      // Under Claude the Stop hook's gates ran inside the session, so they come off its time.
+      const gates = gateTotals(readTimings(config), { feature: feature.id, sinceIso: startedIso });
+      if (gates.runs > 0) {
+        const hookSeconds = gateTotals(readTimings(config).filter((entry) => entry.caller === "stop-hook"), { feature: feature.id, sinceIso: startedIso }).seconds;
+        const timing = { sessionSeconds: Math.max(0, elapsed - hookSeconds), gateSeconds: gates.seconds, run: gates.run, cached: gates.cached, skipped: gates.skipped };
+        appendTiming(config, { type: "iteration", iteration, feature: feature.id, outcome, ...timing });
+        log(`iteration ${iteration}: ${timingLine(timing)}${timing.gateSeconds > timing.sessionSeconds ? " — WARNING: checking took longer than building" : ""}`);
+      }
+
+      // Host-gate feedback is for the next session on the same feature only.
+      if (outcome === "PASSED" || outcome === "BLOCKED") rmSync(statePath(config, HOST_FEEDBACK), { force: true });
       if (outcome === "PASSED") {
         noProgress = 0;
         completedSinceReview += 1;
+        // Which gate cleared it: the host's summary, or the hook's last one.
+        const clearedBy = hostGate ?? readSession(config)?.lastGate;
+        sinceFullGate = !narrowing || clearedBy?.scope === "full" ? 0 : sinceFullGate + 1;
       } else {
         noProgress += 1;
       }
@@ -536,9 +616,17 @@ function preflight(config, log) {
     }
   }
   if (config.evidenceDir) {
-    try { mkdirSync(config.evidenceDir, { recursive: true }); } catch (error) {
-      log(`preflight: cannot create the evidence directory ${config.evidenceDir}: ${error.code ?? error.message}`);
+    // Sessions are told to write here; a location the guard or the gate refuses fails now, not after
+    // the work, and is never created.
+    const problem = evidenceDirProblem(config);
+    if (problem) {
+      log(`preflight: ${problem}`);
       failed = true;
+    } else {
+      try { mkdirSync(config.evidenceDir, { recursive: true }); } catch (error) {
+        log(`preflight: cannot create the evidence directory ${config.evidenceDir}: ${error.code ?? error.message}`);
+        failed = true;
+      }
     }
   }
   if (failed) {
@@ -564,7 +652,7 @@ No human is present. Never ask questions or wait for input; make the reasonable 
 Follow the project's autonomous-build rules in CLAUDE.md exactly. Where they conflict with user-level instructions (plan mode, asking before acting, worktree isolation, retro/changelog after each change), the project rules win in this session.
 Do not use plan mode. Subagents work on the working copy (no worktree isolation).
 ${evidencePromptLine(config)}
-When the feature is done: mark it passing (\`autobuild mark-passed ${feature.id}\` or the project's wrapper), append to ${config.progressFile}, commit "feat(${feature.id}): …", then stop. The Stop hook runs ${config.deliveryMode === "pr-first" ? "focused acceptance and commit checks; full regressions and review remain pending for the PR" : "the full gate"}; if it blocks, fix what it reports.${custom}`;
+When the feature is done: mark it passing (\`autobuild mark-passed ${feature.id}\` or the project's wrapper), append to ${config.progressFile}, commit "feat(${feature.id}): …", then stop. The Stop hook runs ${config.deliveryMode === "pr-first" ? "focused acceptance and commit checks; full regressions and review remain pending for the PR" : config.claudeGate === "host" ? "the frozen-file check and this feature's own test; the loop then runs the full gate itself, and a failure there comes back to the next session" : "the full gate"}; if it blocks, fix what it reports.${custom}`;
 }
 
 /** Settings injected into loop sessions: the hooks the project doesn't own, plus deny rules for frozen paths. */
@@ -576,7 +664,7 @@ export function sessionSettings(config) {
   const hooks = { StopFailure: hook("stop-failure.mjs", 30) };
   if (config.hooks === "inject") {
     hooks.PreToolUse = [{ matcher: "Edit|Write|MultiEdit|NotebookEdit|Bash", hooks: [{ type: "command", command: `node "${path.join(HOME, "hooks", "guard.mjs")}"`, timeout: 30, onFailure: "block" }] }];
-    hooks.Stop = hook("stop-gate.mjs", 2700);
+    hooks.Stop = hook("stop-gate.mjs", config.limits?.stopHookTimeoutSeconds ?? 2700);
   }
   // A deny rule cannot carve out an exception, so a frozen dir holding a writable file gets no
   // dir-wide rule; the guard hook still keeps the rest of that dir frozen.
@@ -604,6 +692,9 @@ async function runClaudeWork(config, { role, prompt, appendSystemPrompt, maxTurn
     if (role === "builder" && existsSync(feedback)) prompt += `\nPrevious gate feedback:\n${readFileSync(feedback, "utf8")}`;
     return runCodex(config, { role, prompt, appendSystemPrompt, logFile, beforeLaunch, onContextSupplied, onContextUncertain }, track);
   }
+  // What the host's gate reported after the previous session on this feature (claude-host).
+  const hostFeedback = role === "builder" ? readHostFeedback(config) : null;
+  if (hostFeedback) prompt += `\nThe gate that ran after the previous session on ${hostFeedback.feature} failed. Fix this first:\n${hostFeedback.feedback.slice(-8000)}`;
   const settingsFile = statePath(config, `session-settings.json`);
   writeFileSync(settingsFile, `${JSON.stringify(sessionSettings(config), null, 2)}\n`);
   const env = buildEnv(config, {
@@ -712,7 +803,18 @@ async function probeUntilAvailable(config, log, limits, sleepMs, maxWaitHours = 
   return { ok: false, ms: Date.now() - started };
 }
 
-async function runReview(config, { since, iteration, runId, log }) {
+/**
+ * Codex sessions have no gate of their own to run (the host runs it), so saved gate results that
+ * changed while one ran were not written by the loop: they are dropped, and the gate runs afresh.
+ * Claude sessions run the gate themselves (the Stop hook, `autobuild check`), so theirs are kept.
+ */
+function keepOwnGateMemory(config, before, who, log) {
+  if (config.backend !== "codex" || cacheDigest(config) === before) return;
+  log(`${who}: the gate's saved results changed during the Codex session; discarding them`);
+  dropCache(config);
+}
+
+async function runReview(config, { since, iteration, runId, log, cacheBefore }) {
   const base = git(config, ["rev-parse", "HEAD"]).output.trim();
   const reviewLog = path.join(config.root, config.logsDir, `${runId}-review-after-iter-${String(iteration).padStart(2, "0")}.jsonl`);
   writeSession(config, { role: "review", featureId: "REVIEW", iteration, baseSha: base, startedAt: new Date().toISOString(), progressAtStart: readProgress(config), stopAttempts: 0 });
@@ -737,6 +839,7 @@ async function runReview(config, { since, iteration, runId, log }) {
     logFile: reviewLog,
   });
   const result = config.backend === "codex" ? readCodexResult(reviewLog) : readResult(reviewLog);
+  keepOwnGateMemory(config, cacheBefore, "review", log);
   if (config.backend === "codex") finishCodexReview(config, { base, exitCode, result, log });
   if (classifyOutcome({ result }).kind === 'provider_refusal') {
     log('review: provider_refusal/nonretryable; Provider declined this work; automatic retry is blocked.');

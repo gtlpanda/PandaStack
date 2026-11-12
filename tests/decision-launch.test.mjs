@@ -74,7 +74,7 @@ async function fixture(backend, patch = {}) {
         else if (git === 'rev-parse --short HEAD') stdout = head.slice(0, 8) + '\n'
         else if (git.startsWith('rev-parse --path-format=absolute ')) stdout = join(root, 'synthetic-metadata') + '\n'
         else if (git.startsWith('show ')) stdout = JSON.stringify(features)
-        else assert.ok(/^(?:status --porcelain|log |diff --name-only |ls-files --others )/.test(git), `Unexpected mock command: ${git}`)
+        else assert.ok(/^(?:status --porcelain|log |diff --name-only |ls-files --others |check-ignore -q --no-index )/.test(git), `Unexpected mock command: ${git}`)
       }
       return { status: 0, stdout, stderr: '' }
     }

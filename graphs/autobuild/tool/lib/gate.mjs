@@ -6,26 +6,31 @@
 //   5. browser suites: the regression command plus passing and current browser specs
 // failFast stops at the first failing step. Explicit PR-first commit phase keeps
 // frozen/current acceptance and commitGate; deferred regressions are not passes.
+//
+// Steps 2-5 are a list of jobs. With no scheduling keys they run one at a time in that order,
+// every time. The keys change the schedule, never the checks:
+//   gateOrder "fastest"   failed-last-time first, then shortest recorded duration first
+//   gateCache             a PASS is reused while the working tree's content is unchanged
+//   gateConcurrency > 1   jobs run side by side (gate-pool.mjs); `resources` keep rivals apart
+//   paths (scope "affected")  a job whose paths the change does not touch is skipped, and said so
 
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { parityLabel, resolveCiParity, runParityStep } from "./ci-parity.mjs";
+import { tmpdir } from "node:os";
+import { globRegex } from "../../../../scripts/evidence-paths.mjs";
+import { passKey, readCache, treeDigest, writeCache } from "./gate-cache.mjs";
+import { appendTiming, timingsDir } from "./gate-timings.mjs";
+import { parityLabel, resolveCiParity, paritySpec } from "./ci-parity.mjs";
 import { checkEvidence } from "./evidence.mjs";
-import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync } from "node:fs";
 import path from "node:path";
-import { featureById, readFeatures } from "./features.mjs";
-import { buildEnv, git, sh, tail } from "./proc.mjs";
-import { runFeatureTests } from "./tests.mjs";
+import { featureById, featuresWithoutPasses, readFeatures } from "./features.mjs";
+import { buildEnv, git, runSpec, sh, shSpec, specOutput, tail } from "./proc.mjs";
+import { featureTestCommands, runFeatureTests } from "./tests.mjs";
 
-/** The feature list with every `passes` flag removed: what must never change during a session. */
-function featuresWithoutPasses(text) {
-  try {
-    const doc = JSON.parse(text);
-    for (const feature of doc.features ?? []) delete feature.passes;
-    return JSON.stringify(doc);
-  } catch {
-    return null;
-  }
-}
+const POOL = path.join(import.meta.dirname, "gate-pool.mjs");
+const KEPT_POOL_RUNS = 10;
+const POOL_RUN_DIR = /^\d{8}T\d{6}Z-\d+$/; // poolLogDir's own stamp
 
 /**
  * Frozen paths changed or added since `baseSha` (committed or not). The feature list may
@@ -126,14 +131,203 @@ export function failureExcerpt(output, chars = EXCERPT_CHARS) {
   return `Failure lines earlier in the output:\n${shown}\n\nEnd of output:\n${end}`;
 }
 
-export function runGate(config, { featureId = null, baseSha = null, failFast = false, skipBrowser = false, phase = "full", ciParity = true } = {}) {
+/** One line for a log: how long the gate took and what each step cost, slowest first. */
+export function gateLine({ steps = [], skipped = [], notRun = [], wallSeconds = 0 }) {
+  const summary = { steps, skipped, notRun, wallSeconds }; // callers may pass a bare { steps } (a bookkeeping failure)
+  const ran = summary.steps.filter((step) => !step.cached);
+  const cached = summary.steps.length - ran.length;
+  const slowest = [...ran].sort((a, b) => (b.seconds ?? 0) - (a.seconds ?? 0)).slice(0, 5).filter((step) => step.seconds > 0).map((step) => `${step.name} ${step.seconds}s`);
+  return `${summary.wallSeconds}s; ${ran.length} run, ${cached} cached, ${summary.skipped.length} skipped${summary.notRun.length ? `, ${summary.notRun.length} not run` : ""}${slowest.length ? `; slowest: ${slowest.join(", ")}` : ""}`;
+}
+
+/** One line per commit a reused PASS came from, and one per step skipped by path selection. */
+export function reuseLines({ steps = [], skipped = [] }) {
+  const summary = { steps, skipped };
+  const from = new Map();
+  for (const step of summary.steps) if (step.cached) from.set(step.cachedFrom, [...(from.get(step.cachedFrom) ?? []), step.name]);
+  return [
+    ...[...from].map(([commit, names]) => `reused ${names.length} PASS result(s) from ${commit} (tree content unchanged): ${names.join(", ")}`),
+    ...summary.skipped.map((entry) => `${entry.name}: ${entry.reason}`),
+  ];
+}
+
+const slug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "step";
+
+/** Files changed since `baseSha` (committed or not) plus untracked ones; null when git cannot say. */
+export function changedSince(config, baseSha) {
+  // --no-renames: a moved file counts at both its old and its new path.
+  const diff = git(config, ["-c", "core.quotepath=off", "diff", "--name-only", "--no-renames", "-z", baseSha]);
+  const untracked = git(config, ["-c", "core.quotepath=off", "ls-files", "--others", "--exclude-standard", "-z"]);
+  if (!diff.ok || !untracked.ok) return null;
+  return [...new Set(`${diff.output}\0${untracked.output}`.split("\0").filter(Boolean))];
+}
+
+/** A `paths` entry as a matcher: a glob, or a plain file or directory name (which covers everything under it). */
+export function pathPattern(entry) {
+  if (/[*?]/.test(entry)) return globRegex(entry);
+  const plain = entry.replace(/\/+$/, "").replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${plain}(?:/.*)?$`);
+}
+
+/** True when any step of this project's gate declares `paths`, so a per-feature gate can be narrower than the full one. */
+export function gateHasPaths(config) {
+  return [...(config.gate ?? []), ...Object.values(config.runners ?? {}), config.browser, config.ciParity].some((entry) => Array.isArray(entry?.paths));
+}
+
+// Scheduling fields a gate entry, a runner, `browser` or `ciParity` may carry.
+const schedule = (entry) => ({ resources: entry?.resources ?? null, memoryMb: entry?.memoryMb ?? 0, paths: entry?.paths ?? null });
+
+function commandJob(config, { id, name, command, entry }) {
+  return { id, name, spec: shSpec(config, command), keyEnv: config.env, ...schedule(entry) };
+}
+
+// Results are kept per job id. Two gate entries may share a name (allowed while no scheduling key
+// is set), so a repeated id gets its position appended: each step keeps its own result.
+function uniqueIds(jobs) {
+  const seen = new Map();
+  return jobs.map((job) => {
+    const count = (seen.get(job.id) ?? 0) + 1;
+    seen.set(job.id, count);
+    return count === 1 ? job : { ...job, id: `${job.id} #${count}` };
+  });
+}
+
+/** The jobs of the full phase in the gate's fixed order (see the file header). */
+function fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, ciParity, focused, warnings, deferred }) {
+  const jobs = [];
+  const featureJobs = (features, prefix, options = {}) => featureTestCommands(config, features, options).map(({ name, command, runner, browser }) => commandJob(config, {
+    id: `${prefix}: ${name.replace(/ \(\d+ files?\)$/, "")}`, name: `${prefix}: ${name}`, command, entry: browser ? config.browser : runner,
+  }));
+  if (focused) {
+    // The Stop hook's part when the full gate runs host-side: the feature's own test, whatever its kind.
+    if (current) jobs.push(...featureJobs([current], `current feature ${current.id}`).map((job) => ({ ...job, pinned: true })));
+    deferred.push({ kind: "host-gate", name: "full gate", reason: "runs host-side after the session" });
+    return uniqueIds(jobs);
+  }
+  if (current && current.testKind !== browserKind) jobs.push(...featureJobs([current], `current feature ${current.id}`).map((job) => ({ ...job, pinned: true })));
+  for (const entry of config.gate ?? []) jobs.push(commandJob(config, { id: `gate: ${entry.name}`, name: entry.name, command: entry.command, entry }));
+
+  // CI's own test steps, exactly as CI runs them (ci-parity.mjs). The Stop hook skips them: its
+  // time budget covers the gate commands, not a CI suite plus a lock wait. The loop's final gate,
+  // the host gates and `autobuild check` run them.
+  if (!ciParity) {
+    deferred.push({ kind: "ci-parity", name: "CI parity", reason: "runs in the loop's final full gate and autobuild check" });
+  } else {
+    const started = Date.now();
+    const parity = resolveCiParity(config);
+    warnings.push(...parity.warnings);
+    jobs.push({ id: "CI parity configuration", name: "CI parity configuration", result: { ok: parity.errors.length === 0, ms: Date.now() - started, output: parity.errors.join("\n") } });
+    if (parity.errors.length === 0) {
+      const pathValue = buildEnv(config).PATH;
+      for (const step of parity.steps) {
+        const name = `CI parity: ${parityLabel(step)}`;
+        jobs.push({ id: name, name, spec: paritySpec(config, step, { pathValue }), keyEnv: step.env, early: true, ...schedule(config.ciParity) });
+      }
+    }
+  }
+
+  const passing = doc.features.filter((feature) => feature.passes && feature.id !== featureId);
+  const passingNonBrowser = passing.filter((feature) => feature.testKind !== browserKind);
+  if (passingNonBrowser.length > 0) jobs.push(...featureJobs(passingNonBrowser, "passing features").map((job) => ({ ...job, early: true })));
+  if (!skipBrowser && browserKind) {
+    const specs = [...passing.filter((feature) => feature.testKind === browserKind), ...(current?.testKind === browserKind ? [current] : [])];
+    // The invocation that carries the current feature's own browser test is never skipped by path selection.
+    const own = current?.testKind === browserKind ? (config.runners?.[browserKind]?.group ?? browserKind) : null;
+    jobs.push(...featureJobs(specs, "browser", { withRegressionBrowser: true }).map((job) => (own && job.id === `browser: ${own}` ? { ...job, pinned: true } : job)));
+  }
+  return uniqueIds(jobs);
+}
+
+/** Execution order: the feature's own test first; then as configured, or failed-last-time and fastest first. */
+function ordered(config, jobs, memory) {
+  if (config.gateOrder !== "fastest") return jobs;
+  const failedLast = new Set(memory.lastFailed ?? []);
+  // A step with no recorded duration goes first (it is new, so the likeliest to fail); among those,
+  // CI's own steps and the passing features' tests go before the project's gate entries.
+  const rank = (job) => [job.pinned ? 0 : 1, failedLast.has(job.id) ? 0 : 1, memory.durations?.[job.id] ?? -1, job.early || job.result ? 0 : 1];
+  return jobs.map((job, index) => ({ job, index, rank: rank(job) }))
+    .sort((a, b) => a.rank[0] - b.rank[0] || a.rank[1] - b.rank[1] || a.rank[2] - b.rank[2] || a.rank[3] - b.rank[3] || a.index - b.index)
+    .map(({ job }) => job);
+}
+
+// Where each step's own log goes when steps run side by side: the logs dir when git ignores it, else a temp dir.
+function poolLogDir(config) {
+  const stamp = `${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z")}-${process.pid}`;
+  const base = timingsDir(config);
+  if (!base) return { dir: mkdtempSync(path.join(tmpdir(), "autobuild-gate-")), temporary: true };
+  const parent = path.join(base, "gate");
+  const temporary = () => ({ dir: mkdtempSync(path.join(tmpdir(), "autobuild-gate-")), temporary: true });
+  // A session can write under the logs dir, so nothing here follows a link: the directory must be
+  // a real one inside the project, and only this tool's own run directories are ever removed.
+  try {
+    mkdirSync(parent, { recursive: true });
+    const inside = `${realpathSync(config.root)}${path.sep}`;
+    if (!lstatSync(parent).isDirectory() || !`${realpathSync(parent)}${path.sep}`.startsWith(inside)) return temporary();
+    const runs = readdirSync(parent, { withFileTypes: true }).filter((entry) => entry.isDirectory() && POOL_RUN_DIR.test(entry.name)).map((entry) => entry.name).sort();
+    for (const old of runs.slice(0, Math.max(0, runs.length - (KEPT_POOL_RUNS - 1)))) rmSync(path.join(parent, old), { recursive: true, force: true });
+  } catch {
+    return temporary();
+  }
+  const dir = path.join(parent, stamp);
+  mkdirSync(dir, { recursive: true });
+  return { dir, temporary: false };
+}
+
+/** Runs `jobs` through gate-pool.mjs; returns Map id -> {ok, status, output, ms}. Jobs it never started are absent. */
+function runInPool(config, jobs, { failFast }) {
+  const { dir, temporary } = poolLogDir(config);
+  try {
+    return poolResults(config, jobs, dir, { failFast, keptLogs: !temporary });
+  } finally {
+    // Logs outside the project's logs dir have nowhere to be kept: each step's output is already in its result.
+    if (temporary) rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function poolResults(config, jobs, dir, { failFast, keptLogs }) {
+  const payload = {
+    jobs: jobs.map((job, index) => ({ id: job.id, spec: job.spec, logFile: path.join(dir, `${String(index + 1).padStart(2, "0")}-${slug(job.name)}.log`), resources: job.resources, memoryMb: job.memoryMb })),
+    options: { concurrency: config.gateConcurrency, failFast, minFreeMb: config.gateMinFreeMb },
+  };
+  const child = spawnSync(process.execPath, [POOL], { input: JSON.stringify(payload), encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["pipe", "pipe", "inherit"] });
+  let parsed = null;
+  try { parsed = JSON.parse(child.stdout); } catch { /* reported below */ }
+  const results = new Map();
+  if (!parsed) {
+    // The scheduler died: no step is known to have passed.
+    for (const job of jobs) results.set(job.id, { ok: false, status: child.status, ms: 0, output: `the gate's scheduler stopped (exit ${child.status ?? child.signal}) before reporting this step` });
+    return results;
+  }
+  for (const job of payload.jobs) {
+    const result = parsed.results[job.id];
+    if (!result) continue;
+    let output = "";
+    try { output = readFileSync(job.logFile, "utf8"); } catch { /* an unstartable step has no log */ }
+    const spec = jobs.find((candidate) => candidate.id === job.id).spec;
+    const timeout = result.timedOut ? `\nstopped after ${Math.round(spec.timeoutMs / 1000)}s (the step's time limit); its process group was killed.` : "";
+    results.set(job.id, { ok: result.ok, status: result.status, ms: result.ms, output: `${specOutput(spec, result.status, output, result.error)}${timeout}${keptLogs ? `\n(step log: ${job.logFile})` : ""}` });
+  }
+  return results;
+}
+
+/**
+ * Options beyond today's: `scope: "affected"` skips jobs whose `paths` the change since baseSha
+ * does not touch (never the feature's own test, never a job without paths); `focused` keeps only
+ * the prelude and the feature's own test (the Stop hook, when the full gate runs host-side).
+ * The summary adds: steps[].cached / cachedFrom, skipped [{name, reason}], notRun [names], wallSeconds.
+ */
+export function runGate(config, { featureId = null, baseSha = null, failFast = false, skipBrowser = false, phase = "full", ciParity = true, scope = "full", focused = false, caller = "check" } = {}) {
   if (!["full", "commit"].includes(phase)) throw new Error("Unknown gate phase");
+  if (!["full", "affected"].includes(scope)) throw new Error("Unknown gate scope");
   if (phase === "commit" && config.deliveryMode !== "pr-first") throw new Error("Commit gate requires pr-first deliveryMode");
+  const gateStarted = Date.now();
   const doc = readFeatures(config);
   const current = featureId ? featureById(doc, featureId) : null;
   const browserKind = config.browser?.runner ?? null;
   const steps = [];
   const warnings = [];
+  const skipped = [];
+  const notRun = [];
   const deferred = phase === "commit" ? [
     ...(config.gate ?? []).map(step => ({ kind: "gate", name: step.name, reason: "PR full gate pending" })),
     ...doc.features.filter(feature => feature.passes && feature.id !== featureId).map(feature => ({ kind: "acceptance", name: feature.id, reason: "PR prior-feature regression pending" })),
@@ -143,14 +337,22 @@ export function runGate(config, { featureId = null, baseSha = null, failFast = f
     steps.push(step);
     return step.ok || !failFast;
   };
-  const summary = () => ({
-    ok: steps.every((step) => step.ok),
-    feature: featureId,
-    phase,
-    deferred,
-    warnings,
-    steps: steps.map((step) => ({ name: step.name, ok: step.ok, seconds: Math.round((step.ms ?? 0) / 1000), tail: step.ok ? "" : failureExcerpt(step.output ?? "") })),
-  });
+  const summary = () => {
+    const result = {
+      ok: steps.every((step) => step.ok),
+      feature: featureId,
+      phase,
+      scope,
+      deferred,
+      warnings,
+      skipped,
+      notRun,
+      wallSeconds: Math.round((Date.now() - gateStarted) / 1000),
+      steps: steps.map((step) => ({ name: step.name, ok: step.ok, seconds: Math.round((step.ms ?? 0) / 1000), tail: step.ok ? "" : failureExcerpt(step.output ?? ""), ...(step.cachedFrom ? { cached: true, cachedFrom: step.cachedFrom } : {}) })),
+    };
+    appendTiming(config, { type: "gate", caller, feature: featureId, phase, scope, focused, ok: result.ok, wallSeconds: result.wallSeconds, steps: result.steps.map(({ name, ok, seconds, cached }) => ({ name, ok, seconds, ...(cached ? { cached: true } : {}) })), skipped: skipped.map((entry) => entry.name), notRun });
+    return result;
+  };
 
   if (baseSha) {
     const started = Date.now();
@@ -173,39 +375,67 @@ export function runGate(config, { featureId = null, baseSha = null, failFast = f
     return summary();
   }
 
-  if (current && current.testKind !== browserKind) {
-    for (const step of runFeatureTests(config, [current])) if (!record({ ...step, name: `current feature ${current.id}: ${step.name}` })) return summary();
-  }
+  const all = fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, ciParity, focused, warnings, deferred });
 
-  for (const gateStep of config.gate ?? []) {
-    if (!record({ name: gateStep.name, ...sh(config, gateStep.command) })) return summary();
-  }
+  // Path selection: only with a base to diff against; when the change cannot be listed, everything runs.
+  const changed = scope === "affected" && baseSha ? changedSince(config, baseSha) : null;
+  const tracked = changed ? git(config, ["-c", "core.quotepath=off", "ls-files", "-z"]) : null;
+  const known = tracked?.ok ? [...new Set([...tracked.output.split("\0").filter(Boolean), ...changed])] : null;
+  const selected = all.filter((job) => {
+    if (!changed || job.pinned || !job.paths || !job.spec) return true;
+    const patterns = job.paths.map(pathPattern);
+    if (changed.some((file) => patterns.some((pattern) => pattern.test(file)))) return true;
+    // A glob that matches nothing in the repository is a typo, not a reason to skip: the step runs.
+    const dead = known ? job.paths.filter((glob, index) => !known.some((file) => patterns[index].test(file))) : job.paths;
+    if (dead.length) {
+      warnings.push(`${job.name}: paths ${dead.map((glob) => JSON.stringify(glob)).join(", ")} match${dead.length === 1 ? "es" : ""} no file in the repository, so the step was run instead of skipped; fix the glob`);
+      return true;
+    }
+    skipped.push({ name: job.name, reason: "skipped (no path match)" });
+    return false;
+  });
 
-  // CI's own test steps, exactly as CI runs them (ci-parity.mjs). The Stop hook skips them: its
-  // time budget covers the gate commands, not a CI suite plus a lock wait. The loop's final gate,
-  // the Codex host gate and `autobuild check` run them.
-  if (!ciParity) {
-    deferred.push({ kind: "ci-parity", name: "CI parity", reason: "runs in the loop's final full gate and autobuild check" });
+  const memory = readCache(config);
+  const tree = config.gateCache ? treeDigest(config) : null;
+  const outcome = new Map();
+  const plan = ordered(config, selected, memory);
+  const toRun = [];
+  for (const job of plan) {
+    const hit = !job.result && tree ? memory.passes[passKey(job, tree)] : null;
+    if (hit) job.result = { ok: true, ms: 0, output: "", cachedFrom: hit.commit };
+    if (!job.result) toRun.push(job);
+  }
+  if (config.gateConcurrency > 1 && toRun.length > 1) {
+    // Settled steps first (a config check, reused passes), then the rest side by side.
+    for (const job of plan) if (job.result) outcome.set(job.id, job.result);
+    if (!(failFast && [...outcome.values()].some((result) => !result.ok))) {
+      for (const [id, result] of runInPool(config, toRun, { failFast })) outcome.set(id, result);
+    }
   } else {
-    const started = Date.now();
-    const parity = resolveCiParity(config);
-    warnings.push(...parity.warnings);
-    if (!record({ name: "CI parity configuration", ok: parity.errors.length === 0, ms: Date.now() - started, output: parity.errors.join("\n") })) return summary();
-    if (parity.errors.length === 0) {
-      const pathValue = buildEnv(config).PATH;
-      for (const step of parity.steps) if (!record({ name: `CI parity: ${parityLabel(step)}`, ...runParityStep(config, step, { pathValue }) })) return summary();
+    for (const job of plan) {
+      const result = job.result ?? runSpec(job.spec);
+      outcome.set(job.id, result);
+      if (!result.ok && failFast) break;
     }
   }
 
-  const passing = doc.features.filter((feature) => feature.passes && feature.id !== featureId);
-  const passingNonBrowser = passing.filter((feature) => feature.testKind !== browserKind);
-  if (passingNonBrowser.length > 0) {
-    for (const step of runFeatureTests(config, passingNonBrowser)) if (!record({ ...step, name: `passing features: ${step.name}` })) return summary();
+  // Remember: durations and failures always; a PASS only when the tree is still the one it ran on.
+  const ran = toRun.filter((job) => outcome.has(job.id));
+  for (const job of ran) memory.durations[job.id] = outcome.get(job.id).ms;
+  memory.lastFailed = [...new Set([...(memory.lastFailed ?? []).filter((id) => outcome.get(id)?.ok !== true), ...ran.filter((job) => !outcome.get(job.id).ok).map((job) => job.id)])];
+  if (tree && ran.some((job) => outcome.get(job.id).ok) && treeDigest(config) === tree) {
+    const head = git(config, ["rev-parse", "HEAD"]);
+    const dirty = git(config, ["status", "--porcelain"]);
+    const commit = `${head.ok ? head.output.trim().slice(0, 12) : "unknown"}${dirty.ok && dirty.output.trim() ? "+uncommitted" : ""}`;
+    for (const job of ran) if (outcome.get(job.id).ok) memory.passes[passKey(job, tree)] = { name: job.name, at: new Date().toISOString(), commit };
   }
+  if (ran.length) writeCache(config, memory);
 
-  if (!skipBrowser && browserKind) {
-    const specs = [...passing.filter((feature) => feature.testKind === browserKind), ...(current?.testKind === browserKind ? [current] : [])];
-    for (const step of runFeatureTests(config, specs, { withRegressionBrowser: true })) if (!record({ ...step, name: `browser: ${step.name}` })) return summary();
+  // Report in the gate's fixed order, whatever order the steps ran or finished in.
+  for (const job of selected) {
+    const result = outcome.get(job.id);
+    if (result) steps.push({ name: job.name, ...result });
+    else notRun.push(job.name);
   }
   return summary();
 }

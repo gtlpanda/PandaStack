@@ -60,3 +60,14 @@ export function nextFeature(doc, blockers) {
 export function countPassing(doc) {
   return doc.features.filter((feature) => feature.passes).length;
 }
+
+/** The feature list with every `passes` flag removed: what must never change during a session. Accepts text or a Buffer. */
+export function featuresWithoutPasses(text) {
+  try {
+    const doc = JSON.parse(String(text));
+    for (const feature of doc.features ?? []) delete feature.passes;
+    return JSON.stringify(doc);
+  } catch {
+    return null;
+  }
+}

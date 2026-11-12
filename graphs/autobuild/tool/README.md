@@ -283,7 +283,9 @@ diffs that reviews and `/bughunt` read.
 - **Where it goes.** `evidence.dir` (default `<logsDir>/evidence`; created at preflight, which fails
   with exit 5 if it cannot be). It must be a relative path inside the project (config load refuses an
   absolute path or `..`), gitignored, not frozen (the state dir is frozen, so it cannot go there) and
-  not in `.git`; `autobuild check` reports one that is not. Because it is an ordinary project path, the
+  not in `.git`. The default is joined under the project root like every other `logsDir` use. Preflight
+  refuses a location that breaks these rules (exit 5, nothing created) and so does `autobuild check`.
+  Because it is an ordinary project path, the
   guard needs no exception for it: the builder prompt names the literal path (e.g. `logs/evidence/`),
   and scripts also get its absolute path as `AUTOBUILD_EVIDENCE_DIR`. A shell redirect through
   `$AUTOBUILD_EVIDENCE_DIR` is still denied as a computed path, since a command can reassign the
@@ -305,6 +307,72 @@ diffs that reviews and `/bughunt` read.
   size limit were checked.
 - **Nothing is assumed about layout.** A repo declares its evidence directories once, in
   `.gitattributes`; `/bughunt` intake reads the same declaration to leave them out of a hunt.
+
+## Gate scheduling
+
+By default the gate runs every step one at a time, in the order listed in `gate.mjs`, every time.
+The keys below change when and how steps run. They never change what a feature must pass before
+it commits: the frozen-file check, the evidence check and CI-parity validation always run, and a
+step that did not run is reported as skipped or not run, never as passed.
+
+| Key | Default | Effect |
+|---|---|---|
+| `gateOrder` | `"config"` | `"fastest"`: the feature's own test first, then steps that failed last time, then steps by recorded duration, shortest first. A step with no recorded duration runs before timed ones; among those, CI-parity steps and the passing features' tests go before `gate` entries. Use it only when entries do not depend on an earlier entry having run. |
+| `gateCache` | `false` | `true`: a step's PASS is reused while the working tree's content, the step's command and the configured env are unchanged. Each reuse is logged with the commit it came from. |
+| `gateCacheIgnore` | `progressFile` + `writable` | Paths left out of the tree content the cache compares (the loop's journal and decision files). |
+| `gateConcurrency` | `1` | More than 1 runs steps side by side. |
+| `gateMinFreeMb` | `1024` | With `gateConcurrency` > 1: no new step starts while `MemAvailable` is under this (one step always runs), and starts are spaced a second apart. `0` turns both off. |
+| `claudeGate` | `"hook"` | `"host"`: the Stop hook runs only the frozen-file check, the evidence check and the feature's own test; the loop runs the full gate (CI parity included) after the session, as the Codex backend does. |
+| `limits.fullGateEvery` | `limits.reviewEvery` | With `paths` in use: every Nth feature gets the whole gate before it commits. |
+| `limits.stopHookTimeoutSeconds` | `2700` | The Stop hook's time limit. |
+
+Per step, on a `gate` entry, a `runners.<kind>` entry, `browser` or `ciParity` (all its steps):
+
+| Key | Effect |
+|---|---|
+| `resources` | Names of what the step uses exclusively, for example `["db:secfix_p21"]`. Steps that share a name never overlap. A step with no `resources` key runs alone and keeps its place in the order; `[]` means it shares nothing. |
+| `memoryMb` | Free memory the step needs, on top of `gateMinFreeMb`, before it starts. |
+| `paths` | The files that can affect the step: globs (`server/**`, `shared/*.js`) or plain file and directory names (`server` covers everything under it). In a per-feature gate, a step whose `paths` match no file changed since the session's base is skipped (`skipped (no path match)`); a moved file counts at both paths. A step without `paths` always runs, and so does a step with a glob that matches no file in the repository (with a warning: it is a typo). |
+
+How they fit together:
+
+- **Per-feature gate.** The feature's own test, every step whose `paths` the change touches and
+  every step without `paths`. The first feature after a start, every `fullGateEvery`-th feature
+  and the last pending feature get the whole gate instead. The bug hunt's host gate and the
+  final gate are always whole.
+- **Reuse.** The cache key is the tree's content (tracked and untracked files, committed or
+  not), minus `gateCacheIgnore` and the `passes` flags of the feature list. A review that only
+  appends to the progress file therefore reuses every pass; any code, test, contract or config
+  change does not. Only a PASS is kept, and only when the tree is unchanged after the run. The
+  cache lives outside the project (`$XDG_STATE_HOME/autobuild/gate`, default
+  `~/.local/state`), where a builder session cannot write.
+- **Side by side.** Each step runs in its own process group with its own log under
+  `<logsDir>/gate/<run>/`. Results are reported in the gate's fixed order. With fail-fast,
+  nothing new starts after the first failure; steps already running finish and are reported.
+  `resources` keep steps of one gate run apart. They do nothing between two autobuild runs on one
+  machine, so keep any cross-run lock (`ciParity.lockFile`, or a `flock` in a command) that guards
+  something two runs share, and drop a lock that only serialized one run's steps. Give every step
+  that takes the same lock one shared `resources` name, `ciParity` included: a CI-parity step
+  waits at most an hour for `ciParity.lockFile` and then fails, so it must not queue behind
+  several long steps holding it. `ciParity`, `runners.<kind>` and `browser` run alone until they
+  get a `resources` key of their own.
+- **Limits of the memory floor.** It reads `MemAvailable` before each start, so it reacts to
+  memory already in use. A step that grows later is not foreseen; give the heavy steps a
+  `memoryMb`. If the scheduler process itself is killed, steps it started keep running.
+- **The Claude Stop hook.** A hook that times out or is cut off no longer lets a feature through
+  on its own test: the loop accepts the hook's gate only when it finished, passed and ran on the
+  committed tree, and otherwise runs the gate itself before the feature counts. With
+  `claudeGate: "host"` the loop always does, and a failure reverts the flag and is given to the
+  next session.
+
+Timings: every gate run and every iteration appends one line to `<logsDir>/gate-timings.jsonl`
+(per step: name, ok, seconds, cached; plus skipped and not-run names). The loop logs
+`iteration N: session Ns, gate Ns (k run, m cached, j skipped)` and warns when checking took
+longer than building; `autobuild status` shows the last iterations and the last gate run. Nothing
+is written when `logsDir` is not gitignored.
+
+`node graphs/autobuild/tool/bench/gate-bench.mjs` times these schedules on a fixture of 53
+sleeping steps.
 
 ## features.json
 

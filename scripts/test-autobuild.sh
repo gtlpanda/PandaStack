@@ -7,6 +7,9 @@ if ! command -v node >/dev/null 2>&1; then
   echo "TEST-AUTOBUILD: 0 passed, 1 failed (node not installed)"
   exit 1
 fi
+# The gate keeps its saved results in the state home: the suite gets its own, not the user's.
+AUTOBUILD_STATE_HOME="$(mktemp -d)"; export AUTOBUILD_STATE_HOME
+trap 'rm -rf "$AUTOBUILD_STATE_HOME"' EXIT
 out="$(node --test --test-reporter=tap test/*.test.mjs 2>&1)"; rc=$?
 printf '%s\n' "$out" | grep -E '^(not )?ok ' | sed -E 's/^ok [0-9]+ - /  ok   /; s/^not ok [0-9]+ - /  FAIL /'
 passed="$(grep -cE '^ok ' <<< "$out")"; failed="$(grep -cE '^not ok ' <<< "$out")"

@@ -3472,9 +3472,61 @@ cherry-crm's dev carried ~839 MB of verification, provenance and QA output under
   exception is removed (guard.mjs is unchanged from main). evidence.dir must now sit inside the project,
   so F4 and F6 are met by the prompt naming the literal path; F7's swap cases pass on the plain guard,
   which judges a write by where it resolves. A regression test fails on 779c6a3's guard and passes now.
+- Advisor review after 68b7a33: the derived default (`<logsDir>/evidence`) was never validated, and
+  `path.resolve` took an absolute logsDir out of the project, unlike every other logsDir use
+  (`path.join(root, logsDir)`). The default now joins the same way, and preflight checks the location
+  before creating it (exit 5), so a bad location fails before a session works, not at the first based
+  gate. cherry-crm's resolves to logs/p114/evidence, covered by its /logs/ ignore rule.
 - Tests: evidence cases for the commit guard, tracked-file edits, placement (frozen, not ignored,
   .git, outside the project), the literal-path prompt, the reassignment bypass, symlink swaps, env,
   manifest/verify, CLI and gate step, preflight and config; a gate case: a hunt that skipped declared
   evidence covers the real head, and a later evidence-only commit still needs a hunt.
-  Autobuild suite 172/0 (13 evidence cases); intake 26/0 on the shared module.
+  Autobuild suite 174/0 (15 evidence cases); intake 26/0 on the shared module.
 
+## 53. The gate's schedule: order, reuse, side-by-side steps, path selection, host gate for Claude (2026-11-12)
+
+**Why.** On cherry-crm's P2-13 run the loop spent 586 minutes for 47 minutes of building. Each
+feature's gate ran about 3600 s serially, a 14 s failing suite reported after 51 minutes because
+it sat behind the long entries, and the same unchanged tree was gated again after a review.
+
+**What changed** (`graphs/autobuild/tool`). Every key defaults to the old behaviour.
+
+- `lib/gate.mjs`: the full phase is now a list of jobs. `gateOrder: "fastest"` runs the feature's
+  own test, then last-failed steps, then the shortest recorded first. `gateCache` reuses a PASS
+  while the tree content, command and env are unchanged. `gateConcurrency` > 1 hands the jobs to
+  `lib/gate-pool.mjs` (resources, a step without `resources` runs alone, a MemAvailable floor,
+  one log per step). `scope: "affected"` skips steps whose `paths` the change does not touch.
+- `lib/gate-cache.mjs`: the tree digest and the saved passes, durations and last failures, kept
+  outside the project. `lib/gate-timings.mjs`: `<logsDir>/gate-timings.jsonl`.
+- `lib/loop.mjs`: a Claude feature counts only when the Stop hook's gate finished, passed and ran
+  on the committed tree; otherwise the loop runs the gate itself. `claudeGate: "host"` always
+  does. The loop picks full or affected scope per feature, runs the whole gate before the hunt
+  when anything was narrowed, and logs session time against gate time.
+- `hooks/stop-gate.mjs`, `lib/codex-gate.mjs`, `lib/bughunt.mjs`: scope, reuse and timing lines.
+- `lib/cli.mjs`: `status` shows timings and no longer reports a dead pid as a running loop.
+- `lib/shell-words.mjs`: a subshell gate `(cd x && …)` is read like its `bash -c` form.
+
+**Bugs caught while building it.**
+- The hook-timeout hole was real by default: the fake Claude never ran the Stop hook, and the
+  loop accepted the feature on its own test alone. The new test drives a 3 s failing gate under a
+  1 s hook limit.
+- The first tree digest hashed an untracked file differently from the same file once committed,
+  so committing identical content missed the cache. Both now use git's blob form.
+- `$(...)` depth started at 0, so no substitution ever closed.
+
+**Benchmark** (`bench/gate-bench.mjs`, 53 sleeping steps, 1 real minute = 1 s, scheduling only):
+serial per-feature gate 52.3 s; with the keys, a per-feature gate 3.6–9.4 s at concurrency 4,
+the whole gate 14.8 s at concurrency 4 and 10.5 s at 6, the post-review gate 0.0 s (53 reused), a failing 14 s
+suite reported in 0.2 s once it has failed (52.3 s before).
+
+**Not measured.** Real steps competing for CPU, memory and Postgres; the fixture only sleeps.
+
+- Review before the hunt found five more: `git diff --name-only` follows renames, so a file moved
+  out of an area skipped that area's step (`--no-renames`); a `paths` typo silently dropped a step
+  (a glob matching no file now runs the step and warns; a plain directory name covers its tree);
+  the not-run list pushed the failing output out of the Stop hook's capped reason; the Codex loop
+  path had no loop test; a burst of starts could outrun the memory reading (starts are spaced).
+- The benchmark fixture then skipped nothing: its areas had no files, so the typo rule ran every
+  step. The fixture now creates them.
+
+**Counts.** 3 new lib files, 1 benchmark, 27 new tests (autobuild suite 202 → 229).
