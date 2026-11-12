@@ -471,6 +471,15 @@ test("every gate run is appended to the timings file; a logs dir git does not ig
   assert.match(report, /current PASSED: session 120s, gate 3600s \(46 run, 0 cached, 0 skipped\)\s+WARNING: checking took longer than building/);
   assert.match(report, /last gate run .*final, current, full\): PASS/);
 
+  // A link planted where the timings file goes is never written through.
+  const linked = fixture(t, { gate: ["a"] });
+  const target = path.join(mkdtempSync(path.join(tmpdir(), "autobuild-outside-")), "victim.txt");
+  writeFileSync(target, "untouched\n");
+  execFileSync("mkdir", ["-p", path.join(linked.root, "logs")]);
+  execFileSync("ln", ["-s", target, path.join(linked.root, "logs", TIMINGS_FILE)]);
+  assert.equal(runGate(linked.config, {}).ok, true);
+  assert.equal(readFileSync(target, "utf8"), "untouched\n");
+
   // Not ignored: the file would be an untracked change in the tree under test.
   const bare = fixture(t, { gate: ["a"] });
   bare.config.logsDir = "visible-logs";

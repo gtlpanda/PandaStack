@@ -22,7 +22,7 @@ import { passKey, readCache, treeDigest, writeCache } from "./gate-cache.mjs";
 import { appendTiming, timingsDir } from "./gate-timings.mjs";
 import { parityLabel, resolveCiParity, paritySpec } from "./ci-parity.mjs";
 import { checkEvidence } from "./evidence.mjs";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync } from "node:fs";
 import path from "node:path";
 import { featureById, featuresWithoutPasses, readFeatures } from "./features.mjs";
 import { buildEnv, git, runSpec, sh, shSpec, specOutput, tail } from "./proc.mjs";
@@ -30,6 +30,7 @@ import { featureTestCommands, runFeatureTests } from "./tests.mjs";
 
 const POOL = path.join(import.meta.dirname, "gate-pool.mjs");
 const KEPT_POOL_RUNS = 10;
+const POOL_RUN_DIR = /^\d{8}T\d{6}Z-\d+$/; // poolLogDir's own stamp
 
 /**
  * Frozen paths changed or added since `baseSha` (committed or not). The feature list may
@@ -255,8 +256,18 @@ function poolLogDir(config) {
   const base = timingsDir(config);
   if (!base) return { dir: mkdtempSync(path.join(tmpdir(), "autobuild-gate-")), temporary: true };
   const parent = path.join(base, "gate");
-  mkdirSync(parent, { recursive: true });
-  for (const old of readdirSync(parent).sort().slice(0, -KEPT_POOL_RUNS)) rmSync(path.join(parent, old), { recursive: true, force: true });
+  const temporary = () => ({ dir: mkdtempSync(path.join(tmpdir(), "autobuild-gate-")), temporary: true });
+  // A session can write under the logs dir, so nothing here follows a link: the directory must be
+  // a real one inside the project, and only this tool's own run directories are ever removed.
+  try {
+    mkdirSync(parent, { recursive: true });
+    const inside = `${realpathSync(config.root)}${path.sep}`;
+    if (!lstatSync(parent).isDirectory() || !`${realpathSync(parent)}${path.sep}`.startsWith(inside)) return temporary();
+    const runs = readdirSync(parent, { withFileTypes: true }).filter((entry) => entry.isDirectory() && POOL_RUN_DIR.test(entry.name)).map((entry) => entry.name).sort();
+    for (const old of runs.slice(0, Math.max(0, runs.length - (KEPT_POOL_RUNS - 1)))) rmSync(path.join(parent, old), { recursive: true, force: true });
+  } catch {
+    return temporary();
+  }
   const dir = path.join(parent, stamp);
   mkdirSync(dir, { recursive: true });
   return { dir, temporary: false };

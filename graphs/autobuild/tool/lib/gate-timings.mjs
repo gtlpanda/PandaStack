@@ -2,7 +2,7 @@
 // line to <logsDir>/gate-timings.jsonl. Nothing is written when the logs directory is not
 // gitignored: the file would dirty the tree the gate is checking.
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { git } from "./proc.mjs";
 
@@ -25,7 +25,10 @@ export function appendTiming(config, record) {
     const dir = timingsDir(config);
     if (!dir) return false;
     mkdirSync(dir, { recursive: true });
-    appendFileSync(path.join(dir, TIMINGS_FILE), `${JSON.stringify({ at: new Date().toISOString(), ...record })}\n`);
+    const file = path.join(dir, TIMINGS_FILE);
+    // A session can write under the logs dir: never append through a link it could have planted.
+    if (lstatSync(dir).isSymbolicLink() || (existsSync(file) && !lstatSync(file).isFile())) return false;
+    appendFileSync(file, `${JSON.stringify({ at: new Date().toISOString(), ...record })}\n`);
     return true;
   } catch {
     return false;
