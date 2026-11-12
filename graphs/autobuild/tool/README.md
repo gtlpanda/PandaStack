@@ -207,10 +207,104 @@ See `templates/autobuild.json`. Agent defaults come from the root `agent-config.
 | `install`, `preflight` | Run before the loop. Each preflight entry is `{name, command, hint}`. |
 | `runners` | Maps a feature's `testKind` to `{group, command}`. Test files are appended, and features in the same group run in one invocation. |
 | `gate` | `[{name, command}]`: typecheck, lint, regression, coverage… |
+| `ciParity` | CI's own test steps, run in the full gate the way CI runs them: `{workflow, steps: [{job, step}], skip}` for GitHub Actions, or `{ciFile, env, steps: [{name, run, cwd, env}]}` for any other CI; optional `lockFile`, `excludeFlags`, `suiteFlags`. Required when the repo has a recognised CI configuration. See [CI parity](#ci-parity). |
+| `ciParityOptOut` | A reason, instead of `ciParity`, for a repo whose CI cannot be run locally or already runs this gate. |
+| `evidence` | `{dir, paths, maxFileBytes}`: where run evidence goes (default `<logsDir>/evidence`, gitignored) and what the commit guard refuses. See [Run evidence](#run-evidence). |
 | `browser` | `{runner, regressionCommand}`: the browser runner, plus the command that also runs the existing browser suite in the same invocation. |
 | `frozen` | Paths sessions may not change. `autobuild.json`, the feature list and the state dir are always frozen. |
 | `writable` | Exceptions, such as `PROGRESS.md` and `DECISIONS.md`. |
 | `allowedTools`, `disallowedTools`, `reviewTools` | Permission lists for builder and review sessions. |
+
+## CI parity
+
+A gate that sets its own environment or leaves slow tests out can pass while CI fails. So the full
+gate also runs CI's test steps the way CI runs them. Two providers, chosen by the shape of `ciParity`:
+
+**GitHub Actions** names workflow steps; their `run`, `working-directory` and `env` are read from the
+workflow at gate time, never copied:
+
+```json
+"ciParity": {
+  "workflow": ".github/workflows/test.yml",
+  "steps": [{ "job": "db-tests", "step": "Acceptance suite" }],
+  "skip": [{ "step": "Install deps", "reason": "dependencies are installed locally" }]
+}
+```
+
+Every `run` step is listed in `steps` or in `skip` with a reason, in CI's order within a job; an
+unnamed step is addressed as `"#N"`, its 1-based position in the job. A step runs with GitHub's shell:
+`bash -e` by default, `bash --noprofile --norc -eo pipefail` for `shell: bash`. A step with `if:`,
+`continue-on-error`, another shell, a `${{ }}` expression, a matrix or a container cannot run exactly,
+so it must be skipped. Steps get what a GitHub-hosted runner sets (`CI=true`,
+`GITHUB_ACTIONS=true`, `TZ=UTC`) plus the workflow, job and step `env`.
+
+**Any other CI** (GitLab, CircleCI, Jenkins, Buildkite…) declares the commands and the environment
+its CI gives them; each command must appear as a whole command in `ciFile`, so a change on either
+side fails the gate until they match again:
+
+```json
+"ciParity": {
+  "ciFile": ".gitlab-ci.yml",
+  "env": { "CI": "true", "GITLAB_CI": "true" },
+  "steps": [{ "name": "api tests", "run": "cd api && pytest -c pytest.ini", "env": { "DATABASE_URL": "postgres://ci@localhost/ci_test" } }]
+}
+```
+
+For both:
+
+- **CI's environment only.** A step also gets `HOME`, `USER`, `LOGNAME`, `SHELL`, `TMPDIR`, `TERM`,
+  `LANG` and the gate's `PATH`; `env.vars` never applies. Declared commands (other CI) run with
+  `bash -eo pipefail`. What CI's services provide (a database on a port) must already be running; check it in
+  `preflight`.
+- **`lockFile`** (absolute path) serializes parity steps with other local runs using `flock`, without
+  changing the command. Waiting for the lock (up to an hour) never shortens a step's own 40 minutes.
+- **No leftovers.** Each step runs under GNU `timeout`, which kills the step's whole process group
+  when time is up, so no test process outlives it or keeps the lock.
+- **The gate is compared with CI.** `autobuild check` prints `WARN` for every `env.vars` entry or inline
+  `NAME=value` in a gate command that CI never sets or sets differently (values are not printed). It
+  fails when a gate leaves tests out and no parity step runs the same suite (same directory, tool and
+  suite options) with nothing left out. The default options cover vitest, jest, pytest, mocha and
+  `go test`; `excludeFlags` and `suiteFlags` replace them.
+- **Required.** A repo with a recognised CI configuration (`.github/workflows/*`, `.gitlab-ci.yml`,
+  `.circleci/config.yml`, `azure-pipelines.yml`, `bitbucket-pipelines.yml`, `Jenkinsfile`,
+  `.buildkite/pipeline.yml`, `.travis.yml`, `.drone.yml`, `.woodpecker.yml`) and neither `ciParity` nor
+  `ciParityOptOut` fails the full gate.
+- **Where it runs.** The loop's final full gate, the Codex host gate and `autobuild check` run parity.
+  A Claude builder's Stop hook defers it (its ~45-minute budget covers the gate commands, not a CI
+  suite plus a lock wait).
+- **Done means the gate passed.** In full delivery mode the loop re-runs the full gate, parity
+  included, before it reports done (stopping at the first failure); a failure exits 16, and a stop
+  signal during it exits 130.
+## Run evidence
+
+Verification logs, provenance and QA output belong outside git: committed, they bloat the repo and the
+diffs that reviews and `/bughunt` read.
+
+- **Where it goes.** `evidence.dir` (default `<logsDir>/evidence`; created at preflight, which fails
+  with exit 5 if it cannot be). It must be a relative path inside the project (config load refuses an
+  absolute path or `..`), gitignored, not frozen (the state dir is frozen, so it cannot go there) and
+  not in `.git`; `autobuild check` reports one that is not. Because it is an ordinary project path, the
+  guard needs no exception for it: the builder prompt names the literal path (e.g. `logs/evidence/`),
+  and scripts also get its absolute path as `AUTOBUILD_EVIDENCE_DIR`. A shell redirect through
+  `$AUTOBUILD_EVIDENCE_DIR` is still denied as a computed path, since a command can reassign the
+  variable. A write that resolves through a symlink is judged by where it lands.
+- **What is committed.** At most a manifest of hashes: `autobuild evidence manifest --out <file>` writes
+  `{schemaVersion, files: [{path, bytes, sha256}]}`; `autobuild evidence verify <file>` reports
+  missing, changed and extra files (exit 1 when a listed file is missing or changed). A binding that
+  needs provenance hashes the manifest instead of committing the files.
+- **The guard.** With a base (builder sessions, the Codex host, `autobuild check --base`), the gate's
+  `run evidence kept out of git` step refuses files a commit would add (new since the base, or untracked
+  and not ignored) that are:
+  - declared evidence: marked `bughunt-skip` or `linguist-generated` in `.gitattributes` as of the base
+    (so a session cannot undeclare them), or matching an `evidence.paths` glob. Only non-code kinds
+    count (data, docs, logs, images, patches, archives); code inside an evidence directory is allowed.
+  - larger than `evidence.maxFileBytes` (default 5 MiB), whatever their kind.
+  Untracked files git does not ignore count, because a host `git add .` would commit them. Edits to files
+  already tracked at the base (a lockfile, generated docs) are never refused. When git cannot read
+  `.gitattributes` at the base (older than 2.40), the gate warns that only `evidence.paths` and the
+  size limit were checked.
+- **Nothing is assumed about layout.** A repo declares its evidence directories once, in
+  `.gitattributes`; `/bughunt` intake reads the same declaration to leave them out of a hunt.
 
 ## features.json
 
@@ -236,6 +330,9 @@ See `templates/autobuild.json`. Agent defaults come from the root `agent-config.
 | 11 | Another loop is running |
 | 12 | The bug hunt needs a human (findings left open, or it could not run or land) |
 | 13 | The final review ended twice without its `chore(review)` commit; rerun to retry it |
+| 14 | A managed decision could not safely release the selected builder |
+| 15 | The provider refused the work (not retried) |
+| 16 | Every feature is flagged passing, but the final full gate (CI parity included) failed |
 | 130 | Interrupted |
 
 ## Limits and caveats

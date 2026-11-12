@@ -149,13 +149,76 @@ export function resolveManagedConfig({ project: raw = {}, env = {}, overrides = 
   }
   validateConcurrency(config.maxConcurrentSubagents);
   if (config.decisions !== undefined) config.decisions = validateDecisionConfig(config.decisions);
+  validateCiParityConfig(config);
   if (env.EXPECTED_BRANCH) config.branch = env.EXPECTED_BRANCH;
   config.env.pathPrepend = (config.env.pathPrepend ?? []).map(expandHome);
   config.env.ldLibraryPath = (config.env.ldLibraryPath ?? []).map(expandHome);
   // The config file and the harness state are always frozen for builders.
   config.frozen = [...new Set([CONFIG_FILE, config.featuresFile, config.stateDir, ...(config.backend === "codex" ? ["AGENTS.md", ".codex"] : []), ...(config.frozen ?? [])])];
   if (!["inject", "project"].includes(config.hooks)) throw new Error(`${CONFIG_FILE}: "hooks" must be "inject" or "project"`);
+  config.evidence = validateEvidenceConfig(config.evidence);
+  // Where sessions write verification, provenance and QA output: outside git, and not
+  // frozen (the state dir is), so the default is under the gitignored logs dir.
+  if (root) config.evidenceDir = path.resolve(root, config.evidence.dir ?? path.join(config.logsDir, "evidence"));
   return config;
+}
+
+export const WORKFLOW_DIR = ".github/workflows";
+const text = (value) => typeof value === "string" && value.trim() !== "";
+
+// Shape checks for ciParity / ciParityOptOut (resolved against the CI files in ci-parity.mjs).
+// GitHub Actions: {workflow, steps: [{job, step}], skip?}. Any other CI: {ciFile, steps: [{name, run, cwd?, env?}], env?}.
+function validateCiParityConfig(raw) {
+  const { ciParity, ciParityOptOut } = raw;
+  if (ciParityOptOut !== undefined && !text(ciParityOptOut)) throw new Error("ciParityOptOut must be a non-empty reason");
+  if (ciParity === undefined) return;
+  if (ciParityOptOut !== undefined) throw new Error("set either ciParity or ciParityOptOut, not both");
+  if (!ciParity || typeof ciParity !== "object" || Array.isArray(ciParity)) throw new Error("ciParity must be an object");
+  const github = ciParity.workflow !== undefined;
+  if (github === (ciParity.ciFile !== undefined)) throw new Error("ciParity needs exactly one of workflow (GitHub Actions) or ciFile (any other CI)");
+  const shared = ["steps", "lockFile", "excludeFlags", "suiteFlags"];
+  const known = new Set(github ? ["workflow", "skip", ...shared] : ["ciFile", "env", ...shared]);
+  const unknown = Object.keys(ciParity).filter((key) => !known.has(key));
+  if (unknown.length) throw new Error(`ciParity has unknown keys: ${unknown.join(", ")}`);
+  const relative = (value) => text(value) && !path.isAbsolute(value) && !value.split(/[\\/]/).includes("..");
+  const stringMap = (value) => value === undefined || (value && typeof value === "object" && !Array.isArray(value) && Object.values(value).every((v) => typeof v === "string"));
+  if (github) {
+    if (!relative(ciParity.workflow) || !ciParity.workflow.startsWith(`${WORKFLOW_DIR}/`)) throw new Error(`ciParity.workflow must be a file under ${WORKFLOW_DIR}/`);
+    if (!Array.isArray(ciParity.steps) || !ciParity.steps.length || ciParity.steps.some((s) => !s || !text(s.job) || !text(s.step) || Object.keys(s).some((k) => !["job", "step"].includes(k)))) {
+      throw new Error('ciParity.steps must be a non-empty array of { "job", "step" }');
+    }
+    if (ciParity.skip !== undefined && (!Array.isArray(ciParity.skip) || ciParity.skip.some((s) => !s || !text(s.step) || !text(s.reason) || (s.job !== undefined && !text(s.job)) || Object.keys(s).some((k) => !["job", "step", "reason"].includes(k))))) {
+      throw new Error('ciParity.skip must be an array of { "step", "reason", optional "job" }');
+    }
+  } else {
+    if (!relative(ciParity.ciFile)) throw new Error("ciParity.ciFile must be a path inside the repository");
+    if (!Array.isArray(ciParity.steps) || !ciParity.steps.length || ciParity.steps.some((s) => !s || !text(s.name) || !text(s.run) || (s.cwd !== undefined && !relative(s.cwd)) || !stringMap(s.env) || Object.keys(s).some((k) => !["name", "run", "cwd", "env"].includes(k)))) {
+      throw new Error('ciParity.steps must be a non-empty array of { "name", "run", optional "cwd" and "env" }');
+    }
+    if (!stringMap(ciParity.env)) throw new Error("ciParity.env must map names to strings");
+  }
+  for (const key of ["excludeFlags", "suiteFlags"]) {
+    if (ciParity[key] !== undefined && (!Array.isArray(ciParity[key]) || ciParity[key].some((flag) => typeof flag !== "string" || !/^-{1,2}[A-Za-z]/.test(flag)))) throw new Error(`ciParity.${key} must be an array of option names`);
+  }
+  if (ciParity.lockFile !== undefined && (!text(ciParity.lockFile) || !path.isAbsolute(ciParity.lockFile))) throw new Error("ciParity.lockFile must be an absolute path");
+}
+
+// Run evidence settings: where it goes (dir) and what the commit guard refuses
+// (paths: globs of declared evidence; maxFileBytes: any new or changed file).
+export const DEFAULT_MAX_FILE_BYTES = 5 * 1024 * 1024;
+
+const nonEmpty = (value) => typeof value === "string" && value.trim() !== "";
+function validateEvidenceConfig(evidence = {}) {
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) throw new Error("evidence must be an object");
+  const unknown = Object.keys(evidence).filter((key) => !["dir", "paths", "maxFileBytes"].includes(key));
+  if (unknown.length) throw new Error(`evidence has unknown keys: ${unknown.join(", ")}`);
+  // Inside the project, so the loop's guard treats it like any other project path.
+  if (evidence.dir !== undefined && (!nonEmpty(evidence.dir) || path.isAbsolute(evidence.dir) || evidence.dir.split(/[\\/]/).includes(".."))) {
+    throw new Error("evidence.dir must be a relative path inside the project (gitignored, not frozen)");
+  }
+  if (evidence.paths !== undefined && (!Array.isArray(evidence.paths) || evidence.paths.some((glob) => !nonEmpty(glob)))) throw new Error("evidence.paths must be an array of globs");
+  if (evidence.maxFileBytes !== undefined && (!Number.isInteger(evidence.maxFileBytes) || evidence.maxFileBytes <= 0)) throw new Error("evidence.maxFileBytes must be a positive integer");
+  return { paths: [], maxFileBytes: DEFAULT_MAX_FILE_BYTES, ...evidence };
 }
 
 export function statePath(config, ...parts) {

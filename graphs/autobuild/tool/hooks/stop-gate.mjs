@@ -63,7 +63,7 @@ if (session.stopAttempts > maxBlocks) {
 }
 
 const started = Date.now();
-const summary = runGate(config, { featureId: id, baseSha: session.baseSha, failFast: true, phase: config.deliveryMode === "pr-first" ? "commit" : "full" });
+const summary = runGate(config, { featureId: id, baseSha: session.baseSha, failFast: true, phase: config.deliveryMode === "pr-first" ? "commit" : "full", ciParity: false });
 const seconds = Math.round((Date.now() - started) / 1000);
 session.lastGate = { at: new Date().toISOString(), ok: summary.ok, seconds, phase: summary.phase, deferred: summary.deferred, steps: summary.steps.map(({ name, ok, seconds: s }) => ({ name, ok, seconds: s })) };
 writeSession(config, session);

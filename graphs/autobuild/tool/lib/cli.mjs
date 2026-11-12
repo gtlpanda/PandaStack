@@ -13,6 +13,7 @@ import { huntStatus } from "./bughunt.mjs";
 import { readSession } from "./session.mjs";
 import { runFeatureTests } from "./tests.mjs";
 import { tail } from "./proc.mjs";
+import { evidenceManifest, verifyEvidence } from "./evidence.mjs";
 import { flushDecisionOutput } from '../../../../core/skills/decisions/output.mjs';
 
 const HOME = path.resolve(import.meta.dirname, "..");
@@ -28,11 +29,13 @@ const HELP = `autobuild — autonomous, test-gated build loop for Claude Code or
   autobuild mark-passed <ID>           rerun a feature's test; set passes:true only if it passes
   autobuild init [--backend claude|codex] scaffold autobuild.json, PROGRESS.md and the CLAUDE.md rules
   autobuild selftest                   test the kit (limit parsing, guard) against this machine
+  autobuild evidence manifest [--out FILE]   hash every file in the evidence dir (JSON, to commit instead of the files)
+  autobuild evidence verify FILE       check the evidence dir against a manifest
 
 Exit codes of \`run\`: 0 verified completion or PR-first handoff, 2 no progress, 3 blocked, 4 frozen files changed, 5 preflight,
 6 total budget, 7 max iterations, 8 usage limit resets too far away, 9 billing, 10 auth,
 11 another loop running, 12 the bug hunt needs a human, 13 the final review did not finish,
-14 managed decision stopped, 15 provider refusal (nonretryable), 130 interrupted.
+14 managed decision stopped, 15 provider refusal (nonretryable), 16 final full gate failed, 130 interrupted.
 Docs: ${path.join(HOME, "README.md")}`;
 
 function flag(args, name) {
@@ -123,6 +126,7 @@ export async function main(argv = process.argv.slice(2)) {
           console.log(`${step.ok ? "PASS" : "FAIL"}  ${step.name} (${step.seconds}s)`);
           if (!step.ok) console.log(step.tail);
         }
+        for (const warning of summary.warnings ?? []) console.log(`WARN  ${warning}`);
         console.log(summary.ok ? `\n${summary.phase === "commit" ? "COMMIT GATE" : "GATE"}: PASS` : "\nGATE: FAIL");
         if (summary.deferred.length) console.log(`Pending PR checks: ${summary.deferred.map(step => step.name).join(", ")}`);
       }
@@ -154,6 +158,25 @@ export async function main(argv = process.argv.slice(2)) {
     }
     case "init":
       return init(value(args, "--backend") || process.env.AUTOBUILD_BACKEND || "claude");
+    case "evidence": {
+      const config = loadConfig();
+      const [action, file] = args;
+      if (action === "manifest") {
+        const json = `${JSON.stringify(evidenceManifest(config.evidenceDir), null, 2)}\n`;
+        const out = value(args, "--out");
+        if (out) writeFileSync(out, json); else process.stdout.write(json);
+        return 0;
+      }
+      if (action === "verify" && file) {
+        const result = verifyEvidence(config.evidenceDir, JSON.parse(readFileSync(file, "utf8")));
+        for (const p of result.missing) console.log(`MISSING  ${p}`);
+        for (const p of result.changed) console.log(`CHANGED  ${p}`);
+        for (const p of result.extra) console.log(`EXTRA    ${p} (not in the manifest)`);
+        console.log(result.ok ? "EVIDENCE: MATCHES" : "EVIDENCE: DIFFERS");
+        return result.ok ? 0 : 1;
+      }
+      throw new Error("usage: autobuild evidence manifest [--out FILE] | autobuild evidence verify FILE");
+    }
     case "selftest": {
       const result = spawnSync(process.execPath, ["--test", ...readdirSync(path.join(HOME, "test")).filter((f) => f.endsWith(".test.mjs")).map((f) => path.join(HOME, "test", f))], { stdio: "inherit" });
       return result.status ?? 1;

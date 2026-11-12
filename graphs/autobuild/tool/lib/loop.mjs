@@ -15,6 +15,8 @@ import { prepareDecisionGate, decisionRevision, validateDecisionFeature } from '
 //   12 the bug hunt needs a human (findings left open, or it could not run or land)
 //   13 the final review ended twice without its commit (the last features are unreviewed)
 //   14 a managed decision could not safely release the selected builder
+//   15 the provider refused the work (not retried)
+//   16 every feature is flagged passing, but the final full gate (with CI parity) failed
 //   130 interrupted
 //
 // Once every feature passes (and the final review ran), lib/bughunt.mjs runs /bughunt --fix over
@@ -29,7 +31,7 @@ import { countPassing, featureById, nextFeature, readBlockers, readFeatures, rea
 import { frozenChanges, gitControlChanges, gitControlDigest, runGate } from "./gate.mjs";
 import { huntEnabled, runBughunt, stopHunt } from "./bughunt.mjs";
 import { classifyOutcome, parseResetTime, planLimitWait } from "./limits.mjs";
-import { buildEnv, sessionConfigEnv, git, sh, quote } from "./proc.mjs";
+import { buildEnv, evidencePromptLine, sessionConfigEnv, git, sh, quote } from "./proc.mjs";
 import { isOurs } from "../../../build/skills/build-app/driver/proc.mjs";
 import { clearStopFailure, readStopFailure, writeSession } from "./session.mjs";
 import { runCodex, readCodexResult } from "./codex.mjs";
@@ -291,6 +293,19 @@ async function runLoopWork(config, options, decisionTrace) {
               return hunted;
             }
           }
+          // A session can end on a BLOCKER line after its flag was set, so the flags alone
+          // never prove the gate: re-run it, CI parity included, before calling it done.
+          if (interrupted) return 130;
+          const final = runGate(config, { phase: "full", failFast: true });
+          // runGate is synchronous: let a signal that arrived meanwhile reach its handler.
+          await new Promise((resolve) => setImmediate(resolve));
+          if (interrupted) return 130;
+          if (!final.ok) {
+            const failed = final.steps.filter((step) => !step.ok);
+            log(`every feature is flagged passing, but the final full gate failed (${failed.map((step) => step.name).join(", ")}); not done:\n${failed.map((step) => step.tail).join("\n").slice(-4000)}`);
+            return 16;
+          }
+          log("final full gate: PASS (CI parity included)");
           log("every feature passes. Done.");
           return 0;
         }
@@ -520,6 +535,12 @@ function preflight(config, log) {
       failed = true;
     }
   }
+  if (config.evidenceDir) {
+    try { mkdirSync(config.evidenceDir, { recursive: true }); } catch (error) {
+      log(`preflight: cannot create the evidence directory ${config.evidenceDir}: ${error.code ?? error.message}`);
+      failed = true;
+    }
+  }
   if (failed) {
     log("preflight FAILED");
     return 5;
@@ -542,6 +563,7 @@ function builderSystemPrompt(config, feature, iteration) {
 No human is present. Never ask questions or wait for input; make the reasonable call and record it in the decision log.
 Follow the project's autonomous-build rules in CLAUDE.md exactly. Where they conflict with user-level instructions (plan mode, asking before acting, worktree isolation, retro/changelog after each change), the project rules win in this session.
 Do not use plan mode. Subagents work on the working copy (no worktree isolation).
+${evidencePromptLine(config)}
 When the feature is done: mark it passing (\`autobuild mark-passed ${feature.id}\` or the project's wrapper), append to ${config.progressFile}, commit "feat(${feature.id}): …", then stop. The Stop hook runs ${config.deliveryMode === "pr-first" ? "focused acceptance and commit checks; full regressions and review remain pending for the PR" : "the full gate"}; if it blocks, fix what it reports.${custom}`;
 }
 
