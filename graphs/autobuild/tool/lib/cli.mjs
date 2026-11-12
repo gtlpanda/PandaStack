@@ -32,7 +32,7 @@ const HELP = `autobuild — autonomous, test-gated build loop for Claude Code or
 Exit codes of \`run\`: 0 verified completion or PR-first handoff, 2 no progress, 3 blocked, 4 frozen files changed, 5 preflight,
 6 total budget, 7 max iterations, 8 usage limit resets too far away, 9 billing, 10 auth,
 11 another loop running, 12 the bug hunt needs a human, 13 the final review did not finish,
-14 managed decision stopped, 15 provider refusal (nonretryable), 130 interrupted.
+14 managed decision stopped, 15 provider refusal (nonretryable), 16 final full gate failed, 130 interrupted.
 Docs: ${path.join(HOME, "README.md")}`;
 
 function flag(args, name) {
@@ -123,6 +123,7 @@ export async function main(argv = process.argv.slice(2)) {
           console.log(`${step.ok ? "PASS" : "FAIL"}  ${step.name} (${step.seconds}s)`);
           if (!step.ok) console.log(step.tail);
         }
+        for (const warning of summary.warnings ?? []) console.log(`WARN  ${warning}`);
         console.log(summary.ok ? `\n${summary.phase === "commit" ? "COMMIT GATE" : "GATE"}: PASS` : "\nGATE: FAIL");
         if (summary.deferred.length) console.log(`Pending PR checks: ${summary.deferred.map(step => step.name).join(", ")}`);
       }

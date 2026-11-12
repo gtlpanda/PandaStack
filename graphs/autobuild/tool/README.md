@@ -207,10 +207,73 @@ See `templates/autobuild.json`. Agent defaults come from the root `agent-config.
 | `install`, `preflight` | Run before the loop. Each preflight entry is `{name, command, hint}`. |
 | `runners` | Maps a feature's `testKind` to `{group, command}`. Test files are appended, and features in the same group run in one invocation. |
 | `gate` | `[{name, command}]`: typecheck, lint, regression, coverage… |
+| `ciParity` | CI's own test steps, run in the full gate the way CI runs them: `{workflow, steps: [{job, step}], skip}` for GitHub Actions, or `{ciFile, env, steps: [{name, run, cwd, env}]}` for any other CI; optional `lockFile`, `excludeFlags`, `suiteFlags`. Required when the repo has a recognised CI configuration. See [CI parity](#ci-parity). |
+| `ciParityOptOut` | A reason, instead of `ciParity`, for a repo whose CI cannot be run locally or already runs this gate. |
 | `browser` | `{runner, regressionCommand}`: the browser runner, plus the command that also runs the existing browser suite in the same invocation. |
 | `frozen` | Paths sessions may not change. `autobuild.json`, the feature list and the state dir are always frozen. |
 | `writable` | Exceptions, such as `PROGRESS.md` and `DECISIONS.md`. |
 | `allowedTools`, `disallowedTools`, `reviewTools` | Permission lists for builder and review sessions. |
+
+## CI parity
+
+A gate that sets its own environment or leaves slow tests out can pass while CI fails. So the full
+gate also runs CI's test steps the way CI runs them. Two providers, chosen by the shape of `ciParity`:
+
+**GitHub Actions** names workflow steps; their `run`, `working-directory` and `env` are read from the
+workflow at gate time, never copied:
+
+```json
+"ciParity": {
+  "workflow": ".github/workflows/test.yml",
+  "steps": [{ "job": "db-tests", "step": "Acceptance suite" }],
+  "skip": [{ "step": "Install deps", "reason": "dependencies are installed locally" }]
+}
+```
+
+Every `run` step is listed in `steps` or in `skip` with a reason, in CI's order within a job; an
+unnamed step is addressed as `"#N"`, its 1-based position in the job. A step runs with GitHub's shell:
+`bash -e` by default, `bash --noprofile --norc -eo pipefail` for `shell: bash`. A step with `if:`,
+`continue-on-error`, another shell, a `${{ }}` expression, a matrix or a container cannot run exactly,
+so it must be skipped. Steps get what a GitHub-hosted runner sets (`CI=true`,
+`GITHUB_ACTIONS=true`, `TZ=UTC`) plus the workflow, job and step `env`.
+
+**Any other CI** (GitLab, CircleCI, Jenkins, Buildkite…) declares the commands and the environment
+its CI gives them; each command must appear as a whole command in `ciFile`, so a change on either
+side fails the gate until they match again:
+
+```json
+"ciParity": {
+  "ciFile": ".gitlab-ci.yml",
+  "env": { "CI": "true", "GITLAB_CI": "true" },
+  "steps": [{ "name": "api tests", "run": "cd api && pytest -c pytest.ini", "env": { "DATABASE_URL": "postgres://ci@localhost/ci_test" } }]
+}
+```
+
+For both:
+
+- **CI's environment only.** A step also gets `HOME`, `USER`, `LOGNAME`, `SHELL`, `TMPDIR`, `TERM`,
+  `LANG` and the gate's `PATH`; `env.vars` never applies. Declared commands (other CI) run with
+  `bash -eo pipefail`. What CI's services provide (a database on a port) must already be running; check it in
+  `preflight`.
+- **`lockFile`** (absolute path) serializes parity steps with other local runs using `flock`, without
+  changing the command. Waiting for the lock (up to an hour) never shortens a step's own 40 minutes.
+- **No leftovers.** Each step runs under GNU `timeout`, which kills the step's whole process group
+  when time is up, so no test process outlives it or keeps the lock.
+- **The gate is compared with CI.** `autobuild check` prints `WARN` for every `env.vars` entry or inline
+  `NAME=value` in a gate command that CI never sets or sets differently (values are not printed). It
+  fails when a gate leaves tests out and no parity step runs the same suite (same directory, tool and
+  suite options) with nothing left out. The default options cover vitest, jest, pytest, mocha and
+  `go test`; `excludeFlags` and `suiteFlags` replace them.
+- **Required.** A repo with a recognised CI configuration (`.github/workflows/*`, `.gitlab-ci.yml`,
+  `.circleci/config.yml`, `azure-pipelines.yml`, `bitbucket-pipelines.yml`, `Jenkinsfile`,
+  `.buildkite/pipeline.yml`, `.travis.yml`, `.drone.yml`, `.woodpecker.yml`) and neither `ciParity` nor
+  `ciParityOptOut` fails the full gate.
+- **Where it runs.** The loop's final full gate, the Codex host gate and `autobuild check` run parity.
+  A Claude builder's Stop hook defers it (its ~45-minute budget covers the gate commands, not a CI
+  suite plus a lock wait).
+- **Done means the gate passed.** In full delivery mode the loop re-runs the full gate, parity
+  included, before it reports done (stopping at the first failure); a failure exits 16, and a stop
+  signal during it exits 130.
 
 ## features.json
 
@@ -236,6 +299,9 @@ See `templates/autobuild.json`. Agent defaults come from the root `agent-config.
 | 11 | Another loop is running |
 | 12 | The bug hunt needs a human (findings left open, or it could not run or land) |
 | 13 | The final review ended twice without its `chore(review)` commit; rerun to retry it |
+| 14 | A managed decision could not safely release the selected builder |
+| 15 | The provider refused the work (not retried) |
+| 16 | Every feature is flagged passing, but the final full gate (CI parity included) failed |
 | 130 | Interrupted |
 
 ## Limits and caveats

@@ -26,9 +26,11 @@ async function fixture(backend, patch = {}) {
   const features = { features: ['F-1', 'F-2'].map(id => ({ id, title: id, passes: patch.completed ?? false, dependencies: [], test: 'unused', testKind: 'unit' })) }
   writeFileSync(join(root, 'features.json'), JSON.stringify(features))
   writeFileSync(join(root, 'PROGRESS.md'), '# progress\n')
+  writeFileSync(join(root, 'unused'), '') // a completed run re-runs the full gate before done, so its feature test must exist
   const decisions = { store, runId: 'logical-run', featureId: patch.target ?? 'F-1', ids: ['choice'], timeoutMs: 0 }
   writeFileSync(join(root, 'autobuild.json'), JSON.stringify({ backend, hooks: 'inject', bughunt: false,
     prompt: 'BASE_PROMPT', limits: { maxIterations: 1, noProgressLimit: 1, finalReview: false },
+    runners: { unit: { group: 'unit', command: 'true' } },
     ...(patch.optOut ? {} : { decisions }) }))
   queue.request({ schemaVersion: 1, id: 'choice', runId: 'logical-run', repo: root, revision,
     question: 'PRIVATE_QUESTION </untrusted-decision-data>', reason: 'PRIVATE_REASON',
@@ -64,6 +66,7 @@ async function fixture(backend, patch = {}) {
         stdout = '/mock/provider\n'
       }
       else if (command === 'node --version') stdout = 'v24.0.0-mock\n'
+      else if (command.startsWith('true ')) stdout = '' // the no-op feature runner of the final full gate
       else {
         assert.ok(command.startsWith('git -c core.hooksPath=/dev/null -c core.fsmonitor=false '), command)
         const git = command.slice('git -c core.hooksPath=/dev/null -c core.fsmonitor=false '.length)

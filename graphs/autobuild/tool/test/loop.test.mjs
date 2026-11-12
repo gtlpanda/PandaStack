@@ -165,3 +165,45 @@ test("stopping the loop also stops the session it is running", async () => {
   assert.equal(code, 130);
   assert.equal(orphaned, false, "the session outlived the loop");
 });
+
+test("flags alone never mean done: a failing final full gate stops with 16, a passing one finishes", () => {
+  const root = project(["F-1"]);
+  const features = path.join(root, "features.json");
+  const doc = JSON.parse(readFileSync(features, "utf8"));
+  doc.features[0].passes = true; // e.g. set by mark-passed before the session ended on a BLOCKER
+  writeFileSync(features, JSON.stringify(doc, null, 2));
+  writeFileSync(path.join(root, "F-1.done"), ""); // F-1's own acceptance test passes
+  const config = path.join(root, "autobuild.json");
+  writeFileSync(config, JSON.stringify({ ...JSON.parse(readFileSync(config, "utf8")), gate: [{ name: "regression suite", command: "test -f gate-ok" }] }, null, 2));
+  execFileSync("git", ["-C", root, "commit", "-qam", "F-1 flagged, gate red"]);
+  const red = run(root, []);
+  assert.equal(red.code, 16, red.loopLog);
+  assert.equal(red.calls.length, 0, "no session runs");
+  assert.match(red.loopLog, /every feature is flagged passing, but the final full gate failed \(regression suite\); not done/);
+  assert.doesNotMatch(red.loopLog, /every feature passes\. Done\./);
+  writeFileSync(path.join(root, "gate-ok"), "");
+  const green = run(root, []);
+  assert.equal(green.code, 0, green.loopLog);
+  assert.match(green.loopLog, /final full gate: PASS \(CI parity included\)\n.*every feature passes\. Done\./);
+});
+
+test("a stop signal during the final full gate exits 130, never Done or 16", async () => {
+  const root = project(["F-1"]);
+  const features = path.join(root, "features.json");
+  const doc = JSON.parse(readFileSync(features, "utf8"));
+  doc.features[0].passes = true;
+  writeFileSync(features, JSON.stringify(doc, null, 2));
+  writeFileSync(path.join(root, "F-1.done"), "");
+  const config = path.join(root, "autobuild.json");
+  writeFileSync(config, JSON.stringify({
+    ...JSON.parse(readFileSync(config, "utf8")),
+    // The first step sends the loop a SIGTERM, as a user's `kill` would; the rest pass.
+    gate: [{ name: "stop the loop", command: `kill -TERM $(cat "${root}/.harness/loop.pid")` }, { name: "later step", command: "true" }],
+  }, null, 2));
+  execFileSync("git", ["-C", root, "commit", "-qam", "F-1 flagged, gate signals the loop"]);
+  const scriptFile = path.join(root, ".harness-script.json");
+  writeFileSync(scriptFile, "[]");
+  const loop = spawn(process.execPath, [CLI, "run"], { cwd: root, env: loopEnv(scriptFile), stdio: "ignore" });
+  const code = await new Promise((resolve) => loop.on("close", (c, signal) => resolve(c ?? signal)));
+  assert.equal(code, 130);
+});

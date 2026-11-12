@@ -3365,3 +3365,44 @@ first failed here because it counted this machine's real Codex; it now uses vers
 
 Remaining for Phase 2: the dogfood scenario and docs/dogfood/phase-02.md.
 
+## 51. CI parity: the full gate runs CI's own test steps (2026-11-12)
+
+cherry-crm's P114-03 passed every autobuild gate and failed CI with a 401. The gates set
+SECFIX_SUITE_DB=secfix_p114 for every step and ran the P1-14 acceptance only under its own config,
+excluded from the shared acceptance run; CI sets neither. Nothing compared the gate with CI.
+- `ciParity` in autobuild.json makes the full gate run CI's test steps the way CI runs them, with CI's
+  environment only (`env.vars` never applies). GitHub Actions: steps named by job and step; run,
+  working-directory and env are read from the workflow at gate time (a small YAML reader, no new
+  dependency, refuses anchors/tags/multi-docs). Any other CI: declared commands must appear as whole
+  commands in the CI file. Every GitHub `run` step is run or skipped with a reason, in CI's order.
+- Required: a recognised CI configuration (GitHub, GitLab, CircleCI, Azure, Bitbucket, Jenkins,
+  Buildkite, Travis, Drone, Woodpecker) without `ciParity` or `ciParityOptOut` fails the full gate.
+  PandaStack opts out: its CI runs this gate itself.
+- `autobuild check` warns on `env.vars` and inline `NAME=value` that CI never sets or sets differently
+  (values never printed), and fails when a gate leaves tests out that no parity step runs (same
+  directory, tool and suite options; default flags cover vitest, jest, pytest, mocha, go test).
+- Done means the gate passed: in full delivery mode the loop re-runs the full gate before "Done", and
+  exits 16 when it fails (the Phase 2 dogfood showed a BLOCKER after mark-passed ending as success).
+- tests/decision-launch.test.mjs: its completed-checkpoint fixture flagged features passing with no test
+  file, which only worked because Done never ran the gate; it now has a no-op runner and test file.
+- /bughunt on efd7b15 (F1/F2 MEDIUM, F3 LOW, reproduced): an unnamed `run` step could never be listed
+  or skipped (now addressable as "#N"); every step ran with pipefail, but GitHub's default shell is
+  `bash -e` (pipefail only for `shell: bash`); each step now gets GitHub's exact shell.
+- /bughunt on c8bad2d (F4 LOW, reproduced): with lockFile, a timeout killed only flock and left the
+  test process holding the lock. GNU timeout is now the outermost process; it kills (and passes TERM to)
+  the whole step group, and the limit is the step time plus the lock wait.
+- Re-hunt on cb53e86: timeout(1)'s own process group kept a terminal Ctrl-C from reaching the step,
+  so the gate waited for it. A small bash wrapper in the gate's group now kills timeout's group on
+  INT/TERM (test: group SIGINT stops step and gate in under 5 s, no survivors, lock free). A SIGINT
+  sent to the node pid alone still waits for the step, as it does for every synchronous gate step:
+  measured on main's proc.mjs `sh("sleep 6")`, the handler ran only after 6 s. Fixing that needs an
+  async gate, which is out of scope.
+- Re-hunt on ba55368: F5 (MEDIUM) the final gate ran every step synchronously and a SIGTERM during it
+  could be lost when the loop removed its handlers; it now stops at the first failure and yields to the
+  event loop before deciding, so a stop signal exits 130. F6 (LOW) the Stop hook (2700 s) ran parity
+  (40 min plus lock wait); the hook now defers parity to the final gate. F6's reproduction compares the
+  step's default limits with the hook timeout and still fails, but the hook no longer runs that step.
+- Tests: 26 ci-parity cases using cherry-crm's real workflow and gate strings, a P114-03-pattern
+  fixture (passes under the gate env, 401 under CI's, passes after the fix), a GitLab fixture, and a
+  loop case (exit 16, then 0). Autobuild suite 180/0.
+

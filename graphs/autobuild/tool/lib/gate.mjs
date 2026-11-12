@@ -8,10 +8,11 @@
 // frozen/current acceptance and commitGate; deferred regressions are not passes.
 
 import { createHash } from "node:crypto";
+import { parityLabel, resolveCiParity, runParityStep } from "./ci-parity.mjs";
 import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
 import path from "node:path";
 import { featureById, readFeatures } from "./features.mjs";
-import { git, sh, tail } from "./proc.mjs";
+import { buildEnv, git, sh, tail } from "./proc.mjs";
 import { runFeatureTests } from "./tests.mjs";
 
 /** The feature list with every `passes` flag removed: what must never change during a session. */
@@ -124,13 +125,14 @@ export function failureExcerpt(output, chars = EXCERPT_CHARS) {
   return `Failure lines earlier in the output:\n${shown}\n\nEnd of output:\n${end}`;
 }
 
-export function runGate(config, { featureId = null, baseSha = null, failFast = false, skipBrowser = false, phase = "full" } = {}) {
+export function runGate(config, { featureId = null, baseSha = null, failFast = false, skipBrowser = false, phase = "full", ciParity = true } = {}) {
   if (!["full", "commit"].includes(phase)) throw new Error("Unknown gate phase");
   if (phase === "commit" && config.deliveryMode !== "pr-first") throw new Error("Commit gate requires pr-first deliveryMode");
   const doc = readFeatures(config);
   const current = featureId ? featureById(doc, featureId) : null;
   const browserKind = config.browser?.runner ?? null;
   const steps = [];
+  const warnings = [];
   const deferred = phase === "commit" ? [
     ...(config.gate ?? []).map(step => ({ kind: "gate", name: step.name, reason: "PR full gate pending" })),
     ...doc.features.filter(feature => feature.passes && feature.id !== featureId).map(feature => ({ kind: "acceptance", name: feature.id, reason: "PR prior-feature regression pending" })),
@@ -145,6 +147,7 @@ export function runGate(config, { featureId = null, baseSha = null, failFast = f
     feature: featureId,
     phase,
     deferred,
+    warnings,
     steps: steps.map((step) => ({ name: step.name, ok: step.ok, seconds: Math.round((step.ms ?? 0) / 1000), tail: step.ok ? "" : failureExcerpt(step.output ?? "") })),
   });
 
@@ -171,6 +174,22 @@ export function runGate(config, { featureId = null, baseSha = null, failFast = f
 
   for (const gateStep of config.gate ?? []) {
     if (!record({ name: gateStep.name, ...sh(config, gateStep.command) })) return summary();
+  }
+
+  // CI's own test steps, exactly as CI runs them (ci-parity.mjs). The Stop hook skips them: its
+  // time budget covers the gate commands, not a CI suite plus a lock wait. The loop's final gate,
+  // the Codex host gate and `autobuild check` run them.
+  if (!ciParity) {
+    deferred.push({ kind: "ci-parity", name: "CI parity", reason: "runs in the loop's final full gate and autobuild check" });
+  } else {
+    const started = Date.now();
+    const parity = resolveCiParity(config);
+    warnings.push(...parity.warnings);
+    if (!record({ name: "CI parity configuration", ok: parity.errors.length === 0, ms: Date.now() - started, output: parity.errors.join("\n") })) return summary();
+    if (parity.errors.length === 0) {
+      const pathValue = buildEnv(config).PATH;
+      for (const step of parity.steps) if (!record({ name: `CI parity: ${parityLabel(step)}`, ...runParityStep(config, step, { pathValue }) })) return summary();
+    }
   }
 
   const passing = doc.features.filter((feature) => feature.passes && feature.id !== featureId);

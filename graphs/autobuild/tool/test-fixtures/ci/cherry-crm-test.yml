@@ -1,0 +1,119 @@
+# Adapted from a real project's CI workflow (cherry-crm) for ci-parity tests; credentials replaced with placeholders.
+name: Tests
+
+on:
+  # Releases only, to stay inside the included Actions minutes: pull requests to
+  # dev are checked locally (all three suites) before they are pushed. No push
+  # runs: a pull request's run already tests its merge result, and Render deploys
+  # main on commit, not on checks. Run it by hand from the Actions tab when needed.
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel superseded runs on the same branch — saves CI minutes when you
+# push twice quickly to a feature branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/dev' }}
+
+jobs:
+  # The server unit suite runs once, in db-tests below, with a scratch database
+  # attached (the same `vitest run`, plus the tests that need Postgres).
+  client-tests:
+    name: client (vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+      # Root install brings in zod (used by shared/schemas/*.js via the
+      # peer-dep model — see shared/package.json). Without it, vitest
+      # fails to resolve `import { z } from 'zod'` inside any shared schema file.
+      - name: Install root deps
+        run: npm ci
+      - name: Install client deps
+        working-directory: client
+        run: npm ci
+      - name: Test
+        working-directory: client
+        run: npm test
+      - name: Acceptance (autobuild, frozen)
+        working-directory: client
+        run: ./node_modules/.bin/vitest run --config vitest.acceptance.config.js --passWithNoTests
+      - name: Build
+        working-directory: client
+        run: npx vite build
+
+  # Tests that need a real Postgres: the migration tests (helpers/scratchConnection.js)
+  # and the security + e2e acceptance suite (vitest.security.config.js, a booted server).
+  # The container uses the scratch defaults in server/tests/support/config.js
+  # (127.0.0.1:55462, secfix / secfix_local, maintenance db secfix_template), so no
+  # SECFIX_* overrides are needed. Only secfix_* databases are ever touched.
+  db-tests:
+    name: server (scratch Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: secfix
+          POSTGRES_PASSWORD: secfix_local
+          POSTGRES_DB: secfix_template
+        ports:
+          - 55462:5432
+        options: >-
+          --health-cmd "pg_isready -U secfix -d secfix_template"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            shared/package-lock.json
+            server/package-lock.json
+            mcp-server/package-lock.json
+      # Same installs as the Render build (render.yaml): the booted server loads
+      # shared/ and the MCP tools (mcp-server/), which have their own deps.
+      - name: Install root deps
+        run: npm ci
+      - name: Install shared deps
+        working-directory: shared
+        run: npm ci
+      - name: Install server deps
+        working-directory: server
+        run: npm ci
+      - name: Install mcp-server deps
+        working-directory: mcp-server
+        run: npm ci
+      - name: Create and migrate secfix_unit
+        working-directory: server
+        run: node tests/support/resetDb.js secfix_unit
+      # The whole unit suite with DATABASE_URL on the scratch DB (the security gate's
+      # setup, docs/security-hotfix-2026-10/SPEC.md): the migration tests and the
+      # schema contract tests (contactMerge / organizationMerge) run instead of
+      # skipping. SCRATCH_DB_REQUIRED makes a scratchConnection() skip fail instead.
+      - name: Unit suite on the scratch DB
+        working-directory: server
+        env:
+          DATABASE_URL: postgres://ci:ci@127.0.0.1:55462/secfix_unit
+          SCRATCH_DB_REQUIRED: '1'
+        run: ./node_modules/.bin/vitest run
+      - name: Security + e2e suite (booted server)
+        working-directory: server
+        run: ./node_modules/.bin/vitest run --config vitest.security.config.js
+      # Frozen acceptance tests written before the code by the autobuild loop
+      # (docs/autobuild/feedback-2026-11/SPEC.md); same booted-server harness.
+      - name: Acceptance suite (autobuild, booted server)
+        working-directory: server
+        run: ./node_modules/.bin/vitest run --config vitest.acceptance.config.js --passWithNoTests

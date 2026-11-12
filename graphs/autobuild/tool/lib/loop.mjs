@@ -15,6 +15,8 @@ import { prepareDecisionGate, decisionRevision, validateDecisionFeature } from '
 //   12 the bug hunt needs a human (findings left open, or it could not run or land)
 //   13 the final review ended twice without its commit (the last features are unreviewed)
 //   14 a managed decision could not safely release the selected builder
+//   15 the provider refused the work (not retried)
+//   16 every feature is flagged passing, but the final full gate (with CI parity) failed
 //   130 interrupted
 //
 // Once every feature passes (and the final review ran), lib/bughunt.mjs runs /bughunt --fix over
@@ -291,6 +293,19 @@ async function runLoopWork(config, options, decisionTrace) {
               return hunted;
             }
           }
+          // A session can end on a BLOCKER line after its flag was set, so the flags alone
+          // never prove the gate: re-run it, CI parity included, before calling it done.
+          if (interrupted) return 130;
+          const final = runGate(config, { phase: "full", failFast: true });
+          // runGate is synchronous: let a signal that arrived meanwhile reach its handler.
+          await new Promise((resolve) => setImmediate(resolve));
+          if (interrupted) return 130;
+          if (!final.ok) {
+            const failed = final.steps.filter((step) => !step.ok);
+            log(`every feature is flagged passing, but the final full gate failed (${failed.map((step) => step.name).join(", ")}); not done:\n${failed.map((step) => step.tail).join("\n").slice(-4000)}`);
+            return 16;
+          }
+          log("final full gate: PASS (CI parity included)");
           log("every feature passes. Done.");
           return 0;
         }
