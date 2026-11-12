@@ -283,7 +283,9 @@ diffs that reviews and `/bughunt` read.
 - **Where it goes.** `evidence.dir` (default `<logsDir>/evidence`; created at preflight, which fails
   with exit 5 if it cannot be). It must be a relative path inside the project (config load refuses an
   absolute path or `..`), gitignored, not frozen (the state dir is frozen, so it cannot go there) and
-  not in `.git`; `autobuild check` reports one that is not. Because it is an ordinary project path, the
+  not in `.git`. The default is joined under the project root like every other `logsDir` use. Preflight
+  refuses a location that breaks these rules (exit 5, nothing created) and so does `autobuild check`.
+  Because it is an ordinary project path, the
   guard needs no exception for it: the builder prompt names the literal path (e.g. `logs/evidence/`),
   and scripts also get its absolute path as `AUTOBUILD_EVIDENCE_DIR`. A shell redirect through
   `$AUTOBUILD_EVIDENCE_DIR` is still denied as a computed path, since a command can reassign the

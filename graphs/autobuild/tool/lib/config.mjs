@@ -159,7 +159,8 @@ export function resolveManagedConfig({ project: raw = {}, env = {}, overrides = 
   config.evidence = validateEvidenceConfig(config.evidence);
   // Where sessions write verification, provenance and QA output: outside git, and not
   // frozen (the state dir is), so the default is under the gitignored logs dir.
-  if (root) config.evidenceDir = path.resolve(root, config.evidence.dir ?? path.join(config.logsDir, "evidence"));
+  // The default joins like every other logsDir use, so it stays under the project root.
+  if (root) config.evidenceDir = config.evidence.dir === undefined ? path.join(root, config.logsDir, "evidence") : path.resolve(root, config.evidence.dir);
   return config;
 }
 

@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { declaredAt, evidenceReason } from "../../../../scripts/evidence-paths.mjs";
-import { SAFE_GIT, evidenceRel } from "./proc.mjs";
+import { SAFE_GIT, evidenceRel, git as loopGit } from "./proc.mjs";
 
 const MAX_LISTED = 50;
 const MiB = 1024 * 1024;
@@ -34,11 +34,14 @@ function addedSince(config, baseSha) {
 /** Problems with where evidence lives: a gitignored, unfrozen directory inside the project. */
 export function evidenceDirProblem(config) {
   const rel = evidenceRel(config);
-  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) return `evidence.dir must be inside the project`;
+  if (rel === "" || rel.split("/")[0] === ".." || path.isAbsolute(rel)) {
+    return `the evidence directory ${config.evidenceDir} is not inside the project (it is evidence.dir, or <logsDir>/evidence by default); set evidence.dir to a gitignored project path`;
+  }
   if (rel === ".git" || rel.startsWith(".git/")) return `evidence.dir ${rel} is inside .git`;
   const frozen = (config.frozen ?? []).find((entry) => rel === entry || rel.startsWith(`${entry.replace(/\/$/, "")}/`));
   if (frozen) return `evidence.dir ${rel} is inside the frozen ${frozen}, so sessions cannot write to it; choose a gitignored path that is not frozen`;
-  const ignored = git(config, ["check-ignore", "-q", "--no-index", `${rel}/probe`]);
+  // Through the loop's git helper, like the rest of preflight.
+  const ignored = loopGit(config, ["check-ignore", "-q", "--no-index", `${rel}/probe`]);
   return ignored.ok ? null : `evidence.dir ${rel} is not gitignored; add it to .gitignore`;
 }
 

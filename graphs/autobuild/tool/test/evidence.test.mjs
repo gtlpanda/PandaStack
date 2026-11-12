@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { loadConfig } from "../lib/config.mjs";
@@ -171,6 +171,7 @@ test("builder sessions may write to the default evidence directory", async () =>
 test("an evidence directory that cannot be created fails preflight with exit 5", () => {
   const root = loopProject(["F-1"]);
   writeFileSync(path.join(root, "blocker"), "a file, not a directory\n");
+  writeFileSync(path.join(root, ".gitignore"), `${readFileSync(path.join(root, ".gitignore"), "utf8")}/blocker/\n`);
   const file = path.join(root, "autobuild.json");
   writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), evidence: { dir: "blocker/evidence" } }));
   git(root, "add", "-A");
@@ -234,4 +235,24 @@ test("a command cannot widen the guard by naming the evidence variable", () => {
     "echo x > $AUTOBUILD_EVIDENCE_DIR/../../autobuild.json",
   ]) assert.equal(decide(root, "Bash", { command }), "deny", command);
   assert.equal(decide(root, "Bash", { command: "echo x > logs/evidence/gate.log" }), "allow", "the literal project path works");
+});
+
+test("the default evidence dir follows logsDir under the project root, even when logsDir is absolute", () => {
+  const { root } = project({ logsDir: "/abs-logs" });
+  const config = loadConfig(root, {});
+  assert.equal(config.evidenceDir, path.join(root, "abs-logs", "evidence"), "joined under the root like every other logsDir use");
+  const outside = project({ logsDir: "../outside-logs" });
+  assert.match(evidenceDirProblem(loadConfig(outside.root, {})), /is not inside the project \(it is evidence\.dir, or <logsDir>\/evidence by default\); set evidence\.dir to a gitignored project path/);
+});
+
+test("preflight refuses an evidence location sessions could not use, and never creates it", () => {
+  const root = loopProject(["F-1"]);
+  const file = path.join(root, "autobuild.json");
+  writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), evidence: { dir: "tracked-evidence" } }));
+  git(root, "add", "-A");
+  git(root, "commit", "-qm", "evidence dir that is not gitignored");
+  const result = runLoop(root, []);
+  assert.equal(result.code, 5, result.out);
+  assert.match(result.loopLog, /preflight: evidence\.dir tracked-evidence is not gitignored; add it to \.gitignore/);
+  assert.equal(existsSync(path.join(root, "tracked-evidence")), false);
 });

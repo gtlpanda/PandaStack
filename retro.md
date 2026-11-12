@@ -3472,9 +3472,14 @@ cherry-crm's dev carried ~839 MB of verification, provenance and QA output under
   exception is removed (guard.mjs is unchanged from main). evidence.dir must now sit inside the project,
   so F4 and F6 are met by the prompt naming the literal path; F7's swap cases pass on the plain guard,
   which judges a write by where it resolves. A regression test fails on 779c6a3's guard and passes now.
+- Advisor review after 68b7a33: the derived default (`<logsDir>/evidence`) was never validated, and
+  `path.resolve` took an absolute logsDir out of the project, unlike every other logsDir use
+  (`path.join(root, logsDir)`). The default now joins the same way, and preflight checks the location
+  before creating it (exit 5), so a bad location fails before a session works, not at the first based
+  gate. cherry-crm's resolves to logs/p114/evidence, covered by its /logs/ ignore rule.
 - Tests: evidence cases for the commit guard, tracked-file edits, placement (frozen, not ignored,
   .git, outside the project), the literal-path prompt, the reassignment bypass, symlink swaps, env,
   manifest/verify, CLI and gate step, preflight and config; a gate case: a hunt that skipped declared
   evidence covers the real head, and a later evidence-only commit still needs a hunt.
-  Autobuild suite 172/0 (13 evidence cases); intake 26/0 on the shared module.
+  Autobuild suite 174/0 (15 evidence cases); intake 26/0 on the shared module.
 

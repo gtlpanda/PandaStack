@@ -32,6 +32,7 @@ import { frozenChanges, gitControlChanges, gitControlDigest, runGate } from "./g
 import { huntEnabled, runBughunt, stopHunt } from "./bughunt.mjs";
 import { classifyOutcome, parseResetTime, planLimitWait } from "./limits.mjs";
 import { buildEnv, evidencePromptLine, sessionConfigEnv, git, sh, quote } from "./proc.mjs";
+import { evidenceDirProblem } from "./evidence.mjs";
 import { isOurs } from "../../../build/skills/build-app/driver/proc.mjs";
 import { clearStopFailure, readStopFailure, writeSession } from "./session.mjs";
 import { runCodex, readCodexResult } from "./codex.mjs";
@@ -536,9 +537,17 @@ function preflight(config, log) {
     }
   }
   if (config.evidenceDir) {
-    try { mkdirSync(config.evidenceDir, { recursive: true }); } catch (error) {
-      log(`preflight: cannot create the evidence directory ${config.evidenceDir}: ${error.code ?? error.message}`);
+    // Sessions are told to write here; a location the guard or the gate refuses fails now, not after
+    // the work, and is never created.
+    const problem = evidenceDirProblem(config);
+    if (problem) {
+      log(`preflight: ${problem}`);
       failed = true;
+    } else {
+      try { mkdirSync(config.evidenceDir, { recursive: true }); } catch (error) {
+        log(`preflight: cannot create the evidence directory ${config.evidenceDir}: ${error.code ?? error.message}`);
+        failed = true;
+      }
     }
   }
   if (failed) {
