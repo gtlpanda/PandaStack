@@ -29,7 +29,7 @@ import { countPassing, featureById, nextFeature, readBlockers, readFeatures, rea
 import { frozenChanges, gitControlChanges, gitControlDigest, runGate } from "./gate.mjs";
 import { huntEnabled, runBughunt, stopHunt } from "./bughunt.mjs";
 import { classifyOutcome, parseResetTime, planLimitWait } from "./limits.mjs";
-import { buildEnv, sessionConfigEnv, git, sh, quote } from "./proc.mjs";
+import { buildEnv, evidencePromptLine, sessionConfigEnv, git, sh, quote } from "./proc.mjs";
 import { isOurs } from "../../../build/skills/build-app/driver/proc.mjs";
 import { clearStopFailure, readStopFailure, writeSession } from "./session.mjs";
 import { runCodex, readCodexResult } from "./codex.mjs";
@@ -520,6 +520,12 @@ function preflight(config, log) {
       failed = true;
     }
   }
+  if (config.evidenceDir) {
+    try { mkdirSync(config.evidenceDir, { recursive: true }); } catch (error) {
+      log(`preflight: cannot create the evidence directory ${config.evidenceDir}: ${error.code ?? error.message}`);
+      failed = true;
+    }
+  }
   if (failed) {
     log("preflight FAILED");
     return 5;
@@ -542,6 +548,7 @@ function builderSystemPrompt(config, feature, iteration) {
 No human is present. Never ask questions or wait for input; make the reasonable call and record it in the decision log.
 Follow the project's autonomous-build rules in CLAUDE.md exactly. Where they conflict with user-level instructions (plan mode, asking before acting, worktree isolation, retro/changelog after each change), the project rules win in this session.
 Do not use plan mode. Subagents work on the working copy (no worktree isolation).
+${evidencePromptLine(config)}
 When the feature is done: mark it passing (\`autobuild mark-passed ${feature.id}\` or the project's wrapper), append to ${config.progressFile}, commit "feat(${feature.id}): …", then stop. The Stop hook runs ${config.deliveryMode === "pr-first" ? "focused acceptance and commit checks; full regressions and review remain pending for the PR" : "the full gate"}; if it blocks, fix what it reports.${custom}`;
 }
 

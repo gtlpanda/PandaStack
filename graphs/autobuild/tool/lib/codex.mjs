@@ -4,7 +4,7 @@ import { autobuildTracking } from '../../../../core/skills/run-records/adapters.
 import { codexConcurrencyArgs } from "../../../../scripts/agent-config.mjs";
 import { spawn } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync } from "node:fs";
-import { buildEnv } from "./proc.mjs";
+import { buildEnv, evidencePromptLine } from "./proc.mjs";
 import { observeContextLaunch } from './context-receipt.mjs';
 
 export function codexArgs(config, { prompt, appendSystemPrompt = "", role = "builder", outputFile, schemaFile } = {}) {
@@ -25,6 +25,7 @@ export function codexArgs(config, { prompt, appendSystemPrompt = "", role = "bui
       ? "Run focused acceptance, fix failures, append the required progress entry, and stop. The outer harness reruns the commit gate; full regressions and broad review remain pending for the PR."
       : "Run tests, fix failures, append the required progress entry, and stop. The outer harness reruns the full gate and commits only verified work.",
     `If delegating, use ${config.subagentModel} for subagents. Keep them on this working copy with separate files.`,
+    evidencePromptLine(config),
   ].join("\n");
   args.push("-");
   return { args, input: `${prompt}\n\n${appendSystemPrompt}\n\n${rules}\n` };
