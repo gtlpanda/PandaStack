@@ -554,7 +554,9 @@ test("Claude: a gate longer than the Stop hook's timeout cannot let a feature pa
   assert.notEqual(code, 0);
   assert.match(execFileSync("git", ["-C", root, "log", "-1", "--format=%s"], { encoding: "utf8" }), /F-1 fails the gate after the session; passes reverted/);
   // The failure reaches the next session.
-  assert.match(readFileSync(path.join(root, ".harness", "gate-feedback.txt"), "utf8"), /slow regression: [\s\S]*regression-broke/);
+  const saved = JSON.parse(readFileSync(path.join(root, ".harness", "gate-feedback.json"), "utf8"));
+  assert.equal(saved.feature, "F-1");
+  assert.match(saved.feedback, /slow regression: [\s\S]*regression-broke/);
 });
 
 test("Claude: a hook that timed out on a passing gate is finished host-side, and the feature then passes", (t) => {
@@ -601,7 +603,7 @@ test("Claude, claudeGate host: the hook runs only the feature's own test; the ho
   assert.match(loopLog, /final full gate: reused \d+ PASS result\(s\) from [0-9a-f]{12}/);
   assert.equal(passesOf(root, "F-1"), true);
   assert.ok(calls.length >= 2);
-  assert.ok(!existsSync(path.join(root, ".harness", "gate-feedback.txt")), "feedback is cleared once the gate passes");
+  assert.ok(!existsSync(path.join(root, ".harness", "gate-feedback.json")), "feedback is cleared once the gate passes");
 });
 
 test("Claude: per-feature gates narrow by paths, and the whole gate still runs every fullGateEvery features and for the last one", (t) => {

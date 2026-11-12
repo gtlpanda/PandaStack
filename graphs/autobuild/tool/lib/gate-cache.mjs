@@ -83,9 +83,14 @@ export function cacheIgnore(config) {
  * A digest of the working tree's content as a gate sees it: every tracked file plus every
  * untracked file git does not ignore, committed or not. Left out: the ignore list (cacheIgnore)
  * and the `passes` flags of the feature list, which the loop itself flips after a gate.
- * Null when git cannot list the tree; callers then neither read nor write the cache.
+ * Null when git cannot list the tree or a file cannot be read; callers then neither read nor
+ * write the cache, and a gate that ran on such a tree is not taken as covering a later one.
  */
 export function treeDigest(config) {
+  try { return digestTree(config); } catch { return null; }
+}
+
+function digestTree(config) {
   const tracked = git(config, ["-c", "core.quotepath=off", "ls-files", "-s", "-z"]);
   const loose = git(config, ["-c", "core.quotepath=off", "ls-files", "-m", "-d", "-o", "--exclude-standard", "-z"]);
   if (!tracked.ok || !loose.ok) return null;
@@ -103,7 +108,7 @@ export function treeDigest(config) {
     const full = path.join(config.root, file);
     let stat;
     try { stat = lstatSync(full); } catch { entries.delete(file); continue; }
-    if (stat.isDirectory()) continue;
+    if (!stat.isFile() && !stat.isSymbolicLink()) continue; // a directory, socket or pipe has no content to compare
     // The same form `git ls-files -s` prints (mode, blob id, stage), so a file reads the same
     // before and after it is committed. (In a SHA-256 repository the ids differ: a miss, never a false hit.)
     const link = stat.isSymbolicLink();

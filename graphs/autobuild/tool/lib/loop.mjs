@@ -48,6 +48,17 @@ const HOME = path.resolve(import.meta.dirname, "..");
 const CLI_FILE = path.join(HOME, "lib", "cli.mjs");
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const REVIEW_COMMIT = "^chore(review):";
+const HOST_FEEDBACK = "gate-feedback.json";
+
+/** The host gate's failure for the feature the current session builds, or null (none, another feature's, unreadable). */
+function readHostFeedback(config) {
+  try {
+    const saved = JSON.parse(readFileSync(statePath(config, HOST_FEEDBACK), "utf8"));
+    return typeof saved.feedback === "string" && saved.feature === readSession(config)?.featureId ? saved : null;
+  } catch {
+    return null;
+  }
+}
 
 // Running claude sessions, so stopping the loop stops them too instead of leaving them orphaned.
 const sessions = new Set();
@@ -431,14 +442,12 @@ async function runLoopWork(config, options, decisionTrace) {
               return 4;
             }
             for (const line of reuseLines(hostGate)) log(`host gate: ${line}`);
-            const feedbackFile = statePath(config, "gate-feedback.txt");
             if (hostGate.ok) {
               outcome = "PASSED";
-              rmSync(feedbackFile, { force: true });
               log(`host gate: PASS (${gateLine(hostGate)})`);
             } else {
               const feedback = hostGate.steps.filter((step) => !step.ok).map((step) => `${step.name}: ${step.tail}`).join("\n");
-              writeFileSync(feedbackFile, feedback);
+              writeFileSync(statePath(config, HOST_FEEDBACK), JSON.stringify({ feature: feature.id, feedback }));
               log(`host gate: FAIL (${gateLine(hostGate)})\n${feedback.slice(-4000)}`);
               revert("fails the gate");
             }
@@ -528,6 +537,8 @@ async function runLoopWork(config, options, decisionTrace) {
         log(`iteration ${iteration}: ${timingLine(timing)}${timing.gateSeconds > timing.sessionSeconds ? " — WARNING: checking took longer than building" : ""}`);
       }
 
+      // Host-gate feedback is for the next session on the same feature only.
+      if (outcome === "PASSED" || outcome === "BLOCKED") rmSync(statePath(config, HOST_FEEDBACK), { force: true });
       if (outcome === "PASSED") {
         noProgress = 0;
         completedSinceReview += 1;
@@ -682,8 +693,8 @@ async function runClaudeWork(config, { role, prompt, appendSystemPrompt, maxTurn
     return runCodex(config, { role, prompt, appendSystemPrompt, logFile, beforeLaunch, onContextSupplied, onContextUncertain }, track);
   }
   // What the host's gate reported after the previous session on this feature (claude-host).
-  const hostFeedback = statePath(config, "gate-feedback.txt");
-  if (role === "builder" && existsSync(hostFeedback)) prompt += `\nThe gate that ran after the previous session failed. Fix this first:\n${readFileSync(hostFeedback, "utf8").slice(-8000)}`;
+  const hostFeedback = role === "builder" ? readHostFeedback(config) : null;
+  if (hostFeedback) prompt += `\nThe gate that ran after the previous session on ${hostFeedback.feature} failed. Fix this first:\n${hostFeedback.feedback.slice(-8000)}`;
   const settingsFile = statePath(config, `session-settings.json`);
   writeFileSync(settingsFile, `${JSON.stringify(sessionSettings(config), null, 2)}\n`);
   const env = buildEnv(config, {

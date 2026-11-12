@@ -178,6 +178,17 @@ function commandJob(config, { id, name, command, entry }) {
   return { id, name, spec: shSpec(config, command), keyEnv: config.env, ...schedule(entry) };
 }
 
+// Results are kept per job id. Two gate entries may share a name (allowed while no scheduling key
+// is set), so a repeated id gets its position appended: each step keeps its own result.
+function uniqueIds(jobs) {
+  const seen = new Map();
+  return jobs.map((job) => {
+    const count = (seen.get(job.id) ?? 0) + 1;
+    seen.set(job.id, count);
+    return count === 1 ? job : { ...job, id: `${job.id} #${count}` };
+  });
+}
+
 /** The jobs of the full phase in the gate's fixed order (see the file header). */
 function fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, ciParity, focused, warnings, deferred }) {
   const jobs = [];
@@ -188,7 +199,7 @@ function fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, c
     // The Stop hook's part when the full gate runs host-side: the feature's own test, whatever its kind.
     if (current) jobs.push(...featureJobs([current], `current feature ${current.id}`).map((job) => ({ ...job, pinned: true })));
     deferred.push({ kind: "host-gate", name: "full gate", reason: "runs host-side after the session" });
-    return jobs;
+    return uniqueIds(jobs);
   }
   if (current && current.testKind !== browserKind) jobs.push(...featureJobs([current], `current feature ${current.id}`).map((job) => ({ ...job, pinned: true })));
   for (const entry of config.gate ?? []) jobs.push(commandJob(config, { id: `gate: ${entry.name}`, name: entry.name, command: entry.command, entry }));
@@ -219,7 +230,7 @@ function fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, c
     const specs = [...passing.filter((feature) => feature.testKind === browserKind), ...(current?.testKind === browserKind ? [current] : [])];
     jobs.push(...featureJobs(specs, "browser", { withRegressionBrowser: true }));
   }
-  return jobs;
+  return uniqueIds(jobs);
 }
 
 /** Execution order: the feature's own test first; then as configured, or failed-last-time and fastest first. */

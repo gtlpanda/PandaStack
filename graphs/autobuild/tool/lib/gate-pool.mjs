@@ -30,10 +30,13 @@ function launch(job) {
   const out = openSync(job.logFile, "w");
   const started = Date.now();
   return new Promise((resolve) => {
-    let child, timer, killTimer, timedOut = false;
+    let child, timer, killTimer, timedOut = false, settled = false;
+    // A failed spawn emits "error" and then "close": the first one settles the step.
     const done = (status, error) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer); clearTimeout(killTimer);
-      closeSync(out);
+      try { closeSync(out); } catch { /* already closed */ }
       resolve({ ok: status === 0 && !timedOut, status, ms: Date.now() - started, timedOut, error: error?.message });
     };
     const kill = (signal) => { try { process.kill(-child.pid, signal); } catch { /* already gone */ } };
