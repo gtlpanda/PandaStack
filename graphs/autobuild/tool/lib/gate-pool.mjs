@@ -5,7 +5,8 @@
 //   - steps that share a resource never overlap; a step that declares no resources runs alone,
 //     and nothing later in the order starts before it;
 //   - no new step starts while free memory is under the floor (plus what the step says it needs
-//     and what recently started steps have reserved), unless nothing is running;
+//     and what recently started steps have reserved), unless nothing is running; with a floor
+//     set, starts are also spaced out, so a burst cannot outrun the memory reading;
 //   - with failFast, nothing new starts after the first failure; running steps finish.
 // Each step runs in its own process group with its output in its own log file.
 
@@ -51,7 +52,7 @@ function launch(job) {
  * A job: { id, spec: {argv, cwd, env, timeoutMs}, logFile, resources: string[] | null, memoryMb }.
  * `run`, `memAvailable` and the timings are injectable for tests.
  */
-export async function runPool(jobs, { concurrency = 1, failFast = false, minFreeMb = 0, run = launch, memAvailable = memAvailableMb, settleMs = 30_000, pollMs = 1000, onEvent = () => {} } = {}) {
+export async function runPool(jobs, { concurrency = 1, failFast = false, minFreeMb = 0, run = launch, memAvailable = memAvailableMb, settleMs = 30_000, pollMs = 1000, startGapMs = 1000, onEvent = () => {} } = {}) {
   const pending = [...jobs];
   const running = new Map();
   const results = {};
@@ -59,6 +60,7 @@ export async function runPool(jobs, { concurrency = 1, failFast = false, minFree
   const note = (type, job, extra = {}) => { const event = { type, id: job.id, at: Date.now(), ...extra }; events.push(event); onEvent(event); };
   let failed = false;
   let memoryHeld = false;
+  let lastStart = 0;
 
   const reserved = () => [...running.values()].filter((entry) => Date.now() - entry.startedAt < settleMs).reduce((sum, entry) => sum + (entry.job.memoryMb ?? 0), 0);
   const blocker = (job) => {
@@ -71,7 +73,9 @@ export async function runPool(jobs, { concurrency = 1, failFast = false, minFree
     }
     if (running.size === 0) return null; // one step always runs, so the gate cannot stall
     const free = memAvailable();
-    if (free != null && free - reserved() < minFreeMb + (job.memoryMb ?? 0)) return "memory";
+    if (free == null) return null;
+    if (minFreeMb > 0 && Date.now() - lastStart < startGapMs) return "memory";
+    if (free - reserved() < minFreeMb + (job.memoryMb ?? 0)) return "memory";
     return null;
   };
 
@@ -90,12 +94,14 @@ export async function runPool(jobs, { concurrency = 1, failFast = false, minFree
           const job = pending[i];
           const why = blocker(job);
           if (why === "concurrency") break;
-          if (why === "memory") { memoryHeld = true; if (!job.memoryNoted) { job.memoryNoted = true; note("memory-wait", job); } continue; }
+          // Memory holds back everything behind it too, so the order stays the order.
+          if (why === "memory") { memoryHeld = true; if (!job.memoryNoted) { job.memoryNoted = true; note("memory-wait", job); } break; }
           // A step that must run alone keeps its place: nothing after it overtakes it.
           if (why === "exclusive" && job.resources == null) break;
           if (why) continue;
           pending.splice(i, 1); i -= 1;
           const entry = { job, startedAt: Date.now() };
+          lastStart = entry.startedAt;
           running.set(job.id, entry);
           note("start", job);
           Promise.resolve(run(job)).catch((error) => ({ ok: false, status: 1, ms: Date.now() - entry.startedAt, error: String(error?.message ?? error) })).then((result) => {

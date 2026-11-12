@@ -2,7 +2,8 @@
 // Usage: autobuild <command> [args]   (run from anywhere inside a project with autobuild.json)
 
 import { spawnSync } from "node:child_process";
-import { appendFileSync, copyFileSync, existsSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG_FILE, findProjectRoot, loadConfig, statePath } from "./config.mjs";
@@ -211,8 +212,14 @@ export async function main(argv = process.argv.slice(2)) {
       throw new Error("usage: autobuild evidence manifest [--out FILE] | autobuild evidence verify FILE");
     }
     case "selftest": {
-      const result = spawnSync(process.execPath, ["--test", ...readdirSync(path.join(HOME, "test")).filter((f) => f.endsWith(".test.mjs")).map((f) => path.join(HOME, "test", f))], { stdio: "inherit" });
-      return result.status ?? 1;
+      // The suite's gates keep their saved results in a state home of their own, not the user's.
+      const stateHome = mkdtempSync(path.join(tmpdir(), "autobuild-selftest-state-"));
+      try {
+        const result = spawnSync(process.execPath, ["--test", ...readdirSync(path.join(HOME, "test")).filter((f) => f.endsWith(".test.mjs")).map((f) => path.join(HOME, "test", f))], { stdio: "inherit", env: { ...process.env, AUTOBUILD_STATE_HOME: stateHome } });
+        return result.status ?? 1;
+      } finally {
+        rmSync(stateHome, { recursive: true, force: true });
+      }
     }
     case undefined:
     case "help":

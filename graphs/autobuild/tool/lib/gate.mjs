@@ -152,10 +152,18 @@ const slug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^
 
 /** Files changed since `baseSha` (committed or not) plus untracked ones; null when git cannot say. */
 export function changedSince(config, baseSha) {
-  const diff = git(config, ["-c", "core.quotepath=off", "diff", "--name-only", "-z", baseSha]);
+  // --no-renames: a moved file counts at both its old and its new path.
+  const diff = git(config, ["-c", "core.quotepath=off", "diff", "--name-only", "--no-renames", "-z", baseSha]);
   const untracked = git(config, ["-c", "core.quotepath=off", "ls-files", "--others", "--exclude-standard", "-z"]);
   if (!diff.ok || !untracked.ok) return null;
   return [...new Set(`${diff.output}\0${untracked.output}`.split("\0").filter(Boolean))];
+}
+
+/** A `paths` entry as a matcher: a glob, or a plain file or directory name (which covers everything under it). */
+export function pathPattern(entry) {
+  if (/[*?]/.test(entry)) return globRegex(entry);
+  const plain = entry.replace(/\/+$/, "").replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${plain}(?:/.*)?$`);
 }
 
 /** True when any step of this project's gate declares `paths`, so a per-feature gate can be narrower than the full one. */
@@ -336,10 +344,18 @@ export function runGate(config, { featureId = null, baseSha = null, failFast = f
 
   // Path selection: only with a base to diff against; when the change cannot be listed, everything runs.
   const changed = scope === "affected" && baseSha ? changedSince(config, baseSha) : null;
+  const tracked = changed ? git(config, ["-c", "core.quotepath=off", "ls-files", "-z"]) : null;
+  const known = tracked?.ok ? [...new Set([...tracked.output.split("\0").filter(Boolean), ...changed])] : null;
   const selected = all.filter((job) => {
     if (!changed || job.pinned || !job.paths || !job.spec) return true;
-    const patterns = job.paths.map(globRegex);
+    const patterns = job.paths.map(pathPattern);
     if (changed.some((file) => patterns.some((pattern) => pattern.test(file)))) return true;
+    // A glob that matches nothing in the repository is a typo, not a reason to skip: the step runs.
+    const dead = known ? job.paths.filter((glob, index) => !known.some((file) => patterns[index].test(file))) : job.paths;
+    if (dead.length) {
+      warnings.push(`${job.name}: paths ${dead.map((glob) => JSON.stringify(glob)).join(", ")} match${dead.length === 1 ? "es" : ""} no file in the repository, so the step was run instead of skipped; fix the glob`);
+      return true;
+    }
     skipped.push({ name: job.name, reason: "skipped (no path match)" });
     return false;
   });

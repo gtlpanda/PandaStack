@@ -81,9 +81,9 @@ if (!summary.ok) {
       `Stop gate for ${id}: FAILED (attempt ${session.stopAttempts}/${maxBlocks}, ${seconds}s). Keep working until the gate passes.`,
       "Fix the code, not the frozen tests. If a frozen test or contract is genuinely wrong, append one line",
       `\`BLOCKER ${id}: <the exact failing assertion and why it cannot be satisfied>\` to ${config.progressFile}, commit it, and stop.`,
+      ...(summary.notRun.length ? [`${summary.notRun.length} later step(s) were not run after this failure.`] : []),
       "",
       ...failed.map((step) => `### ${step.name}\n${step.tail}`),
-      ...(summary.notRun.length ? ["", `Not run after the first failure: ${summary.notRun.join(", ")}`] : []),
     ].join("\n"),
   );
 }

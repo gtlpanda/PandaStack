@@ -22,6 +22,10 @@ const { loopState, timingReport } = await import("../lib/cli.mjs");
 // A project whose commands record their name in a file outside the tree (so running them does not change it).
 function fixture(t, { gate = ["a", "b", "c"], seconds = {} } = {}) {
   const root = project(["current", "prior"]);
+  // A web/ area, so a `paths: ["web/**"]` entry names something that exists.
+  execFileSync("mkdir", ["-p", path.join(root, "web")]);
+  writeFileSync(path.join(root, "web", "index.js"), "1\n");
+  execFileSync("git", ["-C", root, "add", "-A"]); execFileSync("git", ["-C", root, "commit", "-q", "-m", "web"]);
   const outside = mkdtempSync(path.join(tmpdir(), "autobuild-calls-"));
   t.after(() => { rmSync(root, { recursive: true, force: true }); rmSync(outside, { recursive: true, force: true }); });
   const callsFile = path.join(outside, "calls");
@@ -258,7 +262,7 @@ test("pool: no new step starts under the memory floor; one step always runs; dec
   let free = 5000;
   const harness = poolHarness();
   const run = (j) => { free = 500; return harness.run(j).then((result) => { free = 5000; return result; }); };
-  const { results, events } = await runPool([job("a"), job("b"), job("c")], { concurrency: 3, minFreeMb: 1024, run, memAvailable: () => free, pollMs: 5 });
+  const { results, events } = await runPool([job("a"), job("b"), job("c")], { concurrency: 3, minFreeMb: 1024, run, memAvailable: () => free, pollMs: 5, startGapMs: 0 });
   assert.equal(Object.keys(results).length, 3, "the gate finishes: with nothing running a step is always admitted");
   assert.deepEqual(harness.overlaps, []);
   assert.equal(harness.peak(), 1);
@@ -266,21 +270,31 @@ test("pool: no new step starts under the memory floor; one step always runs; dec
 
   // Plenty of memory: side by side.
   const roomy = poolHarness();
-  await runPool([job("a"), job("b"), job("c")], { concurrency: 3, minFreeMb: 1024, run: roomy.run, memAvailable: () => 8000 });
+  await runPool([job("a"), job("b"), job("c")], { concurrency: 3, minFreeMb: 1024, run: roomy.run, memAvailable: () => 8000, startGapMs: 0 });
   assert.equal(roomy.peak(), 3);
 
   // 4000 MiB free, floor 1024: two 1500 MiB steps fit (the first one's share is reserved before it shows up), a third does not.
   const sized = poolHarness();
-  await runPool([job("a", { memoryMb: 1500 }), job("b", { memoryMb: 1500 }), job("c", { memoryMb: 1500 })], { concurrency: 3, minFreeMb: 1024, run: sized.run, memAvailable: () => 4000, pollMs: 5, settleMs: 60_000 });
+  await runPool([job("a", { memoryMb: 1500 }), job("b", { memoryMb: 1500 }), job("c", { memoryMb: 1500 })], { concurrency: 3, minFreeMb: 1024, run: sized.run, memAvailable: () => 4000, pollMs: 5, settleMs: 60_000, startGapMs: 0 });
   assert.ok(sized.peak() <= 2, `peak ${sized.peak()}`);
 
   // Memory frees up with no step ending: the waiting step still starts (the pool polls).
   let late = 100;
   const polled = poolHarness();
   setTimeout(() => { late = 9000; }, 30);
-  const out = await runPool([job("a", { ms: 150 }), job("b")], { concurrency: 2, minFreeMb: 1024, run: polled.run, memAvailable: () => late, pollMs: 5 });
+  const out = await runPool([job("a", { ms: 150 }), job("b")], { concurrency: 2, minFreeMb: 1024, run: polled.run, memAvailable: () => late, pollMs: 5, startGapMs: 0 });
   assert.ok(polled.overlaps.includes("a+b"));
   assert.equal(Object.keys(out.results).length, 2);
+
+  // With a floor set, starts are spaced out so a burst cannot outrun the memory reading; with none, they are not.
+  const spaced = poolHarness();
+  const spacedRun = await runPool([job("a", { ms: 200 }), job("b", { ms: 200 }), job("c", { ms: 200 })], { concurrency: 3, minFreeMb: 1, run: spaced.run, memAvailable: () => 8000, pollMs: 5, startGapMs: 60 });
+  const startTimes = spacedRun.events.filter((event) => event.type === "start").map((event) => event.at);
+  assert.ok(startTimes[1] - startTimes[0] >= 55 && startTimes[2] - startTimes[1] >= 55, `starts ${startTimes.map((at) => at - startTimes[0])}`);
+  assert.equal(spaced.peak(), 3);
+  const burst = await runPool([job("a"), job("b"), job("c")], { concurrency: 3, minFreeMb: 0, run: poolHarness().run, memAvailable: () => 8000 });
+  const burstTimes = burst.events.filter((event) => event.type === "start").map((event) => event.at);
+  assert.ok(burstTimes[2] - burstTimes[0] < 50);
 
   assert.equal(memAvailableMb("/nonexistent/meminfo"), null);
   const meminfo = path.join(mkdtempSync(path.join(tmpdir(), "meminfo-")), "meminfo");
@@ -366,6 +380,56 @@ test("scope affected runs the feature's test, entries whose paths the change tou
   assert.deepEqual(runGate(config, { featureId: "current", baseSha: "0".repeat(40), scope: "affected" }).skipped, []);
   assert.deepEqual(calls().filter((word) => word === "web").length, 3);
   assert.throws(() => runGate(config, { scope: "some" }), /Unknown gate scope/);
+});
+
+test("path selection: a moved file counts at its old path, a plain directory covers what is under it, and a glob matching nothing never skips", (t) => {
+  const { root, config, calls, reset, git } = fixture(t, { gate: ["web", "api", "typo", "docs"] });
+  config.gate[0].paths = ["web/**"];
+  config.gate[1].paths = ["server/"];
+  config.gate[2].paths = ["sever/**"];
+  config.gate[3].paths = ["docs"];
+  execFileSync("mkdir", ["-p", path.join(root, "web"), path.join(root, "server", "deep"), path.join(root, "docs")]);
+  writeFileSync(path.join(root, "web", "page.js"), "export const page = 1; // a file long enough for git to see the move as a rename\n".repeat(5));
+  writeFileSync(path.join(root, "web", "keep.js"), "1\n");
+  writeFileSync(path.join(root, "server", "deep", "a.js"), "1\n");
+  writeFileSync(path.join(root, "docs", "guide.md"), "guide\n");
+  writeFileSync(path.join(root, "docs-extra.md"), "not under docs\n");
+  git("add", "-A"); git("commit", "-q", "-m", "layout");
+  const base = head(root);
+  // Moved out of web/: only the new path would show with rename detection on.
+  git("mv", "web/page.js", "elsewhere.js"); git("commit", "-q", "-m", "move");
+  const moved = runGate(config, { featureId: "current", baseSha: base, scope: "affected" });
+  assert.deepEqual(calls().filter((word) => !word.startsWith("test:")), ["web", "typo"]);
+  assert.deepEqual(moved.skipped.map((entry) => entry.name), ["api", "docs"]);
+  assert.match(moved.warnings.join("\n"), /typo: paths "sever\/\*\*" matches no file in the repository, so the step was run instead of skipped; fix the glob/);
+  assert.ok(!moved.warnings.some((line) => /^(web|api|docs):/.test(line)), "a glob that matches a tracked or changed file is not called a typo");
+  reset();
+  // A plain directory name, with or without the slash, covers the tree under it and nothing beside it.
+  const next = head(root);
+  writeFileSync(path.join(root, "server", "deep", "a.js"), "2\n");
+  writeFileSync(path.join(root, "docs-extra.md"), "changed\n");
+  const deep = runGate(config, { featureId: "current", baseSha: next, scope: "affected" });
+  assert.deepEqual(calls().filter((word) => !word.startsWith("test:")), ["api", "typo"]);
+  assert.deepEqual(deep.skipped.map((entry) => entry.name), ["web", "docs"]);
+});
+
+test("the Stop hook's block reason keeps the failing output when later steps were not run", (t) => {
+  const root = project(["F-1"]);
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const many = Array.from({ length: 60 }, (_, i) => ({ name: `a long descriptive step name number ${i} `.repeat(3).trim(), command: "true" }));
+  const file = path.join(root, "autobuild.json");
+  const doc = JSON.parse(readFileSync(file, "utf8"));
+  writeFileSync(file, JSON.stringify({ ...doc, gate: [{ name: "first", command: "seq 1 4000; echo THE-REAL-FAILURE-LINE; exit 1" }, ...many] }));
+  execFileSync("git", ["-C", root, "commit", "-q", "-am", "config"]);
+  execFileSync("mkdir", ["-p", path.join(root, ".harness")]);
+  writeFileSync(path.join(root, ".harness", "session.json"), JSON.stringify({ role: "builder", featureId: "F-1", baseSha: head(root), stopAttempts: 0 }));
+  writeFileSync(path.join(root, "F-1.done"), "built\n");
+  const hook = path.resolve(import.meta.dirname, "..", "hooks", "stop-gate.mjs");
+  const out = execFileSync(process.execPath, [hook], { cwd: root, input: "{}", encoding: "utf8", env: { ...process.env, AUTOBUILD_ACTIVE: "1", CLAUDE_PROJECT_DIR: root } });
+  const reason = JSON.parse(out).reason;
+  assert.ok(reason.length <= 9000);
+  assert.match(reason, /60 later step\(s\) were not run after this failure\./);
+  assert.match(reason, /THE-REAL-FAILURE-LINE\s*$/, "the end of the reason is the end of the failing output");
 });
 
 test("Codex host gate: an affected-scope pass commits the feature and logs what it skipped", (t) => {
@@ -545,6 +609,9 @@ test("Claude: per-feature gates narrow by paths, and the whole gate still runs e
   const root = project(ids, { maxIterations: 6, fullGateEvery: 3 });
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const counter = path.join(mkdtempSync(path.join(tmpdir(), "autobuild-count-")), "count");
+  execFileSync("mkdir", ["-p", path.join(root, "web")]);
+  writeFileSync(path.join(root, "web", "index.js"), "1\n");
+  execFileSync("git", ["-C", root, "add", "-A"]);
   configure(root, { bughunt: false, gate: [{ name: "web suite", command: `echo web >> ${counter}`, paths: ["web/**"] }, { name: "core suite", command: `echo core >> ${counter}` }] });
   const { code, loopLog } = run(root, ids.map((id) => ({ build: id, stopHook: true })));
   assert.equal(code, 0, loopLog);
@@ -552,4 +619,39 @@ test("Claude: per-feature gates narrow by paths, and the whole gate still runs e
   // First feature after a start: full. Then two narrowed... the third since the last full gate is full again; the last pending one is always full.
   assert.deepEqual(gates.map((record) => [record.feature, record.scope, record.skipped]), [["F-1", "full", []], ["F-2", "affected", ["web suite"]], ["F-3", "affected", ["web suite"]], ["F-4", "full", []]]);
   assert.match(loopLog, /iteration 2: session \d+s, gate \d+s \(\d+ run, 0 cached, 1 skipped\)/);
+});
+
+// ---------- the loop, Codex backend ----------
+
+test("Codex loop: the host gate narrows by paths, runs whole every fullGateEvery features and for the last, reuses passes after a review, and logs build against check time", (t) => {
+  const ids = ["F-1", "F-2", "F-3", "F-4"];
+  const root = project(ids, { maxIterations: 6, fullGateEvery: 3, reviewEvery: 2, finalReview: true });
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const counter = path.join(mkdtempSync(path.join(tmpdir(), "autobuild-count-")), "count");
+  execFileSync("mkdir", ["-p", path.join(root, "web")]);
+  writeFileSync(path.join(root, "web", "index.js"), "1\n");
+  execFileSync("git", ["-C", root, "add", "-A"]);
+  configure(root, { bughunt: false, gateCache: true, gate: [{ name: "web suite", command: `echo web >> ${counter}`, paths: ["web"] }, { name: "core suite", command: `echo core >> ${counter}` }] });
+  const KIT = path.resolve(import.meta.dirname, "..");
+  const codexEnv = { AUTOBUILD_BACKEND: "codex", AUTOBUILD_CODEX_BIN: path.join(KIT, "test-fixtures", "fake-codex.mjs"), AUTOBUILD_CLAUDE_BIN: "/no/claude" };
+  const { code, loopLog } = run(root, [{ build: "F-1" }, { build: "F-2" }, { review: true }, { build: "F-3" }, { build: "F-4" }, { review: true }], codexEnv);
+  assert.equal(code, 0, loopLog);
+  const records = readTimings(loadConfig(root, {}));
+  const host = records.filter((record) => record.type === "gate" && record.caller === "codex-host");
+  assert.deepEqual(host.map((record) => [record.feature, record.scope, record.skipped]), [["F-1", "full", []], ["F-2", "affected", ["web suite"]], ["F-3", "affected", ["web suite"]], ["F-4", "full", []]]);
+  for (const id of ids) assert.match(loopLog, new RegExp(`Codex host gate: PASS \\(\\d+s; \\d+ run, \\d+ cached, \\d+ skipped.*\\); committed ${id}`));
+  assert.match(loopLog, /Codex host gate: web suite: skipped \(no path match\)/);
+  // A review changes only the progress file: its gate reuses the suites instead of running them.
+  const review = records.filter((record) => record.type === "gate" && record.caller === "codex-review");
+  assert.equal(review.length, 2);
+  assert.ok(review.every((record) => record.steps.filter((step) => step.cached).map((step) => step.name).includes("core suite")), JSON.stringify(review));
+  assert.match(loopLog, /review gate: reused \d+ PASS result\(s\) from [0-9a-f]{12}/);
+  assert.match(loopLog, /final full gate: reused \d+ PASS result\(s\) from/);
+  // The web suite ran for the whole gates on a tree it had not passed on: F-1, the review after F-2
+  // (F-2's own gate skipped it), and F-4. Nothing reran it on an unchanged tree.
+  assert.equal(readFileSync(counter, "utf8").trim().split("\n").filter((word) => word === "web").length, 3);
+  assert.equal(readFileSync(counter, "utf8").trim().split("\n").filter((word) => word === "core").length, 4);
+  const iterations = records.filter((record) => record.type === "iteration");
+  assert.deepEqual(iterations.map((record) => [record.feature, record.outcome, record.skipped]), [["F-1", "PASSED", 0], ["F-2", "PASSED", 1], ["F-3", "PASSED", 1], ["F-4", "PASSED", 0]]);
+  assert.match(loopLog, /iteration 2: session \d+s, gate \d+s \(\d+ run, \d+ cached, 1 skipped\)/);
 });

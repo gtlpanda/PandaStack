@@ -3515,10 +3515,18 @@ it sat behind the long entries, and the same unchanged tree was gated again afte
 - `$(...)` depth started at 0, so no substitution ever closed.
 
 **Benchmark** (`bench/gate-bench.mjs`, 53 sleeping steps, 1 real minute = 1 s, scheduling only):
-serial per-feature gate 52.3 s; with the keys, a per-feature gate 3.5–9.4 s, the whole gate
-14.8 s at concurrency 4 and 10.4 s at 6, the post-review gate 0.0 s (53 reused), a failing 14 s
+serial per-feature gate 52.3 s; with the keys, a per-feature gate 3.6–9.4 s at concurrency 4,
+the whole gate 14.8 s at concurrency 4 and 10.5 s at 6, the post-review gate 0.0 s (53 reused), a failing 14 s
 suite reported in 0.2 s once it has failed (52.3 s before).
 
 **Not measured.** Real steps competing for CPU, memory and Postgres; the fixture only sleeps.
 
-**Counts.** 3 new lib files, 1 benchmark, 24 new tests (autobuild suite 202 → 226).
+- Review before the hunt found five more: `git diff --name-only` follows renames, so a file moved
+  out of an area skipped that area's step (`--no-renames`); a `paths` typo silently dropped a step
+  (a glob matching no file now runs the step and warns; a plain directory name covers its tree);
+  the not-run list pushed the failing output out of the Stop hook's capped reason; the Codex loop
+  path had no loop test; a burst of starts could outrun the memory reading (starts are spaced).
+- The benchmark fixture then skipped nothing: its areas had no files, so the typo rule ran every
+  step. The fixture now creates them.
+
+**Counts.** 3 new lib files, 1 benchmark, 27 new tests (autobuild suite 202 → 229).

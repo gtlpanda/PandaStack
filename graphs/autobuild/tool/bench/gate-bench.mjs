@@ -30,6 +30,9 @@ const scaled = (seconds) => (seconds / SCALE).toFixed(3);
 
 function build({ keys, concurrency = 1, failing = null }) {
   const root = project(["F-1", "F-2"]);
+  // Every area exists, so each entry's `paths` names real files (a glob matching nothing is run, not skipped).
+  for (const area of [...AREAS, "shared"]) { mkdirSync(path.join(root, area), { recursive: true }); writeFileSync(path.join(root, area, "index.js"), "1\n"); }
+  execFileSync("git", ["-C", root, "add", "-A"]); execFileSync("git", ["-C", root, "commit", "-q", "-m", "areas"]);
   const config = loadConfig(root, {});
   config.runners.unit.command = "true";
   config.gate = ENTRIES.map(([name, seconds, area]) => ({

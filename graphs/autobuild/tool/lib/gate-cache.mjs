@@ -1,9 +1,10 @@
 // What the gate remembers between runs, per project:
 //   - passes: a PASS per (step, working-tree content), reused only when gateCache is on;
 //   - durations and lastFailed: how long each step took and which failed last, for gateOrder "fastest".
-// The file lives outside the project (the state home), where a builder session cannot write:
-// the guard hook refuses writes outside the project, and the Codex sandbox is limited to it.
-// The loop also drops the file when it changes during a Codex session (cacheDigest).
+// The file lives outside the project (the state home). The guard hook refuses a Claude session's
+// writes outside the project. For Codex the loop does not rely on the sandbox: it drops the file
+// when it changed during a builder or review session (loop.mjs keepOwnGateMemory). The bug hunt's
+// sessions are not covered by that check.
 
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";

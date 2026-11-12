@@ -75,7 +75,10 @@ export function runSpec(spec, options = {}) {
 
 /** A step's output with the spawn error and the meaning of its exit status appended. */
 export function specOutput(spec, status, output, error) {
-  const note = spec.notes?.[status];
+  // Only steps that explain their exit statuses (CI parity) get anything appended: a plain shell
+  // command's output is exactly what it printed, as callers that parse it expect.
+  if (!spec.notes) return output;
+  const note = spec.notes[status];
   return `${output}${error ? `\n${error.message ?? error}` : ""}${note ? `\n${note}` : ""}`;
 }
 

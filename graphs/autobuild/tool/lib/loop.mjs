@@ -211,10 +211,10 @@ async function runLoopWork(config, options, decisionTrace) {
     // Per-feature gates may skip steps whose `paths` the change does not touch. Every
     // fullGateEvery-th feature, the last pending feature and the first one after a start get the
     // whole gate before they commit, so a regression in a skipped step surfaces inside the loop.
+    // The last feature's whole gate, the hunt's host gate and the final gate cover the end of a run.
     const narrowing = gateHasPaths(config) && config.deliveryMode !== "pr-first";
     const fullGateEvery = limits.fullGateEvery ?? limits.reviewEvery;
     let sinceFullGate = Infinity;
-    let narrowedSinceFullGate = false;
     const scopeFor = (doc) => (!narrowing || sinceFullGate + 1 >= fullGateEvery || doc.features.filter((candidate) => !candidate.passes).length <= 1 ? "full" : "affected");
 
     let iteration = 0;
@@ -235,7 +235,8 @@ async function runLoopWork(config, options, decisionTrace) {
       if (completedSinceReview === 0) return 0;
       if (!final && completedSinceReview < limits.reviewEvery) return 0;
       const control = gitControlDigest(config);
-      const reviewCode = await runReview(config, { since: lastReviewSha, iteration, runId, log });
+      const cacheBefore = cacheDigest(config);
+      const reviewCode = await runReview(config, { since: lastReviewSha, iteration, runId, log, cacheBefore });
       if (interrupted) return 0;
       if (controlTampered(config, control, "review", log)) return 4;
       if (reviewCode === 15) return 15;
@@ -297,20 +298,6 @@ async function runLoopWork(config, options, decisionTrace) {
             }
             if (interrupted) return 130;
           }
-          // Features gated with path selection since the last whole gate: run it before the hunt.
-          if (narrowedSinceFullGate) {
-            const whole = runGate(config, { phase: "full", failFast: true, caller: "pre-hunt" });
-            await new Promise((resolve) => setImmediate(resolve));
-            if (interrupted) return 130;
-            for (const line of reuseLines(whole)) log(`full gate before the bug hunt: ${line}`);
-            if (!whole.ok) {
-              const failed = whole.steps.filter((step) => !step.ok);
-              log(`every feature is flagged passing, but the full gate failed before the bug hunt (${failed.map((step) => step.name).join(", ")}); not done:\n${failed.map((step) => step.tail).join("\n").slice(-4000)}`);
-              return 16;
-            }
-            log(`full gate before the bug hunt: PASS (${gateLine(whole)})`);
-            narrowedSinceFullGate = false;
-          }
           if (huntEnabled(config)) {
             const hunted = await runBughunt(config, { log, runId, stopped: () => interrupted });
             if (interrupted) return 130;
@@ -356,7 +343,7 @@ async function runLoopWork(config, options, decisionTrace) {
       let exitCode, base, started, control, gateFailure;
       const gateScope = scopeFor(doc);
       const startedIso = new Date().toISOString();
-      const cacheBefore = config.backend === "codex" ? cacheDigest(config) : null;
+      const cacheBefore = cacheDigest(config);
       try {
         base = git(config, ["rev-parse", "HEAD"]).output.trim();
         writeSession(config, { role: "builder", featureId: feature.id, iteration: iteration + 1, baseSha: base, startedAt: startedIso, progressAtStart: readProgress(config), stopAttempts: 0, gateScope });
@@ -398,11 +385,7 @@ async function runLoopWork(config, options, decisionTrace) {
       }
       let hostGate = null; // the gate summary when the host ran one for this feature
       if (config.backend === "codex") {
-        // A Codex session has no gate of its own to run: a gate memory that changed under it is not the loop's.
-        if (cacheDigest(config) !== cacheBefore) {
-          log(`iteration ${iteration + 1}: the gate's saved results changed during the Codex session; discarding them`);
-          dropCache(config);
-        }
+        keepOwnGateMemory(config, cacheBefore, `iteration ${iteration + 1}`, log);
         const finished = finishCodexBuilder(config, { feature, base, docBefore: doc, exitCode, result, log, scope: gateScope });
         if (finished === 4) return 4;
         if (finished && typeof finished === "object") hostGate = finished;
@@ -550,7 +533,7 @@ async function runLoopWork(config, options, decisionTrace) {
         completedSinceReview += 1;
         // Which gate cleared it: the host's summary, or the hook's last one.
         const clearedBy = hostGate ?? readSession(config)?.lastGate;
-        if (!narrowing || clearedBy?.scope === "full") { sinceFullGate = 0; narrowedSinceFullGate = false; } else { sinceFullGate += 1; narrowedSinceFullGate = true; }
+        sinceFullGate = !narrowing || clearedBy?.scope === "full" ? 0 : sinceFullGate + 1;
       } else {
         noProgress += 1;
       }
@@ -809,7 +792,18 @@ async function probeUntilAvailable(config, log, limits, sleepMs, maxWaitHours = 
   return { ok: false, ms: Date.now() - started };
 }
 
-async function runReview(config, { since, iteration, runId, log }) {
+/**
+ * Codex sessions have no gate of their own to run (the host runs it), so saved gate results that
+ * changed while one ran were not written by the loop: they are dropped, and the gate runs afresh.
+ * Claude sessions run the gate themselves (the Stop hook, `autobuild check`), so theirs are kept.
+ */
+function keepOwnGateMemory(config, before, who, log) {
+  if (config.backend !== "codex" || cacheDigest(config) === before) return;
+  log(`${who}: the gate's saved results changed during the Codex session; discarding them`);
+  dropCache(config);
+}
+
+async function runReview(config, { since, iteration, runId, log, cacheBefore }) {
   const base = git(config, ["rev-parse", "HEAD"]).output.trim();
   const reviewLog = path.join(config.root, config.logsDir, `${runId}-review-after-iter-${String(iteration).padStart(2, "0")}.jsonl`);
   writeSession(config, { role: "review", featureId: "REVIEW", iteration, baseSha: base, startedAt: new Date().toISOString(), progressAtStart: readProgress(config), stopAttempts: 0 });
@@ -834,6 +828,7 @@ async function runReview(config, { since, iteration, runId, log }) {
     logFile: reviewLog,
   });
   const result = config.backend === "codex" ? readCodexResult(reviewLog) : readResult(reviewLog);
+  keepOwnGateMemory(config, cacheBefore, "review", log);
   if (config.backend === "codex") finishCodexReview(config, { base, exitCode, result, log });
   if (classifyOutcome({ result }).kind === 'provider_refusal') {
     log('review: provider_refusal/nonretryable; Provider declined this work; automatic retry is blocked.');
