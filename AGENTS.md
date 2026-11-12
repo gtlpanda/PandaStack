@@ -28,17 +28,16 @@ Git ownership/trust restriction, nested-capture orphan/overflow and filesystem-
 race restrictions. No safety-filter bypass, provider fallback, target audit,
 target application changes or false verification/completion claims.
 
-# Active priority: security-audit repairs and full Codex workflow parity
+# Active priority: Phase 2 completion
 
-The user has paused Phase 2 expansion and prioritized security-audit execution
-and recovery repairs, followed by full Codex parity for every offering. Read
-spec/contracts/security-audit-priority.md and the host-selected feature contract.
-Only entries in features-security-audit.json are currently selected. The Phase 2
-instructions below remain preserved for later resumption and all execution
-restrictions remain binding. Do not implement P2-15/P2-16 during this priority.
-The external pinned host owns feature selection, frozen inputs, full gates,
-commits and completion. No provider fallback, target application changes or
-previously blocked reproduction is authorized by this priority.
+Selected feature list: features.json (Phase 2). The security-audit execution and
+recovery repairs are complete (all 17 repair features pass, through SA-AR01). On 2026-11-11 the user closed the full Codex parity priority (D122):
+Codex stays a fallback backend for the paths already native (autobuild, bughunt),
+and the paused roadmap resumes with Phase 2. P2-15 and P2-16 shipped in b7a6c8c
+and are passing (D121); Phase 2 completion still needs its dogfood scenario and
+report. All execution restrictions above and below remain binding. No provider
+fallback, target application changes or previously blocked reproduction is
+authorized.
 
 # Phase 2 autonomous build
 

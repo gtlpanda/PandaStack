@@ -238,7 +238,7 @@
       ],
       "test": "acceptance/phase2/p2-15.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "P2-16",
@@ -255,7 +255,7 @@
       ],
       "test": "acceptance/phase2/p2-16.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     }
   ]
 }

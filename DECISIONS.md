@@ -825,3 +825,24 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   mislabel is recorded as a PROGRESS limit. It is not fixed here because a fix
   needs new durable state that this slice does not select.
 
+
+- D121 (P2-15/P2-16 flags, 2026-11-11): Both behaviors shipped in b7a6c8c
+  ("stream large suite exports and preserve Git object format", merged via the
+  security-audit readiness work) without their pass flags. Their frozen tests
+  fail on b7a6c8c^ (P2-15 0/2, P2-16 1/3) and pass on main 0bc2604 (2/2, 3/3),
+  so the flags were set with `autobuild mark-passed` and no new code. The root
+  autobuild.json now targets Phase 2 on the Claude backend (branch
+  autobuild/phase2, PROGRESS.md, default state dirs), using the D119 commit-flow
+  prompts plus an explicit pointer to AGENTS.md, which Claude does not read on
+  its own. Phase 2 completion still needs its dogfood scenario and report
+  (ROADMAP Phase 2; docs/dogfood/phase-02.md).
+
+- D122 (priority change, 2026-11-11): The user closed the security-audit and
+  full Codex parity priority after the repairs reached 17/17. Codex stays a
+  fallback backend for the paths already native (autobuild and bughunt); 44 of
+  46 offerings remain uncertified on Codex and are not being ported now. The
+  roadmap resumes with Phase 2. AGENTS.md's active-priority section now selects
+  features.json, and tests/agents-active-priority.test.mjs keeps that section in
+  step with autobuild.json (bughunt F1 on 0278090 found them contradicting).
+  SPEC.md carried the same stale section (bughunt F2 on 47851b2); it now matches
+  AGENTS.md, and the test checks both files.
