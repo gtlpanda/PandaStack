@@ -34,10 +34,10 @@ Selected feature list: features.json (Phase 2). The security-audit execution and
 recovery repairs are complete (all 17 repair features pass, through SA-AR01). On 2026-11-11 the user closed the full Codex parity priority (D122):
 Codex stays a fallback backend for the paths already native (autobuild, bughunt),
 and the paused roadmap resumes with Phase 2. P2-15 and P2-16 shipped in b7a6c8c
-and are passing (D121); Phase 2 completion still needs its dogfood scenario and
-report. All execution restrictions above and below remain binding. No provider
-fallback, target application changes or previously blocked reproduction is
-authorized.
+and are passing (D121). The Phase 2 dogfood ran (docs/dogfood/phase-02.md); Phase 2
+completes when that report is reviewed. All execution restrictions above and below
+remain binding. No provider fallback, target application changes or previously
+blocked reproduction is authorized.
 
 # Phase 2 autonomous build
 
