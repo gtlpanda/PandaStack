@@ -87,6 +87,22 @@ test("splits cherry-crm's gate commands, including the bash -c script and '\"'\"
   ]);
 });
 
+test("a subshell gate is read like the bash -c form: its cd applies inside it and ends with it", () => {
+  const inside = (command) => simpleCommands(command).map((c) => [c.cwd, c.words.join(" ")]);
+  assert.deepEqual(inside("(cd frontend && npx vitest run --exclude a.test.js) && lint"), [["frontend", "npx vitest run --exclude a.test.js"], [".", "lint"]]);
+  assert.deepEqual(inside("cd a && (cd b && (cd c && x) && y) && z"), [["a/b/c", "x"], ["a/b", "y"], ["a", "z"]]);
+  assert.deepEqual(inside("bash -c 'cd sub && x' && y"), [[".", "bash -c"], ["sub", "x"], [".", "y"]]);
+  assert.deepEqual(shellWords("(a)"), ["(", "a", ")"]);
+  // Not subshells: quoted or escaped parentheses, and command substitution, stay inside their word.
+  assert.deepEqual(shellWords(`echo "(cd x)" '(y)' \\(z\\)`), ["echo", "(cd x)", "(y)", "(z)"]);
+  assert.deepEqual(shellWords('run --id=$(cd x && git rev-parse HEAD) "$(date ")")" next'), ["run", "--id=$(cd x && git rev-parse HEAD)", '$(date ")")', "next"]);
+  assert.deepEqual(inside("x=$(cd sub && pwd) run"), [[".", "x=$(cd sub && pwd) run"]]);
+  assert.deepEqual(shellWords("echo $((1+2)) $HOME ${x:-(}"), ["echo", "$((1+2))", "$HOME", "${x:-", "(", "}"]);
+  assert.throws(() => shellWords("echo $(open"), /unterminated command substitution/);
+  // A stray ")" never pops past the gate's root.
+  assert.deepEqual(inside("cd a && x) && y"), [["a", "x"], ["a", "y"]]);
+});
+
 test("shell words: quotes, escapes, operators, cd tracking and option forms", () => {
   assert.deepEqual(shellWords(`a "b c" 'd e'f g\\ h`), ["a", "b c", "d ef", "g h"]);
   assert.deepEqual(shellWords("x&&y||z;w|v"), ["x", "&&", "y", "||", "z", ";", "w", "|", "v"]);
@@ -158,6 +174,20 @@ test("cherry-crm's gate config: run-specific env and the per-slice excludes are 
   const optedOut = resolveCiParity({ root, ciParityOptOut: "testing", env, gate });
   assert.match(optedOut.warnings.join("\n"), /gate "all prior server acceptance" leaves out tests\/acceptance\/p16\/\*\*, tests\/acceptance\/p114\/\*\* \(vitest in server, --config vitest.acceptance.config.js\), and no CI-parity step runs that suite with nothing left out/);
   assert.deepEqual(optedOut.errors, []);
+});
+
+test("a gate written as a subshell gets the same parity verdict as its bash -c form", () => {
+  const root = repo({ ".github/workflows/test.yml": CHERRY_WORKFLOW });
+  const env = { vars: {} };
+  const script = "cd server && ./node_modules/.bin/vitest run --config vitest.acceptance.config.js --exclude 'tests/acceptance/p16/**'";
+  const verdict = (command, ciParity) => { const r = resolveCiParity({ root, ciParity, env, gate: [{ name: "acceptance", command }] }); return [r.errors, r.warnings]; };
+  // Covered by the declared parity acceptance step: no error in either form (the subshell form used to fail).
+  assert.deepEqual(verdict(`(${script})`, CHERRY_PARITY), verdict(`bash -c "${script}"`, CHERRY_PARITY));
+  assert.deepEqual(verdict(`(${script})`, CHERRY_PARITY)[0], []);
+  // Not covered: both forms fail alike, so the subshell form hides nothing.
+  const uncovered = { ...CHERRY_PARITY, steps: CHERRY_PARITY.steps.filter((s) => !s.step.startsWith("Acceptance suite")), skip: [...CHERRY_PARITY.skip, { step: "Acceptance suite (autobuild, booted server)", reason: "test" }] };
+  assert.equal(verdict(`(${script})`, uncovered)[0].length, 1);
+  assert.deepEqual(verdict(`(${script})`, uncovered), verdict(`bash -c "${script}"`, uncovered));
 });
 
 test("an exclude not covered by a parity step fails when ciParity is declared", () => {
