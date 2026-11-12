@@ -52,19 +52,36 @@ export function buildEnv(config, extra = {}) {
   return env;
 }
 
-/** Runs a shell command in the project root; never throws. */
-export function sh(config, command, options = {}) {
+export const SH_TIMEOUT_MS = 40 * 60 * 1000;
+
+/** How a shell command runs in the project root: the one description `sh` and the gate's pool share. */
+export function shSpec(config, command, options = {}) {
+  return { argv: ["bash", "-c", command], cwd: config.root, cwdRel: ".", env: options.env ?? buildEnv(config), timeoutMs: options.timeoutMs ?? SH_TIMEOUT_MS };
+}
+
+/** Runs a spec ({argv, cwd, env, timeoutMs, notes?}) to completion; never throws. */
+export function runSpec(spec, options = {}) {
   const started = Date.now();
-  const result = spawnSync("bash", ["-c", command], {
-    cwd: config.root,
-    env: options.env ?? buildEnv(config),
+  const result = spawnSync(spec.argv[0], spec.argv.slice(1), {
+    cwd: spec.cwd,
+    env: spec.env,
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
-    timeout: options.timeoutMs ?? 40 * 60 * 1000,
+    timeout: spec.timeoutMs,
     stdio: options.inherit ? "inherit" : "pipe",
   });
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-  return { ok: result.status === 0, status: result.status, output, ms: Date.now() - started };
+  return { ok: result.status === 0, status: result.status, output: specOutput(spec, result.status, `${result.stdout ?? ""}${result.stderr ?? ""}`, result.error), ms: Date.now() - started };
+}
+
+/** A step's output with the spawn error and the meaning of its exit status appended. */
+export function specOutput(spec, status, output, error) {
+  const note = spec.notes?.[status];
+  return `${output}${error ? `\n${error.message ?? error}` : ""}${note ? `\n${note}` : ""}`;
+}
+
+/** Runs a shell command in the project root; never throws. */
+export function sh(config, command, options = {}) {
+  return runSpec(shSpec(config, command, options), options);
 }
 
 export function quote(arg) {

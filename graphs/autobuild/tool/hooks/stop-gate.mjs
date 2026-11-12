@@ -13,6 +13,7 @@ import { readFileSync } from "node:fs";
 import { findProjectRoot, loadConfig } from "../lib/config.mjs";
 import { readFeatures, readProgress } from "../lib/features.mjs";
 import { runGate } from "../lib/gate.mjs";
+import { treeDigest } from "../lib/gate-cache.mjs";
 import { git } from "../lib/proc.mjs";
 import { isActive, projectRootFromHookEnv, readSession, writeSession } from "../lib/session.mjs";
 
@@ -63,9 +64,14 @@ if (session.stopAttempts > maxBlocks) {
 }
 
 const started = Date.now();
-const summary = runGate(config, { featureId: id, baseSha: session.baseSha, failFast: true, phase: config.deliveryMode === "pr-first" ? "commit" : "full", ciParity: false });
+// claudeGate "host": the loop runs the full gate after the session, with no time limit; the hook
+// keeps the quick part (frozen files, evidence, the feature's own test).
+const focused = config.claudeGate === "host" && config.deliveryMode !== "pr-first";
+// The tree the gate ran on, so the loop can tell whether a passing gate covers what was committed.
+const tree = treeDigest(config);
+const summary = runGate(config, { featureId: id, baseSha: session.baseSha, failFast: true, phase: config.deliveryMode === "pr-first" ? "commit" : "full", ciParity: false, scope: session.gateScope ?? "full", focused, caller: "stop-hook" });
 const seconds = Math.round((Date.now() - started) / 1000);
-session.lastGate = { at: new Date().toISOString(), ok: summary.ok, seconds, phase: summary.phase, deferred: summary.deferred, steps: summary.steps.map(({ name, ok, seconds: s }) => ({ name, ok, seconds: s })) };
+session.lastGate = { at: new Date().toISOString(), ok: summary.ok, seconds, phase: summary.phase, scope: summary.scope, focused, tree, deferred: summary.deferred, skipped: summary.skipped, steps: summary.steps.map(({ name, ok, seconds: s, cached }) => ({ name, ok, seconds: s, ...(cached ? { cached } : {}) })) };
 writeSession(config, session);
 
 if (!summary.ok) {
@@ -77,6 +83,7 @@ if (!summary.ok) {
       `\`BLOCKER ${id}: <the exact failing assertion and why it cannot be satisfied>\` to ${config.progressFile}, commit it, and stop.`,
       "",
       ...failed.map((step) => `### ${step.name}\n${step.tail}`),
+      ...(summary.notRun.length ? ["", `Not run after the first failure: ${summary.notRun.join(", ")}`] : []),
     ].join("\n"),
   );
 }

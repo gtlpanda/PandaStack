@@ -7,12 +7,12 @@
 //   appear verbatim in that CI file, so a change on either side is caught.
 // A step runs with CI's environment only, plus the few host variables a process
 // needs to start. autobuild.json `env.vars` never applies.
-import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { parseWorkflowYaml } from "./workflow-yaml.mjs";
 import { assignments, optionValues, simpleCommands } from "./shell-words.mjs";
 import { WORKFLOW_DIR } from "./config.mjs";
+import { runSpec } from "./proc.mjs";
 
 // Set for every step on a GitHub-hosted runner.
 const GITHUB_RUNNER_ENV = Object.freeze({ CI: "true", GITHUB_ACTIONS: "true", TZ: "UTC" });
@@ -306,24 +306,27 @@ export function parityEnv(step, hostEnv = process.env, pathValue = hostEnv.PATH)
  * so no test process outlives the step or keeps the lock. The limit is the step's own time plus the lock wait,
  * so waiting for another run never shortens the step.
  */
-export function runParityStep(config, step, { hostEnv = process.env, pathValue, timeoutSeconds = STEP_TIMEOUT_S, lockWaitSeconds = LOCK_WAIT_S } = {}) {
-  const started = Date.now();
+export function paritySpec(config, step, { hostEnv = process.env, pathValue, timeoutSeconds = STEP_TIMEOUT_S, lockWaitSeconds = LOCK_WAIT_S } = {}) {
   const lockFile = config.ciParity?.lockFile;
   const limit = timeoutSeconds + (lockFile ? lockWaitSeconds : 0);
-  const argv = ["bash", "-c", WRAPPER, "ci-parity", String(limit),
-    ...(lockFile ? ["flock", "-w", String(lockWaitSeconds), "-E", String(LOCK_BUSY), lockFile] : []),
-    ...step.shellArgs, "-c", step.run];
-  const result = spawnSync(argv[0], argv.slice(1), {
+  return {
+    argv: ["bash", "-c", WRAPPER, "ci-parity", String(limit),
+      ...(lockFile ? ["flock", "-w", String(lockWaitSeconds), "-E", String(LOCK_BUSY), lockFile] : []),
+      ...step.shellArgs, "-c", step.run],
     cwd: path.join(config.root, step.cwd),
+    cwdRel: step.cwd,
     env: parityEnv(step, hostEnv, pathValue ?? hostEnv.PATH),
-    encoding: "utf8",
-    maxBuffer: 256 * 1024 * 1024,
-    timeout: (limit + 90) * 1000,   // a backstop; its TERM reaches the wrapper, which stops the group
-  });
-  const why = result.status === TIMED_OUT ? `\nCI parity step timed out after ${limit}s${lockFile ? ` (${timeoutSeconds}s to run plus up to ${lockWaitSeconds}s waiting for the lock)` : ""}; its process group was killed.`
-    : result.status === LOCK_BUSY && lockFile ? `\nCI parity lock ${lockFile} stayed busy for ${lockWaitSeconds}s.` : "";
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}${result.error ? `\n${result.error.message}` : ""}${why}`;
-  return { ok: result.status === 0, status: result.status, output, ms: Date.now() - started };
+    timeoutMs: (limit + 90) * 1000,   // a backstop; its TERM reaches the wrapper, which stops the group
+    // What an exit status means, appended to the step's output.
+    notes: {
+      [TIMED_OUT]: `CI parity step timed out after ${limit}s${lockFile ? ` (${timeoutSeconds}s to run plus up to ${lockWaitSeconds}s waiting for the lock)` : ""}; its process group was killed.`,
+      ...(lockFile ? { [LOCK_BUSY]: `CI parity lock ${lockFile} stayed busy for ${lockWaitSeconds}s.` } : {}),
+    },
+  };
+}
+
+export function runParityStep(config, step, options = {}) {
+  return runSpec(paritySpec(config, step, options));
 }
 
 export const parityLabel = (step) => step.label;

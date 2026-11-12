@@ -14,8 +14,8 @@ function runnerFor(config, feature) {
   return runner;
 }
 
-/** Runs the tests of `features`, grouped by runner. Returns one step per invocation. */
-export function runFeatureTests(config, features, options = {}) {
+/** The invocations that test `features`, grouped by runner: [{ name, command, runner, browser }]. */
+export function featureTestCommands(config, features, options = {}) {
   const groups = new Map();
   for (const feature of features) {
     if (!existsSync(path.join(config.root, feature.test))) throw new Error(`${feature.id}: test file ${feature.test} is missing`);
@@ -25,14 +25,19 @@ export function runFeatureTests(config, features, options = {}) {
     groups.get(key).files.push(feature.test);
   }
   const browserKind = config.browser?.runner;
-  const steps = [];
+  const commands = [];
   for (const [key, group] of groups) {
-    const isBrowser = browserKind && group.kind === browserKind;
+    const isBrowser = Boolean(browserKind && group.kind === browserKind);
     const command = isBrowser && options.withRegressionBrowser && config.browser?.regressionCommand ? config.browser.regressionCommand : group.runner.command;
-    steps.push({ name: `${key} (${group.files.length} file${group.files.length === 1 ? "" : "s"})`, ...sh(config, `${command} ${group.files.map(quote).join(" ")}`) });
+    commands.push({ name: `${key} (${group.files.length} file${group.files.length === 1 ? "" : "s"})`, command: `${command} ${group.files.map(quote).join(" ")}`, runner: group.runner, browser: isBrowser });
   }
   if (options.withRegressionBrowser && config.browser?.regressionCommand && !features.some((feature) => feature.testKind === browserKind)) {
-    steps.push({ name: "browser regression suite", ...sh(config, config.browser.regressionCommand) });
+    commands.push({ name: "browser regression suite", command: config.browser.regressionCommand, runner: null, browser: true });
   }
-  return steps;
+  return commands;
+}
+
+/** Runs the tests of `features`, grouped by runner. Returns one step per invocation. */
+export function runFeatureTests(config, features, options = {}) {
+  return featureTestCommands(config, features, options).map(({ name, command }) => ({ name, ...sh(config, command) }));
 }

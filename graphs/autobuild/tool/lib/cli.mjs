@@ -13,6 +13,8 @@ import { huntStatus } from "./bughunt.mjs";
 import { readSession } from "./session.mjs";
 import { runFeatureTests } from "./tests.mjs";
 import { tail } from "./proc.mjs";
+import { readTimings, timingLine } from "./gate-timings.mjs";
+import { isOurs } from "../../../build/skills/build-app/driver/proc.mjs";
 import { evidenceManifest, verifyEvidence } from "./evidence.mjs";
 import { flushDecisionOutput } from '../../../../core/skills/decisions/output.mjs';
 
@@ -24,7 +26,7 @@ const HELP = `autobuild — autonomous, test-gated build loop for Claude Code or
   autobuild next                       print the feature the next session builds
   autobuild status                     passing count, next feature, blockers, last log lines
   autobuild test <ID> [ID...]          run features' frozen acceptance tests
-  autobuild check [--phase full|commit] [--feature ID] [--base SHA] [--fail-fast] [--json] [--skip-browser]
+  autobuild check [--phase full|commit] [--feature ID] [--base SHA] [--fail-fast] [--json] [--skip-browser] [--scope full|affected]
                                        run the full gate
   autobuild mark-passed <ID>           rerun a feature's test; set passes:true only if it passes
   autobuild init [--backend claude|codex] scaffold autobuild.json, PROGRESS.md and the CLAUDE.md rules
@@ -37,6 +39,33 @@ Exit codes of \`run\`: 0 verified completion or PR-first handoff, 2 no progress,
 11 another loop running, 12 the bug hunt needs a human, 13 the final review did not finish,
 14 managed decision stopped, 15 provider refusal (nonretryable), 16 final full gate failed, 130 interrupted.
 Docs: ${path.join(HOME, "README.md")}`;
+
+/** "yes (pid N)" only while that pid is a live autobuild loop; a leftover pid file says so. */
+export function loopState(pidFile) {
+  if (!existsSync(pidFile)) return "no";
+  const pid = Number(readFileSync(pidFile, "utf8").trim());
+  if (Number.isInteger(pid) && pid > 0 && isOurs(pid, path.join(HOME, "lib", "cli.mjs"))) return `yes (pid ${pid})`;
+  return `no (stale pid file: pid ${pid || "unreadable"} is not a running autobuild loop)`;
+}
+
+/** Status lines: build time against check time for the last iterations, and the last gate run step by step. */
+export function timingReport(records) {
+  const lines = [];
+  const iterations = records.filter((record) => record.type === "iteration").slice(-5);
+  if (iterations.length) {
+    lines.push("build vs check time (last iterations):");
+    for (const entry of iterations) lines.push(`  ${entry.feature} ${entry.outcome}: ${timingLine(entry)}${entry.gateSeconds > entry.sessionSeconds ? "  WARNING: checking took longer than building" : ""}`);
+  }
+  const gate = records.filter((record) => record.type === "gate").at(-1);
+  if (gate) {
+    lines.push(`last gate run (${gate.at}, ${gate.caller}, ${gate.feature ?? "no feature"}, ${gate.scope ?? "full"}): ${gate.ok ? "PASS" : "FAIL"} in ${gate.wallSeconds}s`);
+    for (const step of [...gate.steps].sort((a, b) => b.seconds - a.seconds).slice(0, 12)) lines.push(`  ${step.ok ? "PASS" : "FAIL"} ${String(step.cached ? "cached" : `${step.seconds}s`).padStart(7)}  ${step.name}`);
+    if (gate.steps.length > 12) lines.push(`  … ${gate.steps.length - 12} faster steps`);
+    for (const name of gate.skipped ?? []) lines.push(`  SKIP          ${name} (no path match)`);
+    for (const name of gate.notRun ?? []) lines.push(`  ----          ${name} (not run)`);
+  }
+  return lines;
+}
 
 function flag(args, name) {
   return args.includes(name);
@@ -89,9 +118,10 @@ export async function main(argv = process.argv.slice(2)) {
       if (review.reason) console.log(`review: ${review.reason}`);
       if (blockers.size) console.log(`blocked: ${[...blockers].join(", ")}`);
       const pidFile = statePath(config, "loop.pid");
-      console.log(`loop running: ${existsSync(pidFile) ? `yes (pid ${readFileSync(pidFile, "utf8").trim()})` : "no"}`);
+      console.log(`loop running: ${loopState(pidFile)}`);
       const session = readSession(config);
       if (session) console.log(`last session: ${session.role} ${session.featureId}, started ${session.startedAt}, stop attempts ${session.stopAttempts ?? 0}`);
+      for (const line of timingReport(readTimings(config))) console.log(line);
       const logsDir = path.join(config.root, config.logsDir);
       const loopLogs = existsSync(logsDir) ? readdirSync(logsDir).filter((name) => name.startsWith("loop-")).sort() : [];
       if (loopLogs.length) console.log(`\n${loopLogs.at(-1)}:\n${tail(readFileSync(path.join(logsDir, loopLogs.at(-1)), "utf8"), 1500)}`);
@@ -118,14 +148,17 @@ export async function main(argv = process.argv.slice(2)) {
         baseSha: value(args, "--base") ?? (session?.role === "builder" ? session.baseSha : null),
         failFast: flag(args, "--fail-fast"),
         skipBrowser: flag(args, "--skip-browser") || flag(args, "--skip-e2e"),
+        scope: value(args, "--scope") ?? "full",
       });
       if (flag(args, "--json")) {
         console.log(JSON.stringify(summary));
       } else {
         for (const step of summary.steps) {
-          console.log(`${step.ok ? "PASS" : "FAIL"}  ${step.name} (${step.seconds}s)`);
+          console.log(`${step.ok ? "PASS" : "FAIL"}  ${step.name} (${step.cached ? `reused from ${step.cachedFrom}, tree unchanged` : `${step.seconds}s`})`);
           if (!step.ok) console.log(step.tail);
         }
+        for (const entry of summary.skipped) console.log(`SKIP  ${entry.name}: ${entry.reason}`);
+        for (const name of summary.notRun) console.log(`----  ${name}: not run (stopped at the first failure)`);
         for (const warning of summary.warnings ?? []) console.log(`WARN  ${warning}`);
         console.log(summary.ok ? `\n${summary.phase === "commit" ? "COMMIT GATE" : "GATE"}: PASS` : "\nGATE: FAIL");
         if (summary.deferred.length) console.log(`Pending PR checks: ${summary.deferred.map(step => step.name).join(", ")}`);
