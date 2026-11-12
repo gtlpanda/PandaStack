@@ -228,7 +228,9 @@ function fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, c
   if (passingNonBrowser.length > 0) jobs.push(...featureJobs(passingNonBrowser, "passing features").map((job) => ({ ...job, early: true })));
   if (!skipBrowser && browserKind) {
     const specs = [...passing.filter((feature) => feature.testKind === browserKind), ...(current?.testKind === browserKind ? [current] : [])];
-    jobs.push(...featureJobs(specs, "browser", { withRegressionBrowser: true }));
+    // The invocation that carries the current feature's own browser test is never skipped by path selection.
+    const own = current?.testKind === browserKind ? (config.runners?.[browserKind]?.group ?? browserKind) : null;
+    jobs.push(...featureJobs(specs, "browser", { withRegressionBrowser: true }).map((job) => (own && job.id === `browser: ${own}` ? { ...job, pinned: true } : job)));
   }
   return uniqueIds(jobs);
 }
@@ -249,18 +251,27 @@ function ordered(config, jobs, memory) {
 function poolLogDir(config) {
   const stamp = `${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z")}-${process.pid}`;
   const base = timingsDir(config);
-  if (!base) return mkdtempSync(path.join(tmpdir(), "autobuild-gate-"));
+  if (!base) return { dir: mkdtempSync(path.join(tmpdir(), "autobuild-gate-")), temporary: true };
   const parent = path.join(base, "gate");
   mkdirSync(parent, { recursive: true });
   for (const old of readdirSync(parent).sort().slice(0, -KEPT_POOL_RUNS)) rmSync(path.join(parent, old), { recursive: true, force: true });
   const dir = path.join(parent, stamp);
   mkdirSync(dir, { recursive: true });
-  return dir;
+  return { dir, temporary: false };
 }
 
 /** Runs `jobs` through gate-pool.mjs; returns Map id -> {ok, status, output, ms}. Jobs it never started are absent. */
 function runInPool(config, jobs, { failFast }) {
-  const dir = poolLogDir(config);
+  const { dir, temporary } = poolLogDir(config);
+  try {
+    return poolResults(config, jobs, dir, { failFast, keptLogs: !temporary });
+  } finally {
+    // Logs outside the project's logs dir have nowhere to be kept: each step's output is already in its result.
+    if (temporary) rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function poolResults(config, jobs, dir, { failFast, keptLogs }) {
   const payload = {
     jobs: jobs.map((job, index) => ({ id: job.id, spec: job.spec, logFile: path.join(dir, `${String(index + 1).padStart(2, "0")}-${slug(job.name)}.log`), resources: job.resources, memoryMb: job.memoryMb })),
     options: { concurrency: config.gateConcurrency, failFast, minFreeMb: config.gateMinFreeMb },
@@ -281,7 +292,7 @@ function runInPool(config, jobs, { failFast }) {
     try { output = readFileSync(job.logFile, "utf8"); } catch { /* an unstartable step has no log */ }
     const spec = jobs.find((candidate) => candidate.id === job.id).spec;
     const timeout = result.timedOut ? `\nstopped after ${Math.round(spec.timeoutMs / 1000)}s (the step's time limit); its process group was killed.` : "";
-    results.set(job.id, { ok: result.ok, status: result.status, ms: result.ms, output: `${specOutput(spec, result.status, output, result.error)}${timeout}\n(step log: ${job.logFile})` });
+    results.set(job.id, { ok: result.ok, status: result.status, ms: result.ms, output: `${specOutput(spec, result.status, output, result.error)}${timeout}${keptLogs ? `\n(step log: ${job.logFile})` : ""}` });
   }
   return results;
 }

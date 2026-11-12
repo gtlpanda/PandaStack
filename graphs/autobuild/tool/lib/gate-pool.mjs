@@ -55,7 +55,7 @@ function launch(job) {
  * A job: { id, spec: {argv, cwd, env, timeoutMs}, logFile, resources: string[] | null, memoryMb }.
  * `run`, `memAvailable` and the timings are injectable for tests.
  */
-export async function runPool(jobs, { concurrency = 1, failFast = false, minFreeMb = 0, run = launch, memAvailable = memAvailableMb, settleMs = 30_000, pollMs = 1000, startGapMs = 1000, onEvent = () => {} } = {}) {
+export async function runPool(jobs, { concurrency = 1, failFast = false, minFreeMb = 0, run = launch, memAvailable = memAvailableMb, settleMs = 30_000, pollMs = 1000, startGapMs = 1000, stopped = () => false, onEvent = () => {} } = {}) {
   const pending = [...jobs];
   const running = new Map();
   const results = {};
@@ -85,14 +85,15 @@ export async function runPool(jobs, { concurrency = 1, failFast = false, minFree
   return new Promise((resolve) => {
     let timer = null;
     const finishIfIdle = () => {
-      if (running.size === 0 && (pending.length === 0 || (failed && failFast))) { clearTimeout(timer); resolve({ results, events }); return true; }
+      if (running.size === 0 && (pending.length === 0 || stopped() || (failed && failFast))) { clearTimeout(timer); resolve({ results, events }); return true; }
       return false;
     };
     const tick = () => {
       clearTimeout(timer); timer = null;
       if (finishIfIdle()) return;
       memoryHeld = false;
-      if (!(failed && failFast)) {
+      // Nothing new starts after a failure under fail-fast, or once the gate was told to stop.
+      if (!stopped() && !(failed && failFast)) {
         for (let i = 0; i < pending.length; i += 1) {
           const job = pending[i];
           const why = blocker(job);
@@ -126,10 +127,12 @@ export async function runPool(jobs, { concurrency = 1, failFast = false, minFree
 
 async function main() {
   const { jobs, options } = JSON.parse(readFileSync(0, "utf8"));
-  const stop = () => { for (const job of jobs) job.kill?.("SIGTERM"); setTimeout(() => process.exit(130), 2000).unref(); };
+  let stopping = false;
+  const stop = () => { stopping = true; for (const job of jobs) job.kill?.("SIGTERM"); setTimeout(() => process.exit(130), 2000).unref(); };
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
-  const { results, events } = await runPool(jobs, options);
+  const { results, events } = await runPool(jobs, { ...options, stopped: () => stopping });
+  if (stopping) process.exit(130);
   process.stdout.write(JSON.stringify({ results, events }));
 }
 
