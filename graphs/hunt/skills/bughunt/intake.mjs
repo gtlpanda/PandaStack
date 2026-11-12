@@ -5,12 +5,13 @@
 // lines call for. It also checks out a detached analysis worktree at the head,
 // so every agent reads the code under review, never whatever the user has
 // checked out.
-//   node intake.mjs <repo> [--pr <n> | --branch <name> | --range <base>..<head>] [--base <ref>]
+//   node intake.mjs <repo> [--pr <n> | --branch <name> | --range <base>..<head>] [--base <ref>] [--skip <glob>]...
 // Writes <git common dir>/bughunt/<key>/intake.json and the worktree
 // <git common dir>/bughunt/<key>/tree, prints the intake path, then
 // INTAKE: OK|FAIL. Exit 0 ok, 1 fail, 2 usage.
-import { existsSync, mkdirSync, writeFileSync, renameSync, rmSync, realpathSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync, renameSync, rmSync, realpathSync, mkdtempSync, openSync, readSync, closeSync } from 'node:fs'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { git as rawGit, run } from '../../../build/skills/build-app/driver/proc.mjs'
@@ -25,6 +26,9 @@ export const ALWAYS = ['logic', 'regression']
 const git = (dir, args, opts) => rawGit(dir, ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], opts)
 const MAX_HITS = 5
 const MAX_DESCRIPTION = 4000
+// Only these non-code kinds may be skipped. A script or source file is always
+// hunted, wherever it lives and however it is marked.
+const SKIPPABLE = /\.(json|jsonl|ndjson|txt|log|md|csv|tsv|png|jpe?g|gif|webp|pdf|patch|diff|zip|gz|tgz|tar)$/i
 const NOT_CODE = /\.(md|mdx|txt|rst|adoc|png|jpe?g|gif|svg|ico|webp|pdf|lock)$|(^|\/)(LICENSE|CHANGELOG|AUTHORS)[^/]*$|(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/i
 
 // What in a change's own lines calls for each optional lens. Matched against
@@ -64,12 +68,15 @@ export function nameKey(prefix, name) {
 export function parseArgs(argv) {
   const [repo, ...rest] = argv
   if (!repo || repo.startsWith('--')) throw new Error('usage')
-  const opts = { repo }
+  const opts = { repo, skip: [] }
   for (let i = 0; i < rest.length; i += 2) {
     const flag = rest[i]
     const value = rest[i + 1]
-    if (!['--pr', '--branch', '--range', '--base'].includes(flag) || value === undefined || value.startsWith('--')) throw new Error('usage')
-    opts[flag.slice(2)] = value
+    if (!['--pr', '--branch', '--range', '--base', '--skip'].includes(flag) || value === undefined || value.startsWith('--')) throw new Error('usage')
+    if (flag === '--skip') {
+      if (!value.trim() || value.length > 512 || /[\0\n]/.test(value)) throw new Error('usage')
+      opts.skip.push(value)
+    } else opts[flag.slice(2)] = value
   }
   if (['pr', 'branch', 'range'].filter(k => opts[k] !== undefined).length > 1) throw new Error('usage')
   if (opts.pr !== undefined && !/^[1-9][0-9]*$/.test(opts.pr)) throw new Error('usage')
@@ -77,7 +84,8 @@ export function parseArgs(argv) {
 }
 
 function must(r, what) {
-  if (!r.ok) throw new Error(`${what} failed: ${(r.out.trim() || r.error || `exit ${r.status}`).split('\n').slice(-3).join(' ')}`)
+  // A spawn error (ENOBUFS, ETIMEDOUT) explains the failure; partial output does not.
+  if (!r.ok) throw new Error(`${what} failed: ${(r.error || r.out.trim() || `exit ${r.status}`).split('\n').slice(-3).join(' ')}`)
   return r.stdout.trim()
 }
 const commitOf = (repo, ref) => must(git(repo, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]), `resolving ${ref}`)
@@ -122,49 +130,130 @@ export function resolveTarget(repo, opts) {
   return { kind: 'branch', key: nameKey('', branch), label: `branch ${branch}`, base, head: branch }
 }
 
+// A path glob as a whole-path match: `*` and `?` stay within a path segment,
+// `**` crosses segments, and `dir/**` matches everything below dir.
+export function globRegex(glob) {
+  let re = ''
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i]
+    if (c === '*' && glob[i + 1] === '*') {
+      i++
+      if (glob[i + 1] === '/') { i++; re += '(?:.*/)?' } else re += '.*'
+    } else if (c === '*') re += '[^/]*'
+    else if (c === '?') re += '[^/]'
+    else re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+  }
+  return new RegExp(`^${re}$`)
+}
+
+// Why a changed file is left out of the hunt, or null to hunt it. Skips are only
+// ever declared: by the merge-base's .gitattributes (`declared`: path -> the
+// attribute that marked it) or by the operator's --skip globs. Only non-code
+// kinds qualify, whatever the declaration says.
+export function skipReason(path, declared, operatorGlobs = []) {
+  if (!SKIPPABLE.test(path)) return null
+  if (declared.has(path)) return declared.get(path)
+  const glob = operatorGlobs.find(g => globRegex(g).test(path))
+  return glob ? `--skip ${glob}` : null
+}
+
+// Attributes that declare a file not worth hunting, read as of the merge-base so
+// a PR cannot declare its own files skippable: the de facto `linguist-generated`
+// and PandaStack's own `bughunt-skip`. Git older than 2.40 has no --source;
+// then no attribute skips apply.
+const SKIP_ATTRIBUTES = ['bughunt-skip', 'linguist-generated']
+export function declaredAtBase(repo, mergeBase, paths) {
+  const declared = new Map()
+  if (!paths.length) return { declared, read: true }
+  const r = git(repo, ['check-attr', `--source=${mergeBase}`, '-z', '--stdin', ...SKIP_ATTRIBUTES], { input: paths.join('\0') + '\0' })
+  if (!r.ok) return { declared, read: false }
+  const parts = r.stdout.split('\0')
+  for (let i = 0; i + 2 < parts.length; i += 3) {
+    if ((parts[i + 2] === 'set' || parts[i + 2] === 'true') && !declared.has(parts[i])) declared.set(parts[i], parts[i + 1])
+  }
+  return { declared, read: true }
+}
+
+// Calls fn on each line of a file, reading it in bounded chunks: a range's
+// patch can be larger than any buffer or string a process may hold.
+function eachLine(file, fn) {
+  const fd = openSync(file, 'r')
+  const chunk = Buffer.alloc(1 << 20)
+  let rest = Buffer.alloc(0)
+  try {
+    for (let n; (n = readSync(fd, chunk, 0, chunk.length, null)) > 0;) {
+      let data = Buffer.concat([rest, chunk.subarray(0, n)])
+      let start = 0
+      for (let nl = data.indexOf(10); nl !== -1; nl = data.indexOf(10, start)) {
+        fn(data.toString('utf8', start, nl))
+        start = nl + 1
+      }
+      rest = Buffer.from(data.subarray(start))
+    }
+    if (rest.length) fn(rest.toString('utf8'))
+  } finally { closeSync(fd) }
+}
+
 // Changed files at head versus the merge-base, each with its head-side hunk
-// ranges and the lines each optional lens should look at. Paths come from
-// `--name-status -z`, exactly as git stores them (no quoting, no trailing tab
-// after a space, no /dev/null for a deleted file); the patch, in the same
-// order, gives each file its hunks.
-export function changedFiles(repo, mergeBase, head) {
+// ranges and the lines each optional lens should look at, plus the files left
+// out (skipReason) with why. Paths come from `--name-status -z`, exactly as git
+// stores them (no quoting, no trailing tab after a space, no /dev/null for a
+// deleted file); the patch, in the same order, gives each file its hunks. The
+// patch is written to a temporary file and read line by line, never buffered.
+export function changedFiles(repo, mergeBase, head, { skip = [] } = {}) {
   const DIFF = ['-c', 'core.quotepath=off', 'diff', '--no-color', '--no-ext-diff', '--no-renames']
   const names = git(repo, [...DIFF, '--name-status', '-z', mergeBase, head])
-  if (!names.ok) throw new Error(`git diff --name-status failed: ${names.out.trim().split('\n').slice(-3).join(' ')}`)
+  if (!names.ok) throw new Error(`git diff --name-status failed: ${(names.error || names.out.trim()).split('\n').slice(-3).join(' ')}`)
   const parts = names.stdout.split('\0')
   if (parts[parts.length - 1] === '') parts.pop()
-  const files = []
-  for (let i = 0; i + 1 < parts.length; i += 2) files.push({ path: parts[i + 1], status: parts[i].charAt(0), added: 0, deleted: 0, hunks: [], addedLines: [], removedLines: [] })
-  const patch = must(git(repo, [...DIFF, '-U0', mergeBase, head]), 'git diff')
-  let index = -1
-  let cur = null
-  let newLine = 0
-  let oldLine = 0
-  let header = false   // between "diff --git" and the first hunk: "--- " there is a path, not a removed "-- " line
-  for (const line of patch.split('\n')) {
-    if (line.startsWith('diff --git ')) {
-      index += 1
-      cur = files[index] || null
-      header = true
-      continue
-    }
-    if (!cur) continue
-    const h = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/)
-    if (h) {
-      header = false
-      oldLine = Number(h[1])
-      newLine = Number(h[3])
-      const len = h[4] === undefined ? 1 : Number(h[4])
-      const start = Math.max(newLine, 1)
-      cur.hunks.push(len > 0 ? [start, start + len - 1] : [start, start])
-      continue
-    }
-    if (header) continue   // index, mode, ---, +++, and Binary lines: the path came from --name-status
-    if (line.startsWith('+')) { cur.added += 1; cur.addedLines.push([newLine, line.slice(1)]); newLine += 1; continue }
-    if (line.startsWith('-')) { cur.deleted += 1; cur.removedLines.push([oldLine, line.slice(1)]); oldLine += 1; continue }
+  const all = []
+  for (let i = 0; i + 1 < parts.length; i += 2) all.push({ path: parts[i + 1], status: parts[i].charAt(0), added: 0, deleted: 0, hunks: [], addedLines: [], removedLines: [] })
+  const attributes = declaredAtBase(repo, mergeBase, all.map(f => f.path))
+  for (const f of all) {
+    f.skip = skipReason(f.path, attributes.declared, skip)
+    f.isTest = TEST_FILE.test(f.path)
+    f.isCode = !f.isTest && !NOT_CODE.test(f.path)
   }
-  if (index + 1 !== files.length) throw new Error(`git diff listed ${files.length} file(s) but its patch has ${index + 1}`)
-  return files.map(f => ({ ...f, isTest: TEST_FILE.test(f.path), isCode: !TEST_FILE.test(f.path) && !NOT_CODE.test(f.path) }))
+  const dir = mkdtempSync(join(tmpdir(), 'bughunt-intake-'))
+  try {
+    const patchFile = join(dir, 'patch')
+    must(git(repo, [...DIFF, '-U0', `--output=${patchFile}`, mergeBase, head]), 'git diff')
+    let index = -1
+    let cur = null
+    let newLine = 0
+    let oldLine = 0
+    let header = false   // between "diff --git" and the first hunk: "--- " there is a path, not a removed "-- " line
+    eachLine(patchFile, line => {
+      if (line.startsWith('diff --git ')) {
+        index += 1
+        cur = all[index] || null
+        header = true
+        return
+      }
+      if (!cur || cur.skip) return
+      const h = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/)
+      if (h) {
+        header = false
+        oldLine = Number(h[1])
+        newLine = Number(h[3])
+        const len = h[4] === undefined ? 1 : Number(h[4])
+        const start = Math.max(newLine, 1)
+        cur.hunks.push(len > 0 ? [start, start + len - 1] : [start, start])
+        return
+      }
+      if (header) return   // index, mode, ---, +++, and Binary lines: the path came from --name-status
+      // Only code lines feed the lens signals; counting is enough for the rest.
+      if (line.startsWith('+')) { cur.added += 1; if (cur.isCode) cur.addedLines.push([newLine, line.slice(1)]); newLine += 1; return }
+      if (line.startsWith('-')) { cur.deleted += 1; if (cur.isCode) cur.removedLines.push([oldLine, line.slice(1)]); oldLine += 1 }
+    })
+    if (index + 1 !== all.length) throw new Error(`git diff listed ${all.length} file(s) but its patch has ${index + 1}`)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+  const strip = ({ skip, ...f }) => f
+  return {
+    files: all.filter(f => !f.skip).map(strip),
+    skipped: all.filter(f => f.skip).map(f => ({ path: f.path, status: f.status, reason: f.skip })),
+    attributes: attributes.read ? 'merge-base' : 'unavailable',
+  }
 }
 
 // Which optional lenses the change calls for, with up to MAX_HITS example
@@ -216,7 +305,7 @@ export function intake(opts, at) {
   const baseSha = commitOf(repo, t.base)
   const mergeBase = must(git(repo, ['merge-base', baseSha, head]), `finding the merge-base of ${t.base} and ${t.head}`)
   if (mergeBase === head) throw new Error(`${t.label} has no commits beyond ${t.base}: nothing to review`)
-  const files = changedFiles(repo, mergeBase, head)
+  const { files, skipped, attributes } = changedFiles(repo, mergeBase, head, { skip: opts.skip || [] })
   const lenses = routeLenses(files)
   const common = must(git(repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']), 'finding the git directory')
   const stateDir = join(common, 'bughunt', t.key)
@@ -224,9 +313,16 @@ export function intake(opts, at) {
   const checkedOut = git(repo, ['rev-parse', 'HEAD']).stdout.trim()
   const dirty = checkedOut === head && git(repo, ['status', '--porcelain', '--untracked-files=no']).stdout.trim() !== ''
   const tree = analysisTree(repo, stateDir, head)
+  // The full list stays in its own file; the target carries counts, which the
+  // ledger and the report keep. The hunted head is still the real head.
+  const skippedList = join(stateDir, 'skipped.json')
+  writeFileSync(skippedList, JSON.stringify({ head, mergeBase, attributes, operatorGlobs: opts.skip || [], files: skipped }, null, 2) + '\n')
+  const reasons = {}
+  for (const f of skipped) reasons[f.reason] = (reasons[f.reason] || 0) + 1
   const doc = {
     version: 1, key: t.key, at, repo, tree, stateDir,
-    target: { kind: t.kind, label: t.label, pr: t.pr || null, title: t.title || null, url: t.url || null, base: t.base, baseSha, head, mergeBase, dirty, baseFetched: t.baseFetched === undefined ? null : t.baseFetched },
+    target: { kind: t.kind, label: t.label, pr: t.pr || null, title: t.title || null, url: t.url || null, base: t.base, baseSha, head, mergeBase, dirty, baseFetched: t.baseFetched === undefined ? null : t.baseFetched,
+      skipped: { count: skipped.length, reasons, attributes, operatorGlobs: opts.skip || [], list: skippedList } },
     stats: {
       files: files.length, added: files.reduce((n, f) => n + f.added, 0), deleted: files.reduce((n, f) => n + f.deleted, 0),
       code: files.filter(f => f.isCode).length, tests: files.filter(f => f.isTest).length,
@@ -243,7 +339,7 @@ export function intake(opts, at) {
   return { path, doc }
 }
 
-const USAGE = 'usage: intake.mjs <repo> [--pr <n> | --branch <name> | --range <base>..<head>] [--base <ref>]'
+const USAGE = 'usage: intake.mjs <repo> [--pr <n> | --branch <name> | --range <base>..<head>] [--base <ref>] [--skip <glob>]...'
 
 function main(argv) {
   let opts
@@ -253,7 +349,10 @@ function main(argv) {
     console.log(path)
     if (doc.target.dirty) console.log('note: the checked-out branch has uncommitted changes; only committed work is reviewed')
     if (doc.target.baseFetched === false) console.log(`note: could not refresh ${doc.target.base} from origin; the review uses the local copy, which may be behind`)
-    console.log(`INTAKE: OK key=${doc.key} files=${doc.stats.files} lenses=${doc.lenses.routed.join(',') || 'none'}`)
+    const s = doc.target.skipped
+    if (s.count) console.log(`skipped ${s.count} non-code file(s) declared not worth hunting (${Object.entries(s.reasons).sort().map(([k, n]) => `${k} ${n}`).join(', ')}); every path is listed in ${s.list}`)
+    if (s.attributes === 'unavailable') console.log('note: this git cannot read .gitattributes at the merge-base (needs 2.40+); no attribute-declared files were skipped')
+    console.log(`INTAKE: OK key=${doc.key} files=${doc.stats.files} skipped=${s.count} lenses=${doc.lenses.routed.join(',') || 'none'}`)
     return 0
   } catch (e) {
     console.log(`INTAKE: FAIL ${e.message}`)
