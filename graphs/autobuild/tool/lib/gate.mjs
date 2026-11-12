@@ -131,15 +131,17 @@ export function failureExcerpt(output, chars = EXCERPT_CHARS) {
 }
 
 /** One line for a log: how long the gate took and what each step cost, slowest first. */
-export function gateLine(summary) {
+export function gateLine({ steps = [], skipped = [], notRun = [], wallSeconds = 0 }) {
+  const summary = { steps, skipped, notRun, wallSeconds }; // callers may pass a bare { steps } (a bookkeeping failure)
   const ran = summary.steps.filter((step) => !step.cached);
   const cached = summary.steps.length - ran.length;
-  const slowest = [...ran].sort((a, b) => b.seconds - a.seconds).slice(0, 5).filter((step) => step.seconds > 0).map((step) => `${step.name} ${step.seconds}s`);
+  const slowest = [...ran].sort((a, b) => (b.seconds ?? 0) - (a.seconds ?? 0)).slice(0, 5).filter((step) => step.seconds > 0).map((step) => `${step.name} ${step.seconds}s`);
   return `${summary.wallSeconds}s; ${ran.length} run, ${cached} cached, ${summary.skipped.length} skipped${summary.notRun.length ? `, ${summary.notRun.length} not run` : ""}${slowest.length ? `; slowest: ${slowest.join(", ")}` : ""}`;
 }
 
 /** One line per commit a reused PASS came from, and one per step skipped by path selection. */
-export function reuseLines(summary) {
+export function reuseLines({ steps = [], skipped = [] }) {
+  const summary = { steps, skipped };
   const from = new Map();
   for (const step of summary.steps) if (step.cached) from.set(step.cachedFrom, [...(from.get(step.cachedFrom) ?? []), step.name]);
   return [
