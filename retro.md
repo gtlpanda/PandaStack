@@ -3386,4 +3386,7 @@ failed with ENOBUFS at 268,480,512 bytes, and `must()` printed the half-read dif
   `INTAKE: FAIL git diff failed` on origin/main's intake and passes now.
 - The bughunt SKILL.md change moved its pinned hash in spec/offering-capabilities.json and the frozen
   oc-01 fixture (same brittle pin as #48).
+- Known limit: a finding inside a skipped file is never "touched by the change" (its hunks are not
+  recorded), so a reproduction that also fails at the merge-base is classed pre-existing there. Hunters
+  never receive skipped files, and only declared non-code files can be skipped.
 
