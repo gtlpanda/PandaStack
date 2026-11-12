@@ -1,6 +1,6 @@
 # PandaStack engineering roadmap
 
-Status: Phase 1 complete and reviewed. Phase 2 features 16/16 pass; its dogfood scenario and report remain. Phases 3–8 remain planned. Updated: 2026-11-11.
+Status: Phase 1 complete and reviewed. Phase 2 features 16/16 pass and its dogfood ran ([report](docs/dogfood/phase-02.md)); the report awaits review. Phases 3–8 remain planned. Updated: 2026-11-12.
 
 This roadmap combines the Brian Armstrong-inspired shared queue, chief-of-staff
 interface, and learning loop with the engineering review's configuration,
@@ -100,7 +100,7 @@ coverage and demonstrated live capability must be labeled separately.
 | Phase | Deliverable | Depends on | Status |
 |---|---|---|---|
 | 1 | Shared run records and configuration doctor | Bootstrap gate | Complete; reviewed for local runner promotion |
-| 2 | Shared decision queue and answer routing | 1 | Features 16/16; dogfood scenario and report pending |
+| 2 | Shared decision queue and answer routing | 1 | Features 16/16; dogfood done, report review pending |
 | 3 | Telemetry, real-task evaluations, and decision learning | 1-2 | Planned |
 | 4 | Global scheduling and resource controls | 1-3 | Planned |
 | 5 | Chief-of-staff interface, notifications, and page view | 2-4 | Planned |
