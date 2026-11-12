@@ -3390,3 +3390,50 @@ failed with ENOBUFS at 268,480,512 bytes, and `must()` printed the half-read dif
   recorded), so a reproduction that also fails at the merge-base is classed pre-existing there. Hunters
   never receive skipped files, and only declared non-code files can be skipped.
 
+## 52. Run evidence stays out of git; one declaration feeds the guard and /bughunt (2026-11-12)
+
+cherry-crm's dev carried ~839 MB of verification, provenance and QA output under docs/autobuild
+(4,244 files, 6.9 M inserted lines versus main). Builder sessions wrote it there, and the Codex host's
+`git add -- .` swept it into each feature commit.
+- `evidence.dir` (default `<logsDir>/evidence`; a relative, gitignored, unfrozen project path) is where
+  sessions write evidence; the builder prompts (Claude and Codex) name its literal path, and scripts
+  get it as `AUTOBUILD_EVIDENCE_DIR`. `autobuild evidence manifest`
+  and `verify` bind it by hash, so only a small JSON is committed.
+- A gate step, `run evidence kept out of git`, runs whenever there is a base (builder Stop hook, Codex
+  host, `check --base`). It refuses newly added declared evidence and files over
+  `evidence.maxFileBytes` (5 MiB default), counting untracked files that a host `git add .` would take.
+- Agnostic: no layout is built in. Evidence is declared once in `.gitattributes` (`bughunt-skip` or
+  `linguist-generated`, read at the base) or by `evidence.paths` globs, and only non-code kinds count.
+  The classifier moved to scripts/evidence-paths.mjs and /bughunt intake uses the same one.
+- Existing bindings: cherry-crm's elenii-p2-12/BASE-BINDING.json names no evidence paths;
+  elenii-consolidation-1/FINAL-BASE-BINDING.json hashes 3,142 committed evidence paths, which stay
+  committed (no history rewrite), so the bytes it binds do not change. PandaStack reads neither.
+  Retained gates in cherry-crm execute code from evidence directories (e.g.
+  elenii-p2-3/verification/vitest-supplemental.config.js); code there is never refused or skipped.
+- /bughunt on c44ebde: F1 (HIGH) the default evidence dir sat inside the frozen state dir, so sessions
+  could not write there; it is now `<logsDir>/evidence` (gitignored, not frozen) and a frozen
+  evidence.dir is reported. F2 (MEDIUM) the guard refused edits to tracked declared files such as a
+  linguist-generated lockfile; it now checks only files a commit would add. F3 (LOW) an uncreatable
+  evidence dir crashed preflight; it is now a logged preflight failure, exit 5. F1's reproduction also
+  asserts no `Edit(/.harness/**)` deny rule, which still exists (correctly) now that evidence is not there.
+- Re-hunt on dd2e341: F4 (MEDIUM) an evidence.dir outside the repo was denied by the guard; F6 (LOW) the
+  guard denied `> $AUTOBUILD_EVIDENCE_DIR/x` as a computed path. (Superseded below: the fix was itself a
+  bypass and was removed.) The guard expanded that variable and
+  let builders write inside the evidence dir, unless it was /, contained the project or home, or was in
+  .git (reported by check, never opened). F5 (MEDIUM) an unreadable .gitattributes silently skipped the
+  declared check; it is now a gate warning.
+- Re-hunt on 779c6a3: F7 (MEDIUM, security) the guard trusted the evidence dir's real path, so a session
+  could swap logs/evidence for a symlink to the project, .harness or ~/.ssh and write through it. The
+  fix then closed the dir while any symlink was in its path; it went with the exception (below).
+- Advisor review after 779c6a3: expanding `$AUTOBUILD_EVIDENCE_DIR` in the guard was itself a bypass,
+  confirmed: `AUTOBUILD_EVIDENCE_DIR=/etc; echo x > $AUTOBUILD_EVIDENCE_DIR/passwd-test` was allowed,
+  because the command reassigns the variable the guard expanded to the configured value. The guard
+  exception is removed (guard.mjs is unchanged from main). evidence.dir must now sit inside the project,
+  so F4 and F6 are met by the prompt naming the literal path; F7's swap cases pass on the plain guard,
+  which judges a write by where it resolves. A regression test fails on 779c6a3's guard and passes now.
+- Tests: evidence cases for the commit guard, tracked-file edits, placement (frozen, not ignored,
+  .git, outside the project), the literal-path prompt, the reassignment bypass, symlink swaps, env,
+  manifest/verify, CLI and gate step, preflight and config; a gate case: a hunt that skipped declared
+  evidence covers the real head, and a later evidence-only commit still needs a hunt.
+  Autobuild suite 172/0 (13 evidence cases); intake 26/0 on the shared module.
+

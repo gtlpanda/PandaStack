@@ -3,7 +3,7 @@
 // with hand-written /bughunt ledgers and a fake gh.
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { mkdtempSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, mkdirSync, chmodSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
@@ -12,6 +12,7 @@ import { gateDecision, repoSlug } from '../skills/bughunt/gate.mjs'
 import { reviewStatus, isDocPath } from '../skills/bughunt/review-status.mjs'
 
 const HOOK = join(dirname(fileURLToPath(import.meta.url)), '..', 'skills', 'bughunt', 'gate.mjs')
+const INTAKE = join(dirname(fileURLToPath(import.meta.url)), '..', 'skills', 'bughunt', 'intake.mjs')
 const ENV = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
 const sh = (cwd, ...args) => {
   const r = spawnSync('git', args, { cwd, encoding: 'utf8', env: ENV })
@@ -159,6 +160,25 @@ await test('a change that is documentation only from its base needs no hunt', ()
   assert.match(reviewStatus(repo, 'deadbeef').reason, /not a commit/)
 })
 
+await test('a hunt that skipped declared evidence covers the real head; a later evidence-only commit still needs a hunt', () => {
+  const { repo } = fixture()
+  sh(repo, 'checkout', '-q', 'main')
+  commit(repo, { '.gitattributes': 'runs/*/evidence/** bughunt-skip\n' }, 'declare evidence')
+  sh(repo, 'checkout', '-q', 'feat')
+  sh(repo, 'rebase', '-q', 'main')
+  const head = commit(repo, { 'runs/r1/evidence/gate.json': '{"ok":true}\n', 'runs/r1/evidence/check.mjs': 'export {}\n', 'src/b.js': 'export const b = 1\n' }, 'code and evidence')
+  const intake = spawnSync('node', [INTAKE, repo, '--range', 'main..feat'], { encoding: 'utf8', env: ENV })
+  assert.equal(intake.status, 0, intake.stdout + intake.stderr)
+  assert.match(intake.stdout, /INTAKE: OK .* skipped=1 /)
+  const state = JSON.parse(readFileSync(intake.stdout.split('\n')[0].trim(), 'utf8'))
+  assert.equal(state.target.head, head, 'the hunt targets the real head, skips or not')
+  assert.deepEqual(JSON.parse(readFileSync(state.target.skipped.list, 'utf8')).files.map(s => s.path), ['runs/r1/evidence/gate.json'], 'code inside the evidence dir is hunted')
+  ledger(repo, state.key, state.target.head, { mergeBase: state.target.mergeBase })
+  assert.equal(reviewStatus(repo, head, { base: 'main' }).hunted, true)
+  const later = commit(repo, { 'runs/r1/evidence/gate.json': '{"ok":false}\n' }, 'more evidence')
+  const s = reviewStatus(repo, later, { base: 'main' })
+  assert.equal(s.hunted, false, 'a skip never widens what counts as exempt after the hunt')
+})
 console.log('== the gate: gh pr create')
 await test('opening a PR needs a finished hunt over its head; docs-only, dry runs, and the web flow pass', () => {
   const { root, repo, head } = fixture()

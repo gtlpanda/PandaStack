@@ -17,6 +17,9 @@ import { fileURLToPath } from 'node:url'
 import { git as rawGit, run } from '../../../build/skills/build-app/driver/proc.mjs'
 import { TEST_FILE } from '../../../build/skills/build-app/driver/checks.mjs'
 import { defaultBase } from '../../../build/skills/build-app/driver/finish.mjs'
+import { declaredAt, evidenceReason, globRegex } from '../../../../scripts/evidence-paths.mjs'
+
+export { globRegex }
 
 export const ALWAYS = ['logic', 'regression']
 // No hooks or fsmonitor in any git call: a relative core.hooksPath or
@@ -26,9 +29,6 @@ export const ALWAYS = ['logic', 'regression']
 const git = (dir, args, opts) => rawGit(dir, ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], opts)
 const MAX_HITS = 5
 const MAX_DESCRIPTION = 4000
-// Only these non-code kinds may be skipped. A script or source file is always
-// hunted, wherever it lives and however it is marked.
-const SKIPPABLE = /\.(json|jsonl|ndjson|txt|log|md|csv|tsv|png|jpe?g|gif|webp|pdf|patch|diff|zip|gz|tgz|tar)$/i
 const NOT_CODE = /\.(md|mdx|txt|rst|adoc|png|jpe?g|gif|svg|ico|webp|pdf|lock)$|(^|\/)(LICENSE|CHANGELOG|AUTHORS)[^/]*$|(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/i
 
 // What in a change's own lines calls for each optional lens. Matched against
@@ -130,48 +130,17 @@ export function resolveTarget(repo, opts) {
   return { kind: 'branch', key: nameKey('', branch), label: `branch ${branch}`, base, head: branch }
 }
 
-// A path glob as a whole-path match: `*` and `?` stay within a path segment,
-// `**` crosses segments, and `dir/**` matches everything below dir.
-export function globRegex(glob) {
-  let re = ''
-  for (let i = 0; i < glob.length; i++) {
-    const c = glob[i]
-    if (c === '*' && glob[i + 1] === '*') {
-      i++
-      if (glob[i + 1] === '/') { i++; re += '(?:.*/)?' } else re += '.*'
-    } else if (c === '*') re += '[^/]*'
-    else if (c === '?') re += '[^/]'
-    else re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&')
-  }
-  return new RegExp(`^${re}$`)
-}
-
-// Why a changed file is left out of the hunt, or null to hunt it. Skips are only
-// ever declared: by the merge-base's .gitattributes (`declared`: path -> the
-// attribute that marked it) or by the operator's --skip globs. Only non-code
+// Why a changed file is left out of the hunt, or null to hunt it: declared
+// evidence (scripts/evidence-paths.mjs) by the merge-base's
+// .gitattributes, or matched by the operator's --skip globs. Only non-code
 // kinds qualify, whatever the declaration says.
 export function skipReason(path, declared, operatorGlobs = []) {
-  if (!SKIPPABLE.test(path)) return null
-  if (declared.has(path)) return declared.get(path)
-  const glob = operatorGlobs.find(g => globRegex(g).test(path))
-  return glob ? `--skip ${glob}` : null
+  return evidenceReason(path, declared, operatorGlobs, glob => `--skip ${glob}`)
 }
 
-// Attributes that declare a file not worth hunting, read as of the merge-base so
-// a PR cannot declare its own files skippable: the de facto `linguist-generated`
-// and PandaStack's own `bughunt-skip`. Git older than 2.40 has no --source;
-// then no attribute skips apply.
-const SKIP_ATTRIBUTES = ['bughunt-skip', 'linguist-generated']
+// Declared as of the merge-base, so a PR cannot declare its own files skippable.
 export function declaredAtBase(repo, mergeBase, paths) {
-  const declared = new Map()
-  if (!paths.length) return { declared, read: true }
-  const r = git(repo, ['check-attr', `--source=${mergeBase}`, '-z', '--stdin', ...SKIP_ATTRIBUTES], { input: paths.join('\0') + '\0' })
-  if (!r.ok) return { declared, read: false }
-  const parts = r.stdout.split('\0')
-  for (let i = 0; i + 2 < parts.length; i += 3) {
-    if ((parts[i + 2] === 'set' || parts[i + 2] === 'true') && !declared.has(parts[i])) declared.set(parts[i], parts[i + 1])
-  }
-  return { declared, read: true }
+  return declaredAt((args, opts) => git(repo, args, opts), mergeBase, paths)
 }
 
 // Calls fn on each line of a file, reading it in bounded chunks: a range's

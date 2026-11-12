@@ -155,7 +155,29 @@ export function resolveManagedConfig({ project: raw = {}, env = {}, overrides = 
   // The config file and the harness state are always frozen for builders.
   config.frozen = [...new Set([CONFIG_FILE, config.featuresFile, config.stateDir, ...(config.backend === "codex" ? ["AGENTS.md", ".codex"] : []), ...(config.frozen ?? [])])];
   if (!["inject", "project"].includes(config.hooks)) throw new Error(`${CONFIG_FILE}: "hooks" must be "inject" or "project"`);
+  config.evidence = validateEvidenceConfig(config.evidence);
+  // Where sessions write verification, provenance and QA output: outside git, and not
+  // frozen (the state dir is), so the default is under the gitignored logs dir.
+  if (root) config.evidenceDir = path.resolve(root, config.evidence.dir ?? path.join(config.logsDir, "evidence"));
   return config;
+}
+
+// Run evidence settings: where it goes (dir) and what the commit guard refuses
+// (paths: globs of declared evidence; maxFileBytes: any new or changed file).
+export const DEFAULT_MAX_FILE_BYTES = 5 * 1024 * 1024;
+
+const nonEmpty = (value) => typeof value === "string" && value.trim() !== "";
+function validateEvidenceConfig(evidence = {}) {
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) throw new Error("evidence must be an object");
+  const unknown = Object.keys(evidence).filter((key) => !["dir", "paths", "maxFileBytes"].includes(key));
+  if (unknown.length) throw new Error(`evidence has unknown keys: ${unknown.join(", ")}`);
+  // Inside the project, so the loop's guard treats it like any other project path.
+  if (evidence.dir !== undefined && (!nonEmpty(evidence.dir) || path.isAbsolute(evidence.dir) || evidence.dir.split(/[\\/]/).includes(".."))) {
+    throw new Error("evidence.dir must be a relative path inside the project (gitignored, not frozen)");
+  }
+  if (evidence.paths !== undefined && (!Array.isArray(evidence.paths) || evidence.paths.some((glob) => !nonEmpty(glob)))) throw new Error("evidence.paths must be an array of globs");
+  if (evidence.maxFileBytes !== undefined && (!Number.isInteger(evidence.maxFileBytes) || evidence.maxFileBytes <= 0)) throw new Error("evidence.maxFileBytes must be a positive integer");
+  return { paths: [], maxFileBytes: DEFAULT_MAX_FILE_BYTES, ...evidence };
 }
 
 export function statePath(config, ...parts) {
