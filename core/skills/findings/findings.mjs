@@ -422,6 +422,9 @@ export function renderReport(ledger, evidence = {}) {
   L.push(`# Bug hunt: ${t.label || ledger.key}`)
   L.push('')
   L.push(`Commits: ${short(t.mergeBase)}..${short(t.head)} (base ${t.base || '?'}).`)
+  if (t.skipped && t.skipped.count) {
+    L.push(`Not hunted: ${t.skipped.count} non-code file(s) declared not worth hunting (${Object.entries(t.skipped.reasons || {}).sort().map(([k, n]) => `${k} ${n}`).join(', ')}); every path is in ${t.skipped.list}.`)
+  }
   L.push(`Disposition: **${d.disposition.replace('_', ' ')}**${d.because.length ? ` (${d.because.join(', ')})` : ''}.`)
   if (ledger.status && ledger.status !== 'done') L.push(`The last run stopped early: ${ledger.reason || ledger.status}.`)
   if (ledger.routing) {

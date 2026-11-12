@@ -22,6 +22,16 @@ export function sessionConfigEnv(config) {
   };
 }
 
+/** The evidence directory relative to the project root, with forward slashes. */
+export function evidenceRel(config) {
+  return path.relative(config.root, config.evidenceDir).split(path.sep).join("/");
+}
+
+/** The session prompt's instruction on where run evidence goes (the literal project path). */
+export function evidencePromptLine(config) {
+  return `Write verification, provenance and QA output (logs, screenshots, receipts) under ${evidenceRel(config)}/ (gitignored; scripts also get its absolute path as AUTOBUILD_EVIDENCE_DIR); commit at most a manifest of hashes (\`autobuild evidence manifest --out <file>\`).`;
+}
+
 /**
  * The environment for tools and headless sessions:
  * - no inherited Claude session identity (nested sessions misbehave),
@@ -37,6 +47,7 @@ export function buildEnv(config, extra = {}) {
   env.PATH = [...prepend, ...(inherited.includes(KIT_BIN) ? [] : [KIT_BIN]), ...inherited].join(":");
   const libs = (config.env.ldLibraryPath ?? []).filter((dir) => existsSync(dir));
   if (libs.length) env.LD_LIBRARY_PATH = [...libs, ...(env.LD_LIBRARY_PATH ? [env.LD_LIBRARY_PATH] : [])].join(":");
+  if (config.evidenceDir) env.AUTOBUILD_EVIDENCE_DIR = config.evidenceDir;
   Object.assign(env, config.env.vars ?? {}, extra);
   return env;
 }
@@ -62,7 +73,7 @@ export function quote(arg) {
 
 // The loop's own git never runs repo hooks or an fsmonitor: a session could have planted either,
 // and the loop must not run what a session wrote.
-const SAFE_GIT = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"];
+export const SAFE_GIT = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"];
 
 export function git(config, args) {
   return sh(config, ["git", ...SAFE_GIT, ...args].map(quote).join(" "));

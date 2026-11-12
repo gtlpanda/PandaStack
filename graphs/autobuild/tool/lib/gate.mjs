@@ -9,6 +9,7 @@
 
 import { createHash } from "node:crypto";
 import { parityLabel, resolveCiParity, runParityStep } from "./ci-parity.mjs";
+import { checkEvidence } from "./evidence.mjs";
 import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
 import path from "node:path";
 import { featureById, readFeatures } from "./features.mjs";
@@ -156,6 +157,10 @@ export function runGate(config, { featureId = null, baseSha = null, failFast = f
     const frozen = frozenChanges(config, baseSha);
     const ok = frozen.ok && frozen.changed.length === 0;
     if (!record({ name: "frozen files unchanged", ok, ms: Date.now() - started, output: ok ? "" : `Changed or added frozen files:\n${frozen.changed.join("\n")}` })) return summary();
+    const evidenceStarted = Date.now();
+    const evidence = checkEvidence(config, baseSha);
+    warnings.push(...evidence.warnings);
+    if (!record({ name: "run evidence kept out of git", ok: evidence.ok, ms: Date.now() - evidenceStarted, output: evidence.output })) return summary();
   }
 
   if (phase === "commit") {

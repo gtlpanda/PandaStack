@@ -207,13 +207,18 @@ See `templates/autobuild.json`. Agent defaults come from the root `agent-config.
 | `install`, `preflight` | Run before the loop. Each preflight entry is `{name, command, hint}`. |
 | `runners` | Maps a feature's `testKind` to `{group, command}`. Test files are appended, and features in the same group run in one invocation. |
 | `gate` | `[{name, command}]`: typecheck, lint, regression, coverage… |
+<<<<<<< HEAD
 | `ciParity` | CI's own test steps, run in the full gate the way CI runs them: `{workflow, steps: [{job, step}], skip}` for GitHub Actions, or `{ciFile, env, steps: [{name, run, cwd, env}]}` for any other CI; optional `lockFile`, `excludeFlags`, `suiteFlags`. Required when the repo has a recognised CI configuration. See [CI parity](#ci-parity). |
 | `ciParityOptOut` | A reason, instead of `ciParity`, for a repo whose CI cannot be run locally or already runs this gate. |
+=======
+| `evidence` | `{dir, paths, maxFileBytes}`: where run evidence goes (default `<logsDir>/evidence`, gitignored) and what the commit guard refuses. See [Run evidence](#run-evidence). |
+>>>>>>> 68b7a33
 | `browser` | `{runner, regressionCommand}`: the browser runner, plus the command that also runs the existing browser suite in the same invocation. |
 | `frozen` | Paths sessions may not change. `autobuild.json`, the feature list and the state dir are always frozen. |
 | `writable` | Exceptions, such as `PROGRESS.md` and `DECISIONS.md`. |
 | `allowedTools`, `disallowedTools`, `reviewTools` | Permission lists for builder and review sessions. |
 
+<<<<<<< HEAD
 ## CI parity
 
 A gate that sets its own environment or leaves slow tests out can pass while CI fails. So the full
@@ -274,6 +279,38 @@ For both:
 - **Done means the gate passed.** In full delivery mode the loop re-runs the full gate, parity
   included, before it reports done (stopping at the first failure); a failure exits 16, and a stop
   signal during it exits 130.
+=======
+## Run evidence
+
+Verification logs, provenance and QA output belong outside git: committed, they bloat the repo and the
+diffs that reviews and `/bughunt` read.
+
+- **Where it goes.** `evidence.dir` (default `<logsDir>/evidence`; created at preflight, which fails
+  with exit 5 if it cannot be). It must be a relative path inside the project (config load refuses an
+  absolute path or `..`), gitignored, not frozen (the state dir is frozen, so it cannot go there) and
+  not in `.git`; `autobuild check` reports one that is not. Because it is an ordinary project path, the
+  guard needs no exception for it: the builder prompt names the literal path (e.g. `logs/evidence/`),
+  and scripts also get its absolute path as `AUTOBUILD_EVIDENCE_DIR`. A shell redirect through
+  `$AUTOBUILD_EVIDENCE_DIR` is still denied as a computed path, since a command can reassign the
+  variable. A write that resolves through a symlink is judged by where it lands.
+- **What is committed.** At most a manifest of hashes: `autobuild evidence manifest --out <file>` writes
+  `{schemaVersion, files: [{path, bytes, sha256}]}`; `autobuild evidence verify <file>` reports
+  missing, changed and extra files (exit 1 when a listed file is missing or changed). A binding that
+  needs provenance hashes the manifest instead of committing the files.
+- **The guard.** With a base (builder sessions, the Codex host, `autobuild check --base`), the gate's
+  `run evidence kept out of git` step refuses files a commit would add (new since the base, or untracked
+  and not ignored) that are:
+  - declared evidence: marked `bughunt-skip` or `linguist-generated` in `.gitattributes` as of the base
+    (so a session cannot undeclare them), or matching an `evidence.paths` glob. Only non-code kinds
+    count (data, docs, logs, images, patches, archives); code inside an evidence directory is allowed.
+  - larger than `evidence.maxFileBytes` (default 5 MiB), whatever their kind.
+  Untracked files git does not ignore count, because a host `git add .` would commit them. Edits to files
+  already tracked at the base (a lockfile, generated docs) are never refused. When git cannot read
+  `.gitattributes` at the base (older than 2.40), the gate warns that only `evidence.paths` and the
+  size limit were checked.
+- **Nothing is assumed about layout.** A repo declares its evidence directories once, in
+  `.gitattributes`; `/bughunt` intake reads the same declaration to leave them out of a hunt.
+>>>>>>> 68b7a33
 
 ## features.json
 

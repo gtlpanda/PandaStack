@@ -34,8 +34,8 @@ export function isOurs(pid, marker) {
 }
 
 // Runs a command synchronously; never throws.
-export function run(cmd, args, { cwd, env, timeoutMs = 10 * 60_000 } = {}) {
-  const r = spawnSync(cmd, args, { cwd, env: env || buildEnv(), encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: timeoutMs })
+export function run(cmd, args, { cwd, env, timeoutMs = 10 * 60_000, input } = {}) {
+  const r = spawnSync(cmd, args, { cwd, env: env || buildEnv(), encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: timeoutMs, input })
   return { ok: r.status === 0, status: r.status, out: `${r.stdout || ''}${r.stderr || ''}`, stdout: r.stdout || '', error: r.error ? r.error.message : null }
 }
 
