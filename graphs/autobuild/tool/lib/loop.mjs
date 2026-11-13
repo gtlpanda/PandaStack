@@ -260,6 +260,15 @@ async function runLoopWork(config, options, decisionTrace) {
         if (controlTampered(config, control, "review", log)) return 4;
         if (review.code === 15) return 15;
         const { verdict } = review;
+        // A review that committed its findings and then hit the provider is done: running it again
+        // would review the same range twice.
+        if (verdict.kind !== "normal") {
+          const committed = lastReviewCommit(config);
+          if (committed && committed !== lastReviewSha) {
+            log(`review: committed before the provider error (${verdict.message || verdict.kind}); not run again`);
+            break;
+          }
+        }
         if (verdict.kind === "transient" && transientRetries < limits.maxTransientRetries) {
           transientRetries += 1;
           log(`review: API overloaded or server error (${verdict.message}); waiting ${limits.transientWaitMinutes} min, retry ${transientRetries}/${limits.maxTransientRetries}, not counted`);

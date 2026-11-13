@@ -55,3 +55,12 @@ test("a login that keeps failing during the review stops with exit 10, not 13", 
   const { code, loopLog } = run(root, [{ build: "F-1" }, ...Array.from({ length: 40 }, () => ({ auth: true }))]);
   assert.equal(code, 10, loopLog);
 });
+
+test("a review that commits and then fails the login is not run again", () => {
+  const root = project(["F-1"], { finalReview: true });
+  const { code, calls, loopLog } = run(root, [{ build: "F-1" }, { review: true, thenAuth: true }]);
+  assert.equal(code, 0, loopLog);
+  assert.equal(calls.length, 2, "no probe and no second review");
+  assert.equal(reviewCommits(root).length, 1, loopLog);
+  assert.match(loopLog, /review: committed before the provider error/);
+});

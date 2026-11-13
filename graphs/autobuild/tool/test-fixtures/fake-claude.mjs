@@ -13,6 +13,7 @@
 //   { "build": "F-1", "files": {path: text} }  also write those files before committing
 //   { "ok": true }          a successful no-op answer (the usage probe, or a review that commits nothing)
 //   { "review": true }      a review that appends a finding to PROGRESS.md and commits it as chore(review)
+//                           (add "thenAuth": true to fail the login after that commit)
 //   { "hang": true }        write its pid to <script>.pid, then run until killed
 //   { "plant": "<path>" }   write an executable file at that path (relative to the project), commit nothing
 //   { "hunt": ... }         the bug hunt session, acted out by /build-app's fake (its format, its
@@ -86,5 +87,9 @@ if (step.stopHook) {
 if (step.review) {
   appendFileSync("PROGRESS.md", "\nREVIEW 2026-10-12: no drift found\n");
   execFileSync("git", ["commit", "-q", "-am", "chore(review): drift review"]);
+  if (step.thenAuth) {
+    result({ subtype: "success", is_error: true, api_error_status: 403, num_turns: 1, result: "Failed to authenticate. API Error: 403 Attention Required! | Cloudflare" });
+    process.exit(1);
+  }
 }
 result({ subtype: "success", is_error: false, result: "done" });
