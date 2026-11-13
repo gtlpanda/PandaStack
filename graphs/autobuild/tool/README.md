@@ -182,10 +182,11 @@ On a claude.ai subscription, a headless session that hits the plan limit fails r
 
 - **Waits for the reset.** It reads the reason from the StopFailure hook record, or from the error result. It waits until the reset plus `limitMarginMinutes`, then retries the same feature. The retry does not count toward `maxIterations` or the no-progress stop.
 - **Probes when the reset time is unreadable.** Every `probeEveryMinutes` it sends a one-turn Haiku probe until usage is back.
+- **Waits out a failed login.** When a session fails to authenticate (`Not logged in`, `Failed to authenticate`, `401 Unauthorized`), the loop probes every `probeEveryMinutes` until a session authenticates again, then retries the same work. That happens when someone logs in (run `claude`, then `/login`) or the block clears. It covers builds and reviews. A review that waits is not a review attempt, so a failed login can no longer end a run with exit `13`.
 - **Stops cleanly when waiting is pointless.**
   - A reset more than `maxLimitWaitHours` away (a weekly limit, say) → exit `8`. Rerun `autobuild run` after the reset; finished work is committed.
   - A spend or credit limit → exit `9` (it never spends past a limit).
-  - An auth problem → exit `10`.
+  - A login still failing after `maxLimitWaitHours` → exit `10`. The final bug hunt does not wait yet: a failed login there exits `10` at once.
 - **Rides out short outages.** Short API overloads are retried inside each session (`CLAUDE_CODE_RETRY_WATCHDOG=1`, capped by `watchdogMaxWaitMs`). Then the loop waits `transientWaitMinutes`, up to `maxTransientRetries` times.
 
 Dollar figures in logs are Claude Code's list-price estimates. On a subscription they are not charges: usage counts against the plan, unless extra usage is enabled.

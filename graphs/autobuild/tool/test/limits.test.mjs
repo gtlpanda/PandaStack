@@ -29,6 +29,9 @@ test("spend and credit errors stop the loop instead of waiting", () => {
 test("auth problems and transient overloads are told apart", () => {
   assert.equal(classifyOutcome({ stopFailure: { error: "authentication_failed" } }).kind, "auth");
   assert.equal(classifyOutcome({ text: "Not logged in · Please run /login" }).kind, "auth");
+  // The result line a real overnight run got when every session started failing to log in.
+  const failed = { subtype: "success", is_error: true, api_error_status: 403, result: "Failed to authenticate. API Error: 403 Attention Required! | Cloudflare" };
+  assert.equal(classifyOutcome({ result: failed }).kind, "auth");
   assert.equal(classifyOutcome({ stopFailure: { error: "overloaded" } }).kind, "transient");
   assert.equal(classifyOutcome({ text: "API Error: Repeated 529 Overloaded errors" }).kind, "transient");
   assert.equal(classifyOutcome({ result: { result: "Built P1B-01 and committed it." } }).kind, "normal");
