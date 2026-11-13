@@ -3,6 +3,8 @@
 // $FAKE_CLAUDE_SCRIPT (a JSON array) and acts it out in the project:
 //   { "limit": "<text>" }   end like a usage limit: error result with that text, exit 1
 //   { "billing": true }     end like a spend limit
+//   { "auth": true }        end like the failed login seen in a real run (2026-11-13): subtype
+//                           "success" with is_error and a Cloudflare 403 page, exit 1
 //   { "overloaded": true }  end like repeated 529s
 //   { "build": "F-1" }      do the feature properly: file, mark-passed, progress entry, feat commit
 //   { "build": "F-1", "stopHook": true }  then run the injected Stop hook as Claude Code does: the
@@ -40,6 +42,10 @@ if (step.hunt) {
 const result = (fields) => console.log(JSON.stringify({ type: "result", num_turns: 1, total_cost_usd: 0.01, permission_denials: [], ...fields }));
 if (step.limit) {
   result({ subtype: "error_during_execution", is_error: true, result: step.limit });
+  process.exit(1);
+}
+if (step.auth) {
+  result({ subtype: "success", is_error: true, api_error_status: 403, num_turns: 1, result: "Failed to authenticate. API Error: 403 Attention Required! | Cloudflare" });
   process.exit(1);
 }
 if (step.billing) {

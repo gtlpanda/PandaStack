@@ -4,14 +4,16 @@ import { createDecisionTrace } from '../../../../core/skills/decisions/observati
 import { prepareDecisionGate, decisionRevision, validateDecisionFeature } from './decisions.mjs';
 // The autobuild loop: one fresh headless Claude session per feature, until every feature
 // passes, the iteration cap is hit, NO_PROGRESS_LIMIT sessions in a row make no progress,
-// or something needs a human. A usage limit is a pause, not a failure: the loop sleeps
-// until the reset (or probes) and retries the same feature without counting it.
+// or something needs a human. A usage limit or a failed login is a pause, not a failure: the
+// loop sleeps until the reset (or probes) and retries the same feature or review without
+// counting it.
 //
 // Exit codes:
 //   0 every feature passes       2 no progress (limit hit)    3 the rest are blocked
 //   4 frozen files changed       5 preflight failed           6 total budget reached
 //   7 max iterations reached     8 usage limit resets too far away (rerun later)
-//   9 billing / spend limit      10 auth problem              11 another loop is running
+//   9 billing / spend limit      10 login failing past the wait cap (or in the hunt)
+//   11 another loop is running
 //   12 the bug hunt needs a human (findings left open, or it could not run or land)
 //   13 the final review ended twice without its commit (the last features are unreviewed)
 //   14 a managed decision could not safely release the selected builder
@@ -240,17 +242,38 @@ async function runLoopWork(config, options, decisionTrace) {
     let lastReviewSha = lastReviewCommit(config) ?? firstCommitOf(config, config.featuresFile) ?? git(config, ["rev-parse", "HEAD"]).output.trim();
     let completedSinceReview = passedSince(config, lastReviewSha);
     // `final`: the last features of a run are reviewed even when fewer than reviewEvery passed since the last review.
-    // Returns 4 when the review session changed git's control files, else 0.
+    // Returns 4 when the review session changed git's control files, 15 on a provider refusal,
+    // 8 / 9 / 10 when a usage limit, spend limit or failed login outlasted the wait, else 0.
     const reviewIfDue = async ({ final = false } = {}) => {
       if (config.deliveryMode === "pr-first") return 0;
       if (completedSinceReview === 0) return 0;
       if (!final && completedSinceReview < limits.reviewEvery) return 0;
-      const control = gitControlDigest(config);
-      const cacheBefore = cacheDigest(config);
-      const reviewCode = await runReview(config, { since: lastReviewSha, iteration, runId, log, cacheBefore });
-      if (interrupted) return 0;
-      if (controlTampered(config, control, "review", log)) return 4;
-      if (reviewCode === 15) return 15;
+      // A review that ended on the provider (a usage limit, a failed login, an overload) is waited
+      // out and run again; it is not an attempt, so it never counts toward the final review's two.
+      let waitedMs = 0;
+      let transientRetries = 0;
+      for (;;) {
+        const control = gitControlDigest(config);
+        const cacheBefore = cacheDigest(config);
+        const review = await runReview(config, { since: lastReviewSha, iteration, runId, log, cacheBefore });
+        if (interrupted) return 0;
+        if (controlTampered(config, control, "review", log)) return 4;
+        if (review.code === 15) return 15;
+        const { verdict } = review;
+        if (verdict.kind === "transient" && transientRetries < limits.maxTransientRetries) {
+          transientRetries += 1;
+          log(`review: API overloaded or server error (${verdict.message}); waiting ${limits.transientWaitMinutes} min, retry ${transientRetries}/${limits.maxTransientRetries}, not counted`);
+          await sleepMs(limits.transientWaitMinutes * 60_000);
+          if (interrupted) return 0;
+          continue;
+        }
+        if (!WAITABLE.has(verdict.kind)) break;
+        if (verdict.kind !== "billing") log(`review: ${PROBLEM[verdict.kind]} (${verdict.message || "no message"}); not counted as a review attempt`);
+        const waited = await waitOutProvider(config, { verdict, who: "review", retrying: "the review", log, limits, sleepMs, budgetHours: limits.maxLimitWaitHours - waitedMs / 3_600_000 });
+        waitedMs += waited.ms;
+        if (interrupted) return 0;
+        if (!waited.retry) return waited.code;
+      }
       const reviewed = lastReviewCommit(config);
       if (reviewed && reviewed !== lastReviewSha) { lastReviewSha = reviewed; completedSinceReview = 0; }
       else log(`review: no chore(review) commit; the next review covers ${lastReviewSha.slice(0, 8)}..HEAD again`);
@@ -474,43 +497,15 @@ async function runLoopWork(config, options, decisionTrace) {
         // Only error channels are read: the transcript itself may discuss "limits" (product code, tests).
         const errored = result && (result.is_error || result.subtype !== "success") ? result : null;
         const verdict = classifyOutcome({ stopFailure: readStopFailure(config), result: errored, text: stderrOf(iterLog) });
-        if (verdict.kind === "usage_limit") {
-          const resetAt = parseResetTime(verdict.message);
-          const plan = planLimitWait({ resetAt, maxWaitHours: limits.maxLimitWaitHours - limitWaitedMs / 3_600_000, marginMinutes: limits.limitMarginMinutes, probeEveryMinutes: limits.probeEveryMinutes });
-          log(`iteration ${iteration + 1}: usage limit (${verdict.message || "no message"}); ${summary}; not counted`);
-          if (plan.action === "give_up") {
-            log(`the limit resets around ${plan.resumeAt.toISOString()}, beyond the ${limits.maxLimitWaitHours} h wait cap. Stopping; rerun \`autobuild run\` after the reset (finished work is committed).`);
-            return 8;
-          }
-          if (plan.action === "wait") {
-            log(`waiting until ${plan.resumeAt.toISOString()} (reset ${resetAt.toISOString()} + ${limits.limitMarginMinutes} min), then retrying ${feature.id}`);
-            limitWaitedMs += plan.waitMs;
-            await sleepMs(plan.waitMs);
-          } else {
-            // The cap covers every wait for this feature, so a probe that succeeds while the real
-            // session stays limited cannot retry forever.
-            const leftHours = limits.maxLimitWaitHours - limitWaitedMs / 3_600_000;
-            if (leftHours <= 0) {
-              log(`usage limit: ${limits.maxLimitWaitHours} h of waiting spent on ${feature.id}. Stopping; rerun \`autobuild run\` later (finished work is committed).`);
-              return 8;
-            }
-            const waited = await probeUntilAvailable(config, log, limits, sleepMs, leftHours);
-            limitWaitedMs += waited.ms;
-            if (waited.code === 15) return 15;
-            if (!waited.ok) {
-              log(`usage still unavailable after ${limits.maxLimitWaitHours} h of probing. Stopping; rerun \`autobuild run\` later.`);
-              return 8;
-            }
-          }
+        if (WAITABLE.has(verdict.kind)) {
+          if (verdict.kind !== "billing") log(`iteration ${iteration + 1}: ${PROBLEM[verdict.kind]} (${verdict.message || "no message"}); ${summary}; not counted`);
+          // The cap covers every wait for this feature, so a probe that succeeds while the real
+          // session keeps failing cannot retry forever.
+          const waited = await waitOutProvider(config, { verdict, who: `iteration ${iteration + 1}`, retrying: feature.id, log, limits, sleepMs, budgetHours: limits.maxLimitWaitHours - limitWaitedMs / 3_600_000 });
+          limitWaitedMs += waited.ms;
+          if (interrupted) return 130;
+          if (!waited.retry) return waited.code;
           continue;
-        }
-        if (verdict.kind === "billing") {
-          log(`iteration ${iteration + 1}: spend or credit limit (${verdict.message}). Stopping; the loop never spends past a limit.`);
-          return 9;
-        }
-        if (verdict.kind === "auth") {
-          log(`iteration ${iteration + 1}: authentication problem (${verdict.message}). Stopping; log in again, then rerun.`);
-          return 10;
         }
         if (verdict.kind === "transient" && transientStreak < limits.maxTransientRetries) {
           transientStreak += 1;
@@ -756,12 +751,66 @@ function stderrOf(file) {
   return existsSync(candidate) ? readFileSync(candidate, "utf8").slice(-20000) : "";
 }
 
-/** Probes every probeEveryMinutes with a one-turn session until usage is available again. */
-async function probeUntilAvailable(config, log, limits, sleepMs, maxWaitHours = limits.maxLimitWaitHours) {
+// Provider problems the loop waits out (or, for billing, stops on) instead of counting the session.
+const WAITABLE = new Set(["usage_limit", "auth", "billing"]);
+const PROBLEM = { usage_limit: "usage limit", auth: "authentication failed" };
+
+/**
+ * Waits out a session that ended on the provider rather than on its own work, so the same work
+ * (`retrying`: a feature id, "the review") is retried without counting it:
+ *   usage_limit  wait for the reset, or probe when the reset time is unreadable
+ *   auth         probe until a session authenticates again: someone logs in, or the block clears
+ *   billing      never waits (the loop never spends past a limit)
+ * `budgetHours` is what is left of maxLimitWaitHours for this work.
+ * Returns { retry: true, ms } to retry, or { retry: false, code, ms } to stop with that exit code.
+ */
+async function waitOutProvider(config, { verdict, who, retrying, log, limits, sleepMs, budgetHours }) {
+  if (verdict.kind === "billing") {
+    log(`${who}: spend or credit limit (${verdict.message}). Stopping; the loop never spends past a limit.`);
+    return { retry: false, code: 9, ms: 0 };
+  }
+  if (verdict.kind === "usage_limit") {
+    const resetAt = parseResetTime(verdict.message);
+    const plan = planLimitWait({ resetAt, maxWaitHours: budgetHours, marginMinutes: limits.limitMarginMinutes, probeEveryMinutes: limits.probeEveryMinutes });
+    if (plan.action === "give_up") {
+      log(`the limit resets around ${plan.resumeAt.toISOString()}, beyond the ${limits.maxLimitWaitHours} h wait cap. Stopping; rerun \`autobuild run\` after the reset (finished work is committed).`);
+      return { retry: false, code: 8, ms: 0 };
+    }
+    if (plan.action === "wait") {
+      log(`waiting until ${plan.resumeAt.toISOString()} (reset ${resetAt.toISOString()} + ${limits.limitMarginMinutes} min), then retrying ${retrying}`);
+      await sleepMs(plan.waitMs);
+      return { retry: true, ms: plan.waitMs };
+    }
+  }
+  const auth = verdict.kind === "auth";
+  const stopCode = auth ? 10 : 8;
+  if (budgetHours <= 0) {
+    log(auth
+      ? `authentication: ${limits.maxLimitWaitHours} h of waiting spent on ${retrying}. Stopping; log in again (run \`claude\`, then /login), then rerun \`autobuild run\` (finished work is committed).`
+      : `usage limit: ${limits.maxLimitWaitHours} h of waiting spent on ${retrying}. Stopping; rerun \`autobuild run\` later (finished work is committed).`);
+    return { retry: false, code: stopCode, ms: 0 };
+  }
+  if (auth) log(`${who}: if the login expired, log in again (run \`claude\`, then /login). The loop probes every ${limits.probeEveryMinutes} min and resumes ${retrying} on its own once a session authenticates, for up to ${Math.round(budgetHours * 10) / 10} h.`);
+  const waited = await probeUntilAvailable(config, log, limits, sleepMs, budgetHours, auth ? "authentication" : "usage limit");
+  if (waited.code === 15) return { retry: false, code: 15, ms: waited.ms };
+  if (!waited.ok) {
+    log(auth
+      ? `authentication still failing after ${limits.maxLimitWaitHours} h of probing. Stopping; log in again (run \`claude\`, then /login), then rerun \`autobuild run\`.`
+      : `usage still unavailable after ${limits.maxLimitWaitHours} h of probing. Stopping; rerun \`autobuild run\` later.`);
+    return { retry: false, code: stopCode, ms: waited.ms };
+  }
+  return { retry: true, ms: waited.ms };
+}
+
+/**
+ * Probes every probeEveryMinutes with a one-turn session until a session works again: usage is
+ * back (`reason` "usage limit") or it authenticates (`reason` "authentication").
+ */
+async function probeUntilAvailable(config, log, limits, sleepMs, maxWaitHours = limits.maxLimitWaitHours, reason = "usage limit") {
   const started = Date.now();
   const deadline = started + maxWaitHours * 3_600_000;
   while (Date.now() < deadline) {
-    log(`usage limit: reset time unknown; probing again in ${limits.probeEveryMinutes} min`);
+    log(reason === "usage limit" ? `usage limit: reset time unknown; probing again in ${limits.probeEveryMinutes} min` : `${reason}: probing again in ${limits.probeEveryMinutes} min`);
     await sleepMs(limits.probeEveryMinutes * 60_000);
     const probeLog = statePath(config, "probe.jsonl");
     const env = buildEnv(config, { CLAUDE_CODE_RETRY_WATCHDOG: "0" });
@@ -785,7 +834,7 @@ async function probeUntilAvailable(config, log, limits, sleepMs, maxWaitHours = 
       return { ok: false, code: 15, ms: Date.now() - started };
     }
     if (code === 0 && result?.subtype === "success" && !result?.is_error && verdict.kind === "normal") {
-      log("usage limit: available again; resuming");
+      log(`${reason}: available again; resuming`);
       return { ok: true, ms: Date.now() - started };
     }
     if (verdict.kind === "usage_limit") {
@@ -816,7 +865,10 @@ function keepOwnGateMemory(config, before, who, log) {
 
 async function runReview(config, { since, iteration, runId, log, cacheBefore }) {
   const base = git(config, ["rev-parse", "HEAD"]).output.trim();
-  const reviewLog = path.join(config.root, config.logsDir, `${runId}-review-after-iter-${String(iteration).padStart(2, "0")}.jsonl`);
+  // A retried review keeps the earlier attempt's log: it is the evidence of why it was retried.
+  const reviewStem = path.join(config.root, config.logsDir, `${runId}-review-after-iter-${String(iteration).padStart(2, "0")}`);
+  let reviewLog = `${reviewStem}.jsonl`;
+  for (let n = 2; existsSync(reviewLog); n += 1) reviewLog = `${reviewStem}-${n}.jsonl`;
   writeSession(config, { role: "review", featureId: "REVIEW", iteration, baseSha: base, startedAt: new Date().toISOString(), progressAtStart: readProgress(config), stopAttempts: 0 });
   clearStopFailure(config);
   const date = new Date().toISOString().slice(0, 10);
@@ -843,9 +895,13 @@ async function runReview(config, { since, iteration, runId, log, cacheBefore }) 
   if (config.backend === "codex") finishCodexReview(config, { base, exitCode, result, log });
   if (classifyOutcome({ result }).kind === 'provider_refusal') {
     log('review: provider_refusal/nonretryable; Provider declined this work; automatic retry is blocked.');
-    return 15;
+    return { code: 15 };
   }
   const dirty = git(config, ["status", "--porcelain"]).output.trim();
   if (dirty) log(`review: left uncommitted changes:\n${dirty}`);
   log(`review: done (${result?.subtype ?? "no_result"}, ${result?.num_turns ?? 0} turns); log ${path.relative(config.root, reviewLog)}`);
+  // Only a review that ended in error (or with no result) is classified, and only from its error
+  // channels: a successful review may well discuss logins or limits.
+  if (result && !result.is_error && result.subtype === "success") return { verdict: { kind: "normal" } };
+  return { verdict: classifyOutcome({ stopFailure: readStopFailure(config), result, text: stderrOf(reviewLog) }) };
 }

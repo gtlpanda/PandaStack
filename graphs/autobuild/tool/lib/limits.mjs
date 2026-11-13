@@ -14,7 +14,8 @@ const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "
  * Kinds:
  *   usage_limit  plan quota reached → wait for the reset, retry the same feature
  *   billing      spend limit, credits, billing error → stop the loop (never auto-spend)
- *   auth         not logged in, org not allowed, account on hold → stop the loop
+ *   auth         not logged in, failed to authenticate, org not allowed, account on hold → probe
+ *                until a session authenticates again (someone logs in), then resume; stop at the wait cap
  *   transient    overloaded or server errors that outlived in-session retries → short wait, retry
  *   normal       anything else (success, max turns, budget cap): judged by the loop's own checks
  */
@@ -32,7 +33,7 @@ export function classifyOutcome({ stopFailure = null, result = null, text = "" }
   if (/credit balance is too low|spend limit|usage credits required|individual usage limit|team's shared budget/i.test(message) || error === "billing_error") {
     return { kind: "billing", message: firstLine(message, /credit|spend limit|usage credits|usage limit|budget/i) };
   }
-  if (["authentication_failed", "oauth_org_not_allowed", "account_on_hold"].includes(error) || /not logged in|please run \/login|authentication required|refresh token.*(?:expired|invalid)|unauthorized|401 Unauthorized/i.test(message)) {
+  if (["authentication_failed", "oauth_org_not_allowed", "account_on_hold"].includes(error) || /not logged in|please run \/login|failed to authenticate|authentication required|refresh token.*(?:expired|invalid)|unauthorized|401 Unauthorized/i.test(message)) {
     return { kind: "auth", message: firstLine(message, /log ?in|authenticat|org|on hold/i) };
   }
   if (/hit your (?:session|weekly|opus|sonnet|fable|haiku|[a-z]+) limit|usage limit reached|hit your usage limit|usage_limit_reached|claude ai usage limit/i.test(message)) {

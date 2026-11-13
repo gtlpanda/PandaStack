@@ -150,13 +150,18 @@ test("Codex hunt usage failure returns usage-limit exit and no finished review",
   assert.equal(result.code, 8, result.out);
   assert.equal(reviewStatus(root).hunted, false);
 });
-test("Codex usage failures probe with Luna, then resume; auth fails immediately", () => {
+test("Codex usage failures probe with Luna, then resume; a failed login probes too, then stops at the wait cap", () => {
   const root = project(["F-1"]);
   const result = run(root, [{ error: "You've hit your usage limit" }, { ok: true }, { build: "F-1" }], env);
   assert.equal(result.code, 0, result.out);
   assert.ok(result.calls[1].args.includes("gpt-6-luna"));
   assert.ok(result.calls[1].args.includes("read-only"));
-  assert.equal(run(project(["F-1"]), [{ error: "401 Unauthorized" }], env).code, 10);
+  const back = run(project(["F-1"]), [{ error: "401 Unauthorized" }, { ok: true }, { build: "F-1" }], env);
+  assert.equal(back.code, 0, back.out);
+  assert.ok(back.calls[1].args.includes("gpt-6-luna"), "the login wait probes with Luna");
+  // 0.0003 h is about 1.1 s of waiting; the harness caps every sleep at 300 ms.
+  const stuck = run(project(["F-1"], { maxLimitWaitHours: 0.0003 }), Array.from({ length: 40 }, () => ({ error: "401 Unauthorized" })), env);
+  assert.equal(stuck.code, 10, stuck.out);
 });
 test("exit zero without completion event never marks a feature passing", () => {
   const result = run(project(["F-1"]), [{ build: "F-1", noResult: true }, { noResult: true }], env);
