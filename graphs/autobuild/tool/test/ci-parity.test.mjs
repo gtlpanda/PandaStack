@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { spawn, spawnSync, execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseWorkflowYaml, WorkflowYamlError } from "../lib/workflow-yaml.mjs";
 import { assignments, optionValues, shellWords, simpleCommands } from "../lib/shell-words.mjs";
 import { appearsAsCommand, parityEnv, resolveCiParity, runParityStep, toolOf } from "../lib/ci-parity.mjs";
 import { KIT, CLI } from "../test-fixtures/project.mjs";
+import { findInstalls } from "../lib/codex-installs.mjs";
+
+// flock(1) is not on stock macOS; the lock tests run wherever it is (CI runs on Linux).
+const HAS_FLOCK = findInstalls("flock", process.env.PATH).length > 0;
 
 const CHERRY_WORKFLOW = readFileSync(path.join(KIT, "test-fixtures", "ci", "cherry-crm-test.yml"), "utf8");
 // cherry-crm's actual gate command for prior server acceptance (origin/dev autobuild.json).
@@ -387,6 +391,28 @@ test("any CI: declared commands must appear verbatim in the CI file, and run wit
   assert.deepEqual(missing.errors, ["ciParity.ciFile ci/none.yml: not found"]);
 });
 
+test("CI parity names the step wrappers missing from the gate's PATH instead of failing every step", () => {
+  const root = repo({ ".gitlab-ci.yml": GITLAB_CI });
+  const bin = (...names) => {
+    const dir = mkdtempSync(path.join(tmpdir(), "parity-bin-"));
+    for (const name of names) {
+      writeFileSync(path.join(dir, name), "#!/bin/sh\n");
+      chmodSync(path.join(dir, name), 0o755);
+    }
+    return dir;
+  };
+  const resolve = (ciParity, pathValue) => resolveCiParity({ root, ciParity, env: { vars: {} }, gate: [] }, { pathValue }).errors;
+  const locked = { ...GITLAB_PARITY, lockFile: path.join(root, "parity.lock") };
+  assert.deepEqual(resolve(locked, bin("timeout", "flock")), []);
+  assert.deepEqual(resolve(GITLAB_PARITY, bin("timeout")), [], "flock is needed only with a lockFile");
+  assert.deepEqual(resolve(locked, bin("timeout")), ["ciParity.lockFile serializes steps with flock, but flock is not on the gate's PATH (macOS: brew install flock)"]);
+  assert.deepEqual(resolve(GITLAB_PARITY, bin()), ["CI parity runs each step under GNU timeout, but timeout is not on the gate's PATH (macOS: brew install coreutils)"]);
+  assert.deepEqual(resolve(GITLAB_PARITY, ""), ["CI parity runs each step under GNU timeout, but timeout is not on the gate's PATH (macOS: brew install coreutils)"], "an empty PATH");
+  assert.deepEqual(resolve(GITLAB_PARITY, undefined).filter((e) => /not on the gate's PATH/.test(e)), findInstalls("timeout", process.env.PATH).length ? [] : [`CI parity runs each step under GNU timeout, but timeout is not on the gate's PATH (macOS: brew install coreutils)`], "defaults to this process's PATH");
+  const noSteps = resolveCiParity({ root, ciParity: { ...GITLAB_PARITY, ciFile: "ci/none.yml" }, env: { vars: {} }, gate: [] }, { pathValue: "" }).errors;
+  assert.deepEqual(noSteps, ["ciParity.ciFile ci/none.yml: not found"], "no steps resolved, nothing to wrap");
+});
+
 test("ciParity is required for any recognised CI system, not only GitHub Actions", () => {
   for (const file of [".gitlab-ci.yml", ".circleci/config.yml", "azure-pipelines.yml", "bitbucket-pipelines.yml", "Jenkinsfile", ".buildkite/pipeline.yml", ".travis.yml"]) {
     const errors = resolveCiParity({ root: repo({ [file]: "x" }), env: { vars: {} }, gate: [] }).errors;
@@ -481,7 +507,7 @@ test("a timed-out parity step leaves no process behind and releases its lock", (
   const lockFile = path.join(root, "parity.lock");
   const marker = `parity-orphan-${process.pid}-${Date.now()}`;
   const step = { label: "slow", run: `sleep 30 # ${marker}`, cwd: ".", env: {}, shellArgs: ["bash", "-e"] };
-  for (const config of [{ root, ciParity: { lockFile } }, { root, ciParity: {} }]) {
+  for (const config of [...(HAS_FLOCK ? [{ root, ciParity: { lockFile } }] : []), { root, ciParity: {} }]) {
     const started = Date.now();
     const result = runParityStep(config, step, { timeoutSeconds: 1, lockWaitSeconds: 5 });
     assert.equal(result.ok, false);
@@ -491,10 +517,10 @@ test("a timed-out parity step leaves no process behind and releases its lock", (
     const left = spawnSync("pgrep", ["-f", marker], { encoding: "utf8" });
     assert.equal(left.stdout.trim(), "", "no process of the step survives");
   }
-  assert.equal(spawnSync("flock", ["-n", lockFile, "true"]).status, 0, "the lock is free again");
+  if (HAS_FLOCK) assert.equal(spawnSync("flock", ["-n", lockFile, "true"]).status, 0, "the lock is free again");
 });
 
-test("waiting for a busy lock is bounded and reported, not charged to the step", () => {
+test("waiting for a busy lock is bounded and reported, not charged to the step", { skip: !HAS_FLOCK && "flock is not installed (macOS: brew install flock)" }, () => {
   const root = repo({});
   const lockFile = path.join(root, "busy.lock");
   const holder = spawn("flock", [lockFile, "sleep", "10"], { stdio: "ignore" });
@@ -522,7 +548,7 @@ process.exit(0);
 `);
   const lock = path.join(dir, "ctrl-c.lock");
   // detached: the child leads its own process group, like a terminal's foreground job.
-  const child = spawn(process.execPath, [script], { env: { ...process.env, ROOT: dir, MARKER: marker, LOCK: lock }, detached: true, stdio: "ignore" });
+  const child = spawn(process.execPath, [script], { env: { ...process.env, ROOT: dir, MARKER: marker, ...(HAS_FLOCK ? { LOCK: lock } : {}) }, detached: true, stdio: "ignore" });
   const exited = new Promise((resolve) => child.on("exit", (code) => resolve(code)));
   const until = Date.now() + 10_000;
   while (!spawnSync("pgrep", ["-f", marker], { encoding: "utf8" }).stdout.trim()) {
@@ -534,7 +560,7 @@ process.exit(0);
   assert.equal(await exited, 130);
   assert.ok(Date.now() - started < 5000, "the gate stops without waiting for the step");
   assert.equal(spawnSync("pgrep", ["-f", marker], { encoding: "utf8" }).stdout.trim(), "", "no process of the step survives");
-  assert.equal(spawnSync("flock", ["-n", lock, "true"]).status, 0, "the lock is free");
+  if (HAS_FLOCK) assert.equal(spawnSync("flock", ["-n", lock, "true"]).status, 0, "the lock is free");
 });
 
 test("the Stop hook's gate defers CI parity; autobuild check still runs it", async () => {

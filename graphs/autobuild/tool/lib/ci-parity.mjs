@@ -13,6 +13,7 @@ import { parseWorkflowYaml } from "./workflow-yaml.mjs";
 import { assignments, optionValues, simpleCommands } from "./shell-words.mjs";
 import { WORKFLOW_DIR } from "./config.mjs";
 import { runSpec } from "./proc.mjs";
+import { findInstalls } from "./codex-installs.mjs";
 
 // Set for every step on a GitHub-hosted runner.
 const GITHUB_RUNNER_ENV = Object.freeze({ CI: "true", GITHUB_ACTIONS: "true", TZ: "UTC" });
@@ -184,7 +185,7 @@ function resolveCommands(config, parity, errors) {
  * Resolves `ciParity` and compares the gate with CI. Returns { steps, errors,
  * warnings }; errors fail the full gate.
  */
-export function resolveCiParity(config) {
+export function resolveCiParity(config, { pathValue = process.env.PATH } = {}) {
   const errors = [], warnings = [];
   const found = ciFiles(config.root);
   const parity = config.ciParity;
@@ -201,6 +202,7 @@ export function resolveCiParity(config) {
       if (path.isAbsolute(s.cwd) || path.posix.normalize(s.cwd).split("/")[0] === "..") errors.push(`ciParity step ${s.label}: its working directory leaves the repository`);
     }
     for (const file of found.filter((f) => f !== resolved.file)) warnings.push(`${file} is not checked by ciParity`);
+    if (resolved.steps.length) errors.push(...missingTools(parity, pathValue));
   }
   // Without declared steps, GitHub workflows still say what CI sets.
   let ciEnvSteps = resolved.steps;
@@ -212,6 +214,16 @@ export function resolveCiParity(config) {
   warnings.push(...envWarnings(config, ciEnvSteps));
   for (const problem of uncoveredExcludes(config, resolved.steps, parity)) (parity ? errors : warnings).push(problem);
   return { steps: resolved.steps, errors, warnings };
+}
+
+// The commands paritySpec wraps every step in, when they are not on the gate's PATH.
+// Stock macOS has neither; without them each step would only exit 127.
+function missingTools(parity, pathValue) {
+  const needed = [["timeout", "CI parity runs each step under GNU timeout", "brew install coreutils"]];
+  if (parity.lockFile) needed.push(["flock", "ciParity.lockFile serializes steps with flock", "brew install flock"]);
+  return needed
+    .filter(([bin]) => findInstalls(bin, pathValue).length === 0)
+    .map(([bin, why, mac]) => `${why}, but ${bin} is not on the gate's PATH (macOS: ${mac})`);
 }
 
 // Variables the gate sets that CI does not, or sets differently. Values are

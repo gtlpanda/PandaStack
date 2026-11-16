@@ -214,11 +214,11 @@ function fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, c
     deferred.push({ kind: "ci-parity", name: "CI parity", reason: "runs in the loop's final full gate and autobuild check" });
   } else {
     const started = Date.now();
-    const parity = resolveCiParity(config);
+    const pathValue = buildEnv(config).PATH;
+    const parity = resolveCiParity(config, { pathValue });
     warnings.push(...parity.warnings);
     jobs.push({ id: "CI parity configuration", name: "CI parity configuration", result: { ok: parity.errors.length === 0, ms: Date.now() - started, output: parity.errors.join("\n") } });
     if (parity.errors.length === 0) {
-      const pathValue = buildEnv(config).PATH;
       for (const step of parity.steps) {
         const name = `CI parity: ${parityLabel(step)}`;
         jobs.push({ id: name, name, spec: paritySpec(config, step, { pathValue }), keyEnv: step.env, early: true, ...schedule(config.ciParity) });
