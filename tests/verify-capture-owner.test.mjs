@@ -5,6 +5,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from '../scripts/workflow-harness.mjs'
+import { OWNED_CAPTURE } from '../core/skills/verify/retention.mjs'
+
+// capture-owner.sh and retention.sh are the Linux ownership helpers (setsid, GNU stat, /proc);
+// off Linux, verify runs steps directly instead (retention.mjs captureDirect).
+const NO_OWNED_CAPTURE = OWNED_CAPTURE ? false : "verify's ownership helpers need Linux (setsid, GNU stat, /proc)"
 
 const helper = fileURLToPath(new URL('../core/skills/verify/capture-owner.sh', import.meta.url))
 await test('shared capture owner is executable for installed verification', () => {
@@ -33,7 +38,7 @@ await test('Bash normal completion needs both known empty membership and settled
   assert.equal(pure('co_settled empty yes || exit 1; co_settled unknown yes && exit 1; co_settled populated yes && exit 1; co_settled empty no && exit 1; :'), '')
 })
 
-await test('Bash path validator rejects nonliteral normalized paths, aliases and nonprivate leaves', () => {
+await test('Bash path validator rejects nonliteral normalized paths, aliases and nonprivate leaves', { skip: NO_OWNED_CAPTURE }, () => {
   const root = fs.mkdtempSync(join(tmpdir(), 'capture-path-'))
   const leaf = join(root, 'literal space')
   fs.mkdirSync(leaf, { mode: 0o700 })
@@ -59,7 +64,7 @@ await test('Bash root signal identity ignores record identity and rejects stale 
   `), '')
 })
 
-await test('Bash join relation vectors bind boot, live births, group and full current ancestry', () => {
+await test('Bash join relation vectors bind boot, live births, group and full current ancestry', { skip: NO_OWNED_CAPTURE }, () => {
   const root = fs.mkdtempSync(join(tmpdir(), 'capture-relations-'))
   const boot = fs.readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim()
   const record = wire.replace('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', boot)

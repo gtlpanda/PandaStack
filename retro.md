@@ -3606,3 +3606,41 @@ was traced to a file:line and a cause:
 
 `test(name, { skip }, fn)` prints a skip with its reason and the totals line counts skips. On this Mac:
 1726 passed, 9 failed (8 /verify, 1 intermittent), 204 skipped. On Linux nothing skips.
+
+## 57. /verify works on macOS: steps run directly where there is no /proc (2026-11-16)
+
+On this Mac every /verify step exited 125, so every run said `VERIFY: FAIL`, even for a one-line passing
+test. Two independent causes, each confirmed with a fixture:
+- **Default evidence dir under a symlink.** `invocation()` made it under `tmpdir()` (`/var/folders/...`), and
+  evidence paths refuse symlinks. It now uses the real path.
+- **Capture ownership is Linux-only (D78).** `capture-owner.sh` reads process identity, the boot id and group
+  membership from /proc and needs setsid and GNU stat; macOS ships Bash 3.2 besides. A symlink-free evidence
+  dir still gave 125.
+
+Fix (D123): off Linux, `captureDirect` runs a step in its own process group with the same private bounded
+log, exit code and limits; stop or overflow ends the group (TERM, then KILL only while the step is still
+running). The manifest marks such steps `"capture": "direct"` and verify.sh prints `capture: direct` above the
+verdict. Linux keeps the owned path unchanged. Not a port: the ownership proof does not carry over to ps.
+
+**Proof on this Mac.** Fixture that passes: was `[125] VERIFY: FAIL`, now `VERIFY: PASS`. Fixture that exits 2:
+was `[125]`, now `[2] ... VERIFY: FAIL`. The 3 /verify subtests of the monorepo evidence test now pass.
+
+**Bug caught.** /bughunt F1 (MEDIUM, confirmed): a step that exited but left a background process holding
+its output (a dev server, `sleep 600 &`) never settled, so /verify hung where Linux fails the step. Now the
+leftover gets 2s, the group is stopped, and after a 4s deadline the step ends incomplete (125). The hunt's
+reproduction could not run here (no namespace isolation); run by hand it failed on 0a63865 and passes now.
+/bughunt F3 (MEDIUM, confirmed): on Linux, /verify runs the suite inside an owned capture that exports
+`VERIFY_CAPTURE_SCOPE_DIR`, and captureDirect rightly refuses an inherited scope, so the new in-process tests
+would fail there. Each call now sets that variable itself. Reproduced by running the file with the variable
+set: 3 failed before, 6 pass now.
+/bughunt F1 on 5769b34 (LOW, confirmed): a step that died of its own signal was reported as 125 and
+incomplete, where Linux reports 128+signal. Now 137/143/139 for KILL/TERM/SEGV with a complete log; a signal
+sent by stop() still ends the step at 125, incomplete. Its reproduction failed by hand before the fix.
+
+**Tests.** `tests/verify-direct-capture.test.mjs` (6): exit codes and merged output, overflow killing a
+background grandchild, a leftover in the group ended after the grace period, a leftover in its own session
+bounded by the deadline, refusing an inherited scope, verify.sh end to end on this platform's path. Both
+leftover tests fail on 0a63865.
+`verify-scope-adapter` unit-tests the Linux adapter with synthetic /proc, so its worker now pins
+`process.platform`. The 7 tests that run the Linux helpers directly skip off Linux (`OWNED_CAPTURE`);
+`NO_ISOLATION` moved to one shared `graphs/hunt/tests/isolation.mjs`.

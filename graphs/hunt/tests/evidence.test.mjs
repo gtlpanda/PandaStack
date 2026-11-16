@@ -8,10 +8,8 @@ import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
-import { sandboxEnv, testFileProblems, runnerFor, verdictOf, markerFor, isolation } from '../skills/bughunt/evidence.mjs'
-
-// Reproductions run only in a Linux PID namespace (evidence.mjs isolation()); elsewhere these skip.
-const NO_ISOLATION = isolation().pidns ? false : 'reproductions need Linux namespace isolation (bughunt evidence.mjs)'
+import { sandboxEnv, testFileProblems, runnerFor, verdictOf, markerFor } from '../skills/bughunt/evidence.mjs'
+import { NO_ISOLATION } from './isolation.mjs'
 import { mergeFindings, writeLedger, readLedger, emptyLedger } from '../../../core/skills/findings/findings.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))

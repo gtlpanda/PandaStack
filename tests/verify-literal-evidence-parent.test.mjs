@@ -6,13 +6,18 @@ import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { test } from '../scripts/workflow-harness.mjs'
+import { OWNED_CAPTURE } from '../core/skills/verify/retention.mjs'
+
+// capture-owner.sh and retention.sh are the Linux ownership helpers (setsid, GNU stat, /proc);
+// off Linux, verify runs steps directly instead (retention.mjs captureDirect).
+const NO_OWNED_CAPTURE = OWNED_CAPTURE ? false : "verify's ownership helpers need Linux (setsid, GNU stat, /proc)"
 
 const retention = fileURLToPath(new URL('../core/skills/verify/retention.sh', import.meta.url))
 
 // Inert retained manifests only: no tasks, capture owner, signals or lifecycle
 // are started. The frozen acceptance owns actual ordinary nested-success proof.
 for (const parent of ['evidence', 'verify\\logs']) {
-  await test(`Bash finalize retains exact child bytes and digest under ${parent}`, () => {
+  await test(`Bash finalize retains exact child bytes and digest under ${parent}`, { skip: NO_OWNED_CAPTURE }, () => {
     const base = fs.mkdtempSync(join(tmpdir(), 'verify-literal-parent-'))
     try {
       fs.chmodSync(base, 0o700)
