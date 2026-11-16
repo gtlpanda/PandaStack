@@ -3530,3 +3530,27 @@ suite reported in 0.2 s once it has failed (52.3 s before).
   step. The fixture now creates them.
 
 **Counts.** 3 new lib files, 1 benchmark, 27 new tests (autobuild suite 202 → 229).
+
+## 54. A failed login pauses the autobuild loop instead of ending the run (2026-11-13)
+
+PR #58. On 2026-11-13 an overnight autobuild loop died when every Claude session got `Failed to
+authenticate. API Error: 403 ... Cloudflare`. Two such failures in the final review counted as review
+attempts (exit 13); during a build the loop exited 10 at once. The run stayed dead until a person
+logged in the next morning.
+- `lib/limits.mjs`: `classifyOutcome` classifies `failed to authenticate` as auth.
+- `lib/loop.mjs`: usage limits, failed logins and billing share `waitOutProvider`. A failed login
+  probes every `probeEveryMinutes` and resumes the same work, uncounted; exit 10 comes only after
+  `maxLimitWaitHours` (default 26). Billing still stops with 9.
+- `reviewIfDue` retries a review that ended on the provider without counting it as an attempt, with a
+  log per attempt.
+
+**Bug caught.** /bughunt's first pass flagged a review that committed `chore(review)` and then hit
+the provider error as unexamined: the retry would run it again. Fixed in d73e23a; the test for it
+fails with the committed-review check removed.
+
+**Not changed.** The final bug hunt still exits 10 at once on auth. The build-app driver keeps its own
+classifier (`graphs/build/skills/build-app/driver/limits.mjs`), which still lacks the pattern.
+
+**Counts.** 10 files, +213/−60. 6 new tests (`test/loop-auth-wait.test.mjs`), one new auth case in
+`test/limits.test.mjs`, one Codex test reworded for the new wait. Re-run on main 3f4c8a6:
+`node --test test/loop-auth-wait.test.mjs test/limits.test.mjs` 17/17 pass.
