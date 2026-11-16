@@ -48,7 +48,9 @@ function deny(reason) {
 // The kit itself (lib/, hooks/): a session never rewrites the tool that checks it.
 const KIT_HOME = path.resolve(import.meta.dirname, "..");
 const TOOL_PATHS = [KIT_HOME, path.resolve(KIT_HOME, "../../../agent-config.json"), path.resolve(KIT_HOME, "../../../scripts/agent-config.mjs")];
-const TEMP_DIRS = [...new Set(["/tmp", tmpdir()].map((dir) => path.resolve(dir)))];
+// Each temp dir as written and where it really is: on macOS /tmp is /private/tmp and
+// tmpdir() is under /private/var, and isFrozen checks a write both ways.
+const TEMP_DIRS = [...new Set(["/tmp", tmpdir()].flatMap((dir) => [path.resolve(dir), realish(path.resolve(dir))]))];
 
 function globToRegExp(pattern) {
   const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".");

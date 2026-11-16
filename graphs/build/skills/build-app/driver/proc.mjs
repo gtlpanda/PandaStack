@@ -24,13 +24,17 @@ function isAlive(pid) {
 }
 
 // A pid file outlives a SIGKILL or a reboot, and pids are reused: a live pid
-// counts only when its command line is still ours (Linux /proc; elsewhere,
-// alive is all we can tell).
+// counts only when its command line is still ours. Linux reads /proc; macOS and
+// the BSDs ask ps. Only when ps itself cannot run is alive all we can tell, and
+// then the pid counts as ours, so a live loop's lock is never taken.
 export function isOurs(pid, marker) {
   if (!Number.isInteger(pid) || pid <= 0 || !isAlive(pid)) return false
-  const cmdline = `/proc/${pid}/cmdline`
-  if (!existsSync('/proc/self/cmdline')) return true
-  try { return readFileSync(cmdline, 'utf8').split('\0').some(a => a.includes(marker)) } catch { return false }
+  if (existsSync('/proc/self/cmdline')) {
+    try { return readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').some(a => a.includes(marker)) } catch { return false }
+  }
+  const ps = spawnSync('ps', ['-ww', '-o', 'command=', '-p', String(pid)], { encoding: 'utf8', timeout: 5000 })
+  if (ps.error) return true
+  return ps.status === 0 && ps.stdout.includes(marker)
 }
 
 // Runs a command synchronously; never throws.
