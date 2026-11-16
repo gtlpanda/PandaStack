@@ -61,7 +61,7 @@ CLI, and show only that run continuing. Test restart and redelivery as well."
 
 ## What dogfooding found and how it was handled
 
-- **Harness defect (open, pre-existing): "Done" with a failing gate.** In full
+- **Harness defect (pre-existing, fixed after this run): "Done" with a failing gate.** In full
   delivery mode, once every feature flag is set the loop logs `every feature
   passes. Done.` and exits 0 without re-running the gate
   (`graphs/autobuild/tool/lib/loop.mjs`, the `!feature` branch). The Stop hook
@@ -69,7 +69,9 @@ CLI, and show only that run continuing. Test restart and redelivery as well."
   F-1 flag (`mark-passed` reran the test), hit the failing gate, recorded
   `BLOCKER F-1` and stopped, and the loop still reported a verified completion.
   `autobuild check` in alpha afterwards: `FAIL unit tests`, `GATE: FAIL`. Not
-  fixed in this report's scope; tracked as a follow-up.
+  fixed in this report's scope. Fixed by PR #54 (retro entry 51): in full
+  delivery mode the loop now re-runs the full gate before "Done" and exits 16
+  when it fails.
 - **Operator error: the fixture gate.** The gate command `node --test tests/`
   fails on Node 24 (`Cannot find module '.../tests'`); `node --test` with no
   argument passes. Both builders correctly refused to edit the frozen config and

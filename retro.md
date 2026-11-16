@@ -3377,7 +3377,7 @@ docs/dogfood/phase-02.md.
   gamma with a post-request commit stopped with exit 14 STALE and no session.
 - Found: in full delivery mode the loop reports "every feature passes. Done."
   (exit 0) without re-running the gate, so a BLOCKER after `mark-passed` still
-  ends as a verified completion (`autobuild check`: GATE: FAIL). Open follow-up.
+  ends as a verified completion (`autobuild check`: GATE: FAIL). Fixed in entry 51.
   Also: my fixture gate `node --test tests/` fails on Node 24 (operator error),
   and an interrupted wait logs CANCELLED although the request stays pending.
 - Cost: $0.28 + $0.14 Claude est., plus one killed session with no result event.
