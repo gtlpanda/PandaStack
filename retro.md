@@ -3606,3 +3606,27 @@ was traced to a file:line and a cause:
 
 `test(name, { skip }, fn)` prints a skip with its reason and the totals line counts skips. On this Mac:
 1726 passed, 9 failed (8 /verify, 1 intermittent), 204 skipped. On Linux nothing skips.
+
+## 57. /verify works on macOS: steps run directly where there is no /proc (2026-11-16)
+
+On this Mac every /verify step exited 125, so every run said `VERIFY: FAIL`, even for a one-line passing
+test. Two independent causes, each confirmed with a fixture:
+- **Default evidence dir under a symlink.** `invocation()` made it under `tmpdir()` (`/var/folders/...`), and
+  evidence paths refuse symlinks. It now uses the real path.
+- **Capture ownership is Linux-only (D78).** `capture-owner.sh` reads process identity, the boot id and group
+  membership from /proc and needs setsid and GNU stat; macOS ships Bash 3.2 besides. A symlink-free evidence
+  dir still gave 125.
+
+Fix (D123): off Linux, `captureDirect` runs a step in its own process group with the same private bounded
+log, exit code and limits; stop or overflow ends the group (TERM, then KILL only while the step is still
+running). The manifest marks such steps `"capture": "direct"` and verify.sh prints `capture: direct` above the
+verdict. Linux keeps the owned path unchanged. Not a port: the ownership proof does not carry over to ps.
+
+**Proof on this Mac.** Fixture that passes: was `[125] VERIFY: FAIL`, now `VERIFY: PASS`. Fixture that exits 2:
+was `[125]`, now `[2] ... VERIFY: FAIL`. The 3 /verify subtests of the monorepo evidence test now pass.
+
+**Tests.** `tests/verify-direct-capture.test.mjs` (4): exit codes and merged output, overflow killing a
+background grandchild, refusing an inherited scope, verify.sh end to end on this platform's path.
+`verify-scope-adapter` unit-tests the Linux adapter with synthetic /proc, so its worker now pins
+`process.platform`. The 7 tests that run the Linux helpers directly skip off Linux (`OWNED_CAPTURE`);
+`NO_ISOLATION` moved to one shared `graphs/hunt/tests/isolation.mjs`.

@@ -20,6 +20,9 @@ async function probe(scope, receipt, { fifo = false, observed = false } = {}) {
     const { EventEmitter } = require('node:events');
     const { PassThrough } = require('node:stream');
     const calls = [], errors = [], lines = [];
+    // These checks exercise the Linux ownership adapter with synthetic /proc observations,
+    // so retention.mjs must choose it (OWNED_CAPTURE) on any platform.
+    Object.defineProperty(process, 'platform', { value: 'linux' });
     process.env.VERIFY_CAPTURE_SCOPE_DIR = workerData.scope;
     process.argv = [process.execPath, workerData.source, 'relay', '--receipt', workerData.receipt, '--', 'INERT_PAYLOAD'];
     console.error = value => errors.push(String(value));

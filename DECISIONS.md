@@ -846,3 +846,16 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   step with autobuild.json (bughunt F1 on 0278090 found them contradicting).
   SPEC.md carried the same stale section (bughunt F2 on 47851b2); it now matches
   AGENTS.md, and the test checks both files.
+
+- D123 (verify on macOS, 2026-11-16): D78's capture ownership needs Linux (/proc
+  for process identity, boot id and group membership; setsid; GNU stat), so every
+  /verify step exited 125 on macOS. Off Linux, retention.mjs now runs each step
+  directly in its own process group (`captureDirect`): it keeps the private,
+  bounded, hashed log, the real exit code, the step and run limits, and stop or
+  overflow ending the group, and records the step as `"capture": "direct"`;
+  verify.sh prints `capture: direct` above the verdict. It drops the ownership
+  proof and the empty-group check before success. Linux runs the owned path
+  unchanged (`OWNED_CAPTURE` is `process.platform === 'linux'`, as the D22
+  stores use). An inherited VERIFY_CAPTURE_SCOPE_DIR is refused off Linux, since
+  nothing there can validate it. retention.sh, the no-Node path, stays Linux-only.
+  Not a port: ps start times are coarser than /proc's, and macOS ships Bash 3.2.

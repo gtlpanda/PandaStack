@@ -45,6 +45,10 @@ the first argument to verify a subproject, e.g. `packages/api`.
   least one test-class step (`test`, `pytest`, `go test`, `terraform validate`,
   `scripts/test.sh`) must have run. A missing toolchain is a FAIL, not a skip.
   Set `VERIFY_ALLOW_NO_TESTS=1` to accept a lint-only pass deliberately.
+- Keeps every step's output as private, bounded, hashed evidence (`VERIFY_EVIDENCE:`).
+  On Linux each step runs in an owned process group that it cannot outlive. Elsewhere
+  (macOS) there is no procfs to prove that, so steps run directly in their own group:
+  the evidence and exit codes are the same, and the summary says `capture: direct`.
 
 ## After it runs
 
