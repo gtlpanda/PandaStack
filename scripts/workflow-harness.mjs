@@ -17,7 +17,7 @@ let skipped = 0
 // test(name, fn) or test(name, { skip }, fn). `skip`: false to run, or the reason this machine
 // cannot run the test (printed, counted apart).
 export async function test(name, optsOrFn, maybeFn) {
-  const [{ skip = false } = {}, fn] = typeof optsOrFn === 'function' ? [{}, optsOrFn] : [optsOrFn, maybeFn]
+  const [{ skip = false }, fn] = typeof optsOrFn === 'function' ? [{}, optsOrFn] : [optsOrFn ?? {}, maybeFn]
   if (skip) { console.log(`  skip ${name} (${skip})`); skipped += 1; return }
   try { await fn(); console.log(`  ok   ${name}`); pass += 1 }
   catch (e) { console.log(`  FAIL ${name}\n       ${String(e.message).split('\n').join('\n       ')}`); fail += 1 }

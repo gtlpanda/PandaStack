@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
+import { mergeFindings, writeLedger, readLedger, emptyLedger } from '../../../core/skills/findings/findings.mjs'
 import { isolation } from '../skills/bughunt/evidence.mjs'
 
 // Reproductions run only in a Linux PID namespace (evidence.mjs isolation()); elsewhere these skip.
