@@ -261,6 +261,9 @@ For both:
   changing the command. Waiting for the lock (up to an hour) never shortens a step's own 40 minutes.
 - **No leftovers.** Each step runs under GNU `timeout`, which kills the step's whole process group
   when time is up, so no test process outlives it or keeps the lock.
+- **Both must be installed.** When `timeout` (or `flock`, with a `lockFile`) is not on the gate's `PATH`,
+  the parity configuration check fails and names it, before any step runs. Stock macOS has neither:
+  `brew install coreutils flock`.
 - **The gate is compared with CI.** `autobuild check` prints `WARN` for every `env.vars` entry or inline
   `NAME=value` in a gate command that CI never sets or sets differently (values are not printed). It
   fails when a gate leaves tests out and no parity step runs the same suite (same directory, tool and
@@ -413,6 +416,10 @@ sleeping steps.
   - **Files outside the project** (`~/.bashrc`, other repos): **no backstop.** The guard is the only line, so run unattended builds only on a machine or account you are willing to expose to the project's code, or in a container. An OS sandbox is the fix; the security-audit plan names the same gap.
 - **Stopping relies on Claude Code ending its own tool processes.** The loop stops the session; whether `claude` also ends a test run it started in its own process group is untested.
 - **The machine must stay awake.** If the host sleeps, the loop sleeps. On WSL, keep Windows from sleeping.
+- **macOS runs the loop, but the bug hunt cannot reproduce there.** The loop, its gates and the guard work on
+  macOS (CI parity needs GNU `timeout` and `flock`, above). The hunt runs each reproduction only in a Linux
+  PID namespace, so on macOS a confirmed finding stays unreproduced and no fix lands: the hunt passes only
+  when it confirms no finding, and otherwise exits 12. Run unattended builds that end in a hunt on Linux or WSL.
 - **Hook paths point at the PandaStack checkout.** Injected hooks (the default) are found from wherever the tool runs. A project using `hooks: "project"` with wrapper files names `graphs/autobuild/tool/hooks/` in that checkout; moving the checkout breaks those wrappers.
 
 ## Codex backend
