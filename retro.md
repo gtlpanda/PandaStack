@@ -3546,14 +3546,21 @@ with or without the Bash sandbox; CI runs on Linux and was green. Four causes, e
   under the temp dir stays frozen.
 - **CI parity tools** (3 tests): every parity step runs under GNU `timeout`, and under `flock` with
   `ciParity.lockFile`. This Mac has Homebrew's `timeout` but no `flock`, so each locked step exited 127.
-  The parity configuration check now names a missing `timeout` or `flock` and its Homebrew package before any
-  step runs. The lock tests use `flock` where it is installed and keep their lock-free halves elsewhere.
+  The full gate's parity configuration step now names a missing `timeout` or `flock` and its Homebrew package
+  before any step runs. The lock tests use `flock` where it is installed and keep their lock-free halves elsewhere.
 - **bughunt reproductions** (1 test): `evidence.mjs` reproduces only in a Linux PID namespace, by design.
   The Codex repair test now skips where `isolation().pidns` is false, and so does the rejected-fix test,
   which passed without exercising the reject path. The README says what macOS can and cannot do.
 
-**Proof.** The new `isOurs` test fails on the old `proc.mjs` ("a live process without the marker"); the new
-parity test fails without the check. Autobuild suite on this Mac: 243 pass, 0 fail, 3 skipped (was 236/8/0).
+**Bug caught.** /bughunt F2 (LOW, confirmed): the first version put the tool check inside `resolveCiParity`,
+so every test that only resolves CI config failed on a host without `timeout`. The check is now
+`missingParityTools`, called by the gate with its own PATH; `resolveCiParity` reads only the repo again. The
+hunt's reproduction (`test/ci-parity-host-without-timeout.test.mjs`) failed at that head and passes now; the
+hunt could not run it on this Mac (no namespace isolation), so it was run by hand.
 
-**Counts.** 8 files, +98/−19 before this entry. 2 new tests (`isOurs`, missing parity tools); 3 tests skip
-on machines without `flock` or namespace isolation.
+**Proof.** The new `isOurs` test fails on the old `proc.mjs` ("a live process without the marker"); the new
+gate test fails with the gate's call removed. Autobuild suite on this Mac: 245 pass, 0 fail, 3 skipped (was
+236/8/0 on main).
+
+**Counts.** 4 new tests (`isOurs`, `missingParityTools`, the gate without `timeout`, the F2 reproduction);
+3 tests skip on machines without `flock` or namespace isolation.

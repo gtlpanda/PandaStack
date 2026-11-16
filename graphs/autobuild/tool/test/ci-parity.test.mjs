@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { spawn, spawnSync, execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseWorkflowYaml, WorkflowYamlError } from "../lib/workflow-yaml.mjs";
 import { assignments, optionValues, shellWords, simpleCommands } from "../lib/shell-words.mjs";
-import { appearsAsCommand, parityEnv, resolveCiParity, runParityStep, toolOf } from "../lib/ci-parity.mjs";
+import { appearsAsCommand, missingParityTools, parityEnv, resolveCiParity, runParityStep, toolOf } from "../lib/ci-parity.mjs";
 import { KIT, CLI } from "../test-fixtures/project.mjs";
 import { findInstalls } from "../lib/codex-installs.mjs";
 
@@ -391,26 +391,43 @@ test("any CI: declared commands must appear verbatim in the CI file, and run wit
   assert.deepEqual(missing.errors, ["ciParity.ciFile ci/none.yml: not found"]);
 });
 
-test("CI parity names the step wrappers missing from the gate's PATH instead of failing every step", () => {
-  const root = repo({ ".gitlab-ci.yml": GITLAB_CI });
-  const bin = (...names) => {
-    const dir = mkdtempSync(path.join(tmpdir(), "parity-bin-"));
-    for (const name of names) {
-      writeFileSync(path.join(dir, name), "#!/bin/sh\n");
-      chmodSync(path.join(dir, name), 0o755);
-    }
-    return dir;
-  };
-  const resolve = (ciParity, pathValue) => resolveCiParity({ root, ciParity, env: { vars: {} }, gate: [] }, { pathValue }).errors;
-  const locked = { ...GITLAB_PARITY, lockFile: path.join(root, "parity.lock") };
-  assert.deepEqual(resolve(locked, bin("timeout", "flock")), []);
-  assert.deepEqual(resolve(GITLAB_PARITY, bin("timeout")), [], "flock is needed only with a lockFile");
-  assert.deepEqual(resolve(locked, bin("timeout")), ["ciParity.lockFile serializes steps with flock, but flock is not on the gate's PATH (macOS: brew install flock)"]);
-  assert.deepEqual(resolve(GITLAB_PARITY, bin()), ["CI parity runs each step under GNU timeout, but timeout is not on the gate's PATH (macOS: brew install coreutils)"]);
-  assert.deepEqual(resolve(GITLAB_PARITY, ""), ["CI parity runs each step under GNU timeout, but timeout is not on the gate's PATH (macOS: brew install coreutils)"], "an empty PATH");
-  assert.deepEqual(resolve(GITLAB_PARITY, undefined).filter((e) => /not on the gate's PATH/.test(e)), findInstalls("timeout", process.env.PATH).length ? [] : [`CI parity runs each step under GNU timeout, but timeout is not on the gate's PATH (macOS: brew install coreutils)`], "defaults to this process's PATH");
-  const noSteps = resolveCiParity({ root, ciParity: { ...GITLAB_PARITY, ciFile: "ci/none.yml" }, env: { vars: {} }, gate: [] }, { pathValue: "" }).errors;
-  assert.deepEqual(noSteps, ["ciParity.ciFile ci/none.yml: not found"], "no steps resolved, nothing to wrap");
+// A bin dir holding exactly these executables: stubs, or links to the host's own.
+function binDir(stubs = [], linked = []) {
+  const dir = mkdtempSync(path.join(tmpdir(), "parity-bin-"));
+  for (const name of stubs) {
+    writeFileSync(path.join(dir, name), "#!/bin/sh\n");
+    chmodSync(path.join(dir, name), 0o755);
+  }
+  for (const name of linked) {
+    const [found] = findInstalls(name, process.env.PATH);
+    assert.ok(found, `${name} is on this host's PATH`);
+    symlinkSync(found.file, path.join(dir, name));
+  }
+  return dir;
+}
+
+test("missingParityTools names the step wrappers missing from a PATH, flock only with a lockFile", () => {
+  const timeoutError = "CI parity runs each step under GNU timeout, but timeout is not on the gate's PATH (macOS: brew install coreutils)";
+  const flockError = "ciParity.lockFile serializes steps with flock, but flock is not on the gate's PATH (macOS: brew install flock)";
+  const locked = { ...GITLAB_PARITY, lockFile: "/tmp/parity.lock" };
+  assert.deepEqual(missingParityTools(locked, binDir(["timeout", "flock"])), []);
+  assert.deepEqual(missingParityTools(GITLAB_PARITY, binDir(["timeout"])), [], "flock is needed only with a lockFile");
+  assert.deepEqual(missingParityTools(locked, binDir(["timeout"])), [flockError]);
+  assert.deepEqual(missingParityTools(GITLAB_PARITY, binDir()), [timeoutError]);
+  assert.deepEqual(missingParityTools(locked, ""), [timeoutError, flockError], "an empty PATH");
+  assert.deepEqual(missingParityTools(GITLAB_PARITY, undefined), [timeoutError], "no PATH at all");
+});
+
+test("the full gate fails CI parity's configuration, and runs no step, when timeout is not on its PATH", () => {
+  const root = p114Repo();
+  const env = { ...process.env, PATH: binDir([], ["git", "bash", "sh", "node"]) };
+  delete env.NODE_TEST_CONTEXT; // a nested node --test must report to its own process, not to this runner
+  const r = spawnSync(process.execPath, [CLI, "check", "--phase", "full"], { cwd: root, env, encoding: "utf8", timeout: 120_000 });
+  const out = `${r.stdout}${r.stderr}`;
+  assert.equal(r.status, 1, out);
+  assert.match(out, /FAIL {2}CI parity configuration/, out);
+  assert.match(out, /timeout is not on the gate's PATH \(macOS: brew install coreutils\)/, out);
+  assert.doesNotMatch(out, /CI parity: db-tests/, "no parity step runs");
 });
 
 test("ciParity is required for any recognised CI system, not only GitHub Actions", () => {

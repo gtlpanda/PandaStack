@@ -185,7 +185,7 @@ function resolveCommands(config, parity, errors) {
  * Resolves `ciParity` and compares the gate with CI. Returns { steps, errors,
  * warnings }; errors fail the full gate.
  */
-export function resolveCiParity(config, { pathValue = process.env.PATH } = {}) {
+export function resolveCiParity(config) {
   const errors = [], warnings = [];
   const found = ciFiles(config.root);
   const parity = config.ciParity;
@@ -202,7 +202,6 @@ export function resolveCiParity(config, { pathValue = process.env.PATH } = {}) {
       if (path.isAbsolute(s.cwd) || path.posix.normalize(s.cwd).split("/")[0] === "..") errors.push(`ciParity step ${s.label}: its working directory leaves the repository`);
     }
     for (const file of found.filter((f) => f !== resolved.file)) warnings.push(`${file} is not checked by ciParity`);
-    if (resolved.steps.length) errors.push(...missingTools(parity, pathValue));
   }
   // Without declared steps, GitHub workflows still say what CI sets.
   let ciEnvSteps = resolved.steps;
@@ -216,9 +215,12 @@ export function resolveCiParity(config, { pathValue = process.env.PATH } = {}) {
   return { steps: resolved.steps, errors, warnings };
 }
 
-// The commands paritySpec wraps every step in, when they are not on the gate's PATH.
-// Stock macOS has neither; without them each step would only exit 127.
-function missingTools(parity, pathValue) {
+/**
+ * The commands paritySpec wraps every step in that are not on `pathValue`, the PATH the
+ * gate runs steps with. Stock macOS has neither; without them each step would only exit 127.
+ * A host check, apart from resolveCiParity, which reads only the repo's configuration.
+ */
+export function missingParityTools(parity, pathValue) {
   const needed = [["timeout", "CI parity runs each step under GNU timeout", "brew install coreutils"]];
   if (parity.lockFile) needed.push(["flock", "ciParity.lockFile serializes steps with flock", "brew install flock"]);
   return needed
