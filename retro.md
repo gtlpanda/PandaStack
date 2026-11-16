@@ -3629,6 +3629,10 @@ was `[125]`, now `[2] ... VERIFY: FAIL`. The 3 /verify subtests of the monorepo 
 its output (a dev server, `sleep 600 &`) never settled, so /verify hung where Linux fails the step. Now the
 leftover gets 2s, the group is stopped, and after a 4s deadline the step ends incomplete (125). The hunt's
 reproduction could not run here (no namespace isolation); run by hand it failed on 0a63865 and passes now.
+/bughunt F3 (MEDIUM, confirmed): on Linux, /verify runs the suite inside an owned capture that exports
+`VERIFY_CAPTURE_SCOPE_DIR`, and captureDirect rightly refuses an inherited scope, so the new in-process tests
+would fail there. Each call now sets that variable itself. Reproduced by running the file with the variable
+set: 3 failed before, 6 pass now.
 
 **Tests.** `tests/verify-direct-capture.test.mjs` (6): exit codes and merged output, overflow killing a
 background grandchild, a leftover in the group ended after the grace period, a leftover in its own session

@@ -12,10 +12,20 @@ import { OWNED_CAPTURE, captureDirect } from '../core/skills/verify/retention.mj
 // here, so Linux CI covers it too; the verify.sh runs below go through this platform's own path.
 const VERIFY = fileURLToPath(new URL('../core/skills/verify/verify.sh', import.meta.url))
 
-async function direct(argv, limit = 1024) {
+// The suite may itself run inside a verify capture (verify on Linux exports the scope to its
+// steps), so each call sets the inherited scope explicitly: none, unless a test passes one.
+async function direct(argv, limit = 1024, { scope } = {}) {
+  const outer = process.env.VERIFY_CAPTURE_SCOPE_DIR
+  if (scope === undefined) delete process.env.VERIFY_CAPTURE_SCOPE_DIR
+  else process.env.VERIFY_CAPTURE_SCOPE_DIR = scope
   const chunks = []
-  const result = await captureDirect(argv, limit, part => chunks.push(Buffer.from(part)))
-  return { ...result, text: Buffer.concat(chunks).toString('utf8') }
+  try {
+    const result = await captureDirect(argv, limit, part => chunks.push(Buffer.from(part)))
+    return { ...result, text: Buffer.concat(chunks).toString('utf8') }
+  } finally {
+    if (outer === undefined) delete process.env.VERIFY_CAPTURE_SCOPE_DIR
+    else process.env.VERIFY_CAPTURE_SCOPE_DIR = outer
+  }
 }
 const alive = pid => { try { process.kill(pid, 0); return true } catch { return false } }
 
@@ -71,11 +81,8 @@ await test('a leftover that left the step group still cannot hold the step open 
 })
 
 await test('an inherited capture scope is refused, never run unowned', async () => {
-  process.env.VERIFY_CAPTURE_SCOPE_DIR = '/nonexistent/scope'
-  try {
-    const result = await direct(['bash', '-c', 'echo should-not-run'])
-    assert.deepEqual(result, { exitCode: 125, bytes: 0, complete: false, capture: 'direct', text: '' })
-  } finally { delete process.env.VERIFY_CAPTURE_SCOPE_DIR }
+  const result = await direct(['bash', '-c', 'echo should-not-run'], 1024, { scope: '/nonexistent/scope' })
+  assert.deepEqual(result, { exitCode: 125, bytes: 0, complete: false, capture: 'direct', text: '' })
 })
 
 function fixture(testScript) {
