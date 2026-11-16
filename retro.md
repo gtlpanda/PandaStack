@@ -3625,8 +3625,15 @@ verdict. Linux keeps the owned path unchanged. Not a port: the ownership proof d
 **Proof on this Mac.** Fixture that passes: was `[125] VERIFY: FAIL`, now `VERIFY: PASS`. Fixture that exits 2:
 was `[125]`, now `[2] ... VERIFY: FAIL`. The 3 /verify subtests of the monorepo evidence test now pass.
 
-**Tests.** `tests/verify-direct-capture.test.mjs` (4): exit codes and merged output, overflow killing a
-background grandchild, refusing an inherited scope, verify.sh end to end on this platform's path.
+**Bug caught.** /bughunt F1 (MEDIUM, confirmed): a step that exited but left a background process holding
+its output (a dev server, `sleep 600 &`) never settled, so /verify hung where Linux fails the step. Now the
+leftover gets 2s, the group is stopped, and after a 4s deadline the step ends incomplete (125). The hunt's
+reproduction could not run here (no namespace isolation); run by hand it failed on 0a63865 and passes now.
+
+**Tests.** `tests/verify-direct-capture.test.mjs` (6): exit codes and merged output, overflow killing a
+background grandchild, a leftover in the group ended after the grace period, a leftover in its own session
+bounded by the deadline, refusing an inherited scope, verify.sh end to end on this platform's path. Both
+leftover tests fail on 0a63865.
 `verify-scope-adapter` unit-tests the Linux adapter with synthetic /proc, so its worker now pins
 `process.platform`. The 7 tests that run the Linux helpers directly skip off Linux (`OWNED_CAPTURE`);
 `NO_ISOLATION` moved to one shared `graphs/hunt/tests/isolation.mjs`.

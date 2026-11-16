@@ -852,7 +852,10 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   /verify step exited 125 on macOS. Off Linux, retention.mjs now runs each step
   directly in its own process group (`captureDirect`): it keeps the private,
   bounded, hashed log, the real exit code, the step and run limits, and stop or
-  overflow ending the group, and records the step as `"capture": "direct"`;
+  overflow ending the group, and a step whose leader exited but whose output is
+  still held gets 2s, then is stopped; anything still holding it after 4s is
+  given up on, incomplete (125), as the owned path does. It records the step as
+  `"capture": "direct"`;
   verify.sh prints `capture: direct` above the verdict. It drops the ownership
   proof and the empty-group check before success. Linux runs the owned path
   unchanged (`OWNED_CAPTURE` is `process.platform === 'linux'`, as the D22

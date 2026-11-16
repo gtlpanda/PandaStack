@@ -37,10 +37,37 @@ await test('output past the bound ends the step and its process group, and the s
   const script = `sleep 30 & echo $! > "${pidFile}"; while :; do printf 'xxxxxxxxxxxxxxxx'; done`
   const result = await direct(['bash', '-c', script], 64)
   assert.deepEqual({ exitCode: result.exitCode, complete: result.complete, bytes: result.bytes }, { exitCode: 125, complete: false, bytes: 64 })
-  const grandchild = Number(fs.readFileSync(pidFile, 'utf8'))
-  const until = Date.now() + 3000
-  while (alive(grandchild) && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 50))
-  assert.equal(alive(grandchild), false, 'the group was signalled, so no step process outlives the overflow')
+  assert.equal(await waitGone(Number(fs.readFileSync(pidFile, 'utf8'))), true, 'the group was signalled, so no step process outlives the overflow')
+})
+
+async function waitGone(pid, ms = 3000) {
+  const until = Date.now() + ms
+  while (alive(pid) && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 50))
+  return !alive(pid)
+}
+
+// /bughunt F1 on 0a63865: a step that exits but leaves a process holding its output never settled.
+await test('a step that exits but leaves a process holding its output is ended after a grace period, incomplete', async () => {
+  const dir = fs.mkdtempSync(join(fs.realpathSync(tmpdir()), 'verify-linger-'))
+  const pidFile = join(dir, 'background.pid')
+  const started = Date.now()
+  const result = await direct(['bash', '-c', `sleep 600 & echo $! > "${pidFile}"; echo done; exit 0`])
+  assert.deepEqual({ exitCode: result.exitCode, complete: result.complete, text: result.text }, { exitCode: 125, complete: false, text: 'done\n' })
+  assert.ok(Date.now() - started < 6000, 'bounded: about 2s of grace, then the group is stopped')
+  assert.equal(await waitGone(Number(fs.readFileSync(pidFile, 'utf8'))), true, 'the leftover in the step group was ended')
+})
+
+await test('a leftover that left the step group still cannot hold the step open past the deadline', async () => {
+  const dir = fs.mkdtempSync(join(fs.realpathSync(tmpdir()), 'verify-escape-'))
+  const pidFile = join(dir, 'escaped.pid')
+  // A new session of its own, so a group signal cannot reach it, holding the step's output.
+  const escape = `const c = require('child_process').spawn('sleep', ['600'], { detached: true, stdio: 'inherit' }); c.unref(); require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(c.pid))`
+  const started = Date.now()
+  try {
+    const result = await direct([process.execPath, '-e', escape])
+    assert.deepEqual({ exitCode: result.exitCode, complete: result.complete }, { exitCode: 125, complete: false })
+    assert.ok(Date.now() - started < 9000, 'bounded: grace, then the 4s deadline')
+  } finally { try { process.kill(Number(fs.readFileSync(pidFile, 'utf8')), 'SIGKILL') } catch {} }
 })
 
 await test('an inherited capture scope is refused, never run unowned', async () => {

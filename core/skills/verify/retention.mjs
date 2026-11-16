@@ -108,13 +108,15 @@ export const OWNED_CAPTURE=process.platform==='linux';
 // A capture scope cannot be validated here, so an inherited one is refused, as a bad hint is on Linux.
 export async function captureDirect(argv,limit,write){
  if(Object.hasOwn(process.env,'VERIFY_CAPTURE_SCOPE_DIR'))return {exitCode:125,bytes:0,complete:false,capture:'direct'};
- let bytes=0,complete=true,child,killer,settled=false;
+ let bytes=0,complete=true,child,killer,deadline,linger,settled=false;
  let finish=()=>{};
  const stop=()=>{
   complete=false;if(killer||!child?.pid)return;
   try{process.kill(-child.pid,'SIGTERM');}catch{}
-  // Only while the step has not ended: after that its group id may belong to someone else.
+  // Only before the step settles: until its output closes, a process of the step still holds it.
   killer=setTimeout(()=>{if(!settled){try{process.kill(-child.pid,'SIGKILL');}catch{}}},1000);
+  // As in the owned path, a step that still will not end is given up on, incomplete.
+  deadline=setTimeout(()=>{child.stdout.destroy();child.unref();finish(125);},4000);
  };
  process.on('SIGTERM',stop);process.on('SIGINT',stop);
  try{return await new Promise(resolveResult=>{
@@ -133,7 +135,10 @@ export async function captureDirect(argv,limit,write){
   });
   child.stdout.on('error',stop);
   child.on('error',()=>{complete=false;finish(125);});child.on('close',finish);
- });}finally{clearTimeout(killer);process.off('SIGTERM',stop);process.off('SIGINT',stop);}
+  // The leader exited. Whatever it left holding the output is still the step: like a populated
+  // group on Linux, it gets 2s to end, then the step is stopped and incomplete.
+  child.on('exit',()=>{linger=setTimeout(stop,2000);});
+ });}finally{clearTimeout(killer);clearTimeout(deadline);clearTimeout(linger);process.off('SIGTERM',stop);process.off('SIGINT',stop);}
 }
 // The shared owner holds local signal authority. Joined helpers never detach.
 async function capture(argv,limit,write,allocation){
