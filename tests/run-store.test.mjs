@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, existsSync, readdirSync, writeFileSync, mkdirSync,
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
-import { test } from '../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../scripts/workflow-harness.mjs'
 import { createRunStore } from '../core/skills/run-records/store.mjs'
 
 const run = (id = 'run-1') => ({ schemaVersion: 1, id, repo: '/tmp/project', revision: null,
@@ -18,7 +18,7 @@ async function fixture(work) {
 }
 const rejects = (fn, code) => assert.throws(fn, { code })
 
-await test('store is lazy and rejects invalid IDs and records before filesystem access', () => fixture((s, dir) => {
+await test('store is lazy and rejects invalid IDs and records before filesystem access', { skip: NO_LINUX_STORES }, () => fixture((s, dir) => {
   for (const id of ['../escape', '', 'a/b', null, 42, 'a\n']) {
     rejects(() => s.readRun(id), 'INVALID_RECORD')
     rejects(() => s.readEvents(id), 'INVALID_RECORD')
@@ -34,7 +34,7 @@ await test('store is lazy and rejects invalid IDs and records before filesystem 
   assert.equal(existsSync(join(dir, 'store')), false)
 }))
 
-await test('immutable replay ignores property order, filters exactly, and event IDs belong to runs', () => fixture(s => {
+await test('immutable replay ignores property order, filters exactly, and event IDs belong to runs', { skip: NO_LINUX_STORES }, () => fixture(s => {
   s.putRun(run('z')); s.putRun(run()); s.putRun({ ...run('A'), backend: 'claude', parentRunId: 'z' })
   assert.deepEqual(s.putRun(Object.fromEntries(Object.entries(run()).reverse())), { created: false })
   rejects(() => s.putRun({ ...run(), settings: { model: 'changed' } }), 'CONFLICT')
@@ -51,7 +51,7 @@ await test('immutable replay ignores property order, filters exactly, and event 
   assert.deepEqual(s.readRun('run-1'), run())
 }))
 
-await test('corrupt committed data and mismatched filenames fail while abandoned temp files are ignored', () => fixture((s, dir) => {
+await test('corrupt committed data and mismatched filenames fail while abandoned temp files are ignored', { skip: NO_LINUX_STORES }, () => fixture((s, dir) => {
   s.putRun(run()); s.appendEvent(event())
   const events = join(dir, 'store/events/run-1')
   writeFileSync(join(events, '.tmp-abandoned'), '{partial')
@@ -66,7 +66,7 @@ await test('corrupt committed data and mismatched filenames fail while abandoned
   rejects(() => s.listRuns({ repo: '/unrelated' }), 'CORRUPT')
 }))
 
-await test('symlinked roots, ancestor directories, event directories and event files are refused', () => fixture((s, dir) => {
+await test('symlinked roots, ancestor directories, event directories and event files are refused', { skip: NO_LINUX_STORES }, () => fixture((s, dir) => {
   const outside = join(dir, 'outside'); mkdirSync(outside)
   const alias = join(dir, 'alias'); symlinkSync(outside, alias)
   const unsafe = createRunStore(join(alias, 'nested'))
@@ -86,7 +86,7 @@ await test('symlinked roots, ancestor directories, event directories and event f
   assert.equal(readFileSync(target, 'utf8'), JSON.stringify(event()))
 }))
 
-await test('independent writers preserve every run and event and arbitrate conflicting publication', () => fixture(async (s, dir) => {
+await test('independent writers preserve every run and event and arbitrate conflicting publication', { skip: NO_LINUX_STORES }, () => fixture(async (s, dir) => {
   const moduleUrl = new URL('../core/skills/run-records/store.mjs', import.meta.url).href
   const code = `import {createRunStore} from ${JSON.stringify(moduleUrl)};
     const s=createRunStore(process.argv[1]); const r=JSON.parse(process.argv[2]);
@@ -108,7 +108,7 @@ await test('independent writers preserve every run and event and arbitrate confl
   assert.ok(readdirSync(join(dir, 'store/events/run-1')).every(name => name.endsWith('.json')))
 }))
 
-await test('failed atomic publication leaves no committed or temporary record and exposes only safe errors', () => fixture(async (s, dir) => {
+await test('failed atomic publication leaves no committed or temporary record and exposes only safe errors', { skip: NO_LINUX_STORES }, () => fixture(async (s, dir) => {
   const fs = (await import('node:fs')).default
   const { syncBuiltinESMExports } = await import('node:module')
   const original = fs.linkSync
@@ -122,7 +122,7 @@ await test('failed atomic publication leaves no committed or temporary record an
   assert.deepEqual(s.putRun(run()), { created: true })
 }))
 
-await test('event ordering preserves fractional precision and compares equivalent timestamps by ID', () => fixture(s => {
+await test('event ordering preserves fractional precision and compares equivalent timestamps by ID', { skip: NO_LINUX_STORES }, () => fixture(s => {
   s.putRun(run())
   s.appendEvent(event('a', 'run-1', '2026-11-09T12:00:00.0002Z'))
   s.appendEvent(event('z', 'run-1', '2026-11-09T12:00:00.0001Z'))

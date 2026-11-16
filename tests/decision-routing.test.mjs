@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { getEventListeners } from 'node:events'
-import { test } from '../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../scripts/workflow-harness.mjs'
 import { createDecisionQueue } from '../core/skills/decisions/queue.mjs'
 import { waitForDecision } from '../core/skills/decisions/routing.mjs'
 import { main } from '../scripts/pandastack.mjs'
@@ -21,7 +21,7 @@ async function fixture(work) {
   try { await work(queue, root, store) } finally { queue.close(); rmSync(root, { recursive: true, force: true }) }
 }
 
-await test('wait snapshots the recipient, isolates requests, and replays delivery after reopen without ack', () => fixture(async (queue, root, store) => {
+await test('wait snapshots the recipient, isolates requests, and replays delivery after reopen without ack', { skip: NO_LINUX_STORES }, () => fixture(async (queue, root, store) => {
   queue.request(request()); queue.request(request({ id: 'other', runId: 'other-run' }))
   const target = recipient(), controller = new AbortController()
   const waiting = waitForDecision({ queue, id: 'choice', recipient: target, pollMs: 5, timeoutMs: 500, signal: controller.signal })
@@ -41,7 +41,7 @@ await test('wait snapshots the recipient, isolates requests, and replays deliver
   assert.equal(queue.read('other').delivery, null)
 }))
 
-await test('wait rejects pending wrong/stale recipients, missing requests, cancellation, expiry and closed storage', () => fixture(async queue => {
+await test('wait rejects pending wrong/stale recipients, missing requests, cancellation, expiry and closed storage', { skip: NO_LINUX_STORES }, () => fixture(async queue => {
   queue.request(request())
   const opts = { queue, id: 'choice', recipient: recipient(), pollMs: 5, timeoutMs: 100 }
   await assert.rejects(waitForDecision({ ...opts, recipient: { ...recipient(), repo: '/elsewhere' } }), code('WRONG_RECIPIENT'))
@@ -55,7 +55,7 @@ await test('wait rejects pending wrong/stale recipients, missing requests, cance
   await assert.rejects(waitForDecision(opts), code('IO_ERROR'))
 }))
 
-await test('wait bounds timeout independently of poll interval and removes abort listeners', () => fixture(async queue => {
+await test('wait bounds timeout independently of poll interval and removes abort listeners', { skip: NO_LINUX_STORES }, () => fixture(async queue => {
   queue.request(request())
   const controller = new AbortController(), opts = { queue, id: 'choice', recipient: recipient(), signal: controller.signal, pollMs: 1000, timeoutMs: 15 }
   const start = performance.now()
@@ -94,7 +94,7 @@ async function cli(args) {
   finally { console.log = log; console.error = error }
 }
 
-await test('decision CLI commands share native state, preserve inert input and require explicit ack', () => fixture(async (queue, root, store) => {
+await test('decision CLI commands share native state, preserve inert input and require explicit ack', { skip: NO_LINUX_STORES }, () => fixture(async (queue, root, store) => {
   const file = join(root, 'request file.json'), who = join(root, 'recipient.json'), answerFile = join(root, 'answer.json'), marker = join(root, 'marker')
   const decision = request({ question: `Inert $(touch ${marker}) and \`touch ${marker}\`` })
   writeFileSync(file, JSON.stringify(decision)); writeFileSync(who, JSON.stringify(recipient())); writeFileSync(answerFile, JSON.stringify(reply))
@@ -120,7 +120,7 @@ await test('decision CLI commands share native state, preserve inert input and r
   assert.equal(queue.read('cancel').state, 'cancelled'); assert.equal(existsSync(marker), false)
 }))
 
-await test('decision CLI validates syntax before opening storage and redacts file/queue errors', () => fixture(async (queue, root) => {
+await test('decision CLI validates syntax before opening storage and redacts file/queue errors', { skip: NO_LINUX_STORES }, () => fixture(async (queue, root) => {
   const store = join(root, 'must-not-create'), base = ['--store', store]
   for (const args of [[], ['unknown', ...base], ['list', ...base, ...base], ['list', ...base, '--unknown', 'value'],
     ['show', ...base], ['list', ...base, '--id', 'choice'], ['list', '--store'], ['list', ...base, 'extra'],
@@ -138,7 +138,7 @@ await test('decision CLI validates syntax before opening storage and redacts fil
   }
 }))
 
-await test('decision CLI waits for native answers and reports timeout/conflict safely without acknowledgment', () => fixture(async (queue, root, store) => {
+await test('decision CLI waits for native answers and reports timeout/conflict safely without acknowledgment', { skip: NO_LINUX_STORES }, () => fixture(async (queue, root, store) => {
   queue.request(request())
   const who = join(root, 'recipient.json'); writeFileSync(who, JSON.stringify(recipient()))
   const args = ['wait', '--store', store, '--id', 'choice', '--file', who, '--timeout-ms']

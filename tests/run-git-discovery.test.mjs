@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { syncBuiltinESMExports } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { test } from '../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../scripts/workflow-harness.mjs'
 import { withTrackedRun, currentRunId } from '../core/skills/run-records/tracking.mjs'
 import { createRunStore } from '../core/skills/run-records/store.mjs'
 
@@ -70,7 +70,7 @@ async function recorded(options, location) {
   return record
 }
 
-await test('Git root bytes protect both roles and survive external/default tracking without a trimmed sibling', () => fixture(async o => {
+await test('Git root bytes protect both roles and survive external/default tracking without a trimmed sibling', { skip: NO_LINUX_STORES }, () => fixture(async o => {
   const normal = join(o.base, 'normal'); init(normal)
   let index = 0
   for (const suffix of [' ', '\t', '\r', '\n', ' \t\r\n\n']) {
@@ -96,7 +96,7 @@ await test('Git root bytes protect both roles and survive external/default track
   }
 }))
 
-await test('linked roots and separate metadata owners preserve exact Git path bytes', () => fixture(async o => {
+await test('linked roots and separate metadata owners preserve exact Git path bytes', { skip: NO_LINUX_STORES }, () => fixture(async o => {
   const main = join(o.base, 'main'); init(main)
   for (const [i, suffix] of [' ', '\t', '\r', '\n'].entries()) {
     const linked = join(o.base, `linked-${i}`) + suffix
@@ -113,7 +113,7 @@ await test('linked roots and separate metadata owners preserve exact Git path by
   }
 }))
 
-await test('invalid ancestor metadata refuses publication and preserves nested context and work errors', () => fixture(async o => {
+await test('invalid ancestor metadata refuses publication and preserves nested context and work errors', { skip: NO_LINUX_STORES }, () => fixture(async o => {
   const repo = join(o.base, 'valid'); init(repo)
   const external = join(o.base, 'parent-store')
   await withTrackedRun({ ...o, repo, runnerRoot: repo, storeDir: external, runId: 'parent' }, async () => {
@@ -140,7 +140,7 @@ await test('invalid ancestor metadata refuses publication and preserves nested c
   assert.deepEqual(createRunStore(external).listRuns().map(r => r.id), ['parent'])
 }))
 
-await test('failed caller-controlled discovery refuses without changing caller environment', () => fixture(async o => {
+await test('failed caller-controlled discovery refuses without changing caller environment', { skip: NO_LINUX_STORES }, () => fixture(async o => {
   const repo = join(o.base, 'project'), nested = join(repo, 'packages', 'app'); init(repo)
   fs.mkdirSync(nested, { recursive: true })
   for (const [key, value] of Object.entries({ GIT_DIR: join(o.base, 'missing'), GIT_CEILING_DIRECTORIES: repo })) {
@@ -172,7 +172,7 @@ await test('ancestry I/O uncertainty refuses before mutation', () => fixture(asy
   } finally { fs.lstatSync = original; syncBuiltinESMExports() }
 }))
 
-await test('genuine non-Git directories retain external tracking with unknown revisions', () => fixture(async o => {
+await test('genuine non-Git directories retain external tracking with unknown revisions', { skip: NO_LINUX_STORES }, () => fixture(async o => {
   const repo = join(o.base, 'plain', 'nested'), runnerRoot = join(o.base, 'runner')
   fs.mkdirSync(repo, { recursive: true }); fs.mkdirSync(runnerRoot)
   const storeDir = join(o.base, 'external')
@@ -217,7 +217,7 @@ await test('malformed caller config never reaches absence fallback even with dia
   }
 }))
 
-await test('valid explicit caller config preserves successful discovery and recording', () => fixture(async o => {
+await test('valid explicit caller config preserves successful discovery and recording', { skip: NO_LINUX_STORES }, () => fixture(async o => {
   const repo = join(o.base, 'project'); init(repo)
   const config = join(o.base, 'not a git repository.config')
   fs.writeFileSync(config, '')

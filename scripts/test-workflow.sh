@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # test-workflow.sh — every graph's workflow routing tests (tests/, graphs/*/tests/) against scripted agents.
-# Ends with TEST-WORKFLOW: N passed, M failed. A missing node is a failure.
+# Ends with TEST-WORKFLOW: N passed, M failed[, K skipped]. A missing node is a failure.
 set -uo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)" || exit 1
 if ! command -v node >/dev/null 2>&1; then

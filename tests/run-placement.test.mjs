@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, readdirSyn
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { test } from '../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../scripts/workflow-harness.mjs'
 import { withTrackedRun, currentRunId } from '../core/skills/run-records/tracking.mjs'
 import { createRunStore } from '../core/skills/run-records/store.mjs'
 
@@ -82,7 +82,7 @@ await test('environment placement and explicit precedence preserve errors withou
   assert.deepEqual(snapshot(o.base), before)
 }))
 
-await test('prospective placement resolves static aliases, missing suffixes and lexical dot segments', () => fixture(async o => {
+await test('prospective placement resolves static aliases, missing suffixes and lexical dot segments', { skip: NO_LINUX_STORES }, () => fixture(async o => {
   init(o.repo)
   const alias = join(o.base, 'alias'); symlinkSync(o.repo, alias)
   await refused({ ...o, storeDir: join(alias, 'missing', 'records') }, o.base)
@@ -113,7 +113,7 @@ await test('indeterminate Git roots and external symlinks fail unrecorded withou
   await refused({ ...o, storeDir: join(external, 'not-created', 'records') }, o.base)
 }))
 
-await test('default and linked metadata namespaces work inside another protected tree', () => fixture(async o => {
+await test('default and linked metadata namespaces work inside another protected tree', { skip: NO_LINUX_STORES }, () => fixture(async o => {
   init(o.repo)
   const linked = join(o.base, 'linked')
   git(o.repo, 'worktree', 'add', '-qb', 'linked', linked)
@@ -130,7 +130,7 @@ await test('default and linked metadata namespaces work inside another protected
   }
 }))
 
-await test('external shared stores retain concurrent parents, rejected nested context and terminal events', () => fixture(async o => {
+await test('external shared stores retain concurrent parents, rejected nested context and terminal events', { skip: NO_LINUX_STORES }, () => fixture(async o => {
   const storeDir = join(o.base, 'project-records'), store = createRunStore(storeDir)
   const result = await capture(() => Promise.all(['one', 'two'].map(runId => withTrackedRun({ ...o, storeDir, runId }, async () => {
     await new Promise(resolve => setTimeout(resolve, 1))
@@ -150,7 +150,7 @@ await test('external shared stores retain concurrent parents, rejected nested co
   }
 }))
 
-await test('direct store API continues to support caller-selected worktree directories', () => fixture(async o => {
+await test('direct store API continues to support caller-selected worktree directories', { skip: NO_LINUX_STORES }, () => fixture(async o => {
   const store = createRunStore(join(o.repo, 'records'))
   store.putRun({ schemaVersion: 1, id: 'direct', repo: o.repo, runnerRoot: o.runnerRoot, revision: null,
     runnerRevision: null, workflow: 'session', backend: 'claude', parentRunId: null,

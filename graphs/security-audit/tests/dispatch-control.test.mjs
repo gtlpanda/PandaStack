@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DatabaseSync } from 'node:sqlite'
-import { test } from '../../../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../../../scripts/workflow-harness.mjs'
 import * as journal from '../skills/security-audit/dispatch-journal.mjs'
 import * as report from '../skills/security-audit/audit-report.mjs'
 import { META, STATE } from './report-fixtures.mjs'
@@ -41,7 +41,7 @@ async function fixture(check, { maximum = 4, grant = 2, legacy = false } = {}) {
   } finally { h.close(); rmSync(dir, { recursive: true, force: true }) }
 }
 
-await test('control explicit opt-in is atomic, detached, immutable and persistent; legacy stays v1', () => fixture(x => {
+await test('control explicit opt-in is atomic, detached, immutable and persistent; legacy stays v1', { skip: NO_LINUX_STORES }, () => fixture(x => {
   assert.equal(x.h.getControl(), null)
   assert.equal(journal.readAuditControl(x.dir), null)
   assert.equal(journal.readAuditBudgetEvidence(x.dir), null)
@@ -62,7 +62,7 @@ await test('control explicit opt-in is atomic, detached, immutable and persisten
   assert.deepEqual(x.reopen().getControl(), journal.readAuditControl(x.dir))
 }, { legacy: true }))
 
-await test('control current publication acknowledges without a digest cycle; grant changes stale it', () => fixture(x => {
+await test('control current publication acknowledges without a digest cycle; grant changes stale it', { skip: NO_LINUX_STORES }, () => fixture(x => {
   assert.throws(() => x.h.acknowledgeReport({ expectedRevision: 1 }), code('REPORT_NOT_CURRENT'))
   const first = x.fresh(), c = x.h.getControl()
   assert.equal(c.acknowledgedGeneration, first.generationKey)
@@ -82,7 +82,7 @@ await test('control current publication acknowledges without a digest cycle; gra
   assert.deepEqual(report.partialReportContext(x.dir).budgetEvidence, { version: 1, maximum: 4, currentGrant: 3 })
 }))
 
-await test('control CAS and no-op pauses validate inputs without hooks or mutation', () => fixture(x => {
+await test('control CAS and no-op pauses validate inputs without hooks or mutation', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const before = x.inspect(); let hooks = 0
   for (const arg of [null, {}, { expectedRevision: 1, reason: 'other' }, { expectedRevision: 0, reason: 'report_stale' },
     new Proxy({}, { ownKeys() { hooks++; throw Error('trap') } }),
@@ -98,7 +98,7 @@ await test('control CAS and no-op pauses validate inputs without hooks or mutati
   for (const currentGrant of [2, 1, 5, NaN]) assert.throws(() => x.h.adjustGrant({ expectedRevision: 2, currentGrant, reason: 'operator_increase' }), code('INVALID_CONTROL_INPUT'))
 }))
 
-await test('control exhausted reservation persists pause without a row and does not double charge dispatch', () => fixture(async x => {
+await test('control exhausted reservation persists pause without a row and does not double charge dispatch', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   x.fresh()
   const rev = x.h.getControl().revision
   x.h.prepare({ id: 'a', input: {} })
@@ -122,7 +122,7 @@ await test('control exhausted reservation persists pause without a row and does 
   assert.deepEqual(x.h.getControl().blockers, [])
 }))
 
-await test('control two admitted callbacks settle while paused; unknown holds cannot be cleared', () => fixture(async x => {
+await test('control two admitted callbacks settle while paused; unknown holds cannot be cleared', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   x.fresh()
   for (const id of ['a', 'b']) x.h.prepare({ id, input: {} })
   let finishA, finishB
@@ -145,7 +145,7 @@ await test('control two admitted callbacks settle while paused; unknown holds ca
   assert.equal(journal.readAuditJournal(x.dir).heldCalls, 1)
 }))
 
-await test('control ordinary publication failure preserves terminal receipt and blocks only new dispatch', () => fixture(async x => {
+await test('control ordinary publication failure preserves terminal receipt and blocks only new dispatch', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   x.fresh()
   x.h.prepare({ id: 'done', input: {} })
   await x.h.execute('done', () => ({ outcome: 'failed', result: { code: 'ORDINARY_FAILURE' } }))
@@ -160,7 +160,7 @@ await test('control ordinary publication failure preserves terminal receipt and 
   assert.deepEqual(x.h.getControl().blockers, [])
 }))
 
-await test('control readers and owner bind current identity and closed handles cannot mutate', () => fixture(x => {
+await test('control readers and owner bind current identity and closed handles cannot mutate', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const file = join(x.dir, 'run-metadata.json'), bytes = readFileSync(file)
   x.put('run-metadata.json', { ...JSON.parse(bytes), repo: 'changed' })
   for (const read of [() => journal.readAuditControl(x.dir), () => journal.readAuditBudgetEvidence(x.dir), () => x.h.getControl(),
@@ -172,7 +172,7 @@ await test('control readers and owner bind current identity and closed handles c
   assert.throws(() => x.h.initControl({ initialGrant: 2 }), code('CLOSED'))
 }))
 
-await test('control zero grant and maximum are known values, while populated legacy opt-in refuses', async () => {
+await test('control zero grant and maximum are known values, while populated legacy opt-in refuses', { skip: NO_LINUX_STORES }, async () => {
   await fixture(x => {
     x.fresh()
     assert.deepEqual(journal.readAuditBudgetEvidence(x.dir), { version: 1, maximum: 0, currentGrant: 0 })
@@ -202,7 +202,7 @@ async function withWriteFault(pattern, check) {
   assert.ok(faults > 0)
 }
 
-await test('control failed opt-in rolls schema and version back atomically', () => fixture(async x => {
+await test('control failed opt-in rolls schema and version back atomically', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   const before = x.inspect()
   await withWriteFault(/^INSERT INTO control_history/, () => {
     assert.throws(() => x.h.initControl({ initialGrant: 2 }), code('IO_ERROR'))
@@ -212,7 +212,7 @@ await test('control failed opt-in rolls schema and version back atomically', () 
   assert.equal(x.h.initControl({ initialGrant: 2 }).revision, 1)
 }, { legacy: true }))
 
-await test('control failed reservation, cancellation and adjustment preserve both rows and reservations', () => fixture(async x => {
+await test('control failed reservation, cancellation and adjustment preserve both rows and reservations', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   x.fresh()
   let before = x.inspect()
   await withWriteFault(/^UPDATE control SET/, () => assert.throws(() => x.h.prepare({ id: 'a', input: {} }), code('IO_ERROR')))
@@ -229,7 +229,7 @@ await test('control failed reservation, cancellation and adjustment preserve bot
   assert.deepEqual(x.inspect(), before)
 }))
 
-await test('control failed settlement retains dispatched charge; ordinary close/reopen consumes one recovery slot', () => fixture(async x => {
+await test('control failed settlement retains dispatched charge; ordinary close/reopen consumes one recovery slot', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   x.fresh()
   x.h.prepare({ id: 'a', input: {} })
   const before = x.h.getControl()
@@ -253,7 +253,7 @@ await test('control failed settlement retains dispatched charge; ordinary close/
   assert.equal(calls, 1)
 }))
 
-await test('control acknowledgement write failure keeps stale barrier and current generation retryable', () => fixture(async x => {
+await test('control acknowledgement write failure keeps stale barrier and current generation retryable', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   const out = report.publishPartialReport(x.dir)
   assert.equal(out.status, 'published')
   const before = x.inspect()
@@ -289,7 +289,7 @@ await test('control pure capacity boundary keeps settlement slots and full pendi
   assert.ok(controlledBytes(identity, 1000, rows, true) > TOTAL_LIMIT)
 })
 
-await test('control failed budget projection invalidates context rather than becoming legacy null', () => fixture(x => {
+await test('control failed budget projection invalidates context rather than becoming legacy null', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const prepare = DatabaseSync.prototype.prepare
   let bodyReads = 0
   DatabaseSync.prototype.prepare = function(sql, ...rest) {
@@ -317,7 +317,7 @@ await test('control failed budget projection invalidates context rather than bec
   }
 }))
 
-await test('control malformed stored schema/data refuses rather than falling back to legacy', () => fixture(x => {
+await test('control malformed stored schema/data refuses rather than falling back to legacy', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const prepare = DatabaseSync.prototype.prepare, original = x.inspect().control
   const patches = [{ version: 2 }, { revision: 0 }, { maximum: 5 }, { currentGrant: -1 }, { currentGrant: 5 },
     { blockers: ['report_stale', 'paused_budget'] }, { blockers: ['report_stale', 'report_stale'] },
@@ -344,7 +344,7 @@ await test('control malformed stored schema/data refuses rather than falling bac
   })
 }))
 
-await test('control and history byte bounds reject before any journal body read', () => fixture(x => {
+await test('control and history byte bounds reject before any journal body read', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const prepare = DatabaseSync.prototype.prepare
   for (const [table, bytes] of [['control', 4097], ['control_history', 1025]]) {
     let reads = 0, altered = 0
@@ -369,7 +369,7 @@ await test('control and history byte bounds reject before any journal body read'
   }
 }))
 
-await test('control history discontinuity, wrong reasons and mismatched grant/ack are corruption', () => fixture(async x => {
+await test('control history discontinuity, wrong reasons and mismatched grant/ack are corruption', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   x.fresh()
   const prepare = DatabaseSync.prototype.prepare, before = x.inspect()
   const { canonical } = await import('../skills/security-audit/journal-data.mjs')
@@ -391,7 +391,7 @@ await test('control history discontinuity, wrong reasons and mismatched grant/ac
   assert.deepEqual(x.inspect(), before)
 }))
 
-await test('control full-size result fits its admitted allowance and oversized result remains held', () => fixture(async x => {
+await test('control full-size result fits its admitted allowance and oversized result remains held', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   const { BODY_LIMIT } = await import('../skills/security-audit/journal-data.mjs')
   x.fresh()
   x.h.prepare({ id: 'full', input: { text: 'x'.repeat(BODY_LIMIT - 11) } })
@@ -406,7 +406,7 @@ await test('control full-size result fits its admitted allowance and oversized r
   assert.deepEqual(x.h.getControl().blockers, ['paused_uncertain', 'report_stale'])
 }))
 
-await test('control opt-in leaves legacy settlement/cancellation identity semantics unchanged', () => fixture(async x => {
+await test('control opt-in leaves legacy settlement/cancellation identity semantics unchanged', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   const file = join(x.dir, 'run-metadata.json'), bytes = readFileSync(file)
   x.h.prepare({ id: 'active', input: {} })
   x.h.prepare({ id: 'held', input: {} })

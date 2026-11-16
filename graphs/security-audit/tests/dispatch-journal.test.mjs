@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { syncBuiltinESMExports } from 'node:module'
-import { test, run } from '../../../scripts/workflow-harness.mjs'
+import { test, run, NO_LINUX_STORES } from '../../../scripts/workflow-harness.mjs'
 import { openAuditJournal, readAuditJournal } from '../skills/security-audit/dispatch-journal.mjs'
 
 const code = expected => error => error.code === expected && error.message === `Audit journal: ${expected}`
@@ -21,7 +21,7 @@ async function fixture(check, limit = 5) {
   finally { for (const h of handles) h.close(); fs.rmSync(runDir, { recursive: true, force: true }) }
 }
 
-await test('canonical replay and detached workflow result preserve complete inputs including special keys', () => fixture(async x => {
+await test('canonical replay and detached workflow result preserve complete inputs including special keys', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   const h = x.open()
   const input = JSON.parse('{"z":[1,true,null],"__proto__":{"inert":1},"a":2}')
   h.prepare({ id: 'a', input })
@@ -36,7 +36,7 @@ await test('canonical replay and detached workflow result preserve complete inpu
   assert.equal(x.read().rows[0].result.z.length, 4)
 }))
 
-await test('proxy, getter, hook, cycle and sparse input are refused without execution or mutation', () => fixture(x => {
+await test('proxy, getter, hook, cycle and sparse input are refused without execution or mutation', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const h = x.open(), before = x.read(); let calls = 0
   const hook = { toJSON() { calls++; return {} } }
   const accessor = Object.defineProperty({}, 'x', { get() { calls++ } })
@@ -48,7 +48,7 @@ await test('proxy, getter, hook, cycle and sparse input are refused without exec
   assert.equal(calls, 0); assert.deepEqual(x.read(), before)
 }))
 
-await test('UTF8 byte bounds and invalid failure envelopes retain unknown charges', () => fixture(async x => {
+await test('UTF8 byte bounds and invalid failure envelopes retain unknown charges', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   const h = x.open()
   assert.throws(() => h.prepare({ id: 'large', input: { text: 'é'.repeat(600000) } }), code('INPUT_TOO_LARGE'))
   for (const [id, result] of [['a', { code: 'bad private text' }], ['b', { code: 'FAILED', extra: true }]]) {
@@ -58,7 +58,7 @@ await test('UTF8 byte bounds and invalid failure envelopes retain unknown charge
   assert.equal(x.read().heldCalls, 2)
 }))
 
-await test('live metadata terminal and full identity changes block admission and execution', () => fixture(async x => {
+await test('live metadata terminal and full identity changes block admission and execution', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   const h = x.open(); h.prepare({ id: 'a', input: {} }); const before = x.read(); let calls = 0
   for (const [change, expected] of [[{ repo: 'changed' }, 'CONFLICT'], [{ run_status: 'complete' }, 'TERMINAL_RUN'],
     [{ source_ref: { ...x.meta.source_ref, tree: 'c'.repeat(40) } }, 'CONFLICT'], [{ version: 2 }, 'CORRUPT']]) {
@@ -71,14 +71,14 @@ await test('live metadata terminal and full identity changes block admission and
   assert.equal(calls, 0); assert.deepEqual(x.read(), before)
 }))
 
-await test('static unsafe private directory refuses without mode adoption', () => fixture(x => {
+await test('static unsafe private directory refuses without mode adoption', { skip: NO_LINUX_STORES }, () => fixture(x => {
   fs.mkdirSync(x.dir, { mode: 0o755 }); fs.chmodSync(x.dir, 0o755)
   assert.throws(x.open, code('CORRUPT'))
   assert.equal(fs.statSync(x.dir).mode & 0o777, 0o755)
   assert.deepEqual(fs.readdirSync(x.dir), [])
 }))
 
-await test('private files, read-only inspection and closed operations have exact lifecycle', () => fixture(async x => {
+await test('private files, read-only inspection and closed operations have exact lifecycle', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   const h = x.open(); h.prepare({ id: 'a', input: {} }); h.close(); h.close()
   const before = fs.readdirSync(x.dir).map(n => [n, fs.readFileSync(join(x.dir, n)), fs.statSync(join(x.dir, n)).mtimeMs])
   assert.equal(x.read().heldCalls, 1)
@@ -89,7 +89,7 @@ await test('private files, read-only inspection and closed operations have exact
   await assert.rejects(h.execute('a', () => {}), code('CLOSED'))
 }))
 
-await test('dispatched persisted rows become uncertain on clean reopen without callback', () => fixture(async x => {
+await test('dispatched persisted rows become uncertain on clean reopen without callback', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   let h = x.open(); h.prepare({ id: 'a', input: {} }); h.close()
   const db = new DatabaseSync(join(x.dir, 'journal.sqlite'))
   db.prepare("UPDATE attempts SET state='dispatched' WHERE id='a'").run(); db.close()
@@ -97,7 +97,7 @@ await test('dispatched persisted rows become uncertain on clean reopen without c
   await assert.rejects(h.execute('a', () => assert.fail('no dispatch')), code('DISPATCH_UNCERTAIN'))
 }))
 
-await test('malformed persisted row refuses read and open, releasing only newly acquired owner', () => fixture(x => {
+await test('malformed persisted row refuses read and open, releasing only newly acquired owner', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const h = x.open(); h.prepare({ id: 'a', input: {} }); h.close()
   const db = new DatabaseSync(join(x.dir, 'journal.sqlite'))
   db.prepare("UPDATE attempts SET state='invented' WHERE id='a'").run(); db.close()
@@ -105,7 +105,7 @@ await test('malformed persisted row refuses read and open, releasing only newly 
   assert.equal(fs.existsSync(join(x.dir, 'owner.lock')), false)
 }))
 
-await test('synthetic completion persistence failure never acknowledges success or repeats callback', () => fixture(async x => {
+await test('synthetic completion persistence failure never acknowledges success or repeats callback', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   const h = x.open(); h.prepare({ id: 'a', input: {} }); let calls = 0
   const original = DatabaseSync.prototype.exec
   try {
@@ -123,7 +123,7 @@ await test('synthetic completion persistence failure never acknowledges success 
   assert.equal(calls, 1)
 }))
 
-await test('synthetic initialization I/O error releases new lease without raw diagnostics', () => fixture(x => {
+await test('synthetic initialization I/O error releases new lease without raw diagnostics', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const original = fs.fsyncSync
   fs.fsyncSync = () => { throw new Error('private synthetic I/O detail') }; syncBuiltinESMExports()
   try { assert.throws(x.open, code('IO_ERROR')) }
@@ -132,7 +132,7 @@ await test('synthetic initialization I/O error releases new lease without raw di
   x.open()
 }))
 
-await test('sibling receipts and more than 1MiB combined bodies survive reopen without callbacks', () => fixture(async x => {
+await test('sibling receipts and more than 1MiB combined bodies survive reopen without callbacks', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   let h = x.open(), calls = 0
   for (const id of ['good', 'failed', 'unknown']) h.prepare({ id, input: { text: 'a'.repeat(600000) } })
   await h.execute('good', async () => ({ outcome: 'returned', result: { text: 'b'.repeat(600000) } }))
@@ -146,7 +146,7 @@ await test('sibling receipts and more than 1MiB combined bodies survive reopen w
   assert.deepEqual([x.read().settledCalls, x.read().heldCalls, x.read().available], [2, 1, 2])
 }))
 
-await test('same-process busy owner and duplicate execution retain ownership until callback settles', () => fixture(async x => {
+await test('same-process busy owner and duplicate execution retain ownership until callback settles', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   const h = x.open(); h.prepare({ id: 'a', input: {} })
   let finish
   const pending = h.execute('a', () => new Promise(resolve => { finish = resolve }))
@@ -158,7 +158,7 @@ await test('same-process busy owner and duplicate execution retain ownership unt
   h.close(); x.open()
 }))
 
-await test('zero budget, prepared cancellation and stable creation order preserve capacity', () => fixture(async x => {
+await test('zero budget, prepared cancellation and stable creation order preserve capacity', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   let h = x.open(); h.prepare({ id: 'a', input: {} }); h.prepare({ id: 'b', input: {} })
   assert.deepEqual(h.cancelPrepared('a'), { changed: true }); h.prepare({ id: 'a', input: {} })
   assert.deepEqual(x.read().rows.map(r => r.id), ['b', 'a'])
@@ -171,7 +171,7 @@ await test('zero budget, prepared cancellation and stable creation order preserv
   await fixture(y => { const z = y.open(); assert.throws(() => z.prepare({ id: 'a', input: {} }), code('BUDGET_EXHAUSTED')) }, 0)
 }))
 
-await test('row admission cap refuses without mutation and corrupt count refuses on read', () => fixture(x => {
+await test('row admission cap refuses without mutation and corrupt count refuses on read', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const h = x.open(); h.close()
   const db = new DatabaseSync(join(x.dir, 'journal.sqlite'))
   db.exec('BEGIN')
@@ -200,7 +200,7 @@ await test('pure aggregate accounting reserves transitions and bounds content ab
   assert.ok(contentBytes({}, 2000, Array(1023).fill(row)) < TOTAL_LIMIT)
 })
 
-await test('partial own lease write failure cleans up only its newly created lock', () => fixture(x => {
+await test('partial own lease write failure cleans up only its newly created lock', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const original = fs.writeFileSync
   fs.writeFileSync = (path, ...args) => {
     if (typeof path === 'number') { original(path, 'partial'); throw new Error('private I/O detail') }
@@ -212,7 +212,7 @@ await test('partial own lease write failure cleans up only its newly created loc
   x.open()
 }))
 
-await test('static symlink database and unsafe modes refuse without touching existing entries', () => fixture(x => {
+await test('static symlink database and unsafe modes refuse without touching existing entries', { skip: NO_LINUX_STORES }, () => fixture(x => {
   let h = x.open(); h.close()
   const file = join(x.dir, 'journal.sqlite'), original = fs.readFileSync(file)
   fs.chmodSync(file, 0o644)
@@ -227,7 +227,7 @@ await test('static symlink database and unsafe modes refuse without touching exi
   finally { fs.unlinkSync(file); fs.renameSync(target, file) }
 }))
 
-await test('metadata operational read failure is IO_ERROR; no lock is acquired', () => fixture(x => {
+await test('metadata operational read failure is IO_ERROR; no lock is acquired', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const original = fs.readFileSync
   fs.readFileSync = (path, ...args) => {
     if (path === join(x.runDir, 'stage-state.json')) throw Object.assign(new Error('private path'), { code: 'EACCES' })
@@ -239,7 +239,7 @@ await test('metadata operational read failure is IO_ERROR; no lock is acquired',
   x.open()
 }))
 
-await test('unsafe persisted integer counters are corruption rather than operational errors', () => fixture(x => {
+await test('unsafe persisted integer counters are corruption rather than operational errors', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const h = x.open(); h.close()
   const db = new DatabaseSync(join(x.dir, 'journal.sqlite'))
   db.exec('UPDATE header SET invocation_limit=9223372036854775807'); db.close()
@@ -247,7 +247,7 @@ await test('unsafe persisted integer counters are corruption rather than operati
   assert.equal(fs.existsSync(join(x.dir, 'owner.lock')), false)
 }))
 
-await test('oversized or accessor transport results persist uncertainty with no error text or re-dispatch', () => fixture(async x => {
+await test('oversized or accessor transport results persist uncertainty with no error text or re-dispatch', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   const h = x.open(); let getters = 0
   const accessor = Object.defineProperty({}, 'value', { enumerable: true, get() { getters++; return 'private text' } })
   for (const [id, result] of [['large', 'x'.repeat(1024 * 1024)], ['accessor', accessor]]) {
@@ -259,7 +259,7 @@ await test('oversized or accessor transport results persist uncertainty with no 
   assert.deepEqual(x.read().rows.map(r => [r.state, r.result]), [['uncertain', null], ['uncertain', null]])
 }))
 
-await test('invalid identity refuses before private storage creation and does not amend metadata', () => fixture(x => {
+await test('invalid identity refuses before private storage creation and does not amend metadata', { skip: NO_LINUX_STORES }, () => fixture(x => {
   for (const patch of [{ run_id: '' }, { version: 2 }, { source_ref: { ...x.meta.source_ref, tree: undefined } },
     { source_ref: { ...x.meta.source_ref, dirty: 'false' } }, { source_ref: { ...x.meta.source_ref, uncommitted: { tracked: -1, untracked: 0 } } }]) {
     const bytes = JSON.stringify({ ...x.meta, ...patch })

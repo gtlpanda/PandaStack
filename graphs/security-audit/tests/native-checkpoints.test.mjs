@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { test } from '../../../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../../../scripts/workflow-harness.mjs'
 import { newInit } from './stage-fixtures.mjs'
 import { openAuditJournal, readAuditJournal } from '../skills/security-audit/dispatch-journal.mjs'
 import { createAuditCheckpoints } from '../skills/security-audit/native-checkpoints.mjs'
@@ -15,7 +15,7 @@ async function fixture(work) {
   try { await work({ runDir, journal, port }) }
   finally { await port.close(); journal.close() }
 }
-await test('native checkpoint close refuses active intent; repeated uncertain join retains one charged row', () => fixture(async ({ runDir, port }) => {
+await test('native checkpoint close refuses active intent; repeated uncertain join retains one charged row', { skip: NO_LINUX_STORES }, () => fixture(async ({ runDir, port }) => {
   const signal = new AbortController().signal
   assert.deepEqual(await port.reserve({ callId: 'owned' }, { signal }), { state: 'dispatch' })
   await assert.rejects(port.close(), e => e.code === 'BUSY')
@@ -26,7 +26,7 @@ await test('native checkpoint close refuses active intent; repeated uncertain jo
   assert.equal(before.heldCalls, 1)
   assert.equal(before.rows[0].state, 'uncertain')
 }))
-await test('native checkpoint known transport failure is replayable evidence, and changed binding conflicts while paused', () => fixture(async ({ runDir, journal, port }) => {
+await test('native checkpoint known transport failure is replayable evidence, and changed binding conflicts while paused', { skip: NO_LINUX_STORES }, () => fixture(async ({ runDir, journal, port }) => {
   const binding = { callId: 'known', promptHash: 'original' }, signal = new AbortController().signal
   await port.reserve(binding, { signal })
   const completion = { outcome: 'failed', code: 'PROVIDER_REFUSED', usage: null,
