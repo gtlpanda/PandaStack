@@ -3588,3 +3588,21 @@ gate test fails with the gate's call removed. Autobuild suite on this Mac: 245 p
 
 **Counts.** 4 new tests (`isOurs`, `missingParityTools`, the gate without `timeout`, the F2 reproduction);
 3 tests skip on machines without `flock` or namespace isolation.
+
+## 56. The workflow suite says what it cannot run on macOS, instead of failing it (2026-11-16)
+
+On this Mac `scripts/test-workflow.sh` failed 264 tests, the same on main; Linux CI was green. Each failure
+was traced to a file:line and a cause:
+- **53: the temp dir is a symlink** (`/var` -> `/private/var`). The code under test refuses symlinked paths or
+  resolves them, by design. `scripts/test-workflow.mjs` now sets `TMPDIR` to its real path.
+- **175: the Linux-only stores.** The run store, decision queue and audit journal traverse through
+  `/proc/self/fd` anchors and refuse elsewhere (D22). These tests skip with `NO_LINUX_STORES`, exported by
+  `scripts/workflow-harness.mjs` with the stores' own condition.
+- **29: bughunt namespace isolation.** Reproductions run only in a Linux PID namespace; these skip where
+  `isolation().pidns` is false. One of them passed on macOS only because a failing test above it had already
+  written the ledger it reads.
+- **8: /verify's capture.** Not skipped: /verify itself fails on macOS (every step exits 125), a product bug
+  fixed separately.
+
+`test(name, { skip }, fn)` prints a skip with its reason and the totals line counts skips. On this Mac:
+1726 passed, 9 failed (8 /verify, 1 intermittent), 204 skipped. On Linux nothing skips.

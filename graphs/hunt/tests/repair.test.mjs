@@ -10,6 +10,10 @@ import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import { mergeFindings, writeLedger, readLedger, emptyLedger } from '../../../core/skills/findings/findings.mjs'
+import { isolation } from '../skills/bughunt/evidence.mjs'
+
+// Reproductions run only in a Linux PID namespace (evidence.mjs isolation()); elsewhere these skip.
+const NO_ISOLATION = isolation().pidns ? false : 'reproductions need Linux namespace isolation (bughunt evidence.mjs)'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const EVIDENCE = join(here, '..', 'skills', 'bughunt', 'evidence.mjs')
@@ -65,7 +69,7 @@ const reset = () => { sh(FIX, 'reset', '-q', '--hard', 'HEAD'); sh(FIX, 'clean',
 const RIGHT = 'export const sum = (a, b) => a + b\n'
 
 console.log('== repair: setup')
-await test('F1 is reproduced first (the fix check trusts only a recorded REPRODUCED)', () => {
+await test('F1 is reproduced first (the fix check trusts only a recorded REPRODUCED)', { skip: NO_ISOLATION }, () => {
   assert.equal(reproduce('F1', 'tests/bughunt-f1.test.mjs', SUM_TEST), 'EVIDENCE: REPRODUCED F1')
 })
 
@@ -150,7 +154,7 @@ console.log('== repair: the fix check')
 await test('a repair that changes nothing -> FAIL', () => {
   assert.match(ev('fix', STATE, 'F1').stdout, /FIX F1: the repair changed nothing\nFIX: FAIL F1/)
 })
-await test('a change that does not remove the bug: the reproduction still fails with its marker -> FAIL', () => {
+await test('a change that does not remove the bug: the reproduction still fails with its marker -> FAIL', { skip: NO_ISOLATION }, () => {
   appendFileSync(join(FIX, 'src/sum.mjs'), '// looked at it\n')
   const r = ev('fix', STATE, 'F1')
   reset()
@@ -188,7 +192,7 @@ await test('edits hidden from git status by skip-worktree are still judged: they
   assert.equal(lastLine(r.stdout), 'FIX: FAIL F1', r.stdout)
   assert.match(r.stdout, /changed package\.json, which defines what the suite runs/)
 })
-await test('a .gitattributes export-ignore cannot hide a broken test from the check: exports ignore attributes', () => {
+await test('a .gitattributes export-ignore cannot hide a broken test from the check: exports ignore attributes', { skip: NO_ISOLATION }, () => {
   put(join(FIX, 'src/sum.mjs'), RIGHT)
   put(join(FIX, 'src/double.mjs'), 'export const double = n => n * 3\n')
   put(join(FIX, '.gitattributes'), 'tests/double.test.mjs export-ignore\n')
@@ -197,14 +201,14 @@ await test('a .gitattributes export-ignore cannot hide a broken test from the ch
   assert.equal(lastLine(r.stdout), 'FIX: FAIL F1', r.stdout)
   assert.match(r.stdout, /breaks the suite/)
 })
-await test('a repair that writes its own version of the reproduction test -> FAIL', () => {
+await test('a repair that writes its own version of the reproduction test -> FAIL', { skip: NO_ISOLATION }, () => {
   put(join(FIX, 'src/sum.mjs'), RIGHT)
   put(join(FIX, 'tests/bughunt-f1.test.mjs'), "import { test } from 'node:test'\ntest('sum', () => {})\n")
   const r = ev('fix', STATE, 'F1')
   reset()
   assert.match(r.stdout, /changed the reproduction test/)
 })
-await test('a fix hidden in a git-ignored file is not what would be committed, so the check fails it', () => {
+await test('a fix hidden in a git-ignored file is not what would be committed, so the check fails it', { skip: NO_ISOLATION }, () => {
   put(join(FIX, '.gitignore'), 'src/patch.mjs\n')
   put(join(FIX, 'src/patch.mjs'), RIGHT)
   put(join(FIX, 'src/sum.mjs'), "export { sum } from './patch.mjs'\n")
@@ -212,7 +216,7 @@ await test('a fix hidden in a git-ignored file is not what would be committed, s
   reset()
   assert.equal(lastLine(r.stdout), 'FIX: FAIL F1', r.stdout)
 })
-await test('a repair that fixes the bug but breaks the suite -> FAIL, naming the step', () => {
+await test('a repair that fixes the bug but breaks the suite -> FAIL, naming the step', { skip: NO_ISOLATION }, () => {
   put(join(FIX, 'src/sum.mjs'), RIGHT)
   put(join(FIX, 'src/double.mjs'), 'export const double = n => n * 3\n')
   const r = ev('fix', STATE, 'F1')
@@ -220,7 +224,7 @@ await test('a repair that fixes the bug but breaks the suite -> FAIL, naming the
   assert.equal(lastLine(r.stdout), 'FIX: FAIL F1')
   assert.match(r.stdout, /breaks the suite: .*npm run test/)
 })
-await test('the right repair: passes with it, fails without it, the suite passes -> PASS, fingerprinted by its staged tree', () => {
+await test('the right repair: passes with it, fails without it, the suite passes -> PASS, fingerprinted by its staged tree', { skip: NO_ISOLATION }, () => {
   put(join(FIX, 'src/sum.mjs'), RIGHT)
   const r = ev('fix', STATE, 'F1')
   assert.equal(lastLine(r.stdout), 'FIX: PASS F1', r.stdout)
@@ -231,7 +235,7 @@ await test('the right repair: passes with it, fails without it, the suite passes
   assert.equal(record('F1').verdict, 'REPRODUCED', 'the reproduction record survives the fix runs')
 })
 
-await test('a reproduction recorded PREEXISTING (failing at both commits) still gets the full three-arm proof, never the suite-only path', () => {
+await test('a reproduction recorded PREEXISTING (failing at both commits) still gets the full three-arm proof, never the suite-only path', { skip: NO_ISOLATION }, () => {
   const recFile = join(STATE, 'evidence', 'F1.json')
   const saved = readFileSync(recFile, 'utf8')
   const rec = JSON.parse(saved)
@@ -246,7 +250,7 @@ await test('a reproduction recorded PREEXISTING (failing at both commits) still 
 
 console.log('== repair: adversarial tests, commit, revert')
 const ADV = join(STATE, 'repro', 'F1', 'adversarial')
-await test('no adversarial tests -> PASS; one that passes -> PASS; one that fails -> FAIL, naming it', () => {
+await test('no adversarial tests -> PASS; one that passes -> PASS; one that fails -> FAIL, naming it', { skip: NO_ISOLATION }, () => {
   assert.equal(lastLine(ev('adversarial', STATE, 'F1').stdout), 'ADVERSARIAL: PASS F1')
   put(join(ADV, 'adversarial.json'), JSON.stringify({ test_files: ['tests/adv-neg.test.mjs'] }))
   put(join(ADV, 'files', 'tests/adv-neg.test.mjs'), T("import { sum } from '../src/sum.mjs'", 'assert.equal(sum(-1, 1), 0)'))
@@ -258,7 +262,7 @@ await test('no adversarial tests -> PASS; one that passes -> PASS; one that fail
   assert.match(r.stdout, /tests\/adv-wrong\.test\.mjs fails against the repair/)
   assert.ok(!existsSync(join(FIX, 'tests/adv-neg.test.mjs')), 'adversarial tests never enter the worktree')
 })
-await test('a change after the check (content, a symlink retargeted, a mode) makes adversarial and commit refuse', () => {
+await test('a change after the check (content, a symlink retargeted, a mode) makes adversarial and commit refuse', { skip: NO_ISOLATION }, () => {
   for (const tamper of [
     () => appendFileSync(join(FIX, 'src/sum.mjs'), '// sneaked in\n'),
     () => chmodSync(join(FIX, 'src/sum.mjs'), 0o755),
@@ -272,7 +276,7 @@ await test('a change after the check (content, a symlink retargeted, a mode) mak
     put(join(FIX, 'src/sum.mjs'), RIGHT)
   }
 })
-await test('commit commits exactly the checked tree, runs no hook, and never moves the branch under review', () => {
+await test('commit commits exactly the checked tree, runs no hook, and never moves the branch under review', { skip: NO_ISOLATION }, () => {
   const c = ev('commit', STATE, 'F1')
   const m = lastLine(c.stdout).match(/^COMMIT: DONE F1 ([0-9a-f]{40})$/)
   assert.ok(m, c.stdout)
@@ -288,7 +292,7 @@ await test('commit commits exactly the checked tree, runs no hook, and never mov
 await test('commit refuses a repair that never passed its check', () => {
   assert.equal(lastLine(ev('commit', STATE, 'F9').stdout), 'COMMIT: FAIL F9')
 })
-await test('revert puts the worktree back at its last commit: untracked, ignored, skip-worktree, and nested repos included', () => {
+await test('revert puts the worktree back at its last commit: untracked, ignored, skip-worktree, and nested repos included', { skip: NO_ISOLATION }, () => {
   appendFileSync(join(FIX, 'src/double.mjs'), '// a failed attempt\n')
   put(join(FIX, 'src/new.mjs'), 'x\n')
   put(join(FIX, '.gitignore'), 'out/\n')
@@ -308,7 +312,7 @@ await test('revert puts the worktree back at its last commit: untracked, ignored
 })
 
 console.log('== repair: what blocks a repair')
-await test('a reproduction an earlier fix already committed a test over -> BLOCKED (never overwritten)', () => {
+await test('a reproduction an earlier fix already committed a test over -> BLOCKED (never overwritten)', { skip: NO_ISOLATION }, () => {
   assert.equal(reproduce('F2', 'tests/bughunt-f1.test.mjs', SUM_TEST.replace('BUGHUNT-F1', 'BUGHUNT-F2')), 'EVIDENCE: REPRODUCED F2')
   appendFileSync(join(FIX, 'src/double.mjs'), '// a change\n')
   const r = ev('fix', STATE, 'F2')
@@ -316,7 +320,7 @@ await test('a reproduction an earlier fix already committed a test over -> BLOCK
   assert.equal(lastLine(r.stdout), 'FIX: BLOCKED F2')
   assert.match(r.stdout, /already exists in the fix worktree/)
 })
-await test('a REPRODUCED finding whose reproduction is now unreadable -> BLOCKED, never a suite-only pass', () => {
+await test('a REPRODUCED finding whose reproduction is now unreadable -> BLOCKED, never a suite-only pass', { skip: NO_ISOLATION }, () => {
   assert.equal(reproduce('F3', 'tests/bughunt-f3.test.mjs', SUM_TEST.replace('BUGHUNT-F1', 'BUGHUNT-F3')), 'EVIDENCE: REPRODUCED F3')
   writeFileSync(join(STATE, 'repro', 'F3', 'repro.json'), '{broken')
   appendFileSync(join(FIX, 'src/double.mjs'), '// nothing\n')
@@ -325,7 +329,7 @@ await test('a REPRODUCED finding whose reproduction is now unreadable -> BLOCKED
   assert.equal(lastLine(r.stdout), 'FIX: BLOCKED F3')
   assert.match(r.stdout, /the reproduction that proved this finding is unreadable/)
 })
-await test('a reproduction an earlier fix already makes pass cannot tell this fix from no fix -> FAIL', () => {
+await test('a reproduction an earlier fix already makes pass cannot tell this fix from no fix -> FAIL', { skip: NO_ISOLATION }, () => {
   assert.equal(reproduce('F4', 'tests/bughunt-f4.test.mjs', SUM_TEST.replace('BUGHUNT-F1', 'BUGHUNT-F4')), 'EVIDENCE: REPRODUCED F4')
   appendFileSync(join(FIX, 'src/double.mjs'), '// a change\n')
   const r = ev('fix', STATE, 'F4')
@@ -333,14 +337,14 @@ await test('a reproduction an earlier fix already makes pass cannot tell this fi
   assert.equal(lastLine(r.stdout), 'FIX: FAIL F4')
   assert.match(r.stdout, /cannot tell a fix from no fix/)
 })
-await test('a finding no test reproduced (approved by the human) is checked against the suite only', () => {
+await test('a finding no test reproduced (approved by the human) is checked against the suite only', { skip: NO_ISOLATION }, () => {
   put(join(FIX, 'src/double.mjs'), 'export const double = n => n + n\n')
   const r = ev('fix', STATE, 'F5')
   reset()
   assert.equal(lastLine(r.stdout), 'FIX: PASS F5', r.stdout)
   assert.match(r.stdout, /no reproduction proved this finding \(the human approved it\); the suite passes/)
 })
-await test('a suite that already fails without the repair -> BLOCKED: a regression inside it cannot be told apart', () => {
+await test('a suite that already fails without the repair -> BLOCKED: a regression inside it cannot be told apart', { skip: NO_ISOLATION }, () => {
   put(join(FIX, 'tests/broken.test.mjs'), "import { test } from 'node:test'\ntest('already broken', () => { throw new Error('old') })\n")
   sh(FIX, 'add', '.')
   sh(FIX, 'commit', '-q', '--no-verify', '-m', 'a failing test the PR carries')
@@ -352,7 +356,7 @@ await test('a suite that already fails without the repair -> BLOCKED: a regressi
 })
 
 console.log('== repair: recheck of a committed fix')
-await test('recheck re-proves a fix from its commit while it is kept, and takes it back once nothing keeps it', () => {
+await test('recheck re-proves a fix from its commit while it is kept, and takes it back once nothing keeps it', { skip: NO_ISOLATION }, () => {
   const fixCommit = sh(FIX, 'log', '--format=%H', '--grep=^bughunt: fix F1').split('\n')[0]
   const cand = {
     file_path: 'src/sum.mjs', line_range: [1, 1], bug_category: 'logic', severity: 'HIGH', confidence: 90, title: 'sum subtracts', description: 'd',

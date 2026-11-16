@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { test } from '../../../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../../../scripts/workflow-harness.mjs'
 import { openAuditJournal, readAuditJournal, assertAuditJournalOwner } from '../skills/security-audit/dispatch-journal.mjs'
 
 // Ordinary STATIC path and identity regressions for assertAuditJournalOwner, using actual
@@ -59,7 +59,7 @@ const refuseAll = (x, owner) => {
   }
 }
 
-await test('owner assertion accepts the opened root under equivalent separator spellings', () => fixture(x => {
+await test('owner assertion accepts the opened root under equivalent separator spellings', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const owner = x.open(`${x.runDir}/`)
   for (const spelling of [x.runDir, `${x.runDir}/`, `${x.runDir}//`, `${x.base}//real/run`]) {
     assert.equal(assertAuditJournalOwner(owner, spelling), undefined, spelling)
@@ -67,7 +67,7 @@ await test('owner assertion accepts the opened root under equivalent separator s
   }
 }))
 
-await test('explicit dot components are refused with the owning grammar, not normalized away', () => fixture(x => {
+await test('explicit dot components are refused with the owning grammar, not normalized away', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const owner = x.open()
   for (const spelling of dots(x)) {
     assert.throws(() => assertAuditJournalOwner(owner, spelling), code('INVALID_JOURNAL_INPUT'), spelling)
@@ -77,7 +77,7 @@ await test('explicit dot components are refused with the owning grammar, not nor
   assert.equal(assertAuditJournalOwner(owner, x.runDir), undefined)
 }))
 
-await test('symlink alias spellings of the root or an ancestor are not the opened root', () => fixture(x => {
+await test('symlink alias spellings of the root or an ancestor are not the opened root', { skip: NO_LINUX_STORES }, () => fixture(x => {
   // Owning open refuses an alias spelling, so no owner can ever be registered under one.
   assert.throws(() => openAuditJournal({ runDir: x.alias, invocationLimit: 4 }), code('CORRUPT'))
   const owner = x.open()
@@ -89,7 +89,7 @@ await test('symlink alias spellings of the root or an ancestor are not the opene
   assert.equal(assertAuditJournalOwner(owner, x.runDir), undefined)
 }))
 
-await test('equal bound identity at another directory never satisfies an owner', () => fixture(x => {
+await test('equal bound identity at another directory never satisfies an owner', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const a = x.open(), otherDir = x.copy('copy-with-journal'), b = x.open(otherDir), bare = x.copy('copy-without-journal')
   assert.equal(assertAuditJournalOwner(a, x.runDir), undefined)
   assert.equal(assertAuditJournalOwner(b, otherDir), undefined)
@@ -98,7 +98,7 @@ await test('equal bound identity at another directory never satisfies an owner',
   }
 }))
 
-await test('non-string and malformed provided paths fail as safe journal errors without hooks or leaked paths', () => fixture(x => {
+await test('non-string and malformed provided paths fail as safe journal errors without hooks or leaked paths', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const owner = x.open(); let hooks = 0
   const exotic = { toString() { hooks++; return x.runDir }, valueOf() { hooks++; return x.runDir }, [Symbol.toPrimitive]() { hooks++; return x.runDir } }
   const getter = Object.defineProperty({}, 'href', { get() { hooks++; return x.runDir } })
@@ -112,7 +112,7 @@ await test('non-string and malformed provided paths fail as safe journal errors 
   }
 }))
 
-await test('owner branding and closed state take precedence over provided path validation', () => fixture(x => {
+await test('owner branding and closed state take precedence over provided path validation', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const owner = x.open(); let hooks = 0
   const forged = { get prepare() { hooks++; throw new Error('forged methods must not be read') },
     get close() { hooks++; throw new Error('forged methods must not be read') } }
@@ -133,7 +133,7 @@ await test('owner branding and closed state take precedence over provided path v
   }
 }))
 
-await test('current bound identity is still revalidated after path admission and terminal metadata stays assertable', () => fixture(x => {
+await test('current bound identity is still revalidated after path admission and terminal metadata stays assertable', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const owner = x.open(), original = readFileSync(x.metadata)
   const write = patch => writeFileSync(x.metadata, JSON.stringify({ ...META, ...patch }))
   try {
@@ -152,7 +152,7 @@ await test('current bound identity is still revalidated after path admission and
   assert.equal(assertAuditJournalOwner(owner, x.runDir), undefined)
 }))
 
-await test('refused spellings are read-only for rows and bytes and the owner stays usable', () => fixture(x => {
+await test('refused spellings are read-only for rows and bytes and the owner stays usable', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const owner = x.open()
   const rows = readAuditJournal(x.runDir), bytes = readFileSync(x.file)
   refuseAll(x, owner)
@@ -162,7 +162,7 @@ await test('refused spellings are read-only for rows and bytes and the owner sta
   assert.equal(assertAuditJournalOwner(owner, x.runDir), undefined)
 }))
 
-await test('refused spellings leave opted-in control state and rows unchanged', () => fixture(x => {
+await test('refused spellings leave opted-in control state and rows unchanged', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const owner = x.open()
   owner.initControl({ initialGrant: 2 })
   const control = owner.getControl(), rows = readAuditJournal(x.runDir), bytes = readFileSync(x.file)

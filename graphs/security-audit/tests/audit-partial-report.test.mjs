@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync, chmodSync, lstatSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { test } from '../../../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../../../scripts/workflow-harness.mjs'
 import * as api from '../skills/security-audit/audit-report.mjs'
 import { openAuditJournal, readAuditJournal } from '../skills/security-audit/dispatch-journal.mjs'
 import { META, STATE, NV, RJ, UNIT, DECISIONS } from './report-fixtures.mjs'
@@ -35,7 +35,7 @@ const putLeads = x => {
   return { records, ledger }
 }
 
-await test('partial checkpoint preserves receipts and distinguishes held, returned, failed and unknown work', () => fixture(async x => {
+await test('partial checkpoint preserves receipts and distinguishes held, returned, failed and unknown work', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   for (const id of ['returned', 'failed', 'held', 'uncertain']) x.journal.prepare({ id, input: { role: 'analyst', prompt: 'PRIVATE PROMPT' } })
   await x.journal.execute('returned', () => ({ outcome: 'returned', result: { verdict: 'confirmed', fingerprint: 'invented' } }))
   await x.journal.execute('failed', () => ({ outcome: 'failed', result: { code: 'ORDINARY_FAILURE' } }))
@@ -53,7 +53,7 @@ await test('partial checkpoint preserves receipts and distinguishes held, return
   assert.equal(x.publish().status, 'replayed')
 }))
 
-await test('partial leads retain every fingerprint and validated dispositions without raw-result promotion', () => fixture(x => {
+await test('partial leads retain every fingerprint and validated dispositions without raw-result promotion', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const { records } = putLeads(x)
   x.put('decisions.json', DECISIONS(records.map((r, i) => ({ fingerprint: r.fingerprint, n: i + 1, decision: r.verdict, record: r, verifier_id: `v${i + 1}` }))))
   x.put('findings.json', records)
@@ -68,7 +68,7 @@ await test('partial leads retain every fingerprint and validated dispositions wi
   assert.ok(bad.blockers.some(b => b.artifact === 'decisions.json'))
 }))
 
-await test('all bound artifact changes stale a publication while unbound history is ignored', () => fixture(x => {
+await test('all bound artifact changes stale a publication while unbound history is ignored', { skip: NO_LINUX_STORES }, () => fixture(x => {
   for (const name of ['run-metadata.json', 'stage-state.json', 'coverage-ledger.json', 'candidates.json', 'decisions.json', 'critic.json', 'findings.json']) {
     const old = accepted(x.publish())
     let before
@@ -85,7 +85,7 @@ await test('all bound artifact changes stale a publication while unbound history
   assert.deepEqual(x.context(), before)
 }))
 
-await test('malformed optional evidence is bound and rejected; journal unavailability never becomes zero or current', () => fixture(x => {
+await test('malformed optional evidence is bound and rejected; journal unavailability never becomes zero or current', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const old = accepted(x.publish())
   writeFileSync(join(x.dir, 'coverage-ledger.json'), '[broken')
   const c = x.context()
@@ -99,7 +99,7 @@ await test('malformed optional evidence is bound and rejected; journal unavailab
   assert.equal(x.read().expectedGenerationKey, null)
 }))
 
-await test('ordinary output conflict preserves receipt and render-only recovery does not dispatch', () => fixture(async x => {
+await test('ordinary output conflict preserves receipt and render-only recovery does not dispatch', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   let calls = 0
   x.journal.prepare({ id: 'leaf', input: {} })
   await x.journal.execute('leaf', () => { calls++; return { outcome: 'returned', result: 'saved' } })
@@ -113,7 +113,7 @@ await test('ordinary output conflict preserves receipt and render-only recovery 
   assert.equal(calls, 1)
 }))
 
-await test('generation corruption refuses replay and a failed new generation leaves prior pointer stale', () => fixture(x => {
+await test('generation corruption refuses replay and a failed new generation leaves prior pointer stale', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const a = accepted(x.publish())
   x.journal.prepare({ id: 'later', input: {} })
   const path = join(x.dir, 'partial-reports', x.context().generationKey + '.md')
@@ -129,7 +129,7 @@ await test('generation corruption refuses replay and a failed new generation lea
   assert.equal(readFileSync(b.currentPath, 'utf8'), 'tampered')
 }))
 
-await test('private output policy refuses unsafe modes and static symlink destinations without adoption', () => fixture(x => {
+await test('private output policy refuses unsafe modes and static symlink destinations without adoption', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const dir = join(x.dir, 'partial-reports')
   mkdirSync(dir, { mode: 0o755 })
   assert.equal(x.publish().status, 'failed')
@@ -146,7 +146,7 @@ await test('private output policy refuses unsafe modes and static symlink destin
   assert.equal(x.publish().status, 'failed')
 }))
 
-await test('missing or incompatible required authority cannot publish unidentified progress', () => fixture(x => {
+await test('missing or incompatible required authority cannot publish unidentified progress', { skip: NO_LINUX_STORES }, () => fixture(x => {
   for (const name of ['stage-state.json', 'run-metadata.json']) {
     const before = readFileSync(join(x.dir, name))
     try {
@@ -163,7 +163,7 @@ await test('missing or incompatible required authority cannot publish unidentifi
   } finally { writeFileSync(join(x.dir, 'run-metadata.json'), before) }
 }))
 
-await test('pure partial renderer rejects accessors, proxies, malformed shapes and cycles without hooks', () => fixture(x => {
+await test('pure partial renderer rejects accessors, proxies, malformed shapes and cycles without hooks', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const c = x.context(); let hooks = 0
   const getter = { ...c }; Object.defineProperty(getter, 'leads', { enumerable: true, get() { hooks++; return [] } })
   const proxy = new Proxy(c, { ownKeys() { hooks++; throw Error('trap') } })
@@ -178,7 +178,7 @@ await test('pure partial renderer rejects accessors, proxies, malformed shapes a
   assert.equal(a.includes('[link](javascript:inert)'), false)
 }))
 
-await test('partial binding retains more than 1MiB of journal data without exposing raw payloads', () => fixture(async x => {
+await test('partial binding retains more than 1MiB of journal data without exposing raw payloads', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   for (const id of ['one', 'two']) {
     x.journal.prepare({ id, input: { prompt: 'x'.repeat(300000) } })
     await x.journal.execute(id, () => ({ outcome: 'returned', result: 'y'.repeat(300000) }))
@@ -189,7 +189,7 @@ await test('partial binding retains more than 1MiB of journal data without expos
   assert.equal(x.read().status, 'current')
 }))
 
-await test('oversized optional inputs are hashed without content and cannot bypass journal admission bounds', () => fixture(x => {
+await test('oversized optional inputs are hashed without content and cannot bypass journal admission bounds', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const oversized = Buffer.alloc(5 * 1024 * 1024 + 1, 32)
   writeFileSync(join(x.dir, 'coverage-ledger.json'), oversized)
   const c = x.context()
@@ -202,14 +202,14 @@ await test('oversized optional inputs are hashed without content and cannot bypa
   assert.equal(x.read().status, 'invalid')
 }))
 
-await test('partial body limit refuses expansion without dropping pending fingerprints', () => fixture(x => {
+await test('partial body limit refuses expansion without dropping pending fingerprints', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const c = x.context()
   c.leads.push({ fingerprint: 'must-retain', disposition: 'pending', title: '<'.repeat(5 * 1024 * 1024), units: [], blockers: [] })
   assert.throws(() => api.buildPartialReport(c), e => e.code === 'REPORT_TOO_LARGE')
   assert.equal(c.leads[0].fingerprint, 'must-retain')
 }))
 
-await test('malformed and path-directed pointer or manifest is invalid and cannot be adopted', () => fixture(x => {
+await test('malformed and path-directed pointer or manifest is invalid and cannot be adopted', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const out = accepted(x.publish()), dir = join(x.dir, 'partial-reports'), pointer = join(dir, 'current.json')
   const original = readFileSync(pointer)
   for (const contents of ['broken', JSON.stringify({ version: 1, generationKey: out.generationKey, manifest: '../outside.json' }), ' '.repeat(65537)]) {
@@ -228,7 +228,7 @@ await test('malformed and path-directed pointer or manifest is invalid and canno
   assert.equal(x.read().status, 'current')
 }))
 
-await test('valid shape with inconsistent decision record is rejected without resolving pending leads', () => fixture(x => {
+await test('valid shape with inconsistent decision record is rejected without resolving pending leads', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const { records } = putLeads(x)
   x.put('decisions.json', DECISIONS([{ fingerprint: 'nv', n: 1, decision: 'rejected', record: records[0], verifier_id: 'v1' }]))
   const c = x.context()
@@ -236,7 +236,7 @@ await test('valid shape with inconsistent decision record is rejected without re
   assert.ok(c.leads.every(l => l.disposition === 'pending'))
 }))
 
-await test('terminal run status and first reason remain distinct from partial completeness', () => fixture(x => {
+await test('terminal run status and first reason remain distinct from partial completeness', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const file = join(x.dir, 'run-metadata.json'), before = readFileSync(file)
   try {
     x.put('run-metadata.json', { ...JSON.parse(before), run_status: 'incomplete', incomplete_reason: 'first_reason' })
@@ -248,7 +248,7 @@ await test('terminal run status and first reason remain distinct from partial co
   } finally { writeFileSync(file, before) }
 }))
 
-await test('candidate record identity mismatch rejects the artifact without inventing a lead', () => fixture(x => {
+await test('candidate record identity mismatch rejects the artifact without inventing a lead', { skip: NO_LINUX_STORES }, () => fixture(x => {
   putLeads(x)
   const path = join(x.dir, 'candidates.json'), pool = JSON.parse(readFileSync(path))
   pool[0].record.fingerprint = 'different-record'
@@ -259,7 +259,7 @@ await test('candidate record identity mismatch rejects the artifact without inve
   assert.equal(c.binding.artifacts['candidates.json'].state, 'rejected')
 }))
 
-await test('historical confirmed records stay outside provisional leads and preserve their source reference', () => fixture(async x => {
+await test('historical confirmed records stay outside provisional leads and preserve their source reference', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   const { CF } = await import('./report-fixtures.mjs')
   const record = CF('old-confirmation')
   assert.deepEqual(validateFindingsDocument([record]), [])
@@ -272,7 +272,7 @@ await test('historical confirmed records stay outside provisional leads and pres
   assert.match(text, /no new partial confirmation/)
 }))
 
-await test('an interrupted generation pair is historical until manifest recovery and pointer-last publication', () => fixture(x => {
+await test('an interrupted generation pair is historical until manifest recovery and pointer-last publication', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const a = accepted(x.publish())
   x.journal.prepare({ id: 'later', input: {} })
   const key = x.context().generationKey, dir = join(x.dir, 'partial-reports'), manifest = join(dir, key + '.json')

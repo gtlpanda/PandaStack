@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events'
 import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { test } from '../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../scripts/workflow-harness.mjs'
 import { createDecisionQueue } from '../core/skills/decisions/queue.mjs'
 import { createRunStore } from '../core/skills/run-records/store.mjs'
 import { loadConfig } from '../graphs/autobuild/tool/lib/config.mjs'
@@ -139,7 +139,7 @@ async function fixture(backend, patch = {}) {
 }
 
 for (const backend of ['claude', 'codex']) {
-  await test(`${backend}: timeout and approval handoff stop before any mocked provider spawn`, async () => {
+  await test(`${backend}: timeout and approval handoff stop before any mocked provider spawn`, { skip: NO_LINUX_STORES }, async () => {
     for (const [patch, outcome, state] of [[{ pending: true }, 'timeout', 'pending'], [{ approval: true }, 'manual_handoff', 'answered']]) {
       const result = await fixture(backend, patch)
       assert.equal(result.code, 14); assert.equal(result.calls.length, 0); assert.equal(result.state.state, state)
@@ -148,7 +148,7 @@ for (const backend of ['claude', 'codex']) {
     }
   })
 
-  await test(`${backend}: HEAD changes block acknowledgment or the final launch hook`, async () => {
+  await test(`${backend}: HEAD changes block acknowledgment or the final launch hook`, { skip: NO_LINUX_STORES }, async () => {
     for (const event of ['waiting', 'received']) {
       const result = await fixture(backend, { changeHeadOn: event })
       assert.equal(result.code, 14); assert.equal(result.calls.length, 0)
@@ -160,7 +160,7 @@ for (const backend of ['claude', 'codex']) {
     }
   })
 
-  await test(`${backend}: acknowledged target alone receives delimited question data`, async () => {
+  await test(`${backend}: acknowledged target alone receives delimited question data`, { skip: NO_LINUX_STORES }, async () => {
     const result = await fixture(backend)
     assert.equal(result.code, 2); assert.equal(result.calls.length, 1)
     const call = result.calls[0], input = backend === 'codex' ? call.input : call.args[call.args.indexOf('-p') + 1]
@@ -185,7 +185,7 @@ for (const backend of ['claude', 'codex']) {
     }
   })
 
-  await test(`${backend}: observer sink failure preserves provider outcome and acknowledgment`, async () => {
+  await test(`${backend}: observer sink failure preserves provider outcome and acknowledgment`, { skip: NO_LINUX_STORES }, async () => {
     const result = await fixture(backend, { sinkFails: true })
     assert.equal(result.observerFailures, 4); assert.equal(result.code, 2)
     assert.equal(result.calls.length, 1); assert.equal(result.state.state, 'acknowledged')
@@ -193,7 +193,7 @@ for (const backend of ['claude', 'codex']) {
     assert.equal(result.lockRemoved, true)
   })
 
-  await test(`${backend}: receipt captures the actual child and closure accounts for every intended event`, async () => {
+  await test(`${backend}: receipt captures the actual child and closure accounts for every intended event`, { skip: NO_LINUX_STORES }, async () => {
     for (const sinkFails of [false, true]) {
       const result = await fixture(backend, { tracking: true, sinkFails })
       assert.equal(result.code, 2)
@@ -209,7 +209,7 @@ for (const backend of ['claude', 'codex']) {
     }
   })
 
-  await test(`${backend}: failed spawn, preflight, opt-out and completed checkpoint close with known zero`, async () => {
+  await test(`${backend}: failed spawn, preflight, opt-out and completed checkpoint close with known zero`, { skip: NO_LINUX_STORES }, async () => {
     for (const patch of [{ failedSpawn: true }, { preflightFailure: true }, { optOut: true }, { completed: true }]) {
       const result = await fixture(backend, { tracking: true, ...patch })
       const closed = result.events.at(-1)
@@ -223,7 +223,7 @@ for (const backend of ['claude', 'codex']) {
     }
   })
 
-  await test(`${backend}: usage probe has no context and retry receipts have fresh launches and child IDs`, async () => {
+  await test(`${backend}: usage probe has no context and retry receipts have fresh launches and child IDs`, { skip: NO_LINUX_STORES }, async () => {
     const result = await fixture(backend, { tracking: true, usageRetry: true })
     assert.equal(result.code, 2); assert.equal(result.calls.length, 3)
     const contexts = result.calls.map(c => backend === 'codex' ? c.input : c.args[c.args.indexOf('-p') + 1])
@@ -242,7 +242,7 @@ for (const backend of ['claude', 'codex']) {
   })
 }
 
-await test('Codex uncertain context writes preserve provider outcome and cannot emit supplied receipts', async () => {
+await test('Codex uncertain context writes preserve provider outcome and cannot emit supplied receipts', { skip: NO_LINUX_STORES }, async () => {
   for (const patch of [{ writeError: true }, { unknownWrite: true }]) {
     const control = await fixture('codex', { ...patch, optOut: true, tracking: true })
     const result = await fixture('codex', { ...patch, tracking: true })

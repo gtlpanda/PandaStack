@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { test } from '../../../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../../../scripts/workflow-harness.mjs'
 import { openAuditJournal, readAuditJournal } from '../skills/security-audit/dispatch-journal.mjs'
 import { BODY_LIMIT, ROW_LIMIT } from '../skills/security-audit/journal-data.mjs'
 
@@ -33,7 +33,7 @@ async function fixture(check) {
   }
 }
 
-await test('journal reader binds every current identity field and preserves exact restored receipts', () => fixture(x => {
+await test('journal reader binds every current identity field and preserves exact restored receipts', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const before = x.read(), database = readFileSync(x.file)
   const source = x.meta.source_ref
   const patches = [
@@ -52,7 +52,7 @@ await test('journal reader binds every current identity field and preserves exac
   }
 }))
 
-await test('journal reader permits matching terminal identity and rejects malformed current metadata', () => fixture(x => {
+await test('journal reader permits matching terminal identity and rejects malformed current metadata', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const before = x.read()
   for (const run_status of ['complete', 'incomplete']) {
     writeFileSync(x.metadata, JSON.stringify({ ...x.meta, run_status,
@@ -93,13 +93,13 @@ for (const [name, sql, value] of [
   ['empty state', 'UPDATE attempts SET state=?', ''],
   ['input UTF8', 'UPDATE attempts SET input=?', JSON.stringify({ text: 'é'.repeat(BODY_LIMIT / 2) })],
   ['result UTF8', 'UPDATE attempts SET result=?', JSON.stringify('é'.repeat(BODY_LIMIT / 2))],
-]) await test(`journal reader refuses ${name} size before materializing stored bodies`, () => fixture(x => {
+]) await test(`journal reader refuses ${name} size before materializing stored bodies`, { skip: NO_LINUX_STORES }, () => fixture(x => {
   const db = new DatabaseSync(x.file)
   try { db.prepare(sql).run(value) } finally { db.close() }
   withoutBodyReads(x.read)
 }))
 
-await test('journal reader refuses excess small rows before materializing stored bodies', () => fixture(x => {
+await test('journal reader refuses excess small rows before materializing stored bodies', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const db = new DatabaseSync(x.file)
   try {
     db.exec('BEGIN')
@@ -110,7 +110,7 @@ await test('journal reader refuses excess small rows before materializing stored
   withoutBodyReads(x.read)
 }))
 
-await test('journal reader accepts exact byte and ID boundaries with detached replay and unchanged counters', () => fixture(x => {
+await test('journal reader accepts exact byte and ID boundaries with detached replay and unchanged counters', { skip: NO_LINUX_STORES }, () => fixture(x => {
   const db = new DatabaseSync(x.file), id = 'a'.repeat(80)
   const input = { text: 'x'.repeat(BODY_LIMIT - Buffer.byteLength('{"text":""}')) }
   const result = 'é'.repeat((BODY_LIMIT - 2) / 2)
