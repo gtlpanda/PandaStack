@@ -3633,6 +3633,9 @@ reproduction could not run here (no namespace isolation); run by hand it failed 
 `VERIFY_CAPTURE_SCOPE_DIR`, and captureDirect rightly refuses an inherited scope, so the new in-process tests
 would fail there. Each call now sets that variable itself. Reproduced by running the file with the variable
 set: 3 failed before, 6 pass now.
+/bughunt F1 on 5769b34 (LOW, confirmed): a step that died of its own signal was reported as 125 and
+incomplete, where Linux reports 128+signal. Now 137/143/139 for KILL/TERM/SEGV with a complete log; a signal
+sent by stop() still ends the step at 125, incomplete. Its reproduction failed by hand before the fix.
 
 **Tests.** `tests/verify-direct-capture.test.mjs` (6): exit codes and merged output, overflow killing a
 background grandchild, a leftover in the group ended after the grace period, a leftover in its own session

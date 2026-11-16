@@ -40,6 +40,14 @@ await test('a direct step keeps its exit code and its stdout and stderr in one l
   assert.equal(missing.exitCode, 127, 'a missing command is the shell exit code, not a capture failure')
 })
 
+// /bughunt F1 on 5769b34: a step that died of its own signal was reported as 125 and incomplete.
+await test('a step that dies of its own signal reports 128+signal with a complete log, as on Linux', async () => {
+  for (const [signal, code] of [['KILL', 137], ['TERM', 143], ['SEGV', 139]]) {
+    const result = await direct(['bash', '-c', `echo before; kill -${signal} $$`])
+    assert.deepEqual({ exitCode: result.exitCode, complete: result.complete, text: result.text }, { exitCode: code, complete: true, text: 'before\n' }, signal)
+  }
+})
+
 await test('output past the bound ends the step and its process group, and the step is incomplete', async () => {
   const dir = fs.mkdtempSync(join(fs.realpathSync(tmpdir()), 'verify-direct-'))
   const pidFile = join(dir, 'grandchild.pid')

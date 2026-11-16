@@ -1,7 +1,7 @@
 // Private, bounded verification transcripts. Paths in command output are not authority.
 import fs from 'node:fs';
 import {join,resolve,dirname,relative,isAbsolute,basename} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tmpdir,constants} from 'node:os';
 import {createHash,randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
@@ -120,8 +120,11 @@ export async function captureDirect(argv,limit,write){
  };
  process.on('SIGTERM',stop);process.on('SIGINT',stop);
  try{return await new Promise(resolveResult=>{
-  finish=code=>{
+  finish=(code,signal)=>{
    if(settled)return;settled=true;
+   // A step that died of its own signal reports 128+signal, as the owned path's shell does.
+   // Once stop() ran, a signal is ours: complete is already false and the step is 125.
+   if(!Number.isInteger(code)&&complete&&Number.isInteger(constants.signals[signal]))code=128+constants.signals[signal];
    if(!Number.isInteger(code))complete=false;
    resolveResult({exitCode:complete?code:125,bytes,complete,capture:'direct'});
   };
