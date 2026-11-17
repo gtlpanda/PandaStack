@@ -3644,3 +3644,31 @@ leftover tests fail on 0a63865.
 `verify-scope-adapter` unit-tests the Linux adapter with synthetic /proc, so its worker now pins
 `process.platform`. The 7 tests that run the Linux helpers directly skip off Linux (`OWNED_CAPTURE`);
 `NO_ISOLATION` moved to one shared `graphs/hunt/tests/isolation.mjs`.
+
+## 58. /verify no longer reports a finished step as 125 under load (2026-11-17)
+
+Linux CI failed now and then on main with `[125]` for a step that had exited normally (p2-13 in run
+43154224218; p2-09 "preserves exit 7"). Reproduced in a Linux container (node:24-bookworm) by running
+verify.sh 840 times over 14 workers with 6 busy-loop process spawners: 3 runs reported `[125]`, each with
+`.incomplete` = `anchor-status`. Instrumented, the anchor had received `grant=[ELEASE]`.
+
+**Cause.** The anchor waited for the root's `RELEASE` line with `read -t 0.1` in a retry loop. Bash reads a
+pipe one byte at a time; when the timeout fired after the `R`, the loop's next read replaced the variable with
+`ELEASE`, the anchor exited 125, and the root's `wait` no longer matched the step's recorded status.
+`co_await_release` now carries the bytes a timed-out read took into the next read (bounded at 16 bytes,
+same 5s deadline) and still refuses any other line.
+
+**Also.** `co_proc` put `2>/dev/null` after `< /proc/$pid/stat`, so a process that exited before the open
+printed `capture-owner.sh: line 40: ... No such file or directory` into verify's output. Redirection order
+fixed. Harmless before (a vanished process was already skipped), but it was noise in failing CI logs.
+
+**Proof.** Fixed code: 0 of 2,520 stressed runs report 125, over three runs. Old code: 2 of 280, 3 of 840, and
+with the debug lines 0, 0 and 3 of 840 (the failures cluster by run). The p2-09
+and p2-13 pair under 12-way load: the `[125]` and line-40 failures are gone; what is left (9 of 96) is p2-09's
+own /proc reader, which catches ENOENT but not ESRCH from an exiting process. p2-09 is frozen
+acceptance, so that one waits for the owner. Phase 2 acceptance on Linux: 97/97.
+
+**Tests.** `tests/verify-capture-owner.test.mjs` +2 (Linux only): a RELEASE line split across a 0.3s gap is
+accepted and `ELEASED`/`STOP` are refused; `co_proc` of a reaped pid fails with empty stderr. Both fail on
+a985433. The stress harness is not committed; a container without `--init` leaves killed processes as
+zombies and fails two `verify-direct-capture` tests on main too, so container runs need `--init`.
