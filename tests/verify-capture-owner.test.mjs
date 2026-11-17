@@ -52,6 +52,23 @@ await test('Bash path validator rejects nonliteral normalized paths, aliases and
     assert.equal(pure('co_path "$1" && exit 1; :', [leaf]), '')
   } finally { fs.rmSync(root, { recursive: true, force: true }) }
 })
+// A RELEASE line split across the anchor's 0.1s read timeout lost its first bytes under load,
+// so a finished step's own exit code became 125 (anchor-status).
+await test('Bash anchor release keeps a line split across read timeouts and still refuses others', { skip: NO_OWNED_CAPTURE }, () => {
+  const release = 'mkfifo "$1/r"; exec {fd}<>"$1/r"; printf "%s" "$2" >&"$fd"; (sleep 0.3; printf "%s" "$3" >&"$fd") & co_await_release "$fd"; status=$?; wait; exit "$status"'
+  const run = (first, rest) => {
+    const dir = fs.mkdtempSync(join(tmpdir(), 'capture-release-'))
+    try { return spawnSync('bash', ['-c', 'source "$1"; shift; ' + release, 'pure', helper, dir, first, rest], { encoding: 'utf8' }).status } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+  }
+  assert.equal(run('R', 'ELEASE\n'), 0, 'the bytes read before the timeout are kept')
+  assert.equal(run('', 'RELEASE\n'), 0)
+  assert.equal(run('R', 'ELEASED\n'), 1)
+  assert.equal(run('', 'STOP\n'), 1)
+})
+await test('Bash proc snapshot of a process that is gone fails quietly', { skip: NO_OWNED_CAPTURE }, () => {
+  const result = spawnSync('bash', ['-c', 'source "$1"; true & gone=$!; wait "$gone"; co_proc "$gone" && exit 1; exit 0', 'pure', helper], { encoding: 'utf8' })
+  assert.deepEqual({ status: result.status, stderr: result.stderr }, { status: 0, stderr: '' })
+})
 await test('Bash root signal identity ignores record identity and rejects stale observations', () => {
   assert.equal(pure(`
     LOCAL_ANCHOR_PID=202 LOCAL_ANCHOR_START=99 LOCAL_PGID=202 LOCAL_OWNER_PID=101

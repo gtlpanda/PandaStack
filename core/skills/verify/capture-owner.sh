@@ -37,7 +37,8 @@ co_settled() { [[ $1 == empty && $2 == yes ]]; }
 co_proc() {
   local pid=$1 line rest
   co_pid "$pid" || return 1
-  IFS= read -r line < "/proc/$pid/stat" 2>/dev/null || return 1
+  # stderr first: a proc that exits before the open must not print to the step log.
+  IFS= read -r line 2>/dev/null < "/proc/$pid/stat" || return 1
   [[ $line == "$pid ("* && $line == *') '* ]] || return 1
   rest=${line##*) }
   local -a fields
@@ -111,8 +112,20 @@ capture_request() {
   capture_join "$leaf" || return 125
   timeout --foreground --kill-after=1 1 bash -c 'printf "STOP\n" > "$1"' capture-stop "$leaf/stop" </dev/null >/dev/null 2>&1 || return 125
 }
+# Waits up to 5s for the root's RELEASE line. A read that times out mid-line keeps
+# the bytes it took, so they are carried into the next read instead of dropped.
+co_await_release() {
+  local fd=$1 line='' part deadline=$((SECONDS+5))
+  while :; do
+    part=''
+    if IFS= read -r -t 0.1 -u "$fd" part; then line+=$part; break; fi
+    line+=$part
+    ((SECONDS < deadline && ${#line} <= 16)) || return 1
+  done
+  [[ $line == RELEASE ]]
+}
 co_anchor() {
-  local leaf=$1 payload_umask=$2 grant code anchor_grant_fd anchor_release_fd release_deadline
+  local leaf=$1 payload_umask=$2 grant code anchor_grant_fd anchor_release_fd
   shift 2
   # The waiting anchor is granted once, only after its parent writes metadata.
   trap ':' TERM INT HUP
@@ -137,12 +150,8 @@ co_anchor() {
     timeout --foreground --kill-after=1 1 bash -c 'printf "STOP\n" > "$1"' capture-stop "$leaf/stop" </dev/null >/dev/null 2>&1 || :
   fi
   exec {anchor_release_fd}<>"$leaf/.release" || exit 125
-  release_deadline=$((SECONDS+5))
-  while ! IFS= read -r -t 0.1 -u "$anchor_release_fd" grant; do
-    ((SECONDS < release_deadline)) || exit 125
-  done
+  co_await_release "$anchor_release_fd" || exit 125
   exec {anchor_release_fd}>&-
-  [[ $grant == RELEASE ]] || exit 125
   exit "$code"
 }
 # Checks local root identity, independently of mutable disk metadata.
