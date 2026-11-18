@@ -8,8 +8,12 @@ import { project, run, KIT, CLI } from "../test-fixtures/project.mjs";
 import { loadConfig } from "../lib/config.mjs";
 import { codexArgs, readCodexResult } from "../lib/codex.mjs";
 import { npmCodex } from "../test-fixtures/codex-installs.mjs";
+import { isolation } from "../../../hunt/skills/bughunt/evidence.mjs";
 const env = { AUTOBUILD_BACKEND: "codex", AUTOBUILD_CODEX_BIN: path.join(KIT, "test-fixtures", "fake-codex.mjs"), AUTOBUILD_CLAUDE_BIN: "/no/claude" };
 const REVIEW_STATUS = path.resolve(KIT, "../../hunt/skills/bughunt/review-status.mjs");
+// A reproduction runs only in a Linux PID namespace (evidence.mjs); elsewhere none is reproduced,
+// so no fix can land and a test that a fix lands, or is held back, would prove nothing.
+const NO_REPRO = !isolation().pidns && "reproductions need Linux namespace isolation (bughunt evidence.mjs)";
 const git = (root, ...args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
 const huntBuild = { build: "F-1", files: { "src/feature.js": "export function feature() { return -1; }\n" } };
 function huntProject(limits = {}, patch = {}) {
@@ -106,7 +110,7 @@ test("Codex hunt keeps confirmed unreproduced findings open instead of claiming 
   assert.notEqual(status.disposition, "pass", JSON.stringify(status));
   assert.doesNotMatch(result.out, /every feature passes\. Done/);
 });
-test("Codex hunt reproduces, repairs, independently verifies and lands only the verified fix", () => {
+test("Codex hunt reproduces, repairs, independently verifies and lands only the verified fix", { skip: NO_REPRO }, () => {
   const root = repairProject();
   const result = run(root, [huntBuild], { ...env, AUTOBUILD_BUGHUNT: "1", FAKE_HUNT_MODE: "repair" });
   assert.equal(result.code, 0, result.out);
@@ -121,7 +125,7 @@ test("Codex hunt reproduces, repairs, independently verifies and lands only the 
   assert.match(git(root, "log", "-3", "--format=%s"), /bughunt: fix F1/);
   assert.equal(git(root, "status", "--porcelain"), "");
 });
-test("Codex rejected fix is not landed even when the reproduction and suite pass", () => {
+test("Codex rejected fix is not landed even when the reproduction and suite pass", { skip: NO_REPRO }, () => {
   const root = repairProject();
   const result = run(root, [huntBuild], { ...env, AUTOBUILD_BUGHUNT: "1", FAKE_HUNT_MODE: "reject-fix" });
   assert.equal(result.code, 12, result.out);

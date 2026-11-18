@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import { globRegex } from "../../../../scripts/evidence-paths.mjs";
 import { passKey, readCache, treeDigest, writeCache } from "./gate-cache.mjs";
 import { appendTiming, timingsDir } from "./gate-timings.mjs";
-import { parityLabel, resolveCiParity, paritySpec } from "./ci-parity.mjs";
+import { missingParityTools, parityLabel, resolveCiParity, paritySpec } from "./ci-parity.mjs";
 import { checkEvidence } from "./evidence.mjs";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync } from "node:fs";
 import path from "node:path";
@@ -214,11 +214,12 @@ function fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, c
     deferred.push({ kind: "ci-parity", name: "CI parity", reason: "runs in the loop's final full gate and autobuild check" });
   } else {
     const started = Date.now();
+    const pathValue = buildEnv(config).PATH;
     const parity = resolveCiParity(config);
+    const errors = parity.steps.length ? [...parity.errors, ...missingParityTools(config.ciParity, pathValue)] : parity.errors;
     warnings.push(...parity.warnings);
-    jobs.push({ id: "CI parity configuration", name: "CI parity configuration", result: { ok: parity.errors.length === 0, ms: Date.now() - started, output: parity.errors.join("\n") } });
-    if (parity.errors.length === 0) {
-      const pathValue = buildEnv(config).PATH;
+    jobs.push({ id: "CI parity configuration", name: "CI parity configuration", result: { ok: errors.length === 0, ms: Date.now() - started, output: errors.join("\n") } });
+    if (errors.length === 0) {
       for (const step of parity.steps) {
         const name = `CI parity: ${parityLabel(step)}`;
         jobs.push({ id: name, name, spec: paritySpec(config, step, { pathValue }), keyEnv: step.env, early: true, ...schedule(config.ciParity) });

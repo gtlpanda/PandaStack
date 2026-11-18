@@ -1,7 +1,7 @@
 // Private, bounded verification transcripts. Paths in command output are not authority.
 import fs from 'node:fs';
 import {join,resolve,dirname,relative,isAbsolute,basename} from 'node:path';
-import {tmpdir} from 'node:os';
+import {tmpdir,constants} from 'node:os';
 import {createHash,randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
@@ -19,7 +19,8 @@ export function privateRoot(path){
 }
 export function invocation(parent){
  if(parent)parent=privateRoot(parent);
- else parent=fs.mkdtempSync(join(tmpdir(),'verify-evidence-'));
+ // The real path: macOS keeps tmpdir() under a symlink, and evidence paths refuse symlinks.
+ else parent=fs.mkdtempSync(join(fs.realpathSync(tmpdir()),'verify-evidence-'));
  const dir=fs.mkdtempSync(join(parent,'run-'));fs.chmodSync(dir,0o700);return dir;
 }
 export function writePrivate(path,bytes){
@@ -100,8 +101,51 @@ async function requestStop(path,joined){
  }while(performance.now()<until);
  return false;
 }
+// Ownership (capture-owner.sh) proves from /proc which processes a step owns, so it exists only on Linux.
+// Elsewhere a step runs directly: the same private bounded log and exit code, without that proof.
+export const OWNED_CAPTURE=process.platform==='linux';
+// A direct step leads its own process group; stop and overflow end the group, TERM then KILL.
+// A capture scope cannot be validated here, so an inherited one is refused, as a bad hint is on Linux.
+export async function captureDirect(argv,limit,write){
+ if(Object.hasOwn(process.env,'VERIFY_CAPTURE_SCOPE_DIR'))return {exitCode:125,bytes:0,complete:false,capture:'direct'};
+ let bytes=0,complete=true,child,killer,deadline,linger,settled=false;
+ let finish=()=>{};
+ const stop=()=>{
+  complete=false;if(killer||!child?.pid)return;
+  try{process.kill(-child.pid,'SIGTERM');}catch{}
+  // Only before the step settles: until its output closes, a process of the step still holds it.
+  killer=setTimeout(()=>{if(!settled){try{process.kill(-child.pid,'SIGKILL');}catch{}}},1000);
+  // As in the owned path, a step that still will not end is given up on, incomplete.
+  deadline=setTimeout(()=>{child.stdout.destroy();child.unref();finish(125);},4000);
+ };
+ process.on('SIGTERM',stop);process.on('SIGINT',stop);
+ try{return await new Promise(resolveResult=>{
+  finish=(code,signal)=>{
+   if(settled)return;settled=true;
+   // A step that died of its own signal reports 128+signal, as the owned path's shell does.
+   // Once stop() ran, a signal is ours: complete is already false and the step is 125.
+   if(!Number.isInteger(code)&&complete&&Number.isInteger(constants.signals[signal]))code=128+constants.signals[signal];
+   if(!Number.isInteger(code))complete=false;
+   resolveResult({exitCode:complete?code:125,bytes,complete,capture:'direct'});
+  };
+  try{child=spawn('bash',['-c','exec "$@" 2>&1','verify-step',...argv],{detached:true,stdio:['ignore','pipe','ignore']});}
+  catch{complete=false;return finish(125);}
+  child.stdout.on('data',data=>{
+   if(!complete)return;
+   const remaining=limit-bytes,part=data.subarray(0,Math.max(0,remaining));
+   try{write(part);bytes+=part.length;}catch{stop();}
+   if(data.length>remaining)stop();
+  });
+  child.stdout.on('error',stop);
+  child.on('error',()=>{complete=false;finish(125);});child.on('close',finish);
+  // The leader exited. Whatever it left holding the output is still the step: like a populated
+  // group on Linux, it gets 2s to end, then the step is stopped and incomplete.
+  child.on('exit',()=>{linger=setTimeout(stop,2000);});
+ });}finally{clearTimeout(killer);clearTimeout(deadline);clearTimeout(linger);process.off('SIGTERM',stop);process.off('SIGINT',stop);}
+}
 // The shared owner holds local signal authority. Joined helpers never detach.
 async function capture(argv,limit,write,allocation){
+ if(!OWNED_CAPTURE)return captureDirect(argv,limit,write);
  const joined=Object.hasOwn(process.env,'VERIFY_CAPTURE_SCOPE_DIR');
  const scope=joined?process.env.VERIFY_CAPTURE_SCOPE_DIR:fs.mkdtempSync(join(privateRoot(allocation),'scope-'));
  try{if(joined)joinScope(scope);else fs.chmodSync(scope,0o700);}
@@ -167,7 +211,7 @@ async function main(args){
   const file=join(dir,'step-'+randomUUID()+'.log'),fd=fs.openSync(file,'wx',0o600);let result;
   try{result=reservation?await capture(args.slice(4),reservation,b=>fs.writeFileSync(fd,b),dir):{exitCode:125,bytes:0,complete:false};}finally{let retained;try{retained=fs.fstatSync(fd).size;if(result)result.bytes=retained;}finally{fs.closeSync(fd);}sessionBudget(session,retained-reservation);}
   if(!result.complete)markIncomplete();
-  doc.steps.push({label,exitCode:result.exitCode,log:reference(dir,file,result.complete)});
+  doc.steps.push({label,exitCode:result.exitCode,...(result.capture?{capture:result.capture}:{}),log:reference(dir,file,result.complete)});
   const next=join(dir,'manifest-'+randomUUID()+'.tmp');writePrivate(next,JSON.stringify(doc)+'\n');fs.renameSync(next,manifest);
   console.log(file);return result.exitCode;
  }

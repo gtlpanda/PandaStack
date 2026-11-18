@@ -1,7 +1,8 @@
 // test-workflow.mjs — run every graph's workflow tests against scripted agents,
 // then check every workflow file loads. Test files: tests/*.test.mjs and
-// graphs/<name>/tests/*.test.mjs. Ends with TEST-WORKFLOW: N passed, M failed.
-import { readdirSync, existsSync } from 'node:fs'
+// graphs/<name>/tests/*.test.mjs. Ends with TEST-WORKFLOW: N passed, M failed[, K skipped].
+import { readdirSync, existsSync, realpathSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { REPO, test, load, summary, entryDirs } from './workflow-harness.mjs'
@@ -13,6 +14,10 @@ function testFiles() {
     .filter(d => existsSync(d))
     .flatMap(d => readdirSync(d).filter(f => f.endsWith('.test.mjs')).map(f => join(d, f)))
 }
+
+// macOS keeps the temp dir under a symlink (/var -> /private/var). The code under test refuses
+// symlinked paths or resolves them, by design, so every fixture is made at the real path.
+process.env.TMPDIR = realpathSync(tmpdir())
 
 const files = testFiles()
 await test('at least one workflow test file exists', () => {
@@ -31,6 +36,6 @@ for (const d of entryDirs('workflows')) {
   }
 }
 
-const { pass, fail } = summary()
-console.log(`\nTEST-WORKFLOW: ${pass} passed, ${fail} failed`)
+const { pass, fail, skipped } = summary()
+console.log(`\nTEST-WORKFLOW: ${pass} passed, ${fail} failed${skipped ? `, ${skipped} skipped` : ''}`)
 process.exit(fail === 0 ? 0 : 1)

@@ -9,6 +9,7 @@ import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import { sandboxEnv, testFileProblems, runnerFor, verdictOf, markerFor } from '../skills/bughunt/evidence.mjs'
+import { NO_ISOLATION } from './isolation.mjs'
 import { mergeFindings, writeLedger, readLedger, emptyLedger } from '../../../core/skills/findings/findings.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -50,7 +51,7 @@ const repro = (id, testFile, text) => {
 const evidenceOf = id => JSON.parse(readFileSync(join(STATE, 'evidence', `${id}.json`), 'utf8'))
 
 console.log('== evidence: verdicts from real runs')
-await test('a bug the change introduced: fails at the head with its marker, passes at the merge-base -> REPRODUCED', () => {
+await test('a bug the change introduced: fails at the head with its marker, passes at the merge-base -> REPRODUCED', { skip: NO_ISOLATION }, () => {
   repro('F1', 'tests/bughunt-f1.test.mjs', TEST("  assert.equal(sum(2, 2), 4, 'BUGHUNT-F1 sum subtracts')", "import { sum } from '../src/sum.mjs'"))
   const r = ev(['repro', STATE, 'F1'])
   assert.equal(r.status, 0, r.stdout + r.stderr)
@@ -62,30 +63,30 @@ await test('a bug the change introduced: fails at the head with its marker, pass
   assert.deepEqual(e.runs.map(x => [x.arm, x.exit === 0, x.marker]), [['head', false, true], ['merge-base', true, false]])
   assert.equal(e.test_file, 'tests/bughunt-f1.test.mjs')
 })
-await test('a bug already at the merge-base -> PREEXISTING', () => {
+await test('a bug already at the merge-base -> PREEXISTING', { skip: NO_ISOLATION }, () => {
   repro('F2', 'tests/bughunt-f2.test.mjs', TEST("  assert.equal(half(6), 3, 'BUGHUNT-F2 half divides by three')", "import { half } from '../src/half.mjs'"))
   assert.equal(lastLine(ev(['repro', STATE, 'F2']).stdout), 'EVIDENCE: PREEXISTING F2')
 })
-await test('a bug in new code: at the merge-base the test fails without its marker (no such module) -> REPRODUCED, saying why', () => {
+await test('a bug in new code: at the merge-base the test fails without its marker (no such module) -> REPRODUCED, saying why', { skip: NO_ISOLATION }, () => {
   repro('F3', 'tests/bughunt-f3.test.mjs', TEST("  const { double } = await import('../src/double.mjs')\n  assert.equal(double(2), 4, 'BUGHUNT-F3 double triples')"))
   const r = ev(['repro', STATE, 'F3'])
   assert.equal(lastLine(r.stdout), 'EVIDENCE: REPRODUCED F3')
   assert.match(r.stdout, /the code under test is new/)
 })
-await test('a test that passes at the head -> NOT_REPRODUCED, and the merge-base never runs', () => {
+await test('a test that passes at the head -> NOT_REPRODUCED, and the merge-base never runs', { skip: NO_ISOLATION }, () => {
   repro('F4', 'tests/bughunt-f4.test.mjs', TEST("  assert.equal(sum(2, 0), 2, 'BUGHUNT-F4')", "import { sum } from '../src/sum.mjs'"))
   const r = ev(['repro', STATE, 'F4'])
   assert.equal(lastLine(r.stdout), 'EVIDENCE: NOT_REPRODUCED F4')
   assert.doesNotMatch(r.stdout, /merge-base/)
   assert.equal(evidenceOf('F4').runs.length, 1)
 })
-await test('a test that fails at the head without its marker is no evidence either way -> ERROR, never NOT_REPRODUCED', () => {
+await test('a test that fails at the head without its marker is no evidence either way -> ERROR, never NOT_REPRODUCED', { skip: NO_ISOLATION }, () => {
   repro('F5', 'tests/bughunt-f5.test.mjs', TEST("  throw new Error('unrelated breakage')"))
   const r = ev(['repro', STATE, 'F5'])
   assert.equal(lastLine(r.stdout), 'EVIDENCE: ERROR F5')
   assert.match(r.stdout, /without its marker/)
 })
-await test('a test that never ends is killed at the timeout -> ERROR', () => {
+await test('a test that never ends is killed at the timeout -> ERROR', { skip: NO_ISOLATION }, () => {
   repro('F6', 'tests/bughunt-f6.test.mjs', TEST('  while (true) {}'))
   const r = ev(['repro', STATE, 'F6', '--timeout-ms', '3000'])
   assert.equal(lastLine(r.stdout), 'EVIDENCE: ERROR F6')
@@ -131,7 +132,7 @@ await test('a reproducer that wrote into the analysis tree voids the run -> ERRO
 })
 
 console.log('== evidence: the sandbox')
-await test('secrets never reach the test; ordinary variables do', () => {
+await test('secrets never reach the test; ordinary variables do', { skip: NO_ISOLATION }, () => {
   repro('F11', 'tests/bughunt-f11.test.mjs', TEST([
     "  for (const k of ['GITHUB_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN', 'MY_API_KEY', 'AWS_SECRET_ACCESS_KEY', 'DB_PASSWORD', 'SLACK_BOT_TOKEN']) assert.equal(process.env[k], undefined, `BUGHUNT-F11 ${k} leaked`)",
     "  for (const k of ['DATABASE_URL', 'SENTRY_DSN', 'STRIPE_KEY', 'KUBECONFIG']) assert.equal(process.env[k], undefined, `BUGHUNT-F11 ${k} leaked`)",
@@ -211,7 +212,7 @@ await test('anything that throws during a run is an ERROR verdict with an eviden
   assert.match(r.stdout, /the run failed: EACCES/)
   assert.equal(evidenceOf('F16').verdict, 'ERROR')
 })
-await test('a detached grandchild dies with the run, and the run ends when the test does', () => {
+await test('a detached grandchild dies with the run, and the run ends when the test does', { skip: NO_ISOLATION }, () => {
   repro('F14', 'tests/bughunt-f14.test.mjs', TEST([
     "  const { spawn } = await import('node:child_process')",
     "  spawn('sleep', ['4' + '43'], { detached: true, stdio: 'ignore' }).unref()",
@@ -226,7 +227,7 @@ await test('a detached grandchild dies with the run, and the run ends when the t
   assert.ok(Date.now() - started < 15000, 'it finished long before the timeout')
   if (spawnSync('unshare', ['-rnpf', '--kill-child', '--mount-proc', 'true'], { stdio: 'ignore' }).status === 0) assert.equal(left, '', 'no grandchild outlives the run')
 })
-await test('loopback works inside the sandbox, so a test can start a local server', () => {
+await test('loopback works inside the sandbox, so a test can start a local server', { skip: NO_ISOLATION }, () => {
   repro('F15', 'tests/bughunt-f15.test.mjs', TEST([
     "  const http = await import('node:http')",
     "  const server = http.createServer((q, r) => r.end('ok')).listen(0, '127.0.0.1')",
@@ -240,7 +241,7 @@ await test('loopback works inside the sandbox, so a test can start a local serve
 })
 
 console.log('== evidence: recheck')
-await test('recheck re-runs what the ledger relies on and corrects a status the runs contradict; a second recheck passes', () => {
+await test('recheck re-runs what the ledger relies on and corrects a status the runs contradict; a second recheck passes', { skip: NO_ISOLATION }, () => {
   const cand = (id, file) => ({
     file_path: file, line_range: [1, 1], bug_category: 'logic', severity: 'HIGH', confidence: 70, title: `bug ${id}`, description: 'd',
     failure_scenario: { trigger: 't', path: 'p', observable: 'o' }, expected_behavior: 'e', actual_behavior: 'a',
@@ -266,7 +267,8 @@ await test('recheck re-runs what the ledger relies on and corrects a status the 
   r = ev(['recheck', STATE])
   assert.equal(lastLine(r.stdout), 'RECHECK: PASS')
 })
-await test('recheck never trusts a claimed run without a written reproduction: it falls back to confirmed', () => {
+// Uses the ledger the recheck test above writes, so it needs what that test needs.
+await test('recheck never trusts a claimed run without a written reproduction: it falls back to confirmed', { skip: NO_ISOLATION }, () => {
   const ledgerFile = join(STATE, 'ledger.json')
   const l = readLedger(ledgerFile, 'x')
   l.findings[1].reproduction_artifact = { written: false, reason: 'the reproducer returned nothing' }

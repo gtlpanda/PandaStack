@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import { syncBuiltinESMExports } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
-import { test } from '../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../scripts/workflow-harness.mjs'
 import { inspectDoctor } from '../core/skills/run-records/doctor.mjs'
 import { loadConfig } from '../graphs/autobuild/tool/lib/config.mjs'
 import { createRunStore } from '../core/skills/run-records/store.mjs'
@@ -77,7 +77,7 @@ function instrument(work, fault) {
 }
 const anchored = p => /^\/proc\/self\/fd\/\d+(?:\/|$)/.test(String(p))
 
-await test('normal store I/O stays anchored and directory parents sync before publication', () => fixture(root => {
+await test('normal store I/O stays anchored and directory parents sync before publication', { skip: NO_LINUX_STORES }, () => fixture(root => {
   const store = createRunStore(join(root, 'nested/store'))
   instrument(trace => {
     store.putRun(run); store.appendEvent(event)
@@ -106,7 +106,7 @@ await test('normal store I/O stays anchored and directory parents sync before pu
   })
 }))
 
-await test('missing, corrupt, conflicting and failed operations close descriptors and fail safely', () => fixture(root => {
+await test('missing, corrupt, conflicting and failed operations close descriptors and fail safely', { skip: NO_LINUX_STORES }, () => fixture(root => {
   const store = createRunStore(join(root, 'store'))
   instrument(() => {
     assert.equal(store.readRun('absent'), null)
@@ -132,7 +132,7 @@ await test('missing, corrupt, conflicting and failed operations close descriptor
   }, (name, args) => name === 'openSync' && String(args[0]).startsWith('/proc/self/fd/'))
 }))
 
-await test('failed publication-directory sync remains readable and replay retries the durability barrier', () => fixture(root => {
+await test('failed publication-directory sync remains readable and replay retries the durability barrier', { skip: NO_LINUX_STORES }, () => fixture(root => {
   const store = createRunStore(join(root, 'store'))
   let published = false
   instrument(() => {

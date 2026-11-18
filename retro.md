@@ -3547,3 +3547,145 @@ suite reported in 0.2 s once it has failed (52.3 s before).
   step. The fixture now creates them.
 
 **Counts.** 3 new lib files, 1 benchmark, 27 new tests (autobuild suite 202 → 229).
+
+## 54. A failed login pauses the autobuild loop instead of ending the run (2026-11-13)
+
+PR #58. On 2026-11-13 an overnight autobuild loop died when every Claude session got `Failed to
+authenticate. API Error: 403 ... Cloudflare`. Two such failures in the final review counted as review
+attempts (exit 13); during a build the loop exited 10 at once. The run stayed dead until a person
+logged in the next morning.
+- `lib/limits.mjs`: `classifyOutcome` classifies `failed to authenticate` as auth.
+- `lib/loop.mjs`: usage limits, failed logins and billing share `waitOutProvider`. A failed login
+  probes every `probeEveryMinutes` and resumes the same work, uncounted; exit 10 comes only after
+  `maxLimitWaitHours` (default 26). Billing still stops with 9.
+- `reviewIfDue` retries a review that ended on the provider without counting it as an attempt, with a
+  log per attempt.
+
+**Bug caught.** /bughunt's first pass flagged a review that committed `chore(review)` and then hit
+the provider error as unexamined: the retry would run it again. Fixed in d73e23a; the test for it
+fails with the committed-review check removed.
+
+**Not changed.** The final bug hunt still exits 10 at once on auth. The build-app driver keeps its own
+classifier (`graphs/build/skills/build-app/driver/limits.mjs`), which still lacks the pattern.
+
+**Counts.** 10 files, +213/−60. 6 new tests (`test/loop-auth-wait.test.mjs`), one new auth case in
+`test/limits.test.mjs`, one Codex test reworded for the new wait. Re-run on main 3f4c8a6:
+`node --test test/loop-auth-wait.test.mjs test/limits.test.mjs` 17/17 pass.
+
+## 55. autobuild on macOS: the pid lock, the guard's temp dirs, CI parity's tools (2026-11-16)
+
+On this Mac (macOS 26.5.1, arm64, Node 25.9.0) the autobuild suite on main 3f4c8a6 failed 8 of 244 tests,
+with or without the Bash sandbox; CI runs on Linux and was green. Four causes, each read from the failure:
+- **pid lock** (2 tests): `isOurs` (`graphs/build/skills/build-app/driver/proc.mjs`) read a pid's command line
+  only from Linux `/proc`; elsewhere any live pid counted as ours. A stale `loop.pid` reused by an unrelated
+  process blocked `autobuild run` (exit 11), and `status` called it a running loop. It now asks
+  `ps -ww -o command=`; only when ps cannot run does a live pid keep the lock. The same fix clears two
+  build-app driver tests that failed on this Mac (a stale `driver.pid`, and `status` after the driver died).
+- **guard temp dirs** (2 tests): `hooks/guard.mjs` checks a write as written and through symlinks, but
+  `TEMP_DIRS` held only the written forms. macOS resolves `/tmp` to `/private/tmp` and `tmpdir()` to
+  `/private/var/...`, so every temp write by a builder session was denied. Both forms are listed now; the kit
+  under the temp dir stays frozen.
+- **CI parity tools** (3 tests): every parity step runs under GNU `timeout`, and under `flock` with
+  `ciParity.lockFile`. This Mac has Homebrew's `timeout` but no `flock`, so each locked step exited 127.
+  The full gate's parity configuration step now names a missing `timeout` or `flock` and its Homebrew package
+  before any step runs. The lock tests use `flock` where it is installed and keep their lock-free halves elsewhere.
+- **bughunt reproductions** (1 test): `evidence.mjs` reproduces only in a Linux PID namespace, by design.
+  The Codex repair test now skips where `isolation().pidns` is false, and so does the rejected-fix test,
+  which passed without exercising the reject path. The README says what macOS can and cannot do.
+
+**Bug caught.** /bughunt F2 (LOW, confirmed): the first version put the tool check inside `resolveCiParity`,
+so every test that only resolves CI config failed on a host without `timeout`. The check is now
+`missingParityTools`, called by the gate with its own PATH; `resolveCiParity` reads only the repo again. The
+hunt's reproduction (`test/ci-parity-host-without-timeout.test.mjs`) failed at that head and passes now; the
+hunt could not run it on this Mac (no namespace isolation), so it was run by hand.
+
+**Proof.** The new `isOurs` test fails on the old `proc.mjs` ("a live process without the marker"); the new
+gate test fails with the gate's call removed. Autobuild suite on this Mac: 245 pass, 0 fail, 3 skipped (was
+236/8/0 on main).
+
+**Counts.** 4 new tests (`isOurs`, `missingParityTools`, the gate without `timeout`, the F2 reproduction);
+3 tests skip on machines without `flock` or namespace isolation.
+
+## 56. The workflow suite says what it cannot run on macOS, instead of failing it (2026-11-16)
+
+On this Mac `scripts/test-workflow.sh` failed 264 tests, the same on main; Linux CI was green. Each failure
+was traced to a file:line and a cause:
+- **53: the temp dir is a symlink** (`/var` -> `/private/var`). The code under test refuses symlinked paths or
+  resolves them, by design. `scripts/test-workflow.mjs` now sets `TMPDIR` to its real path.
+- **175: the Linux-only stores.** The run store, decision queue and audit journal traverse through
+  `/proc/self/fd` anchors and refuse elsewhere (D22). These tests skip with `NO_LINUX_STORES`, exported by
+  `scripts/workflow-harness.mjs` with the stores' own condition.
+- **29: bughunt namespace isolation.** Reproductions run only in a Linux PID namespace; these skip where
+  `isolation().pidns` is false. One of them passed on macOS only because a failing test above it had already
+  written the ledger it reads.
+- **8: /verify's capture.** Not skipped: /verify itself fails on macOS (every step exits 125), a product bug
+  fixed separately.
+
+`test(name, { skip }, fn)` prints a skip with its reason and the totals line counts skips. On this Mac:
+1726 passed, 9 failed (8 /verify, 1 intermittent), 204 skipped. On Linux nothing skips.
+
+## 57. /verify works on macOS: steps run directly where there is no /proc (2026-11-16)
+
+On this Mac every /verify step exited 125, so every run said `VERIFY: FAIL`, even for a one-line passing
+test. Two independent causes, each confirmed with a fixture:
+- **Default evidence dir under a symlink.** `invocation()` made it under `tmpdir()` (`/var/folders/...`), and
+  evidence paths refuse symlinks. It now uses the real path.
+- **Capture ownership is Linux-only (D78).** `capture-owner.sh` reads process identity, the boot id and group
+  membership from /proc and needs setsid and GNU stat; macOS ships Bash 3.2 besides. A symlink-free evidence
+  dir still gave 125.
+
+Fix (D123): off Linux, `captureDirect` runs a step in its own process group with the same private bounded
+log, exit code and limits; stop or overflow ends the group (TERM, then KILL only while the step is still
+running). The manifest marks such steps `"capture": "direct"` and verify.sh prints `capture: direct` above the
+verdict. Linux keeps the owned path unchanged. Not a port: the ownership proof does not carry over to ps.
+
+**Proof on this Mac.** Fixture that passes: was `[125] VERIFY: FAIL`, now `VERIFY: PASS`. Fixture that exits 2:
+was `[125]`, now `[2] ... VERIFY: FAIL`. The 3 /verify subtests of the monorepo evidence test now pass.
+
+**Bug caught.** /bughunt F1 (MEDIUM, confirmed): a step that exited but left a background process holding
+its output (a dev server, `sleep 600 &`) never settled, so /verify hung where Linux fails the step. Now the
+leftover gets 2s, the group is stopped, and after a 4s deadline the step ends incomplete (125). The hunt's
+reproduction could not run here (no namespace isolation); run by hand it failed on 0a63865 and passes now.
+/bughunt F3 (MEDIUM, confirmed): on Linux, /verify runs the suite inside an owned capture that exports
+`VERIFY_CAPTURE_SCOPE_DIR`, and captureDirect rightly refuses an inherited scope, so the new in-process tests
+would fail there. Each call now sets that variable itself. Reproduced by running the file with the variable
+set: 3 failed before, 6 pass now.
+/bughunt F1 on 5769b34 (LOW, confirmed): a step that died of its own signal was reported as 125 and
+incomplete, where Linux reports 128+signal. Now 137/143/139 for KILL/TERM/SEGV with a complete log; a signal
+sent by stop() still ends the step at 125, incomplete. Its reproduction failed by hand before the fix.
+
+**Tests.** `tests/verify-direct-capture.test.mjs` (6): exit codes and merged output, overflow killing a
+background grandchild, a leftover in the group ended after the grace period, a leftover in its own session
+bounded by the deadline, refusing an inherited scope, verify.sh end to end on this platform's path. Both
+leftover tests fail on 0a63865.
+`verify-scope-adapter` unit-tests the Linux adapter with synthetic /proc, so its worker now pins
+`process.platform`. The 7 tests that run the Linux helpers directly skip off Linux (`OWNED_CAPTURE`);
+`NO_ISOLATION` moved to one shared `graphs/hunt/tests/isolation.mjs`.
+
+## 58. /verify no longer reports a finished step as 125 under load (2026-11-17)
+
+Linux CI failed now and then on main with `[125]` for a step that had exited normally (p2-13 in run
+43154224218; p2-09 "preserves exit 7"). Reproduced in a Linux container (node:24-bookworm) by running
+verify.sh 840 times over 14 workers with 6 busy-loop process spawners: 3 runs reported `[125]`, each with
+`.incomplete` = `anchor-status`. Instrumented, the anchor had received `grant=[ELEASE]`.
+
+**Cause.** The anchor waited for the root's `RELEASE` line with `read -t 0.1` in a retry loop. Bash reads a
+pipe one byte at a time; when the timeout fired after the `R`, the loop's next read replaced the variable with
+`ELEASE`, the anchor exited 125, and the root's `wait` no longer matched the step's recorded status.
+`co_await_release` now carries the bytes a timed-out read took into the next read (bounded at 16 bytes,
+same 5s deadline) and still refuses any other line.
+
+**Also.** `co_proc` put `2>/dev/null` after `< /proc/$pid/stat`, so a process that exited before the open
+printed `capture-owner.sh: line 40: ... No such file or directory` into verify's output. Redirection order
+fixed. Harmless before (a vanished process was already skipped), but it was noise in failing CI logs.
+
+**Proof.** Fixed code: 0 of 2,520 stressed runs report 125, over three runs. Old code: 2 of 280, 3 of 840, and
+with the debug lines 0, 0 and 3 of 840 (the failures cluster by run). The p2-09
+and p2-13 pair under 12-way load: the `[125]` and line-40 failures are gone; what is left (9 of 96) is p2-09's
+own /proc reader, which catches ENOENT but not ESRCH from an exiting process. p2-09 is frozen
+acceptance, so that one waits for the owner. Phase 2 acceptance on Linux: 97/97.
+
+**Tests.** `tests/verify-capture-owner.test.mjs` +2 (Linux only): a RELEASE line split across a 0.3s gap is
+accepted and `ELEASED`/`STOP` are refused; `co_proc` of a reaped pid fails with empty stderr. Both fail on
+a985433. The stress harness is not committed; a container without `--init` leaves killed processes as
+zombies and fails two `verify-direct-capture` tests on main too, so container runs need `--init`.

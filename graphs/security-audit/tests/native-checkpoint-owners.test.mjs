@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync, unlinkSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
-import { test, REPO } from '../../../scripts/workflow-harness.mjs'
+import { test, REPO, NO_LINUX_STORES } from '../../../scripts/workflow-harness.mjs'
 import { META, STATE } from './report-fixtures.mjs'
 import { openAuditJournal, readAuditJournal } from '../skills/security-audit/dispatch-journal.mjs'
 import { createAuditCheckpoints } from '../skills/security-audit/native-checkpoints.mjs'
@@ -57,7 +57,7 @@ async function fixture(check, grant = 4) {
 }
 const qa = runtime => runtime.run('harness-repair', { repo: '/inert' }, { invocationId: 'actual-qa' })
 
-await test('actual bridge pauses at exhausted grant and same invocation replays its durable checker', () => fixture(async x => {
+await test('actual bridge pauses at exhausted grant and same invocation replays its durable checker', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   x.fresh()
   await assert.rejects(qa(x.runtime()), code('CONTROL_PAUSED'))
   const before = x.rows().rows[0]
@@ -70,7 +70,7 @@ await test('actual bridge pauses at exhausted grant and same invocation replays 
   assert.equal(readPartialReport(x.runDir).status, 'current')
 }, 1))
 
-await test('actual freshness blocks absent and prepared admissions while preserving binding conflict authority', () => fixture(async x => {
+await test('actual freshness blocks absent and prepared admissions while preserving binding conflict authority', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   x.fresh(); const p = x.port(), binding = { callId: 'prepared', promptHash: 'original' }
   x.journal.prepare({ id: binding.callId, input: binding }); x.fresh()
   recordSpend(x.runDir, 'inert-observation', 1)
@@ -82,7 +82,7 @@ await test('actual freshness blocks absent and prepared admissions while preserv
   assert.deepEqual(x.rows().rows.map(r => [r.id, r.state]), [['prepared', 'prepared']])
 }))
 
-await test('actual bridge rejects a cancelled queued admission without creating another row', () => fixture(async x => {
+await test('actual bridge rejects a cancelled queued admission without creating another row', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   x.fresh(); const p = x.port(), controller = new AbortController()
   const first = p.reserve({ callId: 'first' })
   const second = p.reserve({ callId: 'cancelled' }, { signal: controller.signal })
@@ -93,7 +93,7 @@ await test('actual bridge rejects a cancelled queued admission without creating 
   assert.deepEqual(x.rows().rows.map(r => [r.id, r.state]), [['first', 'uncertain']])
 }))
 
-await test('actual bridge known failure retains exact receipt and a closed owner refuses later ports', () => fixture(async x => {
+await test('actual bridge known failure retains exact receipt and a closed owner refuses later ports', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   x.fresh(); const p = x.port(), binding = { callId: 'known' }
   await p.reserve(binding)
   await assert.rejects(p.close(), code('BUSY'))
@@ -129,7 +129,7 @@ async function concurrent(x, work) {
   } finally { for (const p of pending) p.resolve(); controller.abort(); await observed }
 }
 
-await test('actual cooperative external cancellation joins owned callbacks and keeps exactly two charges', () => fixture(async x => {
+await test('actual cooperative external cancellation joins owned callbacks and keeps exactly two charges', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   x.fresh()
   await concurrent(x, async ({ controller, observed }) => {
     controller.abort(); assert.equal((await observed).error?.code, 'RUNTIME_ABORTED')
@@ -146,7 +146,7 @@ await test('actual cooperative external cancellation joins owned callbacks and k
   })
 }))
 
-await test('actual controlled pause cannot hide unknown transport from an already authorized sibling', () => fixture(async x => {
+await test('actual controlled pause cannot hide unknown transport from an already authorized sibling', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   x.fresh()
   await concurrent(x, async ({ pending, observed }) => {
     x.journal.pauseControl({ expectedRevision: x.journal.getControl().revision, reason: 'paused_budget' })
@@ -160,7 +160,7 @@ await test('actual controlled pause cannot hide unknown transport from an alread
   })
 }))
 
-await test('actual publication failure drains siblings and repaired same invocation replays both receipts', () => fixture(async x => {
+await test('actual publication failure drains siblings and repaired same invocation replays both receipts', { skip: NO_LINUX_STORES }, () => fixture(async x => {
   x.fresh()
   const pointer = join(x.runDir, 'partial-reports/current.json'), bytes = readFileSync(pointer)
   let conflict = false

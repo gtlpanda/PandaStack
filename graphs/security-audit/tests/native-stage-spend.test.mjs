@@ -3,7 +3,7 @@
 import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
-import { test } from '../../../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../../../scripts/workflow-harness.mjs'
 import { newInit } from './stage-fixtures.mjs'
 import { openAuditJournal, readAuditJournal } from '../skills/security-audit/dispatch-journal.mjs'
 import { createAuditCheckpoints, createAuditStageCheckpoints } from '../skills/security-audit/native-checkpoints.mjs'
@@ -30,7 +30,7 @@ async function fixture(work) {
 const spentOf = (runDir, stageName) => meta(runDir).stage_spend?.[stageName]
 
 console.log('== native stage spend projection')
-await test('live dispatched rows are projected before publication; settling does not change the count and the report stays current', () => fixture(async ({ runDir, stageName, invocationId, open }) => {
+await test('live dispatched rows are projected before publication; settling does not change the count and the report stays current', { skip: NO_LINUX_STORES }, () => fixture(async ({ runDir, stageName, invocationId, open }) => {
   const port = open()
   assert.deepEqual(await port.reserve({ callId: 'a', invocationId }, { signal }), { state: 'dispatch' })
   assert.equal(spentOf(runDir, stageName), 1)
@@ -45,7 +45,7 @@ await test('live dispatched rows are projected before publication; settling does
   assert.equal(readPartialReport(runDir).status, 'current')
 }))
 
-await test('a replay of settled rows is not counted twice; a new call adds exactly one', () => fixture(async ({ runDir, stageName, invocationId, open }) => {
+await test('a replay of settled rows is not counted twice; a new call adds exactly one', { skip: NO_LINUX_STORES }, () => fixture(async ({ runDir, stageName, invocationId, open }) => {
   const first = open()
   await first.reserve({ callId: 'a', invocationId }, { signal })
   await first.settle('a', failed, { signal })
@@ -59,7 +59,7 @@ await test('a replay of settled rows is not counted twice; a new call adds exact
   await replay.settle('c', failed, { signal })
 }))
 
-await test('a binding for another invocation refuses before any journal or ledger mutation', () => fixture(async ({ runDir, journal, stageName, invocationId, open }) => {
+await test('a binding for another invocation refuses before any journal or ledger mutation', { skip: NO_LINUX_STORES }, () => fixture(async ({ runDir, journal, stageName, invocationId, open }) => {
   const port = open()
   await port.reserve({ callId: 'a', invocationId }, { signal })
   const rows = readAuditJournal(runDir), control = journal.getControl(), ledger = meta(runDir)
@@ -73,7 +73,7 @@ await test('a binding for another invocation refuses before any journal or ledge
   await port.settle('a', failed, { signal })
 }))
 
-await test('an uncertain charged intent stays in the projected count and is not rewritten', () => fixture(async ({ runDir, stageName, invocationId, open }) => {
+await test('an uncertain charged intent stays in the projected count and is not rewritten', { skip: NO_LINUX_STORES }, () => fixture(async ({ runDir, stageName, invocationId, open }) => {
   const port = open()
   await port.reserve({ callId: 'u', invocationId }, { signal })
   await port.uncertain('u', { code: 'RUNTIME_ABORTED' }, { signal: undefined })
@@ -85,7 +85,7 @@ await test('an uncertain charged intent stays in the projected count and is not 
   assert.deepEqual(meta(runDir), ledger)
 }))
 
-await test('the stage and invocation are checked against the actual capture; nothing is projected on refusal', () => fixture(async ({ runDir, journal, stageName, invocationId }) => {
+await test('the stage and invocation are checked against the actual capture; nothing is projected on refusal', { skip: NO_LINUX_STORES }, () => fixture(async ({ runDir, journal, stageName, invocationId }) => {
   const base = { runDir, journal }
   const ledger = meta(runDir)
   for (const patch of [
@@ -96,7 +96,7 @@ await test('the stage and invocation are checked against the actual capture; not
   assert.deepEqual(meta(runDir), ledger)
 }))
 
-await test('the legacy bridge never projects spend', () => fixture(async ({ runDir, journal, invocationId }) => {
+await test('the legacy bridge never projects spend', { skip: NO_LINUX_STORES }, () => fixture(async ({ runDir, journal, invocationId }) => {
   const port = createAuditCheckpoints({ runDir, journal }), before = meta(runDir)
   try {
     await port.reserve({ callId: 'legacy', invocationId }, { signal })

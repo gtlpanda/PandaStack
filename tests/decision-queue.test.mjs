@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DatabaseSync } from 'node:sqlite'
-import { test } from '../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../scripts/workflow-harness.mjs'
 import { createDecisionQueue } from '../core/skills/decisions/queue.mjs'
 
 const NOW = '2026-11-10T12:00:00.000Z'
@@ -21,7 +21,7 @@ function fixture(work) {
   try { return work(q, root, value => { now = value }) } finally { q.close(); fs.rmSync(root, { recursive: true, force: true }) }
 }
 
-await test('queue invalid inputs and failed transitions are safe and leave durable state unchanged', () => fixture(q => {
+await test('queue invalid inputs and failed transitions are safe and leave durable state unchanged', { skip: NO_LINUX_STORES }, () => fixture(q => {
   q.request(decision())
   const before = q.read('choice')
   for (const value of [null, {}, answer({ extra: 'PRIVATE_INPUT' }), answer({ actor: ' ' }), answer({ at: '2026-02-30T00:00:00Z' }), answer({ answerId: 'x\n' })]) {
@@ -45,7 +45,7 @@ await test('queue invalid inputs and failed transitions are safe and leave durab
   assert.equal(q.read('choice').answer.actor, 'Local user'); assert.equal(q.read('choice').ack.deliveryId, 'delivery')
 }))
 
-await test('queue orders fractional timestamps precisely and enforces exact expiry and answer time', () => fixture((q, root, clock) => {
+await test('queue orders fractional timestamps precisely and enforces exact expiry and answer time', { skip: NO_LINUX_STORES }, () => fixture((q, root, clock) => {
   q.request(decision({ id: 'z', createdAt: '2026-11-10T12:00:00Z' }))
   q.request(decision({ id: 'a', createdAt: NOW }))
   q.request(decision({ id: 'fraction', createdAt: '2026-11-10T12:00:00.0001Z', expiresAt: '2026-11-10T12:00:00.0003Z' }))
@@ -60,7 +60,7 @@ await test('queue orders fractional timestamps precisely and enforces exact expi
   clock('PRIVATE_INPUT'); assert.throws(() => q.deliver('fraction', recipient()), code('IO_ERROR'))
 }))
 
-await test('queue checks stored snapshots and metadata instead of trusting valid SQLite bytes', () => {
+await test('queue checks stored snapshots and metadata instead of trusting valid SQLite bytes', { skip: NO_LINUX_STORES }, () => {
   for (const mutate of [
     db => db.exec('PRAGMA user_version=999'),
     db => db.exec("UPDATE queue_metadata SET namespace='../PRIVATE_INPUT'"),
@@ -77,7 +77,7 @@ await test('queue checks stored snapshots and metadata instead of trusting valid
   }
 })
 
-await test('queue rejects unsafe storage on existing connections and closes idempotently', () => fixture((q, root) => {
+await test('queue rejects unsafe storage on existing connections and closes idempotently', { skip: NO_LINUX_STORES }, () => fixture((q, root) => {
   q.request(decision())
   const file = join(root, 'decisions.sqlite')
   fs.chmodSync(file, 0o644)
@@ -91,7 +91,7 @@ await test('queue rejects unsafe storage on existing connections and closes idem
   assert.throws(() => q.readNamespace(), code('IO_ERROR'))
 }))
 
-await test('queue cancellation survives restart and unsupported filters fail safely', () => fixture((q, root) => {
+await test('queue cancellation survives restart and unsupported filters fail safely', { skip: NO_LINUX_STORES }, () => fixture((q, root) => {
   q.request(decision()); q.answer('choice', answer()); q.deliver('choice', recipient()); q.cancel('choice', { reason: 'Withdrawn' })
   q.close()
   const reopened = createDecisionQueue(root, { now: () => NOW })
@@ -106,7 +106,7 @@ await test('queue cancellation survives restart and unsupported filters fail saf
   } finally { reopened.close() }
 }))
 
-await test('queue rolls back failed delivery and acknowledgment commits and remains usable', () => fixture(q => {
+await test('queue rolls back failed delivery and acknowledgment commits and remains usable', { skip: NO_LINUX_STORES }, () => fixture(q => {
   q.request(decision()); q.answer('choice', answer())
   const original = DatabaseSync.prototype.exec
   function failCommit(work) {
@@ -125,7 +125,7 @@ await test('queue rolls back failed delivery and acknowledgment commits and rema
   assert.deepEqual(q.acknowledge('choice', recipient()), { created: true })
 }))
 
-await test('queue refuses unknown databases and schema changes without resetting their content', () => {
+await test('queue refuses unknown databases and schema changes without resetting their content', { skip: NO_LINUX_STORES }, () => {
   for (const setup of [
     db => db.exec('CREATE TABLE foreign_data (id TEXT); DROP TABLE foreign_data'),
     db => db.exec('CREATE TABLE foreign_data (id TEXT)'),
@@ -143,7 +143,7 @@ await test('queue refuses unknown databases and schema changes without resetting
   }
 })
 
-await test('queue rejects final-newline identifiers at every queue boundary', () => fixture(q => {
+await test('queue rejects final-newline identifiers at every queue boundary', { skip: NO_LINUX_STORES }, () => fixture(q => {
   for (const key of ['id', 'runId']) assert.throws(() => q.request(decision({ [key]: 'unsafe\n' })), code('INVALID_DECISION'))
   q.request(decision())
   assert.throws(() => q.read('choice\n'), code('INVALID_DECISION'))
@@ -156,7 +156,7 @@ await test('queue rejects final-newline identifiers at every queue boundary', ()
 // Separate SQLite connections in worker isolates exercise lock contention without
 // depending on the sandbox's suppressed child-process stdout. The host's frozen
 // acceptance retains the separate-process boundary and is not replaced here.
-await test('concurrent queue connections agree on namespace and preserve a single answer/delivery winner', async () => {
+await test('concurrent queue connections agree on namespace and preserve a single answer/delivery winner', { skip: NO_LINUX_STORES }, async () => {
   const { Worker } = await import('node:worker_threads')
   const root = fs.mkdtempSync(join(tmpdir(), 'decision-queue-concurrent-'))
   const directory = join(root, 'queue')

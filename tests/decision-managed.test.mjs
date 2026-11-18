@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, writeFileSync, existsSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { test } from '../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../scripts/workflow-harness.mjs'
 import { createDecisionQueue } from '../core/skills/decisions/queue.mjs'
 import { createDecisionTrace } from '../core/skills/decisions/observations.mjs'
 import { prepareDecisionGate, validateDecisionFeature } from '../graphs/autobuild/tool/lib/decisions.mjs'
@@ -25,7 +25,7 @@ async function fixture(work) {
   finally { queue.close(); rmSync(root, { recursive: true, force: true }) }
 }
 
-await test('managed config inspection validates decision structure without opening storage', () => fixture(async ({ root, config }) => {
+await test('managed config inspection validates decision structure without opening storage', { skip: NO_LINUX_STORES }, () => fixture(async ({ root, config }) => {
   const store = join(root, 'unopened'), decisions = { ...config.decisions, store }
   const project = { decisions, claudeBin: process.execPath, codexBin: process.execPath }
   writeFileSync(join(root, 'autobuild.json'), JSON.stringify(project))
@@ -53,7 +53,7 @@ await test('managed config inspection validates decision structure without openi
   validateDecisionFeature(config, { features: [feature] })
 }))
 
-await test('managed gate skips opt-out, later features and completed checkpoint without accessing queue', () => fixture(async ({ config, gate }) => {
+await test('managed gate skips opt-out, later features and completed checkpoint without accessing queue', { skip: NO_LINUX_STORES }, () => fixture(async ({ config, gate }) => {
   const unreadable = { ...config, decisions: { ...config.decisions, store: '/missing/queue' } }
   const readRevision = () => { throw Error('must not inspect HEAD') }
   assert.equal(await gate({ config: { ...config, decisions: undefined }, readRevision }), null)
@@ -61,7 +61,7 @@ await test('managed gate skips opt-out, later features and completed checkpoint 
   assert.equal(await gate({ config: unreadable, feature: { ...feature, passes: true }, readRevision }), null)
 }))
 
-await test('managed gate acknowledges before launch, isolates context and reuses durable identity across invocations', () => fixture(async ({ root, queue, config, request, answer, events, gate, trace }) => {
+await test('managed gate acknowledges before launch, isolates context and reuses durable identity across invocations', { skip: NO_LINUX_STORES }, () => fixture(async ({ root, queue, config, request, answer, events, gate, trace }) => {
   queue.request(request()); answer()
   const first = await gate()
   try {
@@ -81,7 +81,7 @@ await test('managed gate acknowledges before launch, isolates context and reuses
   assert.ok(!JSON.stringify(events).includes('PRIVATE_INPUT'))
 }))
 
-await test('managed gate refuses wrong routing, stale, expired, cancelled and approval requests without acknowledgment', async () => {
+await test('managed gate refuses wrong routing, stale, expired, cancelled and approval requests without acknowledgment', { skip: NO_LINUX_STORES }, async () => {
   for (const mode of ['WRONG_RECIPIENT', 'STALE', 'EXPIRED', 'CANCELLED', 'MANUAL_HANDOFF', 'NOT_FOUND']) {
     await fixture(async ({ queue, request, answer, gate, events }) => {
       const patch = mode === 'WRONG_RECIPIENT' ? { runId: 'another' } : mode === 'STALE' ? { revision: 'b'.repeat(40) } :
@@ -98,7 +98,7 @@ await test('managed gate refuses wrong routing, stale, expired, cancelled and ap
   }
 })
 
-await test('managed waiting times out, aborts and resumes only its assigned answers', () => fixture(async ({ queue, config, request, answer, gate, events }) => {
+await test('managed waiting times out, aborts and resumes only its assigned answers', { skip: NO_LINUX_STORES }, () => fixture(async ({ queue, config, request, answer, gate, events }) => {
   queue.request(request()); queue.request(request({ id: 'other', runId: 'other' })); answer('other')
   await assert.rejects(gate(), code('TIMEOUT'))
   assert.equal(queue.read('choice').delivery, null); assert.equal(queue.read('other').delivery, null)
@@ -110,7 +110,7 @@ await test('managed waiting times out, aborts and resumes only its assigned answ
   assert.deepEqual(events.filter(e => e.event === 'wait_failed').map(e => e.outcome), ['timeout', 'cancelled'])
 }))
 
-await test('managed gate checks HEAD before ack and at launch and carries multiple assigned answers', () => fixture(async ({ queue, config, request, answer, gate, events }) => {
+await test('managed gate checks HEAD before ack and at launch and carries multiple assigned answers', { skip: NO_LINUX_STORES }, () => fixture(async ({ queue, config, request, answer, gate, events }) => {
   queue.request(request()); answer()
   let reads = 0
   await assert.rejects(gate({ readRevision: () => ++reads === 1 ? revision : 'b'.repeat(40) }), code('STALE'))
@@ -131,7 +131,7 @@ await test('managed gate checks HEAD before ack and at launch and carries multip
   } finally { both.close() }
 }))
 
-await test('managed gate refuses an early receipt that expires while a later answer is pending', () => fixture(async ({ queue, config, request, answer, gate }) => {
+await test('managed gate refuses an early receipt that expires while a later answer is pending', { skip: NO_LINUX_STORES }, () => fixture(async ({ queue, config, request, answer, gate }) => {
   queue.request(request({ expiresAt: new Date(Date.now() + 300).toISOString() })); answer()
   queue.request(request({ id: 'second' }))
   const waiting = gate({ config: { ...config, decisions: { ...config.decisions, ids: ['choice', 'second'], timeoutMs: 1500 } } })
@@ -144,7 +144,7 @@ await test('managed gate refuses an early receipt that expires while a later ans
   } finally { clearTimeout(timer); ready?.close() }
 }))
 
-await test('observational failure never changes managed queue success or original timeout', () => fixture(async ({ queue, request, answer, gate }) => {
+await test('observational failure never changes managed queue success or original timeout', { skip: NO_LINUX_STORES }, () => fixture(async ({ queue, request, answer, gate }) => {
   const trace = new Proxy({}, { get() { return () => { throw Error('PRIVATE_INPUT') } } })
   queue.request(request()); await assert.rejects(gate({ trace }), code('TIMEOUT'))
   answer(); const ready = await gate({ trace })

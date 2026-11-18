@@ -13,10 +13,21 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
 
 let pass = 0
 let fail = 0
-export async function test(name, fn) {
+let skipped = 0
+// test(name, fn) or test(name, { skip }, fn). `skip`: false to run, or the reason this machine
+// cannot run the test (printed, counted apart).
+export async function test(name, optsOrFn, maybeFn) {
+  const [{ skip = false }, fn] = typeof optsOrFn === 'function' ? [{}, optsOrFn] : [optsOrFn ?? {}, maybeFn]
+  if (skip) { console.log(`  skip ${name} (${skip})`); skipped += 1; return }
   try { await fn(); console.log(`  ok   ${name}`); pass += 1 }
   catch (e) { console.log(`  FAIL ${name}\n       ${String(e.message).split('\n').join('\n       ')}`); fail += 1 }
 }
+
+// The run store, the decision queue and the audit journal work only on Linux (or WSL): they
+// traverse through /proc/self/fd anchors and refuse anywhere else (DECISIONS.md D22). Same
+// condition the stores check, so a test skips exactly where the store would refuse.
+export const NO_LINUX_STORES = process.platform === 'linux' && typeof process.getuid === 'function'
+  ? false : 'the run store, decision queue and audit journal need Linux /proc (DECISIONS.md D22)'
 
 // ---------- loading ----------
 // The runtime rejects Date.now()/Math.random()/argless new Date() (they break
@@ -106,7 +117,7 @@ export async function run(fn, script, args, { allowLeftover = false, budget = { 
   return { result, calls, logs, leftover }
 }
 
-export function summary() { return { pass, fail } }
+export function summary() { return { pass, fail, skipped } }
 
 // Directories that can hold installable entries of `kind` (agents, skills,
 // workflows): the flat top level, core/, and every graphs/<name>/.

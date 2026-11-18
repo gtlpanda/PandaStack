@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, symlinkSync } from 'node
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { test } from '../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../scripts/workflow-harness.mjs'
 import { withTrackedRun, currentRunId } from '../core/skills/run-records/tracking.mjs'
 import { createRunStore } from '../core/skills/run-records/store.mjs'
 import { autobuildTracking, buildTracking, runnerRoot } from '../core/skills/run-records/adapters.mjs'
@@ -19,7 +19,7 @@ async function fixture(work) {
   const options = { repo, runnerRoot, storeDir, workflow: 'autobuild', backend: 'codex', settings: {} }
   try { await work(options, createRunStore(storeDir)) } finally { rmSync(base, { recursive: true, force: true }) }
 }
-await test('tracking isolates concurrent parents, assigns fresh IDs and preserves terminal codes', () => fixture(async (o, store) => {
+await test('tracking isolates concurrent parents, assigns fresh IDs and preserves terminal codes', { skip: NO_LINUX_STORES }, () => fixture(async (o, store) => {
   await Promise.all(['a', 'b'].map(runId => withTrackedRun({ ...o, runId }, async () => {
     await new Promise(r => setTimeout(r, 2))
     assert.equal(currentRunId(), runId)
@@ -34,7 +34,7 @@ await test('tracking isolates concurrent parents, assigns fresh IDs and preserve
   const terminals = store.listRuns().flatMap(r => store.readEvents(r.id)).map(e => e.type)
   assert.ok(terminals.includes('failed')); assert.ok(terminals.includes('cancelled'))
 }))
-await test('conflicts leave existing records/events unchanged; errors retain identity without secrets', () => fixture(async (o, s) => {
+await test('conflicts leave existing records/events unchanged; errors retain identity without secrets', { skip: NO_LINUX_STORES }, () => fixture(async (o, s) => {
   await withTrackedRun({ ...o, runId: 'same' }, async () => 0)
   const before = s.readEvents('same')
   let calls = 0
@@ -58,7 +58,7 @@ await test('storage failure executes once, preserves errors and bounds safe warn
     assert.ok(!messages.join('').includes('SECRET_SENTINEL'))
   } finally { process.stderr.write = original }
 }))
-await test('canonical paths and Git per-worktree default; explicit store wins environment', () => fixture(async o => {
+await test('canonical paths and Git per-worktree default; explicit store wins environment', { skip: NO_LINUX_STORES }, () => fixture(async o => {
   execFileSync('git', ['init', '-q', o.repo], { stdio: ['ignore', 'pipe', 'pipe'] })
   const alias = join(o.repo, 'alias'); symlinkSync(o.repo, alias)
   const { storeDir, ...defaults } = o
@@ -83,7 +83,7 @@ await test('managed snapshots honor effective models, force and Codex effort', (
   assert.equal(claude.advisorModel, cfg.subagentModel)
   assert.equal(buildTracking('/tmp', 'sonnet', 'build-app').settings.model, 'sonnet')
 })
-await test('actual fake Claude and Codex sessions retain parent IDs, flags, failure codes and probe exclusion', () => fixture(async (o, store) => {
+await test('actual fake Claude and Codex sessions retain parent IDs, flags, failure codes and probe exclusion', { skip: NO_LINUX_STORES }, () => fixture(async (o, store) => {
   const old = process.env.PANDASTACK_RUNS_DIR
   process.env.PANDASTACK_RUNS_DIR = o.storeDir
   try {

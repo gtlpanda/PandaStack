@@ -13,6 +13,7 @@ import { parseWorkflowYaml } from "./workflow-yaml.mjs";
 import { assignments, optionValues, simpleCommands } from "./shell-words.mjs";
 import { WORKFLOW_DIR } from "./config.mjs";
 import { runSpec } from "./proc.mjs";
+import { findInstalls } from "./codex-installs.mjs";
 
 // Set for every step on a GitHub-hosted runner.
 const GITHUB_RUNNER_ENV = Object.freeze({ CI: "true", GITHUB_ACTIONS: "true", TZ: "UTC" });
@@ -212,6 +213,19 @@ export function resolveCiParity(config) {
   warnings.push(...envWarnings(config, ciEnvSteps));
   for (const problem of uncoveredExcludes(config, resolved.steps, parity)) (parity ? errors : warnings).push(problem);
   return { steps: resolved.steps, errors, warnings };
+}
+
+/**
+ * The commands paritySpec wraps every step in that are not on `pathValue`, the PATH the
+ * gate runs steps with. Stock macOS has neither; without them each step would only exit 127.
+ * A host check, apart from resolveCiParity, which reads only the repo's configuration.
+ */
+export function missingParityTools(parity, pathValue) {
+  const needed = [["timeout", "CI parity runs each step under GNU timeout", "brew install coreutils"]];
+  if (parity.lockFile) needed.push(["flock", "ciParity.lockFile serializes steps with flock", "brew install flock"]);
+  return needed
+    .filter(([bin]) => findInstalls(bin, pathValue).length === 0)
+    .map(([bin, why, mac]) => `${why}, but ${bin} is not on the gate's PATH (macOS: ${mac})`);
 }
 
 // Variables the gate sets that CI does not, or sets differently. Values are

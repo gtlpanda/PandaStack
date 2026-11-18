@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import { syncBuiltinESMExports } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { test } from '../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../scripts/workflow-harness.mjs'
 import { ROOT } from '../scripts/configure-agents.mjs'
 import { loadConfig } from '../graphs/autobuild/tool/lib/config.mjs'
 import { inspectDoctor } from '../core/skills/run-records/doctor.mjs'
@@ -105,7 +105,7 @@ const operations = [
   ['run', s => s.putRun(run)], ['run', s => s.readEvents(run.id)],
   ['event', s => s.readEvents(run.id)], ['event', s => s.appendEvent(event)],
 ]
-await test('operational read failures close descriptors, expose safe IO_ERROR and allow unchanged replay after recovery', () => fixture(root => {
+await test('operational read failures close descriptors, expose safe IO_ERROR and allow unchanged replay after recovery', { skip: NO_LINUX_STORES }, () => fixture(root => {
   const store = createRunStore(root)
   store.putRun(run); store.appendEvent(event)
   const files = { run: join(root, 'runs', `${run.id}.json`), event: join(root, 'events', run.id, `${event.id}.json`) }
@@ -135,7 +135,7 @@ await test('operational read failures close descriptors, expose safe IO_ERROR an
   }
 }))
 
-await test('malformed, schema-invalid and mismatched stored content remains safe CORRUPT across reads and replay', () => fixture(root => {
+await test('malformed, schema-invalid and mismatched stored content remains safe CORRUPT across reads and replay', { skip: NO_LINUX_STORES }, () => fixture(root => {
   const store = createRunStore(root)
   store.putRun(run); store.appendEvent(event)
   for (const [target, operation] of operations) {

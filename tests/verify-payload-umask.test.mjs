@@ -5,6 +5,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from '../scripts/workflow-harness.mjs'
+import { OWNED_CAPTURE } from '../core/skills/verify/retention.mjs'
+
+// capture-owner.sh and retention.sh are the Linux ownership helpers (setsid, GNU stat, /proc);
+// off Linux, verify runs steps directly instead (retention.mjs captureDirect).
+const NO_OWNED_CAPTURE = OWNED_CAPTURE ? false : "verify's ownership helpers need Linux (setsid, GNU stat, /proc)"
 
 // The owner hardens its own control files to umask 077. The payload must still
 // see the caller's umask. These checks use the pure predicate, static source
@@ -83,7 +88,7 @@ if (Object.hasOwn(process.env, 'VERIFY_CAPTURE_SCOPE_DIR')) {
   console.log('  skip payload umask runtime case: VERIFY_CAPTURE_SCOPE_DIR is set (inside an outer capture)')
 } else {
   for (const [mask, fileMode] of [['0027', 0o640], ['0000', 0o666]]) {
-    await test(`ordinary payload sees caller umask ${mask} while control artifacts stay private`, () => {
+    await test(`ordinary payload sees caller umask ${mask} while control artifacts stay private`, { skip: NO_OWNED_CAPTURE }, () => {
       const root = fs.realpathSync(fs.mkdtempSync(join(tmpdir(), 'payload-umask-run-')))
       const leaf = join(root, 'leaf')
       const out = join(root, 'out')
@@ -111,7 +116,7 @@ if (Object.hasOwn(process.env, 'VERIFY_CAPTURE_SCOPE_DIR')) {
 }
 
 if (!Object.hasOwn(process.env, 'VERIFY_CAPTURE_SCOPE_DIR')) {
-  await test('Bash retention preserves caller umask without exposing its evidence files', () => {
+  await test('Bash retention preserves caller umask without exposing its evidence files', { skip: NO_OWNED_CAPTURE }, () => {
     const root = fs.realpathSync(fs.mkdtempSync(join(tmpdir(), 'retention-payload-umask-')))
     const retention = fileURLToPath(new URL('../core/skills/verify/retention.sh', import.meta.url))
     const payload = join(root, 'ordinary-file')

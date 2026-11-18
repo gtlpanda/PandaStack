@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { Worker } from 'node:worker_threads'
-import { test } from '../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../scripts/workflow-harness.mjs'
 
 // Each worker has a fresh ESM cache, even when the aggregate runner has already
 // loaded SQLite. Deny only the real builtin, without replacing any product API.
@@ -109,7 +109,7 @@ await test('invalid decisions cannot bypass validation on completed or unassigne
   }
 })
 
-await test('assigned gate attempts SQLite and preserves real queue failure with storage available', async () => {
+await test('assigned gate attempts SQLite and preserves real queue failure with storage available', { skip: NO_LINUX_STORES }, async () => {
   const denied = await probe('assigned')
   assert.ok(['ERR_UNKNOWN_BUILTIN_MODULE', 'IO_ERROR'].includes(denied.code))
   assert.ok(denied.imports.length > 0)

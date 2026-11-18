@@ -168,4 +168,8 @@ if [ "$TESTED" -eq 0 ] && [ "${VERIFY_ALLOW_NO_TESTS:-0}" != "1" ]; then
   echo "  no test step ran (lint/format only). Add a test script, or set VERIFY_ALLOW_NO_TESTS=1 to accept lint-only."
   FAILED=1
 fi
+# Off Linux, retention.mjs runs steps without process-group ownership and marks them in the manifest.
+if grep -q '"capture":"direct"' "$CAPTURE/manifest.json" 2>/dev/null; then
+  echo "  capture: direct (no /proc on this platform: steps ran without process-group ownership)"
+fi
 if [ "$FAILED" -eq 0 ]; then echo "VERIFY: PASS"; exit 0; else echo "VERIFY: FAIL"; exit 1; fi

@@ -4,7 +4,7 @@ import { syncBuiltinESMExports } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { test } from '../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../scripts/workflow-harness.mjs'
 import { createRunStore } from '../core/skills/run-records/store.mjs'
 
 async function fixture(work) {
@@ -53,7 +53,7 @@ const run = { schemaVersion: 1, id: 'followup', repo: '/tmp/project', revision: 
   runnerRoot: '/tmp/runner', runnerRevision: null, workflow: 'autobuild', backend: 'codex',
   parentRunId: null, startedAt: '2026-11-09T12:00:00Z', settings: {} }
 
-await test('run and event publication clean up after close EIO, including cleanup after a write error', () => fixture(root => {
+await test('run and event publication clean up after close EIO, including cleanup after a write error', { skip: NO_LINUX_STORES }, () => fixture(root => {
   for (const event of [false, true]) for (const writeFailure of [false, true]) {
     const directory = join(root, `${event}-${writeFailure}`), store = createRunStore(directory)
     if (event) store.putRun(run)

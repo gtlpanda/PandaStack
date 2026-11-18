@@ -2,12 +2,12 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { test } from '../scripts/workflow-harness.mjs'
+import { test, NO_LINUX_STORES } from '../scripts/workflow-harness.mjs'
 import { createDecisionQueue } from '../core/skills/decisions/queue.mjs'
 import { deliverToCodex } from '../core/skills/decisions/codex-delivery.mjs'
 import { decisionMain } from '../scripts/decision-cli.mjs'
 
-await test('CLI ack retains manual handoff after uncertain native delivery across reopen without resend', async () => {
+await test('CLI ack retains manual handoff after uncertain native delivery across reopen without resend', { skip: NO_LINUX_STORES }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'decision-handoff-')), store = join(root, 'queue')
   const revision = 'a'.repeat(40), recipient = { repo: '/fixture', runId: 'run', revision, deliveryId: 'delivery' }
   let q, calls = 0
