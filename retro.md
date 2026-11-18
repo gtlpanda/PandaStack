@@ -3694,7 +3694,9 @@ zombies and fails two `verify-direct-capture` tests on main too, so container ru
 
 - Reviewed docs/dogfood/phase-02.md on its merge with main 56aa36b and added a
   completion review: Phase 2 acceptance 97/97 and Phase 1 regression 253/253
-  (both exit 0), plus the full `scripts/test.sh` gate. Bughunt dispositions are
+  (both exit 0). Full `scripts/test.sh`: exit 1, 2324 passed, 2 failed,
+  30 skipped. The 2 hunt evidence failures reproduce on untouched main as root
+  without non-root isolation (a missing skip, queued separately). Bughunt dispositions are
   the recorded passes on 405eb2f (#51) and d7433a2 (#52), not re-run.
 - Rechecked the report's code claims: the final gate's exit 16 (#54), exit 14,
   and `node --test tests/` failing. That failure reproduces on Node 22 too, so the

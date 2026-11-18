@@ -110,11 +110,11 @@ container), Node v22.23.5. Decision: Phase 2 complete and promoted (D124).
 |---|---|---|
 | Phase 2 acceptance | `node --test acceptance/phase2/*.test.mjs` | exit 0, 97/97 |
 | Phase 1 regression | `node --test acceptance/phase1/*.test.mjs` | exit 0, 253/253 |
-| Full regression gate | `bash scripts/test.sh` | in progress at this commit: 1594 passed, 2 failed, see note |
+| Full regression gate | `bash scripts/test.sh` | exit 1 (`TEST: FAIL`): 2324 passed, 2 failed, 30 skipped; autobuild 248/0. The 2 are pre-existing, see note |
 | Bughunt, implementation | recorded on PR #51 head 405eb2f | pass, six lenses, `RECHECK: PASS`, 0 new findings |
 | Bughunt, this report | recorded on PR #52 head d7433a2 | pass, `RECHECK: PASS` |
 
-The 2 full-gate failures are in `graphs/hunt/tests/evidence.test.mjs` ("the
+The full gate is not green on this machine. Its 2 failures are in `graphs/hunt/tests/evidence.test.mjs` ("the
 test has no network", "anything that throws during a run..."). They fail the
 same way on untouched main 56aa36b (11 passed, 2 failed, 11 skipped) when run as
 uid 0 without non-root isolation, so this docs-only change did not cause them.
