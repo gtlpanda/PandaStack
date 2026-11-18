@@ -3,7 +3,7 @@
 // sandbox, and recheck correcting a ledger to what the runs show.
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync, symlinkSync, chmodSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
@@ -141,9 +141,7 @@ await test('secrets never reach the test; ordinary variables do', { skip: NO_ISO
   const r = ev(['repro', STATE, 'F11'], { GITHUB_TOKEN: 'x', CLAUDE_CODE_OAUTH_TOKEN: 'x', MY_API_KEY: 'x', AWS_SECRET_ACCESS_KEY: 'x', DB_PASSWORD: 'x', SLACK_BOT_TOKEN: 'x', DATABASE_URL: 'postgres://u:p@h/db', SENTRY_DSN: 'x', STRIPE_KEY: 'x', KUBECONFIG: '/k', TZ: 'Etc/UTC' })
   assert.equal(lastLine(r.stdout), 'EVIDENCE: NOT_REPRODUCED F11', r.stdout)
 })
-const unshare = spawnSync('unshare', ['-rn', 'true'], { stdio: 'ignore' }).status === 0
-await test(`the test has no network${unshare ? '' : ' (skipped: unshare -rn is not available here)'}`, () => {
-  if (!unshare) return
+await test('the test has no network', { skip: NO_ISOLATION }, () => {
   repro('F12', 'tests/bughunt-f12.test.mjs', TEST([
     "  const net = await import('node:net')",
     "  const reached = await new Promise(res => { const s = net.connect({ host: '1.1.1.1', port: 53, timeout: 3000 }, () => { s.destroy(); res(true) }); s.on('error', () => res(false)); s.on('timeout', () => { s.destroy(); res(false) }) })",
@@ -202,15 +200,16 @@ await test('checking whether pytest is installed never runs a pytest.py the chan
 })
 await test('anything that throws during a run is an ERROR verdict with an evidence file, never a crash', () => {
   repro('F16', 'tests/bughunt-f16.test.mjs', TEST("  assert.fail('BUGHUNT-F16')"))
-  const work = join(STATE, 'work')
-  mkdirSync(work, { recursive: true })
-  chmodSync(work, 0o500)   // the export cannot be created
-  let r
-  try { r = ev(['repro', STATE, 'F16']) } finally { chmodSync(work, 0o755) }
+  // A file where the run's work dir goes: the export throws ENOTDIR before any
+  // isolation check, for root too (a read-only dir does not stop root).
+  put(join(STATE, 'work', 'F16'), 'not a directory')
+  const r = ev(['repro', STATE, 'F16'])
   assert.equal(r.status, 0, r.stdout)
   assert.equal(lastLine(r.stdout), 'EVIDENCE: ERROR F16')
-  assert.match(r.stdout, /the run failed: EACCES/)
+  assert.match(r.stdout, /the run failed: ENOTDIR/)
   assert.equal(evidenceOf('F16').verdict, 'ERROR')
+  assert.match(evidenceOf('F16').reason, /the run failed: ENOTDIR/)
+  assert.ok(!existsSync(join(STATE, 'work', 'F16')), 'the run cleans its work path up even after a throw')
 })
 await test('a detached grandchild dies with the run, and the run ends when the test does', { skip: NO_ISOLATION }, () => {
   repro('F14', 'tests/bughunt-f14.test.mjs', TEST([

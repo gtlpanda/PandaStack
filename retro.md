@@ -3672,3 +3672,17 @@ acceptance, so that one waits for the owner. Phase 2 acceptance on Linux: 97/97.
 accepted and `ELEASED`/`STOP` are refused; `co_proc` of a reaped pid fails with empty stderr. Both fail on
 a985433. The stress harness is not committed; a container without `--init` leaves killed processes as
 zombies and fails two `verify-direct-capture` tests on main too, so container runs need `--init`.
+
+## 59. bughunt's evidence tests pass as root without isolation (2026-11-18)
+
+As uid 0 on Linux, `graphs/hunt/tests/evidence.test.mjs` failed 2 of 24 (11 already skipped there):
+- **`the test has no network`** runs a reproduction but guarded only on `unshare -rn`, not on the isolation
+  `wrapIsolation` requires, so it got `ERROR` ("Required non-root execution isolation is unavailable"). It
+  now skips with `NO_ISOLATION`, like its siblings; the `unshare -rn` probe is gone.
+- **`anything that throws during a run is an ERROR ...`** injected the failure with a `chmod 0o500` work dir.
+  Root ignores that, so the isolation refusal fired instead of `EACCES`. It now puts a file where the run's
+  work dir goes: the export throws `ENOTDIR` before any isolation check, for every uid. It still asserts the
+  ERROR verdict, the evidence file (now also its reason), and that the work path is removed.
+
+**Proof.** As root without isolation: 12 pass, 0 fail, 12 skip, exit 0 (was 11/2/11, exit 1). As a non-root
+user with isolation (iproute2 installed): 24 pass, 0 skip, so neither case is weakened there.
