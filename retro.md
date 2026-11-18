@@ -3672,3 +3672,27 @@ acceptance, so that one waits for the owner. Phase 2 acceptance on Linux: 97/97.
 accepted and `ELEASED`/`STOP` are refused; `co_proc` of a reaped pid fails with empty stderr. Both fail on
 a985433. The stress harness is not committed; a container without `--init` leaves killed processes as
 zombies and fails two `verify-direct-capture` tests on main too, so container runs need `--init`.
+
+## 59. An interrupted decision wait no longer logs as a cancellation (2026-11-18)
+
+Phase 2 dogfood: SIGINT while `autobuild run` waited on a managed decision logged `decision gate stopped:
+CANCELLED`, but the queue request stayed `pending` and could still be answered. A request that really was
+cancelled logs the same line.
+
+**Why not a new code.** Frozen acceptance pins both contracts: `p2-03` requires an aborted
+`waitForDecision` to reject with `CANCELLED`, and the observation validator's `wait_failed` outcomes are a
+closed list without `interrupted`. Changing `routing.mjs` to `INTERRUPTED` failed p2-03 (tested, then
+reverted). The queue code and trace outcome stay `cancelled`; only the log line changes.
+
+**Change.** `prepareDecisionGate` tags a `CANCELLED` failure under an aborted signal with
+`interruptedWait: { decisionId, state }`, reading the request's real state; a request whose state is
+`cancelled` is not tagged. `decisionStopMessage` (both gate log sites in `loop.mjs`) prints
+`decision gate interrupted: stopped waiting on <id>; the request is still pending and was not cancelled`.
+A gate failure without the tag, including the `beforeLaunch` path, keeps `decision gate stopped: <CODE>`.
+
+**Tests.** `tests/decision-launch.test.mjs` +2 per backend (4): an in-process SIGINT during the wait exits
+130 with the interrupt line, request `pending`, trace outcome still `cancelled`; a cancelled request still
+exits 14 with `decision gate stopped: CANCELLED`. The SIGINT test fails on 56aa36b with the dogfood line.
+`tests/decision-managed.test.mjs` +1: the tag carries the real state, a cancelled request with or without an
+aborted signal is not tagged, and the message covers unreadable state and code-less failures.
+Phase 2 acceptance: 97/97.

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { test, NO_LINUX_STORES } from '../scripts/workflow-harness.mjs'
 import { createDecisionQueue } from '../core/skills/decisions/queue.mjs'
 import { createDecisionTrace } from '../core/skills/decisions/observations.mjs'
-import { prepareDecisionGate, validateDecisionFeature } from '../graphs/autobuild/tool/lib/decisions.mjs'
+import { prepareDecisionGate, decisionStopMessage, validateDecisionFeature } from '../graphs/autobuild/tool/lib/decisions.mjs'
 import { resolveManagedConfig, loadConfig } from '../graphs/autobuild/tool/lib/config.mjs'
 import { inspectDoctor } from '../core/skills/run-records/doctor.mjs'
 
@@ -108,6 +108,29 @@ await test('managed waiting times out, aborts and resumes only its assigned answ
   answer(); const resumed = await gate(); resumed.close()
   assert.equal(events[0].deliveryId, events.at(-1).deliveryId)
   assert.deepEqual(events.filter(e => e.event === 'wait_failed').map(e => e.outcome), ['timeout', 'cancelled'])
+}))
+
+await test('aborted wait is marked interrupted with the real request state; a cancelled request is not', { skip: NO_LINUX_STORES }, () => fixture(async ({ queue, config, request, gate, events }) => {
+  const long = { ...config, decisions: { ...config.decisions, timeoutMs: 60000 } }
+  queue.request(request())
+  const controller = new AbortController(), waiting = gate({ config: long, signal: controller.signal })
+  controller.abort()
+  const interrupted = await waiting.then(() => assert.fail('wait resolved'), error => error)
+  assert.equal(interrupted.code, 'CANCELLED')
+  assert.deepEqual(interrupted.interruptedWait, { decisionId: 'choice', state: 'pending' })
+  assert.equal(decisionStopMessage(interrupted), 'decision gate interrupted: stopped waiting on choice; the request is still pending and was not cancelled')
+  assert.equal(queue.read('choice').state, 'pending'); assert.equal(events.at(-1).outcome, 'cancelled')
+  // Cancelled with or without an abort: both read as a real cancellation.
+  queue.cancel('choice', { reason: 'No longer needed' })
+  for (const signal of [AbortSignal.abort(), undefined]) {
+    const cancelled = await gate({ config: long, signal }).then(() => assert.fail('gate resolved'), error => error)
+    assert.equal(cancelled.code, 'CANCELLED'); assert.equal(cancelled.interruptedWait, undefined)
+    assert.equal(decisionStopMessage(cancelled), 'decision gate stopped: CANCELLED')
+  }
+  assert.equal(decisionStopMessage({ code: 'CANCELLED', interruptedWait: { decisionId: 'choice', state: null } }),
+    'decision gate interrupted: stopped waiting on choice; the request state could not be read and was not cancelled')
+  for (const failure of [undefined, null, {}, Error('no code')]) assert.equal(decisionStopMessage(failure), 'decision gate stopped: IO_ERROR')
+  assert.equal(decisionStopMessage({ code: 'STALE' }), 'decision gate stopped: STALE')
 }))
 
 await test('managed gate checks HEAD before ack and at launch and carries multiple assigned answers', { skip: NO_LINUX_STORES }, () => fixture(async ({ queue, config, request, answer, gate, events }) => {

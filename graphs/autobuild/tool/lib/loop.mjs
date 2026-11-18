@@ -1,7 +1,7 @@
 import { withTrackedRun, currentRunId } from '../../../../core/skills/run-records/tracking.mjs';
 import { autobuildTracking } from '../../../../core/skills/run-records/adapters.mjs';
 import { createDecisionTrace } from '../../../../core/skills/decisions/observations.mjs';
-import { prepareDecisionGate, decisionRevision, validateDecisionFeature } from './decisions.mjs';
+import { prepareDecisionGate, decisionStopMessage, decisionRevision, validateDecisionFeature } from './decisions.mjs';
 // The autobuild loop: one fresh headless Claude session per feature, until every feature
 // passes, the iteration cap is hit, NO_PROGRESS_LIMIT sessions in a row make no progress,
 // or something needs a human. A usage limit or a failed login is a pause, not a failure: the
@@ -376,7 +376,7 @@ async function runLoopWork(config, options, decisionTrace) {
         waitingForDecision = true;
         decisionGate = await prepareDecisionGate({ config, feature, trace: decisionTrace, signal: decisionAbort.signal });
       } catch (error) {
-        log(`decision gate stopped: ${error.code ?? 'IO_ERROR'}`);
+        log(decisionStopMessage(error));
         return interrupted ? 130 : 14;
       } finally { waitingForDecision = false; }
 
@@ -411,7 +411,7 @@ async function runLoopWork(config, options, decisionTrace) {
         });
       } catch (error) {
         if (error !== gateFailure) throw error;
-        log(`decision gate stopped: ${error.code ?? 'IO_ERROR'}`);
+        log(decisionStopMessage(error));
         return interrupted ? 130 : 14;
       } finally { decisionGate?.close(); }
       if (interrupted) return 130;
