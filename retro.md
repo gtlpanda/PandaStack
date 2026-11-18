@@ -3689,3 +3689,20 @@ acceptance, so that one waits for the owner. Phase 2 acceptance on Linux: 97/97.
 accepted and `ELEASED`/`STOP` are refused; `co_proc` of a reaped pid fails with empty stderr. Both fail on
 a985433. The stress harness is not committed; a container without `--init` leaves killed processes as
 zombies and fails two `verify-direct-capture` tests on main too, so container runs need `--init`.
+
+## 59. Phase 2 complete: the dogfood report reviewed, the Codex demo waived (2026-11-18)
+
+- Reviewed docs/dogfood/phase-02.md on its merge with main 56aa36b and added a
+  completion review: Phase 2 acceptance 97/97 and Phase 1 regression 253/253
+  (both exit 0), plus the full `scripts/test.sh` gate. Bughunt dispositions are
+  the recorded passes on 405eb2f (#51) and d7433a2 (#52), not re-run.
+- Rechecked the report's code claims: the final gate's exit 16 (#54), exit 14,
+  and `node --test tests/` failing. That failure reproduces on Node 22 too, so the
+  report no longer pins it on Node 24. Dropped "not fixed in this report's
+  scope" next to the #54 fix.
+- Found: SPEC's Phase 2 dogfood also required a live native-Codex delivery demo,
+  which never ran (P2-05 has in-process tests only, D64). The user waived it
+  under D122 (D124); the adapter is labeled incomplete for live use.
+- Still open: an interrupted wait logs `CANCELLED` (routing.mjs:30,
+  decisions.mjs:49) while the request stays pending.
+- ROADMAP, AGENTS.md and SPEC.md mark Phase 2 complete; Phase 3 is not launched.
