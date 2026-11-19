@@ -332,7 +332,13 @@
     "spec/contracts/codex-parity-priority.md",
     "docs/roadmap/codex-parity-priority.md",
     "spec/contracts/codex-parity-cp-01a.md",
-    "acceptance/codex-parity/cp-01a-catalog-v2.test.mjs"
+    "acceptance/codex-parity/cp-01a-catalog-v2.test.mjs",
+    "spec/contracts/codex-parity-cp-02a.md",
+    "acceptance/codex-parity/cp-02a-codex-exec.test.mjs",
+    "spec/contracts/codex-parity-cp-02d.md",
+    "acceptance/codex-parity/cp-02d-checkpoint-store.test.mjs",
+    "spec/contracts/codex-parity-cp-03c.md",
+    "acceptance/codex-parity/cp-03c-role-files.test.mjs"
   ],
   "writable": [
     "PROGRESS.md",
