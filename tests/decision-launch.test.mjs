@@ -27,7 +27,7 @@ async function fixture(backend, patch = {}) {
   writeFileSync(join(root, 'features.json'), JSON.stringify(features))
   writeFileSync(join(root, 'PROGRESS.md'), '# progress\n')
   writeFileSync(join(root, 'unused'), '') // a completed run re-runs the full gate before done, so its feature test must exist
-  const decisions = { store, runId: 'logical-run', featureId: patch.target ?? 'F-1', ids: ['choice'], timeoutMs: 0 }
+  const decisions = { store, runId: 'logical-run', featureId: patch.target ?? 'F-1', ids: ['choice'], timeoutMs: patch.timeoutMs ?? 0 }
   writeFileSync(join(root, 'autobuild.json'), JSON.stringify({ backend, hooks: 'inject', bughunt: false,
     prompt: 'BASE_PROMPT', limits: { maxIterations: 1, noProgressLimit: 1, finalReview: false },
     runners: { unit: { group: 'unit', command: 'true' } },
@@ -39,7 +39,8 @@ async function fixture(backend, patch = {}) {
     recommendation: null, evidence: [], kind: patch.approval ? 'approval' : 'question',
     scope: patch.approval ? { action: 'merge', resource: 'PRIVATE_RESOURCE', revision } : null,
     createdAt: '2026-01-01T00:00:00Z', expiresAt: null })
-  if (!patch.pending) queue.answer('choice', { answerId: 'answer', value: patch.approval ? 'approve' : 'blue',
+  if (patch.cancelled) queue.cancel('choice', { reason: 'Cancelled by fixture' })
+  else if (!patch.pending) queue.answer('choice', { answerId: 'answer', value: patch.approval ? 'approve' : 'blue',
     actor: 'PRIVATE_ACTOR', revision, at: '2026-01-01T00:00:01Z' })
   const original = { spawn: childProcess.spawn, spawnSync: childProcess.spawnSync, execFileSync: childProcess.execFileSync,
     write: process.stdout.write, console: console.log, stderr: process.stderr.write }
@@ -112,6 +113,8 @@ async function fixture(backend, patch = {}) {
       if (String(line).startsWith('PANDASTACK_DECISION ')) {
         const event = JSON.parse(String(line).slice('PANDASTACK_DECISION '.length)); events.push(event)
         if (event.event === patch.changeHeadOn) head = newerRevision
+        // Listener-only SIGINT: runs the loop's handler without signalling the test process.
+        if (event.event === patch.interruptOn) process.emit('SIGINT')
         if (patch.sinkFails) { observerFailures++; throw Error('PRIVATE_SINK_ERROR') }
         return true
       }
@@ -146,6 +149,25 @@ for (const backend of ['claude', 'codex']) {
       assert.deepEqual(result.events.map(e => e.event), ['waiting', 'wait_failed', 'trace_closed'])
       assert.equal(result.events[1].outcome, outcome); assert.equal(result.lockRemoved, true)
     }
+  })
+
+  await test(`${backend}: SIGINT during a wait logs an interrupt and leaves the request pending`, { skip: NO_LINUX_STORES }, async () => {
+    const result = await fixture(backend, { pending: true, timeoutMs: 60000, interruptOn: 'waiting' })
+    assert.equal(result.code, 130); assert.equal(result.calls.length, 0)
+    assert.equal(result.state.state, 'pending'); assert.equal(result.state.answer, null)
+    assert.ok(result.logs.some(line => line.endsWith('] decision gate interrupted: stopped waiting on choice; the request is still pending and was not cancelled')), result.logs.join('\n'))
+    assert.ok(!result.logs.some(line => line.includes('decision gate stopped')))
+    // Frozen observation contract: an aborted wait keeps the 'cancelled' trace outcome.
+    assert.deepEqual(result.events.map(e => e.event), ['waiting', 'wait_failed', 'trace_closed'])
+    assert.equal(result.events[1].outcome, 'cancelled'); assert.equal(result.lockRemoved, true)
+  })
+
+  await test(`${backend}: a cancelled request still stops the gate with CANCELLED`, { skip: NO_LINUX_STORES }, async () => {
+    const result = await fixture(backend, { cancelled: true })
+    assert.equal(result.code, 14); assert.equal(result.calls.length, 0); assert.equal(result.state.state, 'cancelled')
+    assert.ok(result.logs.some(line => line.endsWith('] decision gate stopped: CANCELLED')), result.logs.join('\n'))
+    assert.ok(!result.logs.some(line => line.includes('interrupted')))
+    assert.equal(result.events[1].outcome, 'cancelled'); assert.equal(result.lockRemoved, true)
   })
 
   await test(`${backend}: HEAD changes block acknowledgment or the final launch hook`, { skip: NO_LINUX_STORES }, async () => {

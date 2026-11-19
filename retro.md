@@ -3690,7 +3690,45 @@ accepted and `ELEASED`/`STOP` are refused; `co_proc` of a reaped pid fails with 
 a985433. The stress harness is not committed; a container without `--init` leaves killed processes as
 zombies and fails two `verify-direct-capture` tests on main too, so container runs need `--init`.
 
-## 59. Phase 2 complete: the dogfood report reviewed, the Codex demo waived (2026-11-18)
+## 59. bughunt's evidence tests pass as root without isolation (2026-11-18)
+
+As uid 0 on Linux, `graphs/hunt/tests/evidence.test.mjs` failed 2 of 24 (11 already skipped there):
+- **`the test has no network`** runs a reproduction but guarded only on `unshare -rn`, not on the isolation
+  `wrapIsolation` requires, so it got `ERROR` ("Required non-root execution isolation is unavailable"). It
+  now skips with `NO_ISOLATION`, like its siblings; the `unshare -rn` probe is gone.
+- **`anything that throws during a run is an ERROR ...`** injected the failure with a `chmod 0o500` work dir.
+  Root ignores that, so the isolation refusal fired instead of `EACCES`. It now puts a file where the run's
+  work dir goes: the export throws `ENOTDIR` before any isolation check, for every uid. It still asserts the
+  ERROR verdict, the evidence file (now also its reason), and that the work path is removed.
+
+**Proof.** As root without isolation: 12 pass, 0 fail, 12 skip, exit 0 (was 11/2/11, exit 1). As a non-root
+user with isolation (iproute2 installed): 24 pass, 0 skip, so neither case is weakened there.
+
+## 60. An interrupted decision wait no longer logs as a cancellation (2026-11-18)
+
+Phase 2 dogfood: SIGINT while `autobuild run` waited on a managed decision logged `decision gate stopped:
+CANCELLED`, but the queue request stayed `pending` and could still be answered. A request that really was
+cancelled logs the same line.
+
+**Why not a new code.** Frozen acceptance pins both contracts: `p2-03` requires an aborted
+`waitForDecision` to reject with `CANCELLED`, and the observation validator's `wait_failed` outcomes are a
+closed list without `interrupted`. Changing `routing.mjs` to `INTERRUPTED` failed p2-03 (tested, then
+reverted). The queue code and trace outcome stay `cancelled`; only the log line changes.
+
+**Change.** `prepareDecisionGate` tags a `CANCELLED` failure under an aborted signal with
+`interruptedWait: { decisionId, state }`, reading the request's real state; a request whose state is
+`cancelled` is not tagged. `decisionStopMessage` (both gate log sites in `loop.mjs`) prints
+`decision gate interrupted: stopped waiting on <id>; the request is still pending and was not cancelled`.
+A gate failure without the tag, including the `beforeLaunch` path, keeps `decision gate stopped: <CODE>`.
+
+**Tests.** `tests/decision-launch.test.mjs` +2 per backend (4): an in-process SIGINT during the wait exits
+130 with the interrupt line, request `pending`, trace outcome still `cancelled`; a cancelled request still
+exits 14 with `decision gate stopped: CANCELLED`. The SIGINT test fails on 56aa36b with the dogfood line.
+`tests/decision-managed.test.mjs` +1: the tag carries the real state, a cancelled request with or without an
+aborted signal is not tagged, and the message covers unreadable state and code-less failures.
+Phase 2 acceptance: 97/97.
+
+## 61. Phase 2 complete: the dogfood report reviewed, the Codex demo waived (2026-11-18)
 
 - Reviewed docs/dogfood/phase-02.md on its merge with main 56aa36b and added a
   completion review: Phase 2 acceptance 97/97 and Phase 1 regression 253/253
