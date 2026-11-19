@@ -61,7 +61,8 @@ describe('CP-02a args builder (wiring proof, not runtime certification)', () => 
       const theirs = codexArgs(AB_CONFIG, { prompt: 'p', ...row.options }).args
       const ours = codexExecArgs({ ...row.shared, subagentModel: 'model-sub', maxConcurrentSubagents: 3 })
       assert.deepEqual(fixedSubset(ours), fixedSubset(theirs))
-      assert.deepEqual(configValues(ours, 'agents.'), configValues(theirs, 'agents.'))
+      // The contract fixes the agents.* values, not their order.
+      assert.deepEqual(configValues(ours, 'agents.').sort(), configValues(theirs, 'agents.').sort())
       assert.ok(!theirs.includes('--skip-git-repo-check') && !ours.includes('--skip-git-repo-check'))
     })
   }

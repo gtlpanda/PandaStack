@@ -5,7 +5,7 @@
 // installation roots in owned temp directories.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, realpathSync } from 'node:fs'
+import { readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, realpathSync, chmodSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -353,4 +353,26 @@ test('listing ignores non-markdown files, rejects bad stems, and never follows a
 
   const stray = fixture(t, { 'core/agents/README.md': '# not a role\n', 'core/agents/real.md': roleText('real') })
   throwsCode(() => api.listRoleFiles({ installationRoot: stray }), 'INVALID_ROLE_NAME')
+})
+
+test('invalid UTF-8 and unreadable files fail closed with fixed codes', async t => {
+  const api = await loadModule()
+  const invalid = Buffer.concat([Buffer.from(roleText('mojibake', [], '\nbody ')), Buffer.from([0xff, 0xfe]), Buffer.from('\n')])
+  const badSkill = Buffer.concat([Buffer.from(skillText('garbled', '\nrule ')), Buffer.from([0xc3, 0x28]), Buffer.from('\n')])
+  const root = fixture(t, {
+    'core/agents/uses-garbled.md': roleText('uses-garbled', ['skills:', '  - garbled']),
+    'core/agents/locked.md': roleText('locked'),
+  })
+  writeFileSync(join(root, 'core/agents/mojibake.md'), invalid)
+  mkdirSync(join(root, 'core/skills/garbled'), { recursive: true })
+  writeFileSync(join(root, 'core/skills/garbled/SKILL.md'), badSkill)
+  throwsCode(() => api.loadRoleFile({ installationRoot: root, name: 'mojibake' }), 'INVALID_ROLE_FILE')
+  throwsCode(() => api.assembleRoleInstructions({ installationRoot: root, name: 'uses-garbled' }), 'INVALID_SKILL_FILE')
+
+  // Root reads through any mode bits, so the unreadable case needs an ordinary user.
+  if (process.getuid?.() === 0) { t.diagnostic('unreadable-file case skipped: running as root'); return }
+  const locked = join(root, 'core/agents/locked.md')
+  chmodSync(locked, 0o000)
+  t.after(() => { try { chmodSync(locked, 0o600) } catch { /* the fixture may already be removed */ } })
+  throwsCode(() => api.loadRoleFile({ installationRoot: root, name: 'locked' }), 'IO_ERROR')
 })

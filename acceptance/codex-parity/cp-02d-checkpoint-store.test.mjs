@@ -405,6 +405,30 @@ test('close releases the lock, is idempotent, and later calls reject CLOSED', as
   assert.deepEqual(await again.store.reserve(binding), { state: 'uncertain' })
 })
 
+test('a lock that is already gone counts as released', async t => {
+  const env = sandbox(t)
+  const { store, dir } = await env.open()
+  rmSync(join(dir, '.lock'))
+  await store.close()
+  await rejectsWith(store.reserve(bindingOf('after-gone')), 'CLOSED', dir)
+  const again = await env.open()
+  assert.deepEqual(await again.store.reserve(bindingOf('after-gone')), { state: 'dispatch' })
+})
+
+test('a failed lock removal rejects IO_ERROR, keeps the store closed, and a later close retries', async t => {
+  if (process.getuid?.() === 0) { t.diagnostic('skipped: root ignores directory mode bits'); return }
+  const { store, dir } = await sandbox(t).open()
+  const lock = readFileSync(join(dir, '.lock'), 'utf8')
+  chmodSync(dir, 0o500)
+  try {
+    await rejectsWith(store.close(), 'IO_ERROR', dir)
+    assert.equal(readFileSync(join(dir, '.lock'), 'utf8'), lock, 'the lock stays after a failed removal')
+    await rejectsWith(store.reserve(bindingOf('after-failed-close')), 'CLOSED', dir)
+  } finally { chmodSync(dir, 0o700) }
+  await store.close()
+  assert.equal(existsSync(join(dir, '.lock')), false, 'a later close releases the lock')
+})
+
 test('close removes only its own lock', async t => {
   const { store, dir } = await sandbox(t).open()
   writeFileSync(join(dir, '.lock'), 'someone else', { mode: 0o600 })

@@ -79,6 +79,15 @@ Idempotent. Waits for operations already started, then removes the lock file if 
 still holds this store's nonce (a lock whose bytes changed is left alone). Afterwards
 every other method rejects CLOSED. Closing does not touch call files.
 
+The store is marked closed before the lock is touched, so a failed close still leaves
+every other method rejecting CLOSED.
+- A lock that is already gone counts as released, and `close()` resolves.
+- If reading or removing the lock fails for another reason, `close()` rejects
+  IO_ERROR and the lock stays.
+- A later `close()` tries the removal again under the same nonce rule, so the owner
+  can release the lock once the cause is fixed. The lock is never broken by anyone
+  else.
+
 ## Directory and file layout
 
 Under the caller's `dir`, created with mode 0700 when absent (an existing directory's
@@ -103,6 +112,12 @@ mode is not changed):
 - `createFileCheckpointStore` takes `<dir>/.lock` by exclusive create (`wx`, 0600) with
   random nonce content, held until `close()`. Diagnostic fields (such as an owner pid)
   may be written beside the nonce; they are never read to decide anything.
+- If anything fails after the exclusive create succeeds (writing or syncing the
+  nonce), the factory removes the lock it just created before rejecting IO_ERROR. A
+  failed setup therefore never leaves the directory OWNER_BUSY. If that removal also
+  fails, the rejection is still IO_ERROR and the lock is left for an operator. No
+  frozen case can inject this failure without a fault-injection seam, so it is
+  enforced by review, not by the acceptance test.
 - An existing `.lock` refuses the factory with OWNER_BUSY and leaves that lock's bytes
   and every other file untouched. The lock is never auto-broken: no pid, timestamp or
   content is read to decide. This includes a lock left by a process that died without

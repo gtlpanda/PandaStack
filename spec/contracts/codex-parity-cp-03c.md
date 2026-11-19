@@ -77,7 +77,13 @@ never echoes the requested name, a path or any file content.
 | INVALID_ROLE_FRONTMATTER | any parse rule below is broken |
 | UNKNOWN_SKILL | a declared skill has no directory with a regular `SKILL.md` in any skills root |
 | DUPLICATE_SKILL | a declared skill name has a `SKILL.md` in more than one skills root |
-| INVALID_SKILL_FILE | a `SKILL.md` has no complete frontmatter block (cannot be stripped) |
+| INVALID_SKILL_FILE | a `SKILL.md` has no complete frontmatter block (cannot be stripped), or its bytes are not valid UTF-8 |
+| INVALID_ROLE_FILE | a role file's bytes are not valid UTF-8 |
+| IO_ERROR | any other filesystem failure while listing an agents or skills directory or reading a role or `SKILL.md` file (EACCES, EIO). The raw system error never reaches the caller |
+
+Both kinds of file are decoded with a fatal UTF-8 decoder
+(`new TextDecoder('utf-8', { fatal: true })`). Invalid bytes are never replaced
+silently.
 
 The loader throws instead of returning a problem list (as the CP-01a validator does)
 because a missing or malformed role has no partial result a caller could use safely.
