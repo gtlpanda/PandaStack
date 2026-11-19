@@ -1,0 +1,19 @@
+{
+  "features": [
+    {
+      "id": "CP-01a",
+      "title": "Offering catalog schema v2 alongside v1",
+      "description": "Implement only spec/contracts/codex-parity-cp-01a.md: the v2 catalog validator (providers, permissionProfile, proofRefs, transports, workflow sha256) and the version-independent accessors providerImplementation, installEligible and nativeImplementationOf, with runtime.mjs PROFILES exported and imported, never copied. v1 validation and every OC-01 behavior stay unchanged. Do not change spec/offering-capabilities.json, install.sh, preflight semantics or any provider code.",
+      "contract": "spec/contracts/codex-parity-cp-01a.md",
+      "dependencies": [],
+      "acceptance": [
+        "The production v1 catalog and its v2 form both validate; each listed v2 mutation is rejected with no input echoed and no hook run.",
+        "Accessors give identical answers for the v1 and v2 forms of all 46 offerings, and v2 answers come from providers.",
+        "loadOfferingCatalog, discoverOfferings and projectOfferingPreflight agree for the same offering in v1 and v2; readiness is never ready."
+      ],
+      "test": "acceptance/codex-parity/cp-01a-catalog-v2.test.mjs",
+      "testKind": "node",
+      "passes": false
+    }
+  ]
+}
