@@ -13,7 +13,7 @@
       ],
       "test": "acceptance/codex-parity/cp-01a-catalog-v2.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-02a",

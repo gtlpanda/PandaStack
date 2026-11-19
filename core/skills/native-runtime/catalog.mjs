@@ -5,9 +5,10 @@ import { createHash } from 'node:crypto'
 import { TextDecoder } from 'node:util'
 import { fields, exact, json, record, fail } from './boundary.mjs'
 import { sanitizeSettings } from '../run-records/records.mjs'
-import { INPUT, catalogData, discoveryData, safeText, safeFilename, eligible, blockers } from './catalog-data.mjs'
+import { INPUT, catalogData, discoveryData, safeText, safeFilename, backendInput, blockers,
+  installEligible, nativeImplementationOf } from './catalog-data.mjs'
 import { catalogPathContains as contained, catalogPathsEqual } from './catalog-paths.mjs'
-export { validateCatalog } from './catalog-data.mjs'
+export { validateCatalog, providerImplementation, installEligible, nativeImplementationOf } from './catalog-data.mjs'
 
 const MAX_BYTES = 1048576
 const missing = error => error.code === 'ENOENT' || error.code === 'ENOTDIR'
@@ -18,10 +19,6 @@ function options(input, keys) {
 }
 function rootInput(value) {
   if (!safeText(value) || Buffer.byteLength(value) > 4096 || !isAbsolute(value)) fail(INPUT)
-  return value
-}
-function backendInput(value) {
-  if (value !== 'codex' && value !== 'claude') fail(INPUT)
   return value
 }
 function inspectRoot(path) {
@@ -131,7 +128,7 @@ export function discoverOfferings(input) {
   const offerings = catalog.offerings.map(offering => {
     const source = inspectSource(offering, sourceRoot), visible = visibility(offering, source, targetRoot)
     return { id: offering.id, visibility: visible, sourceStatus: source.status,
-      installEligible: eligible(offering, backend), nativeImplementation: offering.nativeImplementation,
+      installEligible: installEligible(offering, backend), nativeImplementation: nativeImplementationOf(offering),
       nativeReadiness: 'unknown', blockers: blockers(offering, source.status, visible) }
   })
   return { schemaVersion: 1, backend, offerings, unknownEntries }
@@ -162,7 +159,7 @@ export function projectOfferingPreflight(input) {
   const readiness = row.sourceStatus !== 'present' ||
     ['absent', 'drifted', 'broken', 'wrong-target', 'unreadable'].includes(row.visibility) ? 'degraded' : 'unknown'
   return { offeringId: offering.id, backend, visibility: row.visibility,
-    implementation: offering.nativeImplementation, readiness, settings,
+    implementation: nativeImplementationOf(offering), readiness, settings,
     runtimes: offering.requiredRuntimes.map(name => ({ name, status: 'unknown', version: null })),
     auth: { status: 'unknown', value: null }, account: { status: 'unknown', value: null },
     payer: { status: 'unknown', value: null }, blockers: row.blockers }

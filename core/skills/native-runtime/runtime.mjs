@@ -5,7 +5,7 @@ import { registryWorkflow } from './registry.mjs'
 import { fields, exact, json, fail, error, nonempty, record, sha, canonical, ownErrorCode } from './boundary.mjs'
 
 const GRACE_MS = 1000
-const PROFILES = new Set(['audit-source-only', 'source-review', 'build-workspace', 'release-controlled'])
+export const PROFILES = new Set(['audit-source-only', 'source-review', 'build-workspace', 'release-controlled'])
 const SafeMath = Object.create(Math)
 SafeMath.random = () => { throw error('NONDETERMINISTIC_WORKFLOW') }
 class SafeDate extends Date {
