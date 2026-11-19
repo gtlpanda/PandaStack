@@ -160,3 +160,94 @@ Observed limits:
 
 Full regressions, review and the branch hunt remain pending for the PR.
 This is wiring proof on stub executables, not runtime certification.
+
+## CP-02d — Generic durable checkpoint store
+
+Implemented spec/contracts/codex-parity-cp-02d.md only. One new module,
+core/skills/native-runtime/checkpoint-store.mjs, exporting `createFileCheckpointStore({dir})`:
+- The store is a frozen plain object with `reserve`, `settle`, `uncertain` and
+  `close`. Each is a closure that never reads `this`.
+- `fields`, `json`, `canonical` and `record` are imported from boundary.mjs. Their
+  errors are restated through the store's own `CheckpointStoreError`, with the fixed
+  message `Checkpoint store: <CODE>.`.
+- Order on every call:
+  1. CLOSED;
+  2. options (`{signal?}`, brand-checked as runtime.mjs does);
+  3. the arguments;
+  4. an already-aborted signal.
+  All four checks run synchronously, before any filesystem access.
+- Operations on one callId run through a per-id promise chain. That chain is the
+  in-process mutex (exactly one `dispatch`), and its tails are the in-flight set
+  that `close` waits for.
+- Each write goes to a `wx` 0600 temp file: `fchmod`, write, `fsync`, `rename`,
+  then `fsync` of the directory. The temp file is removed if the rename never
+  happened.
+- `.lock` is created with `wx`/0600 and holds a JSON nonce plus a diagnostic pid.
+  `close` compares the whole bytes and never parses them.
+- runtime.mjs is unchanged.
+
+Decisions (no human present):
+- `dir` is created without `recursive`, so a missing parent is IO_ERROR. A new
+  directory is `chmod`ed to 0700 against the umask, and its parent is `fsync`ed.
+  Otherwise a crash could lose the directory entry and with it the first prepared
+  row, which would allow a second dispatch.
+- A rename that succeeded before a failed directory `fsync` still rejects IO_ERROR.
+  For reserve, the row left behind replays as `uncertain` and is never dispatched
+  again.
+- Rows go beyond the contract's list in two ways. Each is CORRUPT, so replay can
+  never hand back an inconsistent row:
+  - a terminal row whose `completion.outcome` differs from its `state`;
+  - a binding whose `callId` differs from the file name, or an `uncertain` code that
+    fails the code pattern.
+- Call files and the lock are read with `O_NOFOLLOW`. A symlinked call file is
+  IO_ERROR and is never replayed.
+- The signal is checked again when a queued operation starts. An operation aborted
+  while it waited behind the same id writes nothing.
+- Options `{}` and `{signal: undefined}` mean no signal.
+- A `close` already in progress is shared by concurrent callers. After a failed
+  release, `released` stays false, so the next `close` retries under the nonce rule.
+
+New implementation test tests/native-checkpoint-store.test.mjs (workflow harness, 11
+cases) covers:
+- the fixed message on every input error;
+- optional and null-prototype options, and a look-alike signal whose getter never
+  runs;
+- nested canonical equality;
+- detached replays and extra completion keys stored as given;
+- a `dir` that is a file, and a missing parent;
+- an existing directory's mode kept, and 0700/0600 under `umask 0o777`;
+- stray entries ignored;
+- seven extra CORRUPT rows;
+- symlinked call files;
+- CLOSED before input validation, and shared concurrent close;
+- an abort while an operation is queued.
+
+Mutation check: dropping the queued-abort re-check and the `O_NOFOLLOW` flag made
+exactly those two cases fail. With both restored, all 11 passed again.
+
+Verification on Node v25.9.0 (focused only):
+
+```sh
+node --test acceptance/codex-parity/cp-02d-checkpoint-store.test.mjs acceptance/native-runtime/nr-02-runtime.test.mjs
+# exit 0; 45 pass, 0 fail, 0 skipped (CP-02d 26, NR-02 19)
+node tests/native-checkpoint-store.test.mjs
+# 11 "ok", 0 "FAIL" lines (direct run prints no summary; lines were counted)
+node --check core/skills/native-runtime/checkpoint-store.mjs && node --check tests/native-checkpoint-store.test.mjs && git diff --check
+# exit 0
+bash scripts/check-secrets.sh
+bash scripts/check-secrets.sh core/skills/native-runtime/checkpoint-store.mjs tests/native-checkpoint-store.test.mjs
+# each: check-secrets: clean
+```
+
+Observed limits:
+- No pre-change red run was captured. Before this commit the module did not exist,
+  so the acceptance import could not resolve.
+- Directory `fsync` was exercised on darwin (APFS) only. Linux was not run in this
+  session.
+- The read-only cases ran as a non-root user, so they were not skipped.
+- The factory's lock-removal-after-failed-setup path cannot be injected without a
+  fault seam. The contract leaves it to review.
+- No cross-process concurrency beyond the lock, no network filesystem.
+
+Full regressions, review and the branch hunt remain pending for the PR.
+This is a fake-provider wiring proof through the real runtime, not runtime certification.

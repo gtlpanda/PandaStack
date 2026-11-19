@@ -43,7 +43,7 @@
       ],
       "test": "acceptance/codex-parity/cp-02d-checkpoint-store.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-03c",
