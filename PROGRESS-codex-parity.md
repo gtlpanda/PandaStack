@@ -71,3 +71,92 @@ Observed limits:
 
 Full regressions, review and the branch hunt remain pending for the PR.
 This is static catalog wiring, not runtime certification; no provider ran.
+
+## CP-02a — Shared Codex exec launcher
+
+Implemented spec/contracts/codex-parity-cp-02a.md only. One new module,
+core/skills/native-runtime/codex-exec.mjs, with four exports:
+- `codexExecArgs`: autobuild's token order plus `--ignore-user-config` (always,
+  exactly once; no option turns it off) and the optional flags only when given.
+  `codexConcurrencyArgs` is imported from scripts/agent-config.mjs.
+- `runCodexExec`: all input is validated before any file or process exists; an
+  already-aborted signal returns 130 and opens nothing. Logs open 0600 and are
+  `fchmod`ed, so a pre-existing 0644 log is made private too. The child runs
+  detached in its own group with a copy of `env` minus `CODEX_THREAD_ID`. Timeout
+  and abort send SIGTERM to the group, then SIGKILL after `graceMs`; the first
+  reason wins. A final group SIGKILL follows every close. Spawn failure gives 127,
+  a signal death gives 1.
+- `classifyCodexExec`: reads only `readCodexResult` and applies the contract's
+  seven rules in order. Limit kinds come from `classifyOutcome`.
+- `CODEX_EXEC_CODES`: frozen, nine codes mapping to themselves.
+
+Option objects are detached through boundary.mjs `fields`, so getters and proxies
+are rejected without running. Errors use the fixed code `INVALID_CODEX_EXEC_INPUT`
+and a message that echoes no input.
+
+graphs/autobuild, graphs/hunt, limits.mjs and agent-config.mjs are unchanged. The
+acceptance test compares against their builders as the drift detector.
+
+Decisions (no human present):
+- Messages: `PROVIDER_REFUSAL` uses `readCodexResult`'s fixed text. Limit codes use
+  the `classifyOutcome` line. `TURN_FAILED` uses the protocol message. Every
+  message has control characters replaced and is cut to 300. The raw text stays
+  in `result`.
+- A log that exists but cannot be read (for example a directory) makes
+  `classifyCodexExec` throw the file error. Reading it as no output would make a
+  hidden refusal look retryable.
+- A log file that cannot be opened rejects `runCodexExec` with the file error
+  before anything spawns. The contract's exit codes cover only a started run.
+- `kill` errors ESRCH and EPERM are ignored: the group is gone or is no longer
+  ours. Throwing from a timer would crash the caller.
+- A NUL in `bin`, `args`, `outputFile` or `schemaFile` is `INVALID_CODEX_EXEC_INPUT`,
+  since spawn can never accept it.
+- `timeoutMs` and `graceMs` keep the contract's full safe-integer range. Node's
+  `setTimeout` fires after 1 ms for values above 2^31-1 ms, so longer waits are
+  armed in steps (`startTimer`). Before this fix, `timeoutMs: 2 ** 31` returned 124
+  at once; the new case showed it red, then green.
+
+New implementation test tests/native-codex-exec.test.mjs (workflow harness, 13
+cases) covers:
+- optional flag values and JSON quoting;
+- unknown keys ignored, null-prototype options;
+- getters, proxies and near-miss values rejected, with no getter run;
+- the `input` and `graceMs` defaults, and `graceMs: 0`;
+- timeout and grace values above the timer limit do not fire early;
+- signal death gives 1, a missing cwd gives 127;
+- first reason wins in both orders;
+- forced 0600 on existing logs;
+- no log file on invalid input or an already-aborted signal;
+- an unopenable log rejects before spawning;
+- the 300-character, one-line message bound;
+- an unreadable log failing closed.
+
+A mutation check removed the `fchmodSync` call. The 0600 case failed and passed
+again once the call was restored.
+
+Verification on Node v25.9.0 (focused only):
+
+```sh
+node --test acceptance/codex-parity/cp-02a-codex-exec.test.mjs
+# exit 0; 69 pass, 0 fail (~5.1s). Pre-change: ERR_MODULE_NOT_FOUND for codex-exec.mjs.
+node tests/native-codex-exec.test.mjs
+# 13 "ok", 0 "FAIL" lines. The direct run prints per-case lines but no summary
+# and no failure exit code, so the lines were counted.
+node --check core/skills/native-runtime/codex-exec.mjs && node --check tests/native-codex-exec.test.mjs
+git diff --check
+# each exit 0
+bash scripts/check-secrets.sh
+bash scripts/check-secrets.sh core/skills/native-runtime/codex-exec.mjs tests/native-codex-exec.test.mjs
+# each exit 0: check-secrets: clean
+```
+
+Observed limits:
+- In this session, permissions refused the `node --input-type=module -e … summary()`
+  aggregate that CP-01a used. The new test file was run directly instead.
+- Only stub children ran: a `node` script and `node -e`. No real codex ran, and
+  there was no network or HOME. Whether `--ignore-user-config` has its intended
+  effect on Codex 0.167.0 remains an untested hypothesis.
+- A descendant that leaves the process group is out of scope and was not tested.
+
+Full regressions, review and the branch hunt remain pending for the PR.
+This is wiring proof on stub executables, not runtime certification.
