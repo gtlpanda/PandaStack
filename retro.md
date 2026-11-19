@@ -3746,3 +3746,45 @@ Phase 2 acceptance: 97/97.
 - Still open: an interrupted wait logs `CANCELLED` (routing.mjs:30,
   decisions.mjs:49) while the request stays pending.
 - ROADMAP, AGENTS.md and SPEC.md mark Phase 2 complete; Phase 3 is not launched.
+
+## 62. Codex parity becomes the priority; wave 1 approved and four features frozen (2026-11-19)
+
+- The user required full Codex parity (D125, reversing D122). PR #67 approved
+  wave 1 of spec/codex-parity-completion-matrix.md in
+  spec/contracts/codex-parity-priority.md: CP-01 catalog and install, CP-02 graph
+  host and Codex leaf, CP-03 shared references. That is 13 features. It also
+  recorded five root decisions:
+  - catalog v2 is accepted alongside v1, because the frozen OC-01 fixture equals
+    the production catalog;
+  - security-audit stays unavailable on Codex;
+  - leaves run with `--ignore-user-config`, whose live effect is untested;
+  - held checkpoint calls stay terminal;
+  - `REGISTRY_MISMATCH` is reused.
+- Frozen so far, each with its contract and acceptance test:
+  - CP-01a, catalog schema v2 (#67);
+  - CP-02a, shared Codex exec launcher (#68);
+  - CP-02d, durable checkpoint store (#68);
+  - CP-03c, role-file loader with skills inlining (#68).
+- Before freezing, each test had to fail on main only for the module its feature
+  adds, and pass against a throwaway reference implementation that was then
+  deleted. Results against the throwaways: 69/69, 26/26 and 14/14. Mutation runs
+  killed 20, 20 and 22 deliberate breaks.
+- /bughunt found four real gaps in the frozen inputs before they shipped. All four
+  are fixed, and each new case fails the original behavior.
+  - #67 F1: the roadmap claimed the catalog was already writable. The guard keeps
+    it frozen until CP-01b.
+  - #68 F1: a stranded checkpoint lock on a failed write or close.
+  - #68 F2: an order-pinned drift check.
+  - #68 F3: no code for invalid UTF-8 or an unreadable role file.
+- Correction: early in the session the catalog was summarized as "0 of 46
+  certified, not even autobuild and bughunt". That was wrong; the tally read a
+  field that only v2 has. autobuild and bughunt are `present-limited` on Codex,
+  and the other 44 are `not-certified`.
+- Branch cleanup in the same session:
+  - #64 was merged without a pre-PR /bughunt. It is test-only, and the review-gate
+    hook is not installed on this Mac.
+  - #65 was hunted and passed.
+  - Merging #65 and #66 meant renumbering their retro entries to 60 and 61.
+- Launch: autobuild runs wave 1 on the Claude backend from branch
+  autobuild/codex-parity in pr-first mode. shellcheck 0.11.0 was installed with
+  Homebrew, because the preflight requires it.

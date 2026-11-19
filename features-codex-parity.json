@@ -13,7 +13,7 @@
       ],
       "test": "acceptance/codex-parity/cp-01a-catalog-v2.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-02a",
@@ -28,7 +28,7 @@
       ],
       "test": "acceptance/codex-parity/cp-02a-codex-exec.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-02d",
@@ -43,7 +43,7 @@
       ],
       "test": "acceptance/codex-parity/cp-02d-checkpoint-store.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-03c",
@@ -58,7 +58,7 @@
       ],
       "test": "acceptance/codex-parity/cp-03c-role-files.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     }
   ]
 }
