@@ -251,3 +251,105 @@ Observed limits:
 
 Full regressions, review and the branch hunt remain pending for the PR.
 This is a fake-provider wiring proof through the real runtime, not runtime certification.
+
+## CP-03c — Role file loader with skills inlining
+
+Implemented spec/contracts/codex-parity-cp-03c.md only. The new module is
+core/skills/native-runtime/role-files.mjs. It exports `ROLE_FRONTMATTER_KEYS`
+(frozen), `listRoleFiles`, `loadRoleFile` and `assembleRoleInstructions`. Every
+failure throws through boundary.mjs `fail`, and the module defines no error class of
+its own.
+
+How it works:
+- Directories are found by descending through `readdirSync({withFileTypes})` entries
+  from the root: `core`, `kit`, `graphs/<g>`, then `agents` or `skills`.
+  - Only real directories and regular files count. A symlink at any level is absent,
+    and so is a non-directory `agents`/`skills` path.
+  - Names match directory entries exactly, so a case-insensitive filesystem never
+    turns `Upper.md` into `upper`.
+  - ENOENT means absent. Any other filesystem error is IO_ERROR.
+- Files are opened with `O_NOFOLLOW`, required to be regular by `fstat`, and decoded
+  with a fatal decoder.
+- `loadRoleFile` scans every agents directory for the requested stem. It never calls
+  `listRoleFiles`, so a duplicate elsewhere cannot fail an unrelated load.
+- `listRoleFiles` reads no file contents.
+- Frontmatter is cut by the runner's exact regex and parsed line by line under rules
+  1–8. The `skills` block list is checked before the colon split.
+- Skill bodies are the SKILL.md text after the same strip, with leading newlines
+  removed. They are joined after the role body with `'\n'`.
+- graphs/hunt/skills/bughunt/native-runner.mjs, all role files and all SKILL.md
+  files are unchanged.
+
+Decisions (unattended run, no human present):
+- The decoder adds `ignoreBOM: true` to the contract's `{ fatal: true }`.
+  - The runner's `readFileSync(…, 'utf8')` keeps a leading BOM, so its strip regex
+    does not match.
+  - A default TextDecoder would drop the BOM, and the loader would then parse a body
+    the runner never strips.
+  - With the flag, a BOM'd file fails rule 1 (INVALID_ROLE_FRONTMATTER).
+  - No shipped file has a BOM.
+- An `agents` or `skills` path that is a regular file or a symlink is skipped like a
+  missing directory, not IO_ERROR. This is one rule: only real directories count.
+  An EACCES on a real directory is IO_ERROR.
+- An options value that is not a plain data object (null, a string, an array, a
+  proxy, an accessor property) is INVALID_ROLE_ROOT, because root is checked first.
+  This reuses boundary.mjs `fields`, so no getter runs. A NUL in the root is also
+  INVALID_ROLE_ROOT.
+- A missing installation root lists `[]`, and `loadRoleFile` returns ROLE_NOT_FOUND.
+
+New implementation test tests/native-role-files.test.mjs (workflow harness, 10
+cases) covers:
+- a missing root, and absent `graphs` and `kit`;
+- symlinked `core/agents`, a symlinked `graphs/<g>` and a symlinked skill directory,
+  plus a file named `kit/agents`;
+- an EACCES agents directory as IO_ERROR (skipped under uid 0);
+- twelve more grammar cases:
+  - an empty block, and `skills:` as the last line;
+  - `  -  x`, `  - x `, three-space indent and `  -x`;
+  - a key with a leading space, and a repeated `skills` key;
+  - `tools:` with no value;
+  - a leading BOM, CRLF delimiters, and `constructor:` as a key;
+- raw values after the first colon;
+- malformed options objects, with a getter that never runs;
+- error message and stack that never contain the requested name, the root or file
+  content;
+- listing that reads no contents;
+- exact-case matching for roles and skills;
+- skills that resolve across two graphs.
+
+Mutation check: two mutations, each followed by a direct run of the new test.
+- Dropping `ignoreBOM` failed exactly the grammar case, at "leading byte-order mark".
+- Letting `realDirs` accept symlinks failed exactly the symlinked-containers case, by
+  listing `core/agents/away.md` and `graphs/linked/agents/far.md`.
+
+After both were restored, acceptance passed 14/14 again.
+
+Verification on Node v25.9.0 (focused only):
+
+```sh
+node --test acceptance/codex-parity/cp-03c-role-files.test.mjs
+# before the module existed: exit 1; 14 tests, 0 pass, 14 fail (all ERR_MODULE_NOT_FOUND)
+# after: exit 0; 14 pass, 0 fail
+node tests/native-role-files.test.mjs
+# 10 "ok", 0 "FAIL" lines (direct run prints no summary; lines were counted)
+node --test acceptance/native-runtime/nr-02-runtime.test.mjs acceptance/codex-parity/cp-02a-codex-exec.test.mjs acceptance/codex-parity/cp-02d-checkpoint-store.test.mjs acceptance/codex-parity/cp-01a-catalog-v2.test.mjs
+# exit 0; 121 pass, 0 fail
+node --check core/skills/native-runtime/role-files.mjs && node --check tests/native-role-files.test.mjs && git diff --check
+# exit 0
+bash scripts/check-secrets.sh
+bash scripts/check-secrets.sh core/skills/native-runtime/role-files.mjs tests/native-role-files.test.mjs
+# each: check-secrets: clean
+```
+
+Observed limits:
+- Ran on darwin (APFS, case-insensitive) as a non-root user only. Linux was not run
+  in this session.
+- The new test was not run through the `summary()` aggregate. This session denied the
+  inline `node -e` runner that earlier entries used, and scripts/test-workflow.mjs
+  runs the full suite, which is out of scope.
+- A file swapped for a symlink or a directory between listing and open fails
+  through `O_NOFOLLOW`/`fstat` as IO_ERROR. That race was not injected in a test.
+- The installed `~/.claude` layout is out of scope. No caller uses the loader yet.
+
+Full regressions, review and the branch hunt remain pending for the PR.
+This is a static loader proof over the source tree, not runtime certification.
