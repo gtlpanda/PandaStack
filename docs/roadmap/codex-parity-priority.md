@@ -38,8 +38,10 @@ None of these runs inside an unattended builder session.
 
 ## Known constraints
 
-- autobuild.json freezes `spec`. spec/offering-capabilities.json is listed as
-  writable for this priority because CP-01b, CP-02f, CP-03a and CP-03b edit it.
+- autobuild.json freezes `spec`, so spec/offering-capabilities.json stays frozen
+  while CP-01a builds (CP-01a must not change it). The host commit that freezes
+  CP-01b adds that one file to autobuild.json `writable`, because CP-01b, CP-02f,
+  CP-03a and CP-03b edit it. The guard checks `writable` before `frozen`.
 - Every SKILL.md edit must update its catalog `entrySha256` in the same change;
   CP-01b's drift guard makes a missed update fail.
 - Builder sessions on macOS cannot run the Linux-only stores (D22) or the hunt
