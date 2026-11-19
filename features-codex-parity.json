@@ -14,6 +14,51 @@
       "test": "acceptance/codex-parity/cp-01a-catalog-v2.test.mjs",
       "testKind": "node",
       "passes": false
+    },
+    {
+      "id": "CP-02a",
+      "title": "Shared Codex exec launcher",
+      "description": "Implement only spec/contracts/codex-parity-cp-02a.md: core/skills/native-runtime/codex-exec.mjs with codexExecArgs (always --ignore-user-config), runCodexExec (detached process group, SIGTERM then SIGKILL after the grace, timeout 124, abort 130, CODEX_THREAD_ID removed, 0600 logs) and classifyCodexExec (fixed codes). autobuild and the hunt runner are not modified; the test compares against them as a drift detector. No real codex, network or HOME.",
+      "contract": "spec/contracts/codex-parity-cp-02a.md",
+      "dependencies": [],
+      "acceptance": [
+        "For equal inputs the shared args match autobuild and the hunt runner on the fixed flag subset and always include --ignore-user-config.",
+        "Stub executables prove timeout 124, abort 130, SIGKILL after the grace and no surviving descendant.",
+        "Classification yields only the fixed codes, with PROVIDER_REFUSAL non-retryable, and CODEX_THREAD_ID never reaches the child."
+      ],
+      "test": "acceptance/codex-parity/cp-02a-codex-exec.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CP-02d",
+      "title": "Generic durable checkpoint store",
+      "description": "Implement only spec/contracts/codex-parity-cp-02d.md: core/skills/native-runtime/checkpoint-store.mjs, createFileCheckpointStore({dir}) implementing exactly the reserve/settle/uncertain/close port runtime.mjs calls, with atomic 0600 per-call files in a 0700 directory and an exclusive lock that is never auto-broken. Held calls stay terminal (no reconcile command). runtime.mjs is not changed.",
+      "contract": "spec/contracts/codex-parity-cp-02d.md",
+      "dependencies": [],
+      "acceptance": [
+        "A settled call replays the exact completion from a new store; prepared or uncertain calls return uncertain; a binding mismatch is CONFLICT.",
+        "Corrupt, truncated and read-only storage surface through the real runtime as CHECKPOINT_ERROR with zero provider calls.",
+        "A second store on the same directory is refused, a dead owner lock is never auto-broken, and close releases only its own lock."
+      ],
+      "test": "acceptance/codex-parity/cp-02d-checkpoint-store.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CP-03c",
+      "title": "Role file loader with skills inlining",
+      "description": "Implement only spec/contracts/codex-parity-cp-03c.md: core/skills/native-runtime/role-files.mjs with listRoleFiles, loadRoleFile and assembleRoleInstructions over core/agents, kit/agents and graphs/*/agents, the exact frontmatter key set, fail-closed parsing and referenced SKILL.md bodies inlined once after the role body. The hunt runner is not modified.",
+      "contract": "spec/contracts/codex-parity-cp-03c.md",
+      "dependencies": [],
+      "acceptance": [
+        "Every shipped role file parses with the frontmatter key set found on disk.",
+        "Unknown keys, a missing closing delimiter, duplicate roles, dangling skills and unsafe names fail closed with fixed codes and no input echoed.",
+        "The hunter assembly inlines the bug-lenses body exactly once after the role body, and the role body equals the hunt runner's strip."
+      ],
+      "test": "acceptance/codex-parity/cp-03c-role-files.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
