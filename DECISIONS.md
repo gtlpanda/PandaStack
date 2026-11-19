@@ -872,3 +872,18 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   labeled incomplete for live use. Claude interactive-session delivery ships as
   the P2-07 manual handoff and stays a tracked follow-up. Running the live Codex
   smoke later needs a machine with the Codex CLI and a login.
+
+- D125 (Codex parity priority, 2026-11-19): The user required full Codex parity
+  ("i need parity"), reversing D122. Every offering in
+  spec/offering-capabilities.json must run natively on the Codex CLI with the
+  same stages, gates, recovery and outputs it has on Claude Code, with no Claude
+  fallback. The plan is spec/codex-parity-completion-matrix.md; CP-00 is the
+  finished security-audit work. spec/contracts/codex-parity-priority.md approves
+  wave 1 (CP-01, CP-02, CP-03; 13 features) and five root decisions: catalog
+  schema v2 accepted alongside v1 (the frozen OC-01 fixture equals the
+  production catalog, so v1 cannot be replaced); security-audit stays
+  unavailable on Codex in wave 1; shared-host leaves pass --ignore-user-config
+  (its live effect is untested until a bounded probe is authorized); held
+  checkpoint calls stay terminal in wave 1; the host reuses REGISTRY_MISMATCH.
+  Features are frozen one at a time (CP-01a first), as the security-audit
+  priority did. Phase 3 stays unlaunched until this priority closes.

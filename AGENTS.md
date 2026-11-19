@@ -28,16 +28,17 @@ Git ownership/trust restriction, nested-capture orphan/overflow and filesystem-
 race restrictions. No safety-filter bypass, provider fallback, target audit,
 target application changes or false verification/completion claims.
 
-# Active priority: Phase 2 completion
+# Active priority: Codex parity
 
-Selected feature list: features.json (Phase 2). The security-audit execution and
-recovery repairs are complete (all 17 repair features pass, through SA-AR01). On 2026-11-11 the user closed the full Codex parity priority (D122):
-Codex stays a fallback backend for the paths already native (autobuild, bughunt),
-and the paused roadmap resumes with Phase 2. P2-15 and P2-16 shipped in b7a6c8c
-and are passing (D121). The Phase 2 dogfood ran and its report
-(docs/dogfood/phase-02.md) was reviewed on 2026-11-18: Phase 2 is complete (D124).
-Phase 3 is not launched. All execution restrictions above and below remain binding. No provider fallback, target application changes or previously
-blocked reproduction is authorized.
+Selected feature list: features-codex-parity.json (Codex parity). On 2026-11-19 the
+user required full Codex parity, reversing D122 (D125): every offering must run
+natively on the Codex CLI with the same stages, gates, recovery and outputs as on
+Claude Code. Phase 2 is complete (D124) and Phase 3 is not launched. The contract is
+spec/contracts/codex-parity-priority.md; wave 1 (CP-01, CP-02, CP-03) is approved
+and its features are frozen one at a time. Fake-codex tests are wiring proof, never
+runtime certification. All execution restrictions above and below remain binding.
+No provider fallback, target application changes, live provider calls in builder
+sessions or previously blocked reproduction is authorized.
 
 # Phase 2 autonomous build
 
