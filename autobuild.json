@@ -1,6 +1,6 @@
 {
   "backend": "claude",
-  "branch": "autobuild/phase2",
+  "branch": "autobuild/codex-parity",
   "featuresFile": "features-codex-parity.json",
   "progressFile": "PROGRESS-codex-parity.md",
   "maxConcurrentSubagents": 16,
@@ -9,7 +9,7 @@
     "sessionTimeoutMinutes": 30
   },
   "bughunt": true,
-  "bughuntBase": "0bc26048cbf99302a7f310689dad74da6388de11",
+  "bughuntBase": "87696c21f7700779818aa009b5501651c01d04ce",
   "limits": {
     "maxIterations": 8,
     "noProgressLimit": 3,
