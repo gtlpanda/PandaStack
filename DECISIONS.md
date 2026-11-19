@@ -862,3 +862,13 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   stores use). An inherited VERIFY_CAPTURE_SCOPE_DIR is refused off Linux, since
   nothing there can validate it. retention.sh, the no-Node path, stays Linux-only.
   Not a port: ps start times are coarser than /proc's, and macOS ships Bash 3.2.
+
+- D124 (Phase 2 completion, 2026-11-18): The user accepted Phase 2 on the
+  Claude managed-loop dogfood (docs/dogfood/phase-02.md) and waived SPEC's live
+  native-Codex delivery demonstration (two owned ephemeral sessions, stale-turn
+  rejection, no cross-routing). Under D122 Codex is a fallback backend, so that
+  demonstration is deferred, not passed: the P2-05 adapter has in-process test
+  coverage only (D64) plus the pre-implementation primitive spike, and is
+  labeled incomplete for live use. Claude interactive-session delivery ships as
+  the P2-07 manual handoff and stays a tracked follow-up. Running the live Codex
+  smoke later needs a machine with the Codex CLI and a login.

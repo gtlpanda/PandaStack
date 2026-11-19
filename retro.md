@@ -3365,6 +3365,23 @@ first failed here because it counted this machine's real Codex; it now uses vers
 
 Remaining for Phase 2: the dogfood scenario and docs/dogfood/phase-02.md.
 
+## 49. Phase 2 dogfood: two projects, one answer, restart and redelivery (2026-11-12)
+
+Live on the pinned runner 6efca9b with the Claude backend (Sonnet). Report:
+docs/dogfood/phase-02.md.
+- Alpha and beta both blocked on their own decision; answering only alpha
+  started only alpha's builder, which used its answer. Beta stayed pending.
+- Beta: SIGINT while waiting left the request pending; after answering, a
+  SIGKILL mid-build and a restart reused the same delivery ID and finished F-1
+  with beta's own answer. Alpha restarted after completion with no new session;
+  gamma with a post-request commit stopped with exit 14 STALE and no session.
+- Found: in full delivery mode the loop reports "every feature passes. Done."
+  (exit 0) without re-running the gate, so a BLOCKER after `mark-passed` still
+  ends as a verified completion (`autobuild check`: GATE: FAIL). Fixed in entry 51.
+  Also: my fixture gate `node --test tests/` fails on Node 24 (operator error),
+  and an interrupted wait logs CANCELLED although the request stays pending.
+- Cost: $0.28 + $0.14 Claude est., plus one killed session with no result event.
+
 ## 50. Bughunt intake survives a release-sized range and skips only declared files (2026-11-12)
 
 cherry-crm's release range (origin/main..release/2026-11-11a) failed intake with `git diff failed`.
@@ -3710,3 +3727,22 @@ exits 14 with `decision gate stopped: CANCELLED`. The SIGINT test fails on 56aa3
 `tests/decision-managed.test.mjs` +1: the tag carries the real state, a cancelled request with or without an
 aborted signal is not tagged, and the message covers unreadable state and code-less failures.
 Phase 2 acceptance: 97/97.
+
+## 61. Phase 2 complete: the dogfood report reviewed, the Codex demo waived (2026-11-18)
+
+- Reviewed docs/dogfood/phase-02.md on its merge with main 56aa36b and added a
+  completion review: Phase 2 acceptance 97/97 and Phase 1 regression 253/253
+  (both exit 0). Full `scripts/test.sh`: exit 1, 2324 passed, 2 failed,
+  30 skipped. The 2 hunt evidence failures reproduce on untouched main as root
+  without non-root isolation (a missing skip, queued separately). Bughunt dispositions are
+  the recorded passes on 405eb2f (#51) and d7433a2 (#52), not re-run.
+- Rechecked the report's code claims: the final gate's exit 16 (#54), exit 14,
+  and `node --test tests/` failing. That failure reproduces on Node 22 too, so the
+  report no longer pins it on Node 24. Dropped "not fixed in this report's
+  scope" next to the #54 fix.
+- Found: SPEC's Phase 2 dogfood also required a live native-Codex delivery demo,
+  which never ran (P2-05 has in-process tests only, D64). The user waived it
+  under D122 (D124); the adapter is labeled incomplete for live use.
+- Still open: an interrupted wait logs `CANCELLED` (routing.mjs:30,
+  decisions.mjs:49) while the request stays pending.
+- ROADMAP, AGENTS.md and SPEC.md mark Phase 2 complete; Phase 3 is not launched.

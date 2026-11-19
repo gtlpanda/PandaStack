@@ -1,6 +1,6 @@
 # PandaStack engineering roadmap
 
-Status: Phase 1 complete and reviewed. Phase 2 features 16/16 pass; its dogfood scenario and report remain. Phases 3–8 remain planned. Updated: 2026-11-11.
+Status: Phases 1 and 2 complete and reviewed ([Phase 2 report](docs/dogfood/phase-02.md)). Phases 3–8 remain planned; Phase 3 is not launched. Updated: 2026-11-18.
 
 This roadmap combines the Brian Armstrong-inspired shared queue, chief-of-staff
 interface, and learning loop with the engineering review's configuration,
@@ -100,7 +100,7 @@ coverage and demonstrated live capability must be labeled separately.
 | Phase | Deliverable | Depends on | Status |
 |---|---|---|---|
 | 1 | Shared run records and configuration doctor | Bootstrap gate | Complete; reviewed for local runner promotion |
-| 2 | Shared decision queue and answer routing | 1 | Features 16/16; dogfood scenario and report pending |
+| 2 | Shared decision queue and answer routing | 1 | Complete; report reviewed (D124) |
 | 3 | Telemetry, real-task evaluations, and decision learning | 1-2 | Planned |
 | 4 | Global scheduling and resource controls | 1-3 | Planned |
 | 5 | Chief-of-staff interface, notifications, and page view | 2-4 | Planned |
@@ -145,6 +145,10 @@ Dogfood: build phase 1 using the pinned baseline; demonstrate doctor and run
 capture on the candidate, then use the accepted result to record phase 2.
 
 ### Phase 2 — Shared decision queue and answer routing
+
+Implementation, dogfood and completion evidence are in
+[the Phase 2 report](docs/dogfood/phase-02.md). Claude interactive-session
+delivery ships as a manual handoff and stays a tracked follow-up (D124).
 
 Build a durable local queue and CLI. Items identify the project/run, question,
 reason, options, recommendation, evidence links, and any approval scope. Add
