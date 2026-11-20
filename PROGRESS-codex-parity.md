@@ -1164,3 +1164,66 @@ Observed limits and untested hypotheses:
   `GUIDANCE_ONLY` records. Linux was not run.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-02f — harness-repair and dev-build through the native host on a fake codex
+
+Wiring proof, not runtime certification. Every CLI case runs a fake `codex`
+(the frozen acceptance/codex-parity/cp-02f-fake-codex.cjs) and the schema sweep runs
+in process; nothing here says anything about a real Codex, model or repository. No
+module, workflow, role file, SKILL.md, install.sh or provider changed, and no real
+codex, claude, network or HOME was used.
+
+Edit:
+- `spec/offering-capabilities.json`: `dev`'s `proofRefs` goes from `[]` to
+  `["cp-02f-host-wiring"]`, written multi-line like every other non-empty array in
+  the file (`git diff --stat`: 1 file, 3 insertions, 1 deletion; one hunk at dev's
+  row). `dev`'s codex row stays `unavailable` with no transport, so
+  `install.sh --codex` still installs only autobuild and bughunt.
+
+Decisions (no human present):
+- Edited by exact string replacement anchored on dev's unique `entrySha256`, not a
+  JSON rewrite, so no other byte could move.
+
+New implementation test `tests/host-wiring-proof-ref.test.mjs` (workflow harness,
+5 cases), pinning what the frozen test leaves open (it checks `includes` and that
+only dev carries the id):
+- dev's `proofRefs` is exactly `["cp-02f-host-wiring"]`, a catalog `identifier`, and
+  every other row's is `[]`;
+- dev's provider rows, `requirementsComplete`, `nativeReadiness` and the two
+  `evidenceOwners` are exactly as the contract states;
+- the id appears in the CP-02f contract and its frozen test;
+- a reference is never evidence: for every row, `[]`, the one id, or two ids give the
+  same `installEligible`/`providerImplementation` (both backends) and
+  `nativeImplementationOf`; dev stays non-Codex-installable and `not-certified`;
+  `validateCatalog` is clean with and without the reference;
+- `installPlan({backend: 'codex'})` on the repo still names only `skills/autobuild`
+  and `skills/bughunt`.
+
+Verification on Node v25.9.0, darwin (focused only):
+
+```sh
+node --test acceptance/codex-parity/cp-02f-native-graphs.test.mjs
+# pre-change: 7 tests, 6 pass, 1 fail ("dev proofRefs include cp-02f-host-wiring")
+# post-change: 7 tests, 7 pass, 0 fail. Sweep diagnostics: blueprint-design 5/5,
+#   dev-build 7/7, bughunt-flow 8/8, harness-repair 5/5, release-flow 5/5,
+#   security-audit-flow 6/9, unproven: audit-analyst, audit-analyst, audit-researcher
+node --test acceptance/codex-parity/cp-02f-native-graphs.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs acceptance/codex-parity/cp-01c-install-plan.test.mjs acceptance/codex-parity/cp-01d-inspect-offering.test.mjs acceptance/codex-parity/cp-02e-graph-host.test.mjs acceptance/codex-parity/cp-03b-reference-closure.test.mjs
+# 98 tests, 98 pass, 0 fail
+node logs/evidence/cp-02f/run-focused.mjs tests/host-wiring-proof-ref.test.mjs tests/native-catalog-v2.test.mjs tests/native-catalog-drift.test.mjs tests/install-plan.test.mjs tests/install-codex.test.mjs tests/native-preflight-cli.test.mjs tests/native-offering-catalog.test.mjs tests/reference-closure-catalog.test.mjs
+# FOCUSED: 68 passed, 0 failed
+bash scripts/validate.sh                    # VALIDATE: PASS
+node scripts/check-refs.mjs                 # check-refs: 271 references, all resolve
+git diff --check                            # no output
+bash scripts/check-secrets.sh               # check-secrets: clean
+bash scripts/check-secrets.sh tests/host-wiring-proof-ref.test.mjs   # check-secrets: clean
+```
+
+Observed limits and untested hypotheses:
+- The new test was not run against the pre-change catalog. Its first case compares
+  dev's list exactly to `["cp-02f-host-wiring"]`; the pre-change value was `[]`
+  (the removed line in the diff), which it rejects.
+- 3 of 39 graph nodes are unproven by the sweep (security-audit-flow's Validate
+  analyst and its two Verify nodes), as the contract pins.
+- Linux was not run.
+
+Full regressions, review and the branch hunt remain pending for the PR.

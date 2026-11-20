@@ -1616,7 +1616,9 @@
         }
       },
       "permissionProfile": null,
-      "proofRefs": []
+      "proofRefs": [
+        "cp-02f-host-wiring"
+      ]
     },
     {
       "id": "bughunt",

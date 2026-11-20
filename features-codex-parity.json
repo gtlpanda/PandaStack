@@ -224,7 +224,7 @@
       ],
       "test": "acceptance/codex-parity/cp-02f-native-graphs.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     }
   ]
 }
