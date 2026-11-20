@@ -163,12 +163,12 @@ function gitStatus(repo, args) {
 
 let n = 0
 // A repo whose path holds spaces, with a bare origin. `commit: false` leaves it unborn.
-function makeRepo({ commit = true } = {}) {
+function makeRepo({ commit = true, branch = 'main' } = {}) {
   const id = ++n
   const repo = join(WORK, `repo ${id} with spaces`)
   const origin = join(WORK, `origin ${id}.git`)
   mkdirSync(repo)
-  git(repo, ['init', '-q', '-b', 'main'])
+  git(repo, ['init', '-q', '-b', branch])
   git(WORK, ['init', '-q', '--bare', origin])
   git(repo, ['remote', 'add', 'origin', origin])
   if (commit) {
@@ -580,6 +580,31 @@ describe('approve: refusals change nothing', () => {
     assert.deepEqual(snapshot(r0), before)
     assert.ok(!r.gitCalls.some(c => c[2] === 'branch'), 'no branch -D: no branch was created')
     assertGitDiscipline(r, r0.repo)
+  })
+
+  test('the same refusal in a repo with no commit (unborn HEAD branch integration) is GIT_FAILED, exit 2, and the start commit stays', async () => {
+    await load()
+    const r0 = makeRepo({ commit: false, branch: 'integration' })
+    const { repo } = r0
+    const { hash } = writeState(repo)
+    writeFile(repo, 'idea.md', '# the idea\n')
+    const before = snapshot(r0)
+    assert.equal(before.refs, '', 'no ref before')
+    const r = approve(repo, hash)
+    assertError(r, 'GIT_FAILED', 2)
+    const after = snapshot(r0)
+    assert.equal(after.head, 'refs/heads/integration\n', 'HEAD still names the same branch')
+    assert.equal(gitStatus(repo, ['rev-parse', '-q', '--verify', 'HEAD']).status, 0, 'the start commit exists')
+    assert.equal(git(repo, ['rev-parse', 'HEAD^{tree}']).trim(), EMPTY_TREE, 'the start commit is empty')
+    assert.equal(subject(repo, 'HEAD'), `blueprint: start ${APP}`)
+    assert.equal(git(repo, ['rev-list', '--count', 'HEAD']).trim(), '1')
+    assert.equal(after.refs, `refs/heads/integration ${git(repo, ['rev-parse', 'HEAD']).trim()}\n`, 'no integration/<app> branch, no other ref')
+    assert.equal(after.originRefs, before.originRefs)
+    assert.equal(after.index, before.index, 'the index is unchanged')
+    assert.deepEqual(after.tree, before.tree, 'the working tree is unchanged')
+    for (const p of TARGETS) assert.ok(!existsSync(join(repo, p)), `${p} is not written`)
+    assert.ok(!r.gitCalls.some(c => ['add', 'reset', 'branch'].includes(c[2])), 'no rollback: nothing after the switch ran')
+    assertGitDiscipline(r, repo)
   })
 })
 

@@ -353,7 +353,7 @@
       "acceptance": [
         "show prints the exact fixed-grammar report, redacted and single-lined, ending with approvalSha256 equal to sha256 of run3.json, using only read-only git calls; missing, malformed, stale or unready state, a bad app slug and a non-top-level repo each refuse with a fixed code.",
         "approve with the shown hash puts HEAD on integration/<app> with one commit holding exactly the design doc, backlog.json and knowledge-map.json, byte-equal to write-docs, with untracked and modified files, the original branch, remote refs and origin untouched, gh never run, and every git call git -C <repo>; a repo with no commit gets the empty start commit first.",
-        "A hash mismatch or a missing hash, stale design, unready run2, staged changes, an existing branch or an invalid target leaves the repo unchanged with exit 2; write-docs refusing or a failing pre-commit hook rolls back to prior bytes, a clean index, no branch and the original HEAD (branch or detached) with exit 3; a failed rollback step is ROLLBACK_FAILED, exit 4."
+        "A hash mismatch or a missing hash, stale design, unready run2, staged changes, an existing branch or an invalid target leaves the repo unchanged with exit 2, and a refused switch after the start commit in a repo with no commit is GIT_FAILED exit 2 with only that commit kept; write-docs refusing or a failing pre-commit hook rolls back to prior bytes, a clean index, no branch and the original HEAD (branch or detached) with exit 3; a failed rollback step is ROLLBACK_FAILED, exit 4."
       ],
       "test": "acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs",
       "testKind": "node",

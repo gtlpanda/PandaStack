@@ -100,8 +100,8 @@ node graphs/blueprint/skills/blueprint/blueprint-approve.mjs <show|approve> --ar
 |---|---|
 | 0 | success |
 | 1 | bad input; nothing was read from the repo |
-| 2 | refused or failed before `switch -c` succeeded. The repo is as it was: HEAD, every ref, the index and the working tree. |
-| 3 | failed after `switch -c` succeeded, and the rollback below finished. The repo is as it was, except for a start commit this call made. (The one exception is step 11 below.) |
+| 2 | refused or failed before `switch -c` succeeded. The repo is as it was: HEAD, every ref, the index and the working tree. The one exception: a start commit this call made in step 5 stays when a later step before the switch (6 or 7) fails. |
+| 3 | failed after `switch -c` succeeded, and the rollback below finished. The repo is as it was, except for a start commit this call made in step 5. (Step 11 below is the one case with no rollback.) |
 | 4 | failed after `switch -c` succeeded, and at least one rollback step failed |
 
 The CLI sets `process.exitCode` and never calls `process.exit`.
@@ -228,10 +228,12 @@ After the checks it runs these steps in order. The first refusal or failure wins
    - exit 0: its output names the branch to come back to;
    - exit 1: HEAD is detached. The CLI reads `git -C <repo> rev-parse HEAD`, and that
      commit is where it comes back to;
-   - anything else is `GIT_FAILED`.
+   - anything else is `GIT_FAILED`, exit 2. A start commit made in step 5 stays.
 7. **Switch.** `git -C <repo> switch -c integration/<app>`. A failure is
-   `GIT_FAILED`, exit 2. No branch was created, so nothing is deleted. A failure in
-   steps 8 to 10 runs the rollback.
+   `GIT_FAILED`, exit 2. No branch was created, so nothing is deleted. A start
+   commit made in step 5 stays: it is never undone. (Example: an unborn HEAD branch
+   named `integration` gets the start commit, then `switch -c integration/<app>`
+   hits a ref conflict.) A failure in steps 8 to 10 runs the rollback.
 8. **Snapshot.** For each target, record its bytes, or that it is absent. Record
    whether `docs` and `docs/blueprint` exist. These are working-tree bytes, not
    HEAD's: an unstaged edit is what gets restored. A read failure is `IO_ERROR`.
@@ -272,8 +274,9 @@ Results:
 - Every step succeeds: the CLI reports the original failure's code, exit 3.
 - Any step fails: it reports `ROLLBACK_FAILED`, exit 4. The repo then needs a person.
 
-A start commit made in step 5 stays: the branch it is on is the branch HEAD comes back
-to. Other untracked and modified files are never touched by any step.
+A start commit made in step 5 is never undone, whatever fails after it (exit 2, 3 or
+4). After a rollback, the branch it is on is the branch HEAD comes back to. Other
+untracked and modified files are never touched by any step.
 
 ### Git calls
 
@@ -316,7 +319,7 @@ to. Other untracked and modified files are never touched by any step.
 
 ## Acceptance
 
-acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs (node:test, 26 cases, about
+acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs (node:test, 27 cases, about
 12 seconds).
 
 **Setup.**
@@ -358,6 +361,9 @@ acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs (node:test, 26 cases, 
 - **Failure injection.**
   - A `switch -c` that git refuses (a branch named `integration` exists) is
     `GIT_FAILED`, exit 2, with nothing created.
+  - The same refusal in a repo with no commit (its unborn HEAD branch is
+    `integration`) is `GIT_FAILED`, exit 2. The start commit stays, and no
+    `integration/<app>` branch or target file is created.
   - write-docs refusing (an existing design doc) is `WRITE_DOCS_FAILED`, exit 3: no
     branch and no new file.
   - A failing pre-commit hook is `COMMIT_FAILED`, exit 3. A new design doc goes back
