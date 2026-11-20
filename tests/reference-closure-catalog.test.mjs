@@ -1,0 +1,88 @@
+// CP-03b implementation edges the frozen acceptance does not pin: it checks that
+// declared dependencies are a superset of the closure and that GUIDANCE_ONLY is
+// present. This pins the contract's exact catalog result: the "dependencies after"
+// table, the exact sorted limitation lists of the seven reference rows, an acyclic
+// dependency graph, and GUIDANCE_ONLY being a limitation, not a refusal (stripping it
+// changes no eligibility, implementation or validation answer).
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { test, REPO } from '../scripts/workflow-harness.mjs'
+import { validateCatalog, installEligible, nativeImplementationOf, providerImplementation } from '../core/skills/native-runtime/catalog.mjs'
+
+const catalog = JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8'))
+const byId = new Map(catalog.offerings.map(o => [o.id, o]))
+const REFERENCE_ROWS = ['backlog', 'bug-lenses', 'default-stack', 'findings', 'gtm-brief', 'knowledge-map', 'run-records']
+const CLAUDE_LIMITS = ['GUIDANCE_ONLY', 'REQUIREMENTS_INCOMPLETE']
+const CODEX_LIMITS = ['GUIDANCE_ONLY', 'NATIVE_UNVERIFIED', 'NO_PROVIDER_TRANSPORT', 'REQUIREMENTS_INCOMPLETE']
+const codeUnitSorted = list => [...list].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+
+await test('dev, bughunt and release-pr declare exactly the contract table', () => {
+  assert.deepEqual(byId.get('dev').dependencies,
+    ['backlog', 'default-stack', 'harness-review', 'knowledge-map', 'verify', 'workflow-state'])
+  assert.deepEqual(byId.get('bughunt').dependencies,
+    ['backlog', 'bug-lenses', 'default-stack', 'findings', 'knowledge-map', 'verify', 'workflow-state'])
+  assert.deepEqual(byId.get('release-pr').dependencies, ['backlog', 'default-stack', 'knowledge-map'])
+})
+
+await test('every dependency list is sorted, unique, names a known offering and never itself', () => {
+  for (const row of catalog.offerings) {
+    assert.deepEqual(row.dependencies, codeUnitSorted(new Set(row.dependencies)), `${row.id}: sorted and unique`)
+    for (const dependency of row.dependencies) {
+      assert.ok(byId.has(dependency), `${row.id} -> ${dependency} is a catalog offering`)
+      assert.notEqual(dependency, row.id, `${row.id} does not depend on itself`)
+    }
+  }
+})
+
+await test('the dependency graph is acyclic, and every added target is a leaf', () => {
+  for (const target of ['backlog', 'harness-review', 'verify']) assert.deepEqual(byId.get(target).dependencies, [], `${target} is a leaf`)
+  const DONE = 2, ACTIVE = 1, state = new Map()
+  const visit = (id, path) => {
+    if (state.get(id) === DONE) return
+    assert.notEqual(state.get(id), ACTIVE, `cycle: ${[...path, id].join(' -> ')}`)
+    state.set(id, ACTIVE)
+    for (const next of byId.get(id).dependencies) visit(next, [...path, id])
+    state.set(id, DONE)
+  }
+  for (const row of catalog.offerings) visit(row.id, [])
+})
+
+await test('the seven reference rows carry exactly the sorted limitation lists and no dependencies', () => {
+  assert.deepEqual(catalog.offerings.filter(o => o.kind === 'shared-reference-contract').map(o => o.id), REFERENCE_ROWS)
+  for (const id of REFERENCE_ROWS) {
+    const row = byId.get(id)
+    assert.deepEqual(row.dependencies, [], `${id}: no rule derives an edge from a reference row`)
+    assert.deepEqual(row.providers.claude.limitations, CLAUDE_LIMITS, `${id} claude`)
+    assert.deepEqual(row.providers.codex.limitations, CODEX_LIMITS, `${id} codex`)
+    assert.equal(row.providers.claude.implementation, 'partial', `${id} claude stays partial`)
+    assert.equal(row.providers.codex.implementation, 'unavailable', `${id} codex stays unavailable`)
+  }
+  assert.deepEqual(codeUnitSorted(CODEX_LIMITS), CODEX_LIMITS, 'GUIDANCE_ONLY sorts first')
+})
+
+await test('GUIDANCE_ONLY appears only on reference rows', () => {
+  for (const row of catalog.offerings) {
+    for (const backend of ['claude', 'codex']) {
+      assert.equal(row.providers[backend].limitations.includes('GUIDANCE_ONLY'), REFERENCE_ROWS.includes(row.id), `${row.id} ${backend}`)
+    }
+  }
+})
+
+await test('GUIDANCE_ONLY is a limitation, not a refusal: stripping it changes no answer', () => {
+  const strip = row => ({ ...row, providers: Object.fromEntries(Object.entries(row.providers).map(([backend, entry]) =>
+    [backend, { ...entry, limitations: entry.limitations.filter(code => code !== 'GUIDANCE_ONLY') }])) })
+  for (const id of REFERENCE_ROWS) {
+    const row = byId.get(id), bare = strip(row)
+    assert.notDeepEqual(bare, row, `${id}: the strip removed something`)
+    for (const backend of ['claude', 'codex']) {
+      assert.equal(installEligible(row, backend), installEligible(bare, backend), `${id} ${backend} installEligible`)
+      assert.equal(providerImplementation(row, backend), providerImplementation(bare, backend), `${id} ${backend} implementation`)
+    }
+    assert.equal(nativeImplementationOf(row), nativeImplementationOf(bare), `${id} nativeImplementationOf`)
+    assert.equal(installEligible(row, 'claude'), true, `${id} stays Claude-installable`)
+    assert.equal(installEligible(row, 'codex'), false, `${id} stays non-Codex-installable`)
+  }
+  assert.deepEqual(validateCatalog(catalog), [], 'the catalog validates with GUIDANCE_ONLY')
+  assert.deepEqual(validateCatalog({ ...catalog, offerings: catalog.offerings.map(strip) }), [], 'and without it')
+})

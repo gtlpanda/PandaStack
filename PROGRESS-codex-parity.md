@@ -1089,3 +1089,78 @@ Observed limits and untested hypotheses:
 - Linux was not run.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-03b — Reference-content closure
+
+Catalog data only; it certifies nothing. No row became `supported`, no readiness
+changed, and no model, provider, network or real HOME was used.
+
+Edits:
+- `spec/offering-capabilities.json`, 18 inserted lines and nothing else
+  (`git diff --stat`: 18 insertions, 0 deletions):
+  - dependencies: dev gains `harness-review` and `verify`; bughunt and release-pr
+    gain `backlog`. Lists stay sorted and unique and match the contract's
+    "dependencies after" table exactly. Every added target has `dependencies: []`.
+  - `GUIDANCE_ONLY` added first (code-unit order) to both providers of the seven
+    `shared-reference-contract` rows (backlog, bug-lenses, default-stack, findings,
+    gtm-brief, knowledge-map, run-records): claude `GUIDANCE_ONLY,
+    REQUIREMENTS_INCOMPLETE`; codex `GUIDANCE_ONLY, NATIVE_UNVERIFIED,
+    NO_PROVIDER_TRANSPORT, REQUIREMENTS_INCOMPLETE`.
+- No SKILL.md, role, workflow, lens, module or install.sh change, so no hash moved.
+
+Decisions (no human present):
+- The catalog was edited by exact string replacement rather than a JSON rewrite
+  script: the autobuild guard refuses inline scripts that name the catalog path.
+  Each reference row's limitation edit was anchored on its unique `entrySha256`.
+
+New implementation test `tests/reference-closure-catalog.test.mjs` (workflow harness,
+6 cases), pinning what the frozen test leaves open (it checks a superset and presence):
+- dev, bughunt and release-pr dependencies equal the contract table exactly;
+- every dependency list is sorted, unique, names a known offering, never itself;
+- the whole dependency graph is acyclic and the three added targets are leaves;
+- the seven reference rows carry exactly the two sorted limitation lists, keep
+  `dependencies: []`, claude `partial` and codex `unavailable`;
+- `GUIDANCE_ONLY` appears on reference rows only (no graph, library or guided row);
+- `GUIDANCE_ONLY` is a limitation, not a refusal: stripping it from each reference
+  row changes no `installEligible`, `providerImplementation` or
+  `nativeImplementationOf` answer under either backend, and `validateCatalog` is
+  clean with and without it.
+
+Verification on Node v25.9.0, darwin (focused only):
+
+```sh
+node --test acceptance/codex-parity/cp-03b-reference-closure.test.mjs
+# pre-change (output was filtered, totals not captured): three failure messages,
+#   "undeclared closure edges" listing exactly dev -> verify, dev -> harness-review,
+#   bughunt -> backlog, release-pr -> backlog; "backlog claude GUIDANCE_ONLY";
+#   "bughunt -> backlog is declared"
+# post-change: 7 tests, 7 pass, 0 fail
+node logs/evidence/cp-03b/run-focused.mjs tests/reference-closure-catalog.test.mjs tests/native-catalog-v2.test.mjs tests/native-catalog-drift.test.mjs tests/native-catalog-paths.test.mjs tests/native-preflight-cli.test.mjs tests/native-offering-catalog.test.mjs tests/native-role-files.test.mjs tests/install-plan.test.mjs tests/install-codex.test.mjs graphs/hunt/tests/bughunt-flow.test.mjs graphs/hunt/tests/intake.test.mjs
+# FOCUSED: 164 passed, 0 failed
+node --test acceptance/codex-parity/*.test.mjs acceptance/native-runtime/*.test.mjs
+# 399 tests, 389 pass, 10 fail: 1 is CP-02f's own unbuilt case ("dev proofRefs
+#   include cp-02f-host-wiring"; CP-02f passes:false); 9 are sa-02d-native-checkpoints
+#   `Audit journal: IO_ERROR`, thrown by the Linux-only guard at
+#   graphs/security-audit/skills/security-audit/journal-storage.mjs:49 on darwin
+bash scripts/validate.sh                    # VALIDATE: PASS
+node scripts/check-refs.mjs                 # check-refs: 271 references, all resolve
+git diff --check                            # exit 0
+bash scripts/check-secrets.sh               # check-secrets: clean
+bash scripts/check-secrets.sh tests/reference-closure-catalog.test.mjs   # check-secrets: clean
+```
+
+Observed limits and untested hypotheses:
+- The new test was not run against the pre-change catalog (the guard refuses
+  `git stash`). Case 1 compares exact lists; the pre-change dev list was
+  `backlog, default-stack, knowledge-map, workflow-state`, which it rejects.
+- acceptance/phase1/p1-06 "temporary records are removed when close ... reports EIO"
+  fails on darwin ("close fault must be exercised"). It patches `fs.closeSync` on
+  the run store, and core/skills/run-records names no catalog path (grep). Not rerun
+  on a pre-change tree.
+- Raw `node --test` without a real-path TMPDIR fails cases in native-offering-catalog,
+  install-codex and intake on macOS (`/var` vs `/private/var`); through the real-path
+  runner they pass, as above.
+- That any model follows the reference prose is unproven; that is what
+  `GUIDANCE_ONLY` records. Linux was not run.
+
+Full regressions, review and the branch hunt remain pending for the PR.

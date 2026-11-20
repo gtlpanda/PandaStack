@@ -26,6 +26,7 @@
           "implementation": "partial",
           "transportId": "claude-code",
           "limitations": [
+            "GUIDANCE_ONLY",
             "REQUIREMENTS_INCOMPLETE"
           ]
         },
@@ -33,6 +34,7 @@
           "implementation": "unavailable",
           "transportId": null,
           "limitations": [
+            "GUIDANCE_ONLY",
             "NATIVE_UNVERIFIED",
             "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
@@ -64,6 +66,7 @@
           "implementation": "partial",
           "transportId": "claude-code",
           "limitations": [
+            "GUIDANCE_ONLY",
             "REQUIREMENTS_INCOMPLETE"
           ]
         },
@@ -71,6 +74,7 @@
           "implementation": "unavailable",
           "transportId": null,
           "limitations": [
+            "GUIDANCE_ONLY",
             "NATIVE_UNVERIFIED",
             "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
@@ -149,6 +153,7 @@
           "implementation": "partial",
           "transportId": "claude-code",
           "limitations": [
+            "GUIDANCE_ONLY",
             "REQUIREMENTS_INCOMPLETE"
           ]
         },
@@ -156,6 +161,7 @@
           "implementation": "unavailable",
           "transportId": null,
           "limitations": [
+            "GUIDANCE_ONLY",
             "NATIVE_UNVERIFIED",
             "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
@@ -188,6 +194,7 @@
           "implementation": "partial",
           "transportId": "claude-code",
           "limitations": [
+            "GUIDANCE_ONLY",
             "REQUIREMENTS_INCOMPLETE"
           ]
         },
@@ -195,6 +202,7 @@
           "implementation": "unavailable",
           "transportId": null,
           "limitations": [
+            "GUIDANCE_ONLY",
             "NATIVE_UNVERIFIED",
             "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
@@ -227,6 +235,7 @@
           "implementation": "partial",
           "transportId": "claude-code",
           "limitations": [
+            "GUIDANCE_ONLY",
             "REQUIREMENTS_INCOMPLETE"
           ]
         },
@@ -234,6 +243,7 @@
           "implementation": "unavailable",
           "transportId": null,
           "limitations": [
+            "GUIDANCE_ONLY",
             "NATIVE_UNVERIFIED",
             "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
@@ -303,6 +313,7 @@
           "implementation": "partial",
           "transportId": "claude-code",
           "limitations": [
+            "GUIDANCE_ONLY",
             "REQUIREMENTS_INCOMPLETE"
           ]
         },
@@ -310,6 +321,7 @@
           "implementation": "unavailable",
           "transportId": null,
           "limitations": [
+            "GUIDANCE_ONLY",
             "NATIVE_UNVERIFIED",
             "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
@@ -346,6 +358,7 @@
           "implementation": "partial",
           "transportId": "claude-code",
           "limitations": [
+            "GUIDANCE_ONLY",
             "REQUIREMENTS_INCOMPLETE"
           ]
         },
@@ -353,6 +366,7 @@
           "implementation": "unavailable",
           "transportId": null,
           "limitations": [
+            "GUIDANCE_ONLY",
             "NATIVE_UNVERIFIED",
             "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
@@ -1570,7 +1584,9 @@
       "dependencies": [
         "backlog",
         "default-stack",
+        "harness-review",
         "knowledge-map",
+        "verify",
         "workflow-state"
       ],
       "evidenceOwners": [
@@ -1612,6 +1628,7 @@
       ],
       "nativeReadiness": "unknown",
       "dependencies": [
+        "backlog",
         "bug-lenses",
         "default-stack",
         "findings",
@@ -1659,6 +1676,7 @@
       ],
       "nativeReadiness": "unknown",
       "dependencies": [
+        "backlog",
         "default-stack",
         "knowledge-map"
       ],

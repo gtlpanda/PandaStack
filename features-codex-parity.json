@@ -205,7 +205,7 @@
       ],
       "test": "acceptance/codex-parity/cp-03b-reference-closure.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-02f",
