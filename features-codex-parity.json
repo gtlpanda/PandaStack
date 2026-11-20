@@ -164,7 +164,7 @@
       ],
       "test": "acceptance/codex-parity/cp-03a-skill-dir.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-02e",

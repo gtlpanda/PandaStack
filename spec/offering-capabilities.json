@@ -20,7 +20,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "9a3415be9a6e352e0a63847f131e81acd134c27304b21a61822d6573b79770da",
+      "entrySha256": "a966b5122b77f50967b0845eca7bae9038a5df117e029419937e175209f3dc5f",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -182,7 +182,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "5c1395055f810a1ab0f582f2e629aa443bd7436a253c3d0fe79500cdde2017ec",
+      "entrySha256": "c5b288650427718c9396faf07be36eacf2c16dbc31a4dfb7709d22cb379964fc",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -221,7 +221,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "a25824f9508b37c529da3b1d332f99647c1919e6b446a613e289199387b530a2",
+      "entrySha256": "a11264d34c83098b7ac34b752b3db1dd450325e117d7d161da039a54d47f545e",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -384,7 +384,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "c0c81d1fe3b57519d487dc884397e4cf55c92e0f82cb1204bcccb3831ac91e2a",
+      "entrySha256": "00032a2afe268e359a5ab4cedfe1327b46854e4e58bef44d06bba2f702b41800",
       "providers": {
         "claude": {
           "implementation": "partial",

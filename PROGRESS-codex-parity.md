@@ -911,3 +911,80 @@ Observed limits:
 - Ran on darwin as a non-root user only. Linux was not run.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-03a — Provider-neutral SKILL_DIR helper invocation
+
+Wiring proof, not runtime certification. Neither Claude Code nor Codex was run; no
+provider, network or real HOME was used. The four catalog rows stay codex
+`unavailable` and non-install-eligible.
+
+Edits (documentation and hashes only; no helper code changed):
+- `core/skills/{backlog,findings,gtm-brief,verify}/SKILL.md`: the seven fenced helper
+  commands now read `<node|bash> "${SKILL_DIR:-${CLAUDE_SKILL_DIR}}/<helper>"<tail>`
+  with main's tails unchanged and in order (backlog 2, findings 3, gtm-brief 1,
+  verify 1). Each file gains the pinned `SKILL_DIR` paragraph once, as plain prose.
+  In verify it replaces the `CLAUDE_SKILL_DIR` / `~/.claude/skills/verify/verify.sh`
+  parenthesis; the "Pass a directory as the first argument" sentence stays. No
+  `.claude` remains in any of the four files.
+- `spec/offering-capabilities.json`: exactly four `entrySha256` values (backlog,
+  findings, gtm-brief, verify), set to the sha256 of the new SKILL.md bytes. The
+  values were taken from the acceptance catalog case's own sha256 of the on-disk
+  bytes (`shasum` was denied in this session). `git diff --stat` shows 4 changed lines.
+- `spec/codex-parity-inventory.json` still quotes main's commands. It is a
+  hash-pinned historical snapshot (CP-01b `inventorySha256`, OC-01) and is not in
+  this feature's writable set, so it was left unchanged.
+
+Decisions (no human present):
+- Paragraph placement: before the first helper fence in backlog, findings and
+  gtm-brief; after the fence in verify (where main's parenthesis was). No fenced
+  Codex example was added: any fenced line naming `SKILL_DIR` must match the idiom.
+
+New implementation test `tests/skill-dir-idiom.test.mjs` (workflow harness, 8 cases):
+- every `CLAUDE_SKILL_DIR` read in the four files is the bare token nested as the
+  default of `SKILL_DIR`; no `${CLAUDE_SKILL_DIR:-` form;
+- no idiom line consults `~`, `$HOME`, `.agents`, `.claude` or a `skills/` path;
+- the paragraph appears exactly once per file and is prose; verify keeps its
+  subproject sentence and loses main's parenthesis;
+- every `validate.sh` `rule` sentence pinned on these four files is present (read
+  from validate.sh; the test requires at least the contract's five);
+- no file names another skill's `skills/<id>/` path (the CP-01b edge rule);
+- bash facts the contract states in prose, run for real: an env-prefix assignment
+  does not reach the expansion (the `SKILL_DIR='<dir>';` statement form is needed),
+  the substituted idiom is valid bash and a set `SKILL_DIR` wins, and the reversed
+  nesting is `bad substitution`;
+- with neither variable set (or both empty) the idiom expands to `/<helper>` at the
+  filesystem root, never a relative path.
+
+Verification on Node v25.9.0, darwin (focused only):
+
+```sh
+node --test acceptance/codex-parity/cp-03a-skill-dir.test.mjs
+# pre-change: 17 tests, 1 pass, 16 fail (the 16 are the idiom cases; the catalog case
+#   already passed because CP-01b is built)
+# post-change: 17 tests, 17 pass, 0 fail (duration ~11.4 s)
+node logs/evidence/cp-02c/run-focused.mjs tests/skill-dir-idiom.test.mjs tests/backlog.test.mjs tests/gtm-brief.test.mjs tests/native-offering-catalog.test.mjs
+# FOCUSED: 69 passed, 0 failed
+node --test acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs acceptance/native-runtime/oc-01-catalog.test.mjs
+# 33 tests, 33 pass, 0 fail
+bash scripts/validate.sh                    # VALIDATE: PASS
+node scripts/check-refs.mjs                 # check-refs: 271 references, all resolve
+git diff --check                            # exit 0
+bash scripts/check-secrets.sh               # check-secrets: clean
+bash scripts/check-secrets.sh tests/skill-dir-idiom.test.mjs   # check-secrets: clean
+```
+
+Observed limits and untested hypotheses:
+- That Claude Code substitutes `${CLAUDE_SKILL_DIR}` when it is nested inside
+  `${SKILL_DIR:-...}` is an untested hypothesis; the test models the documented text
+  substitution and the variable form, not a run of Claude Code.
+- That Codex shows a skill's path to the session (so it can set `SKILL_DIR`) is an
+  untested hypothesis; the test models the caller setting it.
+- The Linux branch of the verify capture check (no `capture: direct`) was not run
+  (macOS only); it is an untested hypothesis until CI runs it.
+- Fail-closed with neither variable set rests on `/<helper>` (for example
+  `/verify.sh`) not existing at the filesystem root. That is a property of the pinned
+  idiom, not something this feature can change.
+- A skill directory whose path contains a single quote is not supported by the
+  `SKILL_DIR='<dir>';` form (contract). Not tested.
+
+Full regressions, review and the branch hunt remain pending for the PR.
