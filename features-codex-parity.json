@@ -165,6 +165,47 @@
       "test": "acceptance/codex-parity/cp-03a-skill-dir.test.mjs",
       "testKind": "node",
       "passes": false
+    },
+    {
+      "id": "CP-02e",
+      "title": "Native graph host library and CLI",
+      "description": "Implement only spec/contracts/codex-parity-cp-02e.md: add core/skills/native-runtime/graph-host.mjs exporting runGraphHost and the --args-file CLI. It takes workflow pins from the v2 catalog, refuses before creating anything, puts role instructions in front of each leaf prompt, uses the CP-02d store and its lock, and writes result.json. No catalog, workflow, role file, runtime, registry, provider, selection or store changes.",
+      "contract": "spec/contracts/codex-parity-cp-02e.md",
+      "dependencies": [
+        "CP-01b",
+        "CP-02b",
+        "CP-02c",
+        "CP-02d",
+        "CP-03c"
+      ],
+      "acceptance": [
+        "A pin mismatch (REGISTRY_MISMATCH), a v1 catalog (CATALOG_NO_PINS), an unlisted workflow (UNKNOWN_WORKFLOW) and a codex-unavailable offering (OFFERING_UNSUPPORTED) each exit 2 with no checkpoint, no provider call and no run directory; a bad args file exits 1 with one JSON error line.",
+        "A harness-repair run with a fake provider writes result.json (0600) and exits 0 with the graph status, escalate included; a provider throw or the runtime deadline exits 3, and a held run lock exits 4 and is never broken.",
+        "On resume a completed leaf replays with no provider call, an uncertain leaf is held with CHECKPOINT_UNCERTAIN, and a new invocation id starts fresh."
+      ],
+      "test": "acceptance/codex-parity/cp-02e-graph-host.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CP-03b",
+      "title": "Reference-content closure",
+      "description": "Implement only spec/contracts/codex-parity-cp-03b.md: in spec/offering-capabilities.json add dev -> harness-review and verify, bughunt -> backlog, release-pr -> backlog (sorted), and GUIDANCE_ONLY under both providers of the seven shared-reference-contract rows. No SKILL.md, role, workflow, module or other catalog change.",
+      "contract": "spec/contracts/codex-parity-cp-03b.md",
+      "dependencies": [
+        "CP-01b",
+        "CP-01c",
+        "CP-03a",
+        "CP-03c"
+      ],
+      "acceptance": [
+        "Every skills: name in a shipped role file resolves to a catalog entry offering whose SKILL.md is a regular file matching its entrySha256.",
+        "The six lenses in intake routing (ALWAYS plus SIGNALS) equal the files in core/skills/bug-lenses/lenses, the skill table, the hunt workflow lists and findings LENSES.",
+        "Declared dependencies cover child-workflow and role-body closure edges, and the reference rows stay non-supported and carry GUIDANCE_ONLY under both providers, while install-plan output and checkCatalogDrift stay unchanged."
+      ],
+      "test": "acceptance/codex-parity/cp-03b-reference-closure.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }

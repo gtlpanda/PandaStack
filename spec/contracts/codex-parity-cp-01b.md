@@ -166,7 +166,8 @@ Problems, each `{ code, ref, dependency }` with exactly these keys:
   before any string). `ok` is `problems.length === 0`.
 - The result for an unchanged root is the same on every call.
 
-CP-02e, CP-02f and CP-01d call this guard; CP-03a and every later SKILL.md or workflow
+CP-02f and CP-01d call this guard (CP-02e does not: a pin change must reach the
+registry as `REGISTRY_MISMATCH`, decision 5); CP-03a and every later SKILL.md or workflow
 edit must update the matching hash in the same change, or the guard fails.
 
 ## OC-01 and CP-01a
