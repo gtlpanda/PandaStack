@@ -509,7 +509,8 @@ describe('CP-02b runLeaf failures resolve failed envelopes (wiring proof, not ru
     })
   }
 
-  test('TIMEOUT: the child is killed graceMs before the runtime deadline', async () => {
+  // SETTLE_MARGIN_MS is the contract's fixed 500 ms: SIGTERM at deadline - grace - 500.
+  test('TIMEOUT: SIGTERM comes graceMs plus the 500 ms settle margin before the deadline', async () => {
     const c = makeCase()
     const provider = await makeProvider(c, [{ hang: true }], { options: { graceMs: 1000 } })
     const began = Date.now()
@@ -517,16 +518,30 @@ describe('CP-02b runLeaf failures resolve failed envelopes (wiring proof, not ru
     const envelope = await runLeaf(provider, req)
     const elapsed = Date.now() - began
     assertFailed(envelope, 'TIMEOUT', req)
-    assert.ok(elapsed >= 1900, `returned before the leaf timeout: ${elapsed}ms`)
-    assert.ok(elapsed < 3000, `returned after the runtime deadline: ${elapsed}ms`)
+    assert.ok(elapsed >= 1400, `returned before the leaf timeout: ${elapsed}ms`)
+    assert.ok(elapsed < 2000, `SIGTERM was not sent grace + margin before the deadline: ${elapsed}ms`)
     const pid = calls(c)[0].pid
     assert.equal(await until(() => !alive(pid) && !alive(-pid)), true, 'stub process group still alive')
   })
 
-  test('TIMEOUT: no time left after the grace means no spawn and no file', async () => {
+  test('TIMEOUT: a child that ignores SIGTERM gets SIGKILL at least the margin before the deadline', async () => {
+    const c = makeCase()
+    const provider = await makeProvider(c, [{ hang: true, trap: true }], { options: { graceMs: 500 } })
+    const began = Date.now()
+    const req = await request({ deadlineMs: began + 3000 })
+    const envelope = await runLeaf(provider, req)
+    const elapsed = Date.now() - began
+    assertFailed(envelope, 'TIMEOUT', req)
+    assert.ok(elapsed >= 2400, `SIGKILL came before the grace ended: ${elapsed}ms`)
+    assert.ok(elapsed < 3000, `the leaf outlived the runtime deadline: ${elapsed}ms`)
+    const pid = calls(c)[0].pid
+    assert.equal(await until(() => !alive(pid) && !alive(-pid)), true, 'stub process group still alive')
+  })
+
+  test('TIMEOUT: no time left after the grace and the margin means no spawn and no file', async () => {
     const c = makeCase()
     const provider = await makeProvider(c, [{ output: wireText({ verdict: 'PASS' }) }], { options: { graceMs: 500 } })
-    const req = await request({ deadlineMs: Date.now() + 400 })
+    const req = await request({ deadlineMs: Date.now() + 900 })
     assertFailed(await runLeaf(provider, req), 'TIMEOUT', req)
     assert.equal(calls(c).length, 0)
     assert.equal(existsSync(c.runDir), false)
@@ -535,7 +550,7 @@ describe('CP-02b runLeaf failures resolve failed envelopes (wiring proof, not ru
   test('TIMEOUT: the default graceMs is 500', async () => {
     const short = makeCase()
     const none = await makeProvider(short, [{ output: wireText({ verdict: 'PASS' }) }], { options: { graceMs: undefined } })
-    const tight = await request({ deadlineMs: Date.now() + 450 })
+    const tight = await request({ deadlineMs: Date.now() + 950 })
     assertFailed(await runLeaf(none, tight), 'TIMEOUT', tight)
     assert.equal(calls(short).length, 0, 'spawned with less than the default grace left')
 
@@ -545,7 +560,7 @@ describe('CP-02b runLeaf failures resolve failed envelopes (wiring proof, not ru
     const req = await request({ deadlineMs: began + 2000 })
     assertFailed(await runLeaf(provider, req), 'TIMEOUT', req)
     const elapsed = Date.now() - began
-    assert.ok(elapsed >= 1400 && elapsed < 2000, `leaf timeout was not deadline minus 500 ms: ${elapsed}ms`)
+    assert.ok(elapsed >= 900 && elapsed < 1500, `leaf timeout was not deadline minus grace 500 and margin 500: ${elapsed}ms`)
   })
 
   test('TIMEOUT: the deadline is read through the injected nowMs', async () => {
@@ -679,6 +694,18 @@ describe('CP-02b through the real runtime (wiring proof, not runtime certificati
     assert.equal(result.status, 'escalate')
     assert.equal(spawned.length, 1)
     assert.equal(rows[0].completion.code, 'TIMEOUT')
+  })
+
+  test('a child that ignores SIGTERM still settles as a failed TIMEOUT leaf, not RUNTIME_ABORTED', async t => {
+    const began = Date.now()
+    const { result, rows, spawned } = await runtimeCase(t, [{ hang: true, trap: true }], { options: { graceMs: 1000 }, deadlineMs: began + 4000 })
+    assert.equal(result.status, 'escalate')
+    assert.equal(spawned.length, 1)
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].completion.outcome, 'failed')
+    assert.equal(rows[0].completion.code, 'TIMEOUT')
+    const pid = spawned[0].pid
+    assert.equal(await until(() => !alive(pid) && !alive(-pid)), true, 'stub process group still alive')
   })
 
   for (const json of [JSON.stringify({ verdict: 'PASS' }), 'not json']) {

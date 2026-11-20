@@ -80,7 +80,8 @@ bad value throws `INVALID_RUNTIME_INPUT`:
 
 The default grace is 500 ms because the runtime waits only 1000 ms for a provider to
 settle after an abort. Whether 500 ms is enough for a real Codex to exit cleanly is an
-untested hypothesis.
+untested hypothesis. A leaf starts only with more than `graceMs` plus the 500 ms
+settle margin left before the deadline (step 2).
 
 `provider` is a frozen plain object (Object.prototype) with exactly one own
 enumerable data property, `runLeaf`, an async function that never reads `this`. The
@@ -118,10 +119,17 @@ runtime copies it with `fields()` and calls `runLeaf.call(provider, request)`.
 
 1. If `sandboxForProfile(profile)` is null, resolve `failed` `PROFILE_UNSUPPORTED`.
    No file is written and nothing is spawned.
-2. `timeoutMs = floor(deadlineMs - nowMs() - graceMs)`. If it is below 1, resolve
-   `failed` `TIMEOUT`, with no file and no spawn. So the child is dead (SIGKILL
-   included) before the runtime's own deadline, and a timeout settles as an ordinary
-   leaf failure rather than `RUNTIME_ABORTED`.
+2. `timeoutMs = floor(deadlineMs - nowMs() - graceMs - SETTLE_MARGIN_MS)`, where
+   `SETTLE_MARGIN_MS` is the fixed constant 500. It is not an option and not exported.
+   If `timeoutMs` is below 1, resolve `failed` `TIMEOUT`, with no file and no spawn.
+   - `runCodexExec` sends SIGTERM at `timeoutMs` and SIGKILL `graceMs` later. So
+     SIGKILL is sent at least `SETTLE_MARGIN_MS` before the runtime deadline, even to
+     a child that ignores SIGTERM.
+   - That margin is left for the child to exit, the output to be read and the
+     envelope to settle. Then a timeout settles as an ordinary failed `TIMEOUT` leaf,
+     not the runtime's fatal `RUNTIME_ABORTED`.
+   - This bounds when SIGKILL is sent, not process scheduling. That the margin is
+     enough under heavy load is not guaranteed.
 3. Create `runDir` if absent (recursive, mode 0700). Write `<callId>.schema.json`
    (mode 0600) whose bytes are exactly `JSON.stringify(request.wireSchema)`. Remove
    any existing `<callId>.output.json`, so a stale file can never be read as this
@@ -205,7 +213,7 @@ model id or any request value.
 
 ## Acceptance
 
-acceptance/codex-parity/cp-02b-codex-leaf.test.mjs (node:test, about 10 seconds; the timing bounds keep at least 500 ms of slack). It
+acceptance/codex-parity/cp-02b-codex-leaf.test.mjs (node:test, about 15 seconds; each timing bound keeps at least 500 ms of slack). It
 imports the module under test from `PANDASTACK_CANDIDATE_ROOT` (default: the repo
 root) and creates a stub `codex` in an owned temp directory. Each run gets a minimal
 explicit environment (no HOME, no PATH). Direct cases call `runLeaf` with a
