@@ -697,3 +697,115 @@ Observed limits:
   and bughunt). This proves installer wiring only, not runtime readiness of any skill.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-01d — Offering inspection and a provider-keyed preflight gate
+
+Implemented spec/contracts/codex-parity-cp-01d.md only. Every `ready` below comes from
+a fake probe: wiring proof, not runtime certification.
+
+New module core/skills/native-runtime/inspect-offering.mjs (220 lines). It exports
+only `inspectOffering` and the frozen `CLAUDE_ONLY_CONTROLS` (the six caps in contract
+order).
+- Options and `configuration` go through boundary `fields`, so no getter runs, plus an
+  allow-list and a required-key check. Paths use catalog-data `safeText`, a 4096-byte
+  bound and `isAbsolute`. Every input error is `INVALID_INSPECT_INPUT`, raised before
+  any file read or probe call. It is an `async function`, so bad input still returns a
+  rejected promise.
+- `loadOfferingCatalog` errors pass through unchanged. An unknown id is
+  `UNKNOWN_OFFERING`. After that the inspection always resolves with nine checks.
+- Check 1 reads `providerImplementation`. Check 2 uses only `fs/promises` `stat` and
+  `access(X_OK)`, both following symlinks; the executable is never opened.
+- Checks 3 to 6 come from one `checkCatalogDrift` call, partitioned by a `take` over
+  the remaining problems: entry first (any problem whose `ref` is the offering), then
+  transport, then dependencies over the transitive closure. Leftovers are
+  `CATALOG_DRIFT`. A `CATALOG_NO_PINS` throw is a fail; any other throw is unknown
+  `INSPECTION_ERROR`, and 4 to 6 are skipped.
+- The probe runs once, only after checks 1 to 8 all pass. It gets a frozen request
+  carrying an `AbortSignal`. A timer races it, and on timeout the inspection aborts
+  the signal and resolves at once. The rejection handler is attached when the probe
+  returns, so a late rejection is never unhandled.
+- Imports: `./catalog.mjs`, `./catalog-data.mjs`, `./boundary.mjs` (self-edges for the
+  drift guard), `node:fs/promises`, `node:path` and `node:util`. No hashing, and
+  nothing that starts a process.
+
+preflight-cli.mjs (+15/−5):
+- `providerImplementation` joins the lazy load and `NEEDED`.
+- `IMPLEMENTATION_NOT_CERTIFIED` now comes from `implementationRefused`. A v2 catalog
+  reads `providers.<backend>`; v1 keeps `report.implementation === 'not-certified'`.
+- Help gained one line: "With a v2 catalog the implementation refusal reads the
+  --backend provider row." No other output, code or exit changed. It still does not
+  import the inspection module.
+
+Decisions (no human present):
+- `probeTimeoutMs: undefined` and `configuration.limits: undefined` take their
+  defaults, matching the contract's rule for `probe: undefined`. `null` for either is
+  an input error.
+- The contract says a report may be "a promise of one", and also that "a getter on a
+  report is never run". Only a native promise (`util.types.isPromise`) is awaited. Any
+  other return value is the report itself, so no `then` lookup runs on it, and a
+  foreign thenable is `PROBE_INVALID`.
+- With no probe, check 9 is `skipped` whenever checks 1 to 8 do not all pass, and
+  `PROBE_ABSENT` only when they do. `status` is the same either way.
+- A cap counts as set when it is an own key whose value is not `null`, as written. So
+  an explicit `undefined` counts as set (tested).
+- A `providerImplementation` throw is unknown `INSPECTION_ERROR` in check 1 and
+  `PREFLIGHT_FAILED` in the CLI. Neither should happen with a validated catalog.
+- A loader without `providerImplementation` is `DEPENDENCY_UNAVAILABLE`, like any
+  other missing dependency.
+- `dependencyClosure` repeats the short closure walk in preflight-cli `dependencyRows`.
+  It is not shared: the frozen test forbids the CLI from naming the inspection module,
+  and catalog.mjs is out of scope.
+
+New implementation test tests/inspect-offering.test.mjs (workflow harness, 8 cases,
+231 lines) covers:
+- A `then` getter on a sync report, and a foreign thenable: both are `PROBE_INVALID`,
+  and neither the getter nor `then` runs.
+- An un-aborted signal at the call and after a normal settle. `probeTimeoutMs` bounds
+  1 and 600000 accepted; a 1 ms bound times out a slower probe and aborts it.
+- Explicit-undefined defaults, null-prototype objects accepted, and these input errors:
+  a getter in `configuration` or `limits`, a symbol key, a 257-byte model, a 2^53
+  concurrency, a string timeout. 256 bytes is accepted.
+- A 4097-byte executable path (multi-byte last character) and TAB, DEL, U+0085 or
+  U+009F are input errors. A 4095-byte path component is unknown `INSPECTION_ERROR`,
+  and the probe is skipped.
+- Static failures do not short-circuit (four fails in one result), and check 9 is
+  `skipped` with no probe.
+- An undeclared edge on a dependency is `DEPENDENCY_DRIFT`, and `DEPENDENCY_MISSING`
+  outranks it. The same problems seen from another offering are `CATALOG_DRIFT`.
+- A workflow hash mismatch is `CATALOG_DRIFT` only. `limitations` is a fresh copy.
+- The CLI: a missing `providerImplementation` is `DEPENDENCY_UNAVAILABLE`, and a
+  throwing one is `PREFLIGHT_FAILED` with no echo. It is read once for v2 and never
+  for v1.
+
+Mutation check: replacing the native-promise test with `Promise.resolve(returned)`
+failed exactly the thenable case: the foreign thenable was adopted and reported
+`pass`. The code was restored before the runs below. The frozen acceptance was not
+run under this mutation.
+
+Verification on Node v25.9.0, darwin (focused only):
+
+```sh
+node --test --test-reporter=tap acceptance/codex-parity/cp-01d-inspect-offering.test.mjs
+# pre-change: 24 tests, 4 pass (cases 12, 20, 21, 24, as the contract predicts), 20 fail
+# post-change: 24 tests, 24 pass, 0 fail (~3.1s)
+node --test --test-reporter=tap acceptance/codex-parity/cp-01d-inspect-offering.test.mjs acceptance/codex-parity/cp-01a-catalog-v2.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs acceptance/codex-parity/cp-01c-install-plan.test.mjs
+# 65 tests, 65 pass, 0 fail (the production drift guard accepts the new module)
+node logs/evidence/cp-01d/run-focused.mjs tests/inspect-offering.test.mjs tests/native-preflight-cli.test.mjs
+# FOCUSED: 22 passed, 0 failed
+node --check core/skills/native-runtime/inspect-offering.mjs && node --check core/skills/native-runtime/preflight-cli.mjs && node --check tests/inspect-offering.test.mjs && git diff --check
+# exit 0
+node scripts/check-refs.mjs
+# check-refs: 271 references, all resolve
+bash scripts/check-secrets.sh
+bash scripts/check-secrets.sh core/skills/native-runtime/inspect-offering.mjs tests/inspect-offering.test.mjs
+# each: check-secrets: clean
+```
+
+Observed limits:
+- No real probe exists. `ready` means only that this host's static prerequisites hold
+  and a fake probe said yes. No codex, claude, provider, network or HOME was used.
+- The executable is never opened or read by construction (`stat` and `access` only).
+  No test pins it, as the contract notes. The tests pin only that it never runs.
+- Ran on darwin as a non-root user only. Linux was not run.
+
+Full regressions, review and the branch hunt remain pending for the PR.

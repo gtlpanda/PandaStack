@@ -12,7 +12,8 @@ const FLAGS = new Map([
   ['--installation-root', 'installationRoot'], ['--skills-root', 'skillsRoot'],
   ['--backend', 'backend'], ['--offering', 'offeringId'],
 ])
-const NEEDED = ['loadOfferingCatalog', 'discoverOfferings', 'projectOfferingPreflight', 'resolveSettings', 'readAgentConfig']
+const NEEDED = ['loadOfferingCatalog', 'discoverOfferings', 'projectOfferingPreflight', 'providerImplementation',
+  'resolveSettings', 'readAgentConfig']
 const SEMANTICS = 'Offline static report: settings are configured values, not observed enforcement; ' +
   'runtime, auth, account and payer are unknown; exit 0 is not readiness or certification.'
 
@@ -50,6 +51,7 @@ const HELP = [
   '  Runtime versions, authentication, account and payer are always reported as unknown.',
   '  Source and skill visibility describe files on disk, not that the offering can run.',
   '  --backend selects catalog eligibility only; it does not preflight the legacy Claude installer.',
+  '  With a v2 catalog the implementation refusal reads the --backend provider row.',
   '',
   'Output: one JSON object on stdout.',
   '',
@@ -87,7 +89,8 @@ async function loadDependencies() {
   const [catalog, doctor, agentConfig] = await Promise.all([import('./catalog.mjs'),
     import('../run-records/doctor.mjs'), import('../../../scripts/agent-config.mjs')])
   return { loadOfferingCatalog: catalog.loadOfferingCatalog, discoverOfferings: catalog.discoverOfferings,
-    projectOfferingPreflight: catalog.projectOfferingPreflight, resolveSettings: doctor.resolveSettings,
+    projectOfferingPreflight: catalog.projectOfferingPreflight, providerImplementation: catalog.providerImplementation,
+    resolveSettings: doctor.resolveSettings,
     readAgentConfig: agentConfig.readAgentConfig }
 }
 async function loadChecked(load) {
@@ -115,11 +118,18 @@ function dependencyRows(catalog, discovery, index) {
     [{ id: row.id, visibility: discovery.offerings[i].visibility, sourceStatus: discovery.offerings[i].sourceStatus }])
 }
 
+// A v2 catalog refuses on the selected backend's provider row; a v1 catalog keeps the
+// Codex-native projection rule. `implementation` in the output is unchanged for both.
+function implementationRefused(deps, catalog, index, backend, report) {
+  if (catalog.schemaVersion !== 2) return report.implementation === 'not-certified'
+  return stage(() => deps.providerImplementation(catalog.offerings[index], backend), () => 'PREFLIGHT_FAILED') === 'unavailable'
+}
+
 // Refusal reasons are offline facts only. NATIVE_UNVERIFIED is on every row, so it
 // cannot be the gate; the absence of a reason is not a readiness claim.
-function refusalReasons(report, row, dependencies) {
+function refusalReasons(notCertified, report, row, dependencies) {
   return [
-    report.implementation === 'not-certified' && 'IMPLEMENTATION_NOT_CERTIFIED',
+    notCertified && 'IMPLEMENTATION_NOT_CERTIFIED',
     !row.installEligible && 'NOT_INSTALL_ELIGIBLE',
     report.visibility === 'library-only' && 'LIBRARY_ONLY',
     report.readiness === 'degraded' && 'READINESS_DEGRADED',
@@ -145,7 +155,7 @@ export async function preflightMain(args, options) {
       code => code === 'INVALID_CATALOG_INPUT' ? 'INVALID_USAGE' : 'PREFLIGHT_FAILED')
     const report = stage(() => deps.projectOfferingPreflight({ catalog, discovery, offeringId, backend, settings }), () => 'PREFLIGHT_FAILED')
     const row = discovery.offerings[index], dependencies = dependencyRows(catalog, discovery, index)
-    const reasons = refusalReasons(report, row, dependencies)
+    const reasons = refusalReasons(implementationRefused(deps, catalog, index, backend, report), report, row, dependencies)
     const configured = Object.fromEntries(['model', 'effort', 'maxConcurrentSubagents'].map(key =>
       [key, { value: report.settings.values[key] ?? null, source: report.settings.sources[key] ?? 'unknown' }]))
     console.log(JSON.stringify({ schemaVersion: 1, mode: 'offline-static-preflight', backend, offeringId,

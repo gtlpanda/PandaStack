@@ -127,7 +127,7 @@
       ],
       "test": "acceptance/codex-parity/cp-01d-inspect-offering.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-02c",
