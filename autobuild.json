@@ -369,7 +369,13 @@
     "spec/contracts/codex-parity-cp-05c.md",
     "acceptance/codex-parity/cp-05c-qa-ledger.test.mjs",
     "docs/evidence/codex-live-2026-11-20.md",
-    "docs/evidence/codex-live-2026-11-20"
+    "docs/evidence/codex-live-2026-11-20",
+    "spec/contracts/codex-parity-cp-05b.md",
+    "acceptance/codex-parity/cp-05b-graph-reconcile.test.mjs",
+    "spec/contracts/codex-parity-cp-04b.md",
+    "acceptance/codex-parity/cp-04b-blueprint-decisions.test.mjs",
+    "spec/contracts/codex-parity-cp-04d.md",
+    "acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs"
   ],
   "writable": [
     "PROGRESS.md",

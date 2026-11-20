@@ -306,6 +306,58 @@
       "test": "acceptance/codex-parity/cp-05c-qa-ledger.test.mjs",
       "testKind": "node",
       "passes": false
+    },
+    {
+      "id": "CP-05b",
+      "title": "Held-call reconcile CLI and shared failed envelope",
+      "description": "Implement only spec/contracts/codex-parity-cp-05b.md: core/skills/native-runtime/completion.mjs failedCompletion({selection, code, invocationId}) and the CLI core/skills/native-runtime/graph-reconcile.mjs (list, fail, unlock) over CP-05a's checkpointDirOf, inspectCheckpoints, failHeldCheckpoint and breakCheckpointLock. W2-1: never spawn, never write a returned completion, never delete or rename a row (only .lock), never create a directory, never act while .lock is held or without the confirm token, never print prompt or completion text. No host, runtime, store or catalog change.",
+      "contract": "spec/contracts/codex-parity-cp-05b.md",
+      "dependencies": [
+        "CP-02d",
+        "CP-05a"
+      ],
+      "acceptance": [
+        "After a host CLI run is SIGKILLed mid-leaf, list shows the lock and the prepared row without changing the run dir, unlock needs the right token and a dead pid, and a rerun is CHECKPOINT_UNCERTAIN with zero spawns.",
+        "fail needs a matching --confirm, refuses while any .lock is held and on returned, failed, corrupt or selection-less rows, and writes failed/OPERATOR_ABANDONED with the stored selection; the rerun then escalates with zero spawns and no claude call.",
+        "failedCompletion returns the exact NR-02 failed envelope, rejects bad input with INVALID_RUNTIME_INPUT, and replays through the real runtime as LEAF_FAILED."
+      ],
+      "test": "acceptance/codex-parity/cp-05b-graph-reconcile.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CP-04b",
+      "title": "Blueprint decision rules",
+      "description": "Implement only spec/contracts/codex-parity-cp-04b.md: graphs/blueprint/skills/blueprint/blueprint-decisions.mjs with BLUEPRINT_DECISION_CODES, applyInterviewAnswers, applyGateAnswers and applyApprovalEdit (SKILL.md 3.4-3.5, 4.2/5.2 needs-human, 6.4). Read request.json, run1.json, state.json and the gate run through CP-04a's readers, write state.json only through CP-04a's writeState, then delete run3.json, run2.json and meta.json. Import only node built-ins and ./blueprint-state.mjs. Do not change SKILL.md, blueprint-design.js, write-docs.mjs, blueprint-state.mjs, the catalog or any graph.",
+      "contract": "spec/contracts/codex-parity-cp-04b.md",
+      "dependencies": [
+        "CP-04a"
+      ],
+      "acceptance": [
+        "applyInterviewAnswers writes SKILL.md 3.5's state from run1.json: every asked question answered exactly once (duplicate, unknown and missing ids refused naming only the ids), option labels kept and free text redacted, preflight have by exact name with the rest owed, overrides as decisions that remove their assumption, gateRounds 0.",
+        "applyGateAnswers answers the pending fresh gate by G<k>: a decision id sets its answer, an assumption id becomes a decision with resolves [], about null takes the next unused D<n> after the highest D id, every note is \"design gate\", gateRounds rises by 1 and at 2 it refuses GATE_ROUNDS_EXHAUSTED; applyApprovalEdit adds an \"approval edit\" decision at a fresh backlog-ready run3.",
+        "Every applied answer is written through CP-04a's writeState and then deletes run2.json, run3.json and meta.json, while every refusal (malformed input, a wrong or stale run, an existing state) uses a fixed code, echoes no input and leaves the directory unchanged."
+      ],
+      "test": "acceptance/codex-parity/cp-04b-blueprint-decisions.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CP-04d",
+      "title": "Blueprint approve CLI",
+      "description": "Implement only spec/contracts/codex-parity-cp-04d.md: graphs/blueprint/skills/blueprint/blueprint-approve.mjs, a synchronous CLI `<show|approve> --args-file <abs>` importing only node built-ins, ./blueprint-state.mjs (CP-04a pinned names) and ./write-docs.mjs. show prints the fixed compact design and backlog report with approvalSha256 = sha256(run3.json); approve checks freshness, readiness, the exact hash, a clean index, a new integration/<app> branch and safe targets, makes the empty start commit in a repo with no commit, then switch -c, write-docs, git add -- the printed paths and commit, rolling back bytes, index, branch and HEAD on any failure. Every git call is git -C <repo> with argv arrays. No model call, push, fetch or merge. Do not change write-docs.mjs, blueprint-state.mjs, SKILL.md, blueprint-design.js or the catalog.",
+      "contract": "spec/contracts/codex-parity-cp-04d.md",
+      "dependencies": [
+        "CP-04a"
+      ],
+      "acceptance": [
+        "show prints the exact fixed-grammar report, redacted and single-lined, ending with approvalSha256 equal to sha256 of run3.json, using only read-only git calls; missing, malformed, stale or unready state, a bad app slug and a non-top-level repo each refuse with a fixed code.",
+        "approve with the shown hash puts HEAD on integration/<app> with one commit holding exactly the design doc, backlog.json and knowledge-map.json, byte-equal to write-docs, with untracked and modified files, the original branch, remote refs and origin untouched, gh never run, and every git call git -C <repo>; a repo with no commit gets the empty start commit first.",
+        "A hash mismatch or a missing hash, stale design, unready run2, staged changes, an existing branch or an invalid target leaves the repo unchanged with exit 2, and a refused switch after the start commit in a repo with no commit is GIT_FAILED exit 2 with only that commit kept; write-docs refusing or a failing pre-commit hook rolls back to prior bytes, a clean index, no branch and the original HEAD (branch or detached) with exit 3; a failed rollback step is ROLLBACK_FAILED, exit 4."
+      ],
+      "test": "acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
