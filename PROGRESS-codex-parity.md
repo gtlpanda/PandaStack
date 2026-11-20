@@ -585,3 +585,115 @@ Observed limits:
 
 Full regressions, review and the branch hunt remain pending for the PR.
 This is wiring proof on stub executables, not runtime certification.
+
+## CP-01c — Codex install plan from the catalog
+
+Implemented spec/contracts/codex-parity-cp-01c.md only.
+
+New module core/skills/native-runtime/install-plan.mjs (111 lines):
+- `installPlan({ installationRoot, backend })` validates input through boundary
+  `fields`/`exact` plus catalog-data `safeText`, a 4096-byte bound and `isAbsolute`.
+  `backend` must be exactly `'codex'`.
+- It calls `loadOfferingCatalog` (errors pass through unchanged) and plans every
+  offering for which `installEligible(offering, 'codex')` is true.
+- It verifies the transitive `dependencies` closure with `lstat` under
+  `realpathSync(root)`, and returns `{dest, src}` entries sorted by `dest` in
+  code-unit order.
+- `installPlanMain` is the strict two-flag CLI: one `<dest>\t<src>` line per entry, or
+  one `install-plan: <CODE>` line on stderr, exiting 1 or 2.
+- It imports only `node:` builtins and same-directory modules; `loadOfferingCatalog`
+  and `installEligible` come from ./catalog.mjs. It never reads `codexInstaller`,
+  never calls `checkCatalogDrift`, and writes nothing.
+
+install.sh `--codex` (only Codex paths, plus the header usage line):
+- It runs the plan exactly once, after argument checks and before any change, into
+  `CODEX_PLAN`.
+- With no `node` on PATH it exits 2 with `--codex needs node …`. A failing plan
+  exits 2: `|| exit 2` normalizes the plan's exit 1 for input refusals.
+- `list_targets` prints the plan, and an empty plan prints nothing.
+- `dest_of` and the restore allow-check both use `is_codex_plan_dest`, an exact match
+  against plan dests. `--skip` already validated against `list_targets`, so it now
+  follows the plan with no change.
+- Claude mode never runs the plan.
+
+README "For Codex" now says the set comes from the catalog (today autobuild and
+bughunt), that `--codex` needs node, and that uninstall restores only planned skills.
+
+Decisions (no human present):
+- `realpathSync(installationRoot)` for the dependency check runs after the catalog
+  loaded. If it fails anyway (a concurrent replacement), it maps as the loader does:
+  ENOENT/ENOTDIR to `NOT_FOUND`, otherwise `IO_ERROR`. The contract does not name this
+  case.
+- Dependency ids are checked in sorted order, so a root with several bad sources gives
+  the same code on every call. A dependency id missing from the catalog (which the
+  validator already rejects) is `DEPENDENCY_MISSING`, never skipped.
+- The entry-point check compares `realpath`s of `argv[1]` and the module, so running
+  through a symlinked checkout still runs the CLI. Importing prints nothing (tested).
+- install.sh runs the plan at top level, not inside a function, so it is computed once
+  even though `list_targets` is called up to four times per run.
+
+New implementation test tests/install-plan.test.mjs (workflow harness, 7 cases, 189
+lines) covers:
+- A backup made for `skills/autobuild` is refused at `--uninstall` (dry-run and
+  real) after autobuild leaves the plan, and its copy stays. `--skip` of it is
+  refused.
+- An empty plan: install and uninstall exit 0, and no skills directory is created.
+- install.sh exits 2 with the plan's exact stderr line and empty stdout. This holds
+  for the plan's exit-1 input refusal (a control character in the repo path) and for
+  `NOT_FOUND` (catalog deleted), in install, dry-run and uninstall, creating nothing.
+- A diamond closure where one planned offering depends on another. The dependent's
+  own missing source stays planned; the depended-on one's is `DEPENDENCY_MISSING`.
+  It also checks the code-unit `dest` order `skills/a-b` < `skills/ab` <
+  `skills/autobuild`.
+- A symlinked installation root gives the same plan, and its dependency check runs
+  under the canonical root.
+- The 4096/4097-byte bound, including a multi-byte 4097th byte. C0, TAB, DEL, U+0085
+  and U+009F are refused, U+00A0 is accepted, a null-prototype input is accepted and
+  a symbol key is refused.
+- `installPlanMain` output and exit codes, and an import with no output.
+
+Mutation check: two mutations of install.sh, each followed by a focused run of the
+new test and each restored before the runs below.
+- Removing `|| exit 2` failed exactly the plan-failure case (exit 1, not 2). The
+  frozen acceptance does not catch it.
+- Removing the empty-plan guard in `list_targets` failed exactly the empty-plan case
+  (`unsupported Codex target:` on a blank line).
+
+Verification on Node v25.9.0, darwin, bash on PATH is /bin/bash (focused only):
+
+```sh
+node --test --test-reporter=tap acceptance/codex-parity/cp-01c-install-plan.test.mjs
+# pre-change: 9 tests, 1 pass ("tests/install-codex.test.mjs is unchanged and passes"), 8 fail
+# post-change: 9 tests, 9 pass, 0 fail (~12s)
+node --test --test-reporter=tap acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs acceptance/codex-parity/cp-01a-catalog-v2.test.mjs
+# 32 tests, 32 pass, 0 fail (the drift guard accepts install-plan.mjs's self-edge imports)
+node logs/evidence/cp-01c/run-focused.mjs tests/install-plan.test.mjs tests/install-codex.test.mjs
+# FOCUSED: 14 passed, 0 failed
+bash scripts/test-install.sh
+# TEST-INSTALL: 138 passed, 0 failed (Claude mode unchanged)
+node scripts/check-refs.mjs
+# check-refs: 271 references, all resolve
+bash scripts/validate.sh
+# ok bash -n install.sh ... VALIDATE: PASS
+node --check core/skills/native-runtime/install-plan.mjs && node --check tests/install-plan.test.mjs && git diff --check
+# exit 0
+bash scripts/check-secrets.sh
+bash scripts/check-secrets.sh core/skills/native-runtime/install-plan.mjs tests/install-plan.test.mjs
+# each: check-secrets: clean
+```
+
+Observed limits:
+- A direct `bash -n install.sh` was refused by the session's permission layer and a
+  `bash --version` print by its command guard, so the bash version was not printed.
+  `bash scripts/validate.sh` ran `bash -n install.sh` (ok) and ended `VALIDATE: PASS`.
+  install.sh also ran under /bin/bash in every acceptance, focused and test-install
+  run above.
+- The dependency check is a static `lstat`, as the contract states. It is not
+  protection against concurrent replacement, and intermediate path components are not
+  checked.
+- Ran on darwin as a non-root user only. The acceptance `IO_ERROR` case (a mode-000
+  directory) is skipped under uid 0. Linux was not run.
+- No live codex, provider or network ran. The installed set is unchanged (autobuild
+  and bughunt). This proves installer wiring only, not runtime readiness of any skill.
+
+Full regressions, review and the branch hunt remain pending for the PR.

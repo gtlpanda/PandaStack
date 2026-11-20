@@ -110,7 +110,7 @@
       ],
       "test": "acceptance/codex-parity/cp-01c-install-plan.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-01d",

@@ -18,7 +18,8 @@
 #
 # Usage:
 #   ./install.sh              link; back up anything in the way
-#   ./install.sh --codex      link only autobuild/bughunt skills into ~/.agents/skills
+#   ./install.sh --codex      link only the catalog's Codex entry skills (today
+#                             autobuild, bughunt) into ~/.agents/skills; needs node
 #   ./install.sh --dry-run    print what would happen, change nothing
 #   ./install.sh --skip=a,b   install, but leave these targets alone (e.g.
 #                             --skip=settings.json,CLAUDE.md, or skills/verify)
@@ -91,6 +92,14 @@ fi
 
 [ "$MODE" = install ] || [ "${#SKIP[@]}" -eq 0 ] || { echo "--skip only applies to install" >&2; exit 2; }
 
+# The Codex targets come from the offering catalog: one plan run, before any change.
+# Each line is "<dest><TAB><src>"; the plan's own error line reaches stderr unchanged.
+CODEX_PLAN=""
+if [ "$CODEX_MODE" -eq 1 ]; then
+  command -v node >/dev/null 2>&1 || { echo "--codex needs node to read the offering catalog; install Node and run again" >&2; exit 2; }
+  CODEX_PLAN="$(node "$REPO_DIR/core/skills/native-runtime/install-plan.mjs" --installation-root "$REPO_DIR" --backend codex)" || exit 2
+fi
+
 log()  { printf '%s\n' "$*"; }
 warn() { printf 'warn: %s\n' "$*" >&2; }
 die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -132,10 +141,20 @@ guard_layout() {
   done
 }
 
+# True if rel path $1 is exactly a dest in the Codex plan.
+is_codex_plan_dest() {
+  local d
+  while IFS=$'\t' read -r d _; do
+    [ -n "$d" ] && [ "$d" = "$1" ] && return 0
+  done <<< "$CODEX_PLAN"
+  return 1
+}
+
 # Where rel path $1 lives: under LOCAL_BIN for local-bin/<name>, else under ~/.claude.
 dest_of() {
   if [ "$CODEX_MODE" -eq 1 ]; then
-    case "$1" in skills/autobuild|skills/bughunt) printf '%s/%s\n' "$CODEX_SKILLS_DIR" "${1#skills/}" ;; *) die "unsupported Codex target: $1" ;; esac
+    is_codex_plan_dest "$1" || die "unsupported Codex target: $1"
+    printf '%s/%s\n' "$CODEX_SKILLS_DIR" "${1#skills/}"
     return
   fi
   case "$1" in
@@ -149,8 +168,8 @@ dest_of() {
 list_targets() {
   local t root entry name
   if [ "$CODEX_MODE" -eq 1 ]; then
-    printf 'skills/autobuild\tgraphs/autobuild/skills/autobuild\n'
-    printf 'skills/bughunt\tgraphs/hunt/skills/bughunt\n'
+    # An empty plan prints nothing, not one blank line.
+    [ -z "$CODEX_PLAN" ] || printf '%s\n' "$CODEX_PLAN"
     return
   fi
   for t in "${FILE_TARGETS[@]}"; do printf '%s\t%s\n' "$t" "$t"; done
@@ -436,7 +455,7 @@ do_uninstall() {
   while IFS= read -r rel; do
     [ -n "$rel" ] || continue
     if [ "$CODEX_MODE" -eq 1 ]; then
-      case "$rel" in skills/autobuild|skills/bughunt) ;; *) die "unsupported Codex backup target: $rel" ;; esac
+      is_codex_plan_dest "$rel" || die "unsupported Codex backup target: $rel"
     fi
     if [ -z "$LOCAL_BIN" ] && [ "${rel#local-bin/}" != "$rel" ]; then
       warn "'$rel' kept in the backup: HOME is not set; set PANDASTACK_BIN_DIR and run --uninstall again to restore it"

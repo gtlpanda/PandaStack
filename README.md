@@ -310,14 +310,20 @@ For Codex, install just the supported entry skills:
 ./install.sh --codex --uninstall  # remove these links and restore conflicts
 ```
 
-This links only `autobuild` and `bughunt` into `~/.agents/skills`; it does not
-copy Claude settings, hooks, credentials, agent definitions or workflows, change
-git hooks, or install a PATH command. The linked skills use this checkout's native
-runners. Set `PANDASTACK_CODEX_SKILLS_DIR` to an absolute directory for another
-skill location (for example `$HOME/.codex/skills`). Conflicting entries are backed
-up beside that directory under `.pandastack-codex-backups-<directory-name>/`;
-foreign skills and replacements made after installation are preserved. `--skip`
-accepts `skills`, `skills/autobuild`, or `skills/bughunt` in this mode.
+This links into `~/.agents/skills` only the entry skills the offering catalog
+(`spec/offering-capabilities.json`) marks Codex install-eligible, today `autobuild`
+and `bughunt`. It reads the catalog through
+`core/skills/native-runtime/install-plan.mjs`, so `--codex` needs `node` on PATH;
+if a planned skill's declared dependency is missing from the checkout, it exits 2
+and changes nothing. It does not copy Claude settings, hooks, credentials, agent
+definitions or workflows, change git hooks, or install a PATH command. The linked
+skills use this checkout's native runners. Set `PANDASTACK_CODEX_SKILLS_DIR` to an
+absolute directory for another skill location (for example `$HOME/.codex/skills`).
+Conflicting entries are backed up beside that directory under
+`.pandastack-codex-backups-<directory-name>/`; foreign skills and replacements made
+after installation are preserved, and `--uninstall` restores only skills still in
+the plan. `--skip` accepts `skills` or any planned skill (today `skills/autobuild`
+or `skills/bughunt`) in this mode.
 
 A symlinked destination or ancestor is refused, including the common
 `~/.agents/skills -> ~/.claude/skills` arrangement. If those shared entry links
