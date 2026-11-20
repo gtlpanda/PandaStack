@@ -133,6 +133,16 @@ OC-01.
 With that edit OC-01 passes 8 of 8 on main + tier A (freeze worktree, v1 catalog) and on
 the CP-03a reference.
 
+## tests/native-offering-catalog.test.mjs (host edit, applied in the freeze commit)
+
+Its case "all declared current sources discover present without certifying any
+offering" paired the same v1 fixture with the repo's real SKILL.md files, so the
+edited backlog SKILL.md came out `drifted` and the baseline gate (scripts/test.sh,
+through scripts/test-workflow.mjs) went red. The host changes only that case's catalog
+to the production spec/offering-capabilities.json, which is what "current" means. On
+main the two are byte-identical, so the case is unchanged there; with tier A, tier B and
+this feature's reference it passes. The builder never edits that file.
+
 ## Not in scope
 
 - No helper code change (backlog.mjs, findings.mjs, gtm-brief.mjs, verify.sh,
