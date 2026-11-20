@@ -147,7 +147,7 @@
       ],
       "test": "acceptance/codex-parity/cp-02c-codex-selection.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-03a",

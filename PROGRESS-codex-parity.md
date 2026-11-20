@@ -809,3 +809,105 @@ Observed limits:
 - Ran on darwin as a non-root user only. Linux was not run.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-02c — Role-to-profile table and Codex leaf selection
+
+Wiring proof, not runtime certification. No codex, provider, network or HOME was used.
+
+New `core/skills/native-runtime/codex-selection.mjs` (85 lines):
+- `ROLE_PROFILES`: a frozen ordinary object with the 27 catalog workflow roles in
+  sorted order. It is built from the contract's four profile groups plus
+  `runner: null`, sorted by code unit.
+- `CODEX_REFUSED_WORKFLOWS`: exactly `['release-flow', 'security-audit-flow']`.
+- `resolveLeaf(context)`: synchronous and pure. It runs contract steps 1 to 7 in
+  order, and returns a fresh `{ selection: { provider, model, effort }, profile }`.
+- Imports, never copies: `CODEX_PROVIDER` and `sandboxForProfile` (CP-02b),
+  `codexExecArgs` (CP-02a, used only to validate), autobuild `codexModel`,
+  `DOCTOR_EFFORTS`, and boundary `fail`/`fields`/`exact`/`nonempty`. It imports
+  neither the catalog nor role-files.
+
+`core/skills/run-records/doctor.mjs` gains only `export const DOCTOR_EFFORTS`, a
+frozen array of the same eight values in the same order. Its private `efforts` set is
+now `new Set(DOCTOR_EFFORTS)`.
+
+runtime.mjs, codex-provider.mjs, codex-exec.mjs, role-files.mjs, the catalog, role
+files, autobuild and hunt are unchanged.
+
+Decisions (no human present):
+- One outer `try { select() } catch { fail('INVALID_SELECTION') }` makes every
+  refusal the fixed error. That includes `codexModel`'s message (which names the
+  model), `codexExecArgs`'s `INVALID_CODEX_EXEC_INPUT`, and any unexpected throw. The
+  refusal is a new Error with no `cause`.
+- `workflowPath` is copied through own data descriptors (`stringList`), not read with
+  `.every`/`.some`/`.at` on the caller's array. Reading it naively would let a hole
+  (which `.every` skips) pass "non-empty strings". It would also run a getter or proxy
+  trap, or let an own `some` override hide `release-flow`. A proxy array is refused.
+  The runtime always sends `json(context)`, so this only matters for direct callers.
+- A null-prototype context is accepted, because `fields` accepts it. A frozen
+  context is accepted and left unchanged.
+- The role lookup is `Object.hasOwn(ROLE_PROFILES, agentType)`, so `constructor`,
+  `__proto__` and `toString` are refused.
+
+New implementation test `tests/native-codex-selection.test.mjs` (workflow harness, 8
+cases, 126 lines) covers:
+- a sparse `workflowPath`;
+- a getter index and a proxy array, each refused without running caller code;
+- own `some`/`includes`/`at`/`every` overrides that cannot hide `release-flow`;
+- a refused workflow in the middle of a three-deep path, and a last element that is
+  not the `workflowId`;
+- null-prototype and frozen contexts;
+- a symbol key or a non-enumerable key;
+- the refusal's error shape: own keys `['code']`, no `cause`, and no model or
+  `codexModel` text in `stack`. A NUL model from the launcher check gives the same
+  code;
+- all 20 accepted roles reaching CP-02b's sandbox: `build-workspace` gives
+  `workspace-write` and `source-review` gives `read-only`, checked in the launcher
+  argv;
+- the doctor still accepting exactly `DOCTOR_EFFORTS` on both backends, rejecting
+  near-misses, and the export being immutable.
+
+Mutation check: replacing `stringList` with the naive
+`Array.isArray && length > 0 && every(nonempty)` failed exactly the three
+`workflowPath` cases (5 passed, 3 failed). The code was restored before the runs
+below, and the frozen acceptance was rerun on the restored code.
+
+Verification on Node v25.9.0, darwin (focused only):
+
+```sh
+node --test acceptance/codex-parity/cp-02c-codex-selection.test.mjs
+# pre-change: the file fails at import (ERR_MODULE_NOT_FOUND codex-selection.mjs)
+# post-change: 25 tests, 25 pass, 0 fail
+node --test --test-reporter=tap acceptance/codex-parity/cp-02c-codex-selection.test.mjs acceptance/codex-parity/cp-01a-catalog-v2.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs acceptance/codex-parity/cp-02a-codex-exec.test.mjs acceptance/codex-parity/cp-02b-codex-provider.test.mjs acceptance/codex-parity/cp-03c-role-files.test.mjs
+# 140 tests, 140 pass, 0 fail (the drift guard accepts the new module and its run-records edge)
+node --test acceptance/codex-parity/cp-02c-codex-selection.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs
+# final code: 50 tests, 50 pass, 0 fail
+node logs/evidence/cp-02c/run-focused.mjs tests/native-codex-selection.test.mjs tests/run-doctor.test.mjs tests/run-doctor-codex-cli.test.mjs tests/run-doctor-trust.test.mjs tests/native-codex-provider.test.mjs tests/native-codex-exec.test.mjs tests/native-role-files.test.mjs
+# FOCUSED: 57 passed, 1 failed (the run-doctor failure below, which predates this change)
+node --check core/skills/native-runtime/codex-selection.mjs   # exit 0
+node --check core/skills/run-records/doctor.mjs               # exit 0
+node --check tests/native-codex-selection.test.mjs            # exit 0
+git diff --check                                              # exit 0
+node scripts/check-refs.mjs
+# check-refs: 271 references, all resolve
+bash scripts/check-secrets.sh
+bash scripts/check-secrets.sh core/skills/native-runtime/codex-selection.mjs tests/native-codex-selection.test.mjs
+# each: check-secrets: clean
+```
+
+Pre-existing failure, not caused by this change:
+- `tests/run-doctor.test.mjs` "doctor CLI validates arguments in-process and prints
+  safe JSON for paths with spaces" expects `blocked` and gets `degraded`.
+- It fails the same way with doctor.mjs at HEAD. The edit was reverted by hand so
+  `git diff` on the file was empty, then the test was rerun (6 passed, 1 failed).
+- The test does not import codex-selection.mjs. Its cause was not investigated.
+
+Observed limits:
+- An empty-environment import probe (`env -i … node -e`) was denied by this session's
+  permissions. That importing the module touches no HOME and starts no process is
+  shown only indirectly: the acceptance test imports it in-process. It is not proven
+  separately.
+- Whether a real Codex accepts `max`, `ultra` or `none` is unverified, as the contract
+  states.
+- Ran on darwin as a non-root user only. Linux was not run.
+
+Full regressions, review and the branch hunt remain pending for the PR.
