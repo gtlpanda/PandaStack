@@ -49,8 +49,15 @@ can't catch it: use phrases.
 
 ## Checking a brief
 
+`SKILL_DIR` is the directory that holds this SKILL.md. Claude Code fills it in
+through its `CLAUDE_SKILL_DIR` substitution, so there the helper commands in
+this file run as written. Anywhere else (Codex, or this file read without that
+substitution), start each command with `SKILL_DIR='<dir>';`, where `<dir>` is
+the absolute path of the folder that holds this SKILL.md. A set `SKILL_DIR`
+wins. With neither set, the command fails.
+
 ```bash
-node ~/.claude/skills/gtm-brief/gtm-brief.mjs check docs/gtm.md
+node "${SKILL_DIR:-${CLAUDE_SKILL_DIR}}/gtm-brief.mjs" check docs/gtm.md
 ```
 
 It prints each problem with its line number, and its last line is

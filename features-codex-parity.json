@@ -76,7 +76,7 @@
       ],
       "test": "acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-02b",
@@ -93,7 +93,7 @@
       ],
       "test": "acceptance/codex-parity/cp-02b-codex-leaf.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-01c",
@@ -110,7 +110,7 @@
       ],
       "test": "acceptance/codex-parity/cp-01c-install-plan.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-01d",
@@ -127,7 +127,7 @@
       ],
       "test": "acceptance/codex-parity/cp-01d-inspect-offering.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-02c",
@@ -147,7 +147,7 @@
       ],
       "test": "acceptance/codex-parity/cp-02c-codex-selection.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-03a",
@@ -164,7 +164,7 @@
       ],
       "test": "acceptance/codex-parity/cp-03a-skill-dir.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-02e",
@@ -185,7 +185,7 @@
       ],
       "test": "acceptance/codex-parity/cp-02e-graph-host.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-03b",
@@ -205,7 +205,7 @@
       ],
       "test": "acceptance/codex-parity/cp-03b-reference-closure.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-02f",
@@ -224,7 +224,7 @@
       ],
       "test": "acceptance/codex-parity/cp-02f-native-graphs.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     }
   ]
 }

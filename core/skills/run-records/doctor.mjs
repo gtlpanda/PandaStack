@@ -9,7 +9,9 @@ import { sanitizeSettings } from './records.mjs'
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 const controls = ['model', 'effort', 'concurrency']
-const efforts = new Set(['low', 'medium', 'high', 'xhigh', 'max', 'ultra', 'minimal', 'none'])
+// The effort values a managed launch accepts. Shared with the Codex leaf selection.
+export const DOCTOR_EFFORTS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max', 'ultra', 'minimal', 'none'])
+const efforts = new Set(DOCTOR_EFFORTS)
 function validateProject(project, env, overrides) {
   if (![project, env, overrides].every(object) || Object.keys(overrides).some(k => k !== 'model')) throw Error('Invalid configuration')
   // Model validation belongs to the shared resolver after precedence selection;

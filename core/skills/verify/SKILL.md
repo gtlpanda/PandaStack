@@ -11,12 +11,16 @@ summarize it, reorder it, or drop lines. The last line must be `VERIFY: PASS`
 or `VERIFY: FAIL`.
 
 ```bash
-bash "${CLAUDE_SKILL_DIR}/verify.sh"
+bash "${SKILL_DIR:-${CLAUDE_SKILL_DIR}}/verify.sh"
 ```
 
-(`CLAUDE_SKILL_DIR` is set by Claude Code when a skill runs. Outside a skill
-the script lives at `~/.claude/skills/verify/verify.sh`.) Pass a directory as
-the first argument to verify a subproject, e.g. `packages/api`.
+`SKILL_DIR` is the directory that holds this SKILL.md. Claude Code fills it in
+through its `CLAUDE_SKILL_DIR` substitution, so there the helper commands in
+this file run as written. Anywhere else (Codex, or this file read without that
+substitution), start each command with `SKILL_DIR='<dir>';`, where `<dir>` is
+the absolute path of the folder that holds this SKILL.md. A set `SKILL_DIR`
+wins. With neither set, the command fails. Pass a directory as the first
+argument to verify a subproject, e.g. `packages/api`.
 
 ## What it does
 

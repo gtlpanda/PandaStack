@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "status": "PROPOSED_CATALOG_NOT_RUNTIME_CERTIFICATION",
   "inventorySha256": "a7c3e748655ca3c588c7d436402a025ec7c270a7b0ad09f61e12749b2de13262",
   "offerings": [
@@ -11,8 +11,6 @@
       "installTargets": [
         "skills/backlog"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -22,7 +20,29 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "9a3415be9a6e352e0a63847f131e81acd134c27304b21a61822d6573b79770da"
+      "entrySha256": "a966b5122b77f50967b0845eca7bae9038a5df117e029419937e175209f3dc5f",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "GUIDANCE_ONLY",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "GUIDANCE_ONLY",
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "bug-lenses",
@@ -32,8 +52,6 @@
       "installTargets": [
         "skills/bug-lenses"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -42,7 +60,29 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "7ffdad25631a6855cb2e2cd2601f466d7c39d301c94fae2447de94aa5b8250c5"
+      "entrySha256": "7ffdad25631a6855cb2e2cd2601f466d7c39d301c94fae2447de94aa5b8250c5",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "GUIDANCE_ONLY",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "GUIDANCE_ONLY",
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "decisions",
@@ -52,8 +92,6 @@
       "installTargets": [
         "skills/decisions"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -69,7 +107,29 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": null
+      "entrySha256": null,
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "LIBRARY_ONLY",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "LIBRARY_ONLY",
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "default-stack",
@@ -79,8 +139,6 @@
       "installTargets": [
         "skills/default-stack"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -89,7 +147,29 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "4a0e12de638485fec8c51dadcdcb67f961921ba6ba7f6121e0b27d037682d130"
+      "entrySha256": "4a0e12de638485fec8c51dadcdcb67f961921ba6ba7f6121e0b27d037682d130",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "GUIDANCE_ONLY",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "GUIDANCE_ONLY",
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "findings",
@@ -99,8 +179,6 @@
       "installTargets": [
         "skills/findings"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -110,7 +188,29 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "5c1395055f810a1ab0f582f2e629aa443bd7436a253c3d0fe79500cdde2017ec"
+      "entrySha256": "c5b288650427718c9396faf07be36eacf2c16dbc31a4dfb7709d22cb379964fc",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "GUIDANCE_ONLY",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "GUIDANCE_ONLY",
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "gtm-brief",
@@ -120,8 +220,6 @@
       "installTargets": [
         "skills/gtm-brief"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -131,7 +229,29 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "a25824f9508b37c529da3b1d332f99647c1919e6b446a613e289199387b530a2"
+      "entrySha256": "a11264d34c83098b7ac34b752b3db1dd450325e117d7d161da039a54d47f545e",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "GUIDANCE_ONLY",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "GUIDANCE_ONLY",
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "harness-review",
@@ -141,8 +261,6 @@
       "installTargets": [
         "skills/harness-review"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -151,7 +269,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "23fbc36676dc8bc8618307fd04e77bef7f4b2dba5e177ef7979e5b0eb9c33875"
+      "entrySha256": "23fbc36676dc8bc8618307fd04e77bef7f4b2dba5e177ef7979e5b0eb9c33875",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "knowledge-map",
@@ -161,8 +299,6 @@
       "installTargets": [
         "skills/knowledge-map"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -171,7 +307,29 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "b41c22f867d4fde4627f7520236c9695c647d77f70291372818894e2681b5815"
+      "entrySha256": "b41c22f867d4fde4627f7520236c9695c647d77f70291372818894e2681b5815",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "GUIDANCE_ONLY",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "GUIDANCE_ONLY",
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "run-records",
@@ -181,8 +339,6 @@
       "installTargets": [
         "skills/run-records"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -196,7 +352,29 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "e010ebcbc30f16942ae567cd43afd09beac250da9960fa84d59e4aae57d40101"
+      "entrySha256": "e010ebcbc30f16942ae567cd43afd09beac250da9960fa84d59e4aae57d40101",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "GUIDANCE_ONLY",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "GUIDANCE_ONLY",
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "verify",
@@ -206,8 +384,6 @@
       "installTargets": [
         "skills/verify"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -222,7 +398,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "c0c81d1fe3b57519d487dc884397e4cf55c92e0f82cb1204bcccb3831ac91e2a"
+      "entrySha256": "00032a2afe268e359a5ab4cedfe1327b46854e4e58bef44d06bba2f702b41800",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "workflow-state",
@@ -232,8 +428,6 @@
       "installTargets": [
         "skills/workflow-state"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -243,7 +437,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "5045607fcd3b9d003d44795c22170955e479edb5d6e8440cefbb758413729c8c"
+      "entrySha256": "5045607fcd3b9d003d44795c22170955e479edb5d6e8440cefbb758413729c8c",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "build-bot-integration",
@@ -253,8 +467,6 @@
       "installTargets": [
         "skills/build-bot-integration"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -263,7 +475,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "4a9e556e5d8b48685d8a619d7b182cb956a80283e0863c77f007b6b8fea07eea"
+      "entrySha256": "4a9e556e5d8b48685d8a619d7b182cb956a80283e0863c77f007b6b8fea07eea",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "build-scraper",
@@ -273,8 +505,6 @@
       "installTargets": [
         "skills/build-scraper"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -283,7 +513,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "e279bea22c772774afe385ae1c42ea026e5c91a6b5a88b3bcef2ca486ad2203a"
+      "entrySha256": "e279bea22c772774afe385ae1c42ea026e5c91a6b5a88b3bcef2ca486ad2203a",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "clean-gone",
@@ -293,8 +543,6 @@
       "installTargets": [
         "skills/clean-gone"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -303,7 +551,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "00381a31b9ac72a0337e18a1a4974275f776d0b7216095cd21a5a0afe9772b9e"
+      "entrySha256": "00381a31b9ac72a0337e18a1a4974275f776d0b7216095cd21a5a0afe9772b9e",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "commit",
@@ -313,8 +581,6 @@
       "installTargets": [
         "skills/commit"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -323,7 +589,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "3017ce9d10808c2a387c36d98bdd56c69b049f7788151cbfd28905bd37367ba6"
+      "entrySha256": "3017ce9d10808c2a387c36d98bdd56c69b049f7788151cbfd28905bd37367ba6",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "copywriting",
@@ -333,8 +619,6 @@
       "installTargets": [
         "skills/copywriting"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -343,7 +627,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "1fc2dbd6fe392b593a402d8bfe136cd77c62f1d4117ac643c2dc3cd2fbdc4a7c"
+      "entrySha256": "1fc2dbd6fe392b593a402d8bfe136cd77c62f1d4117ac643c2dc3cd2fbdc4a7c",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "deep",
@@ -353,8 +657,6 @@
       "installTargets": [
         "skills/deep"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -363,7 +665,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "72dc7958bfbbdc433b05f6082594daa5a04397f7dfffd4bbceff2065989b87b6"
+      "entrySha256": "72dc7958bfbbdc433b05f6082594daa5a04397f7dfffd4bbceff2065989b87b6",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "deep-fix",
@@ -373,8 +695,6 @@
       "installTargets": [
         "skills/deep-fix"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -383,7 +703,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "a3c82fd55ec377da1fa52bdbf4a065fb4181e2cdd487c640e1d6936d8514e76a"
+      "entrySha256": "a3c82fd55ec377da1fa52bdbf4a065fb4181e2cdd487c640e1d6936d8514e76a",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "dockerize",
@@ -393,8 +733,6 @@
       "installTargets": [
         "skills/dockerize"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -403,7 +741,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "5694179ca9957a5a48c1497988ee8e912cb4cd6ccef295a13566afe17f55300a"
+      "entrySha256": "5694179ca9957a5a48c1497988ee8e912cb4cd6ccef295a13566afe17f55300a",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "dry",
@@ -413,8 +771,6 @@
       "installTargets": [
         "skills/dry"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -423,7 +779,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "55b636a2b92507b69e20cb925510a7ba076615c52623debf90c91af540f3c2a0"
+      "entrySha256": "55b636a2b92507b69e20cb925510a7ba076615c52623debf90c91af540f3c2a0",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "error-audit",
@@ -433,8 +809,6 @@
       "installTargets": [
         "skills/error-audit"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -443,7 +817,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "e28ba220b022cec9a443f878ae4b117bf7c0c8acaed92a426506a01ef710d297"
+      "entrySha256": "e28ba220b022cec9a443f878ae4b117bf7c0c8acaed92a426506a01ef710d297",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "fix-scraper",
@@ -453,8 +847,6 @@
       "installTargets": [
         "skills/fix-scraper"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -463,7 +855,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "806a0276e7c0556e2fc46dab15ce16c8edef1d45dbd1a2f01701a3dfece96ccf"
+      "entrySha256": "806a0276e7c0556e2fc46dab15ce16c8edef1d45dbd1a2f01701a3dfece96ccf",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "frontend-design",
@@ -473,8 +885,6 @@
       "installTargets": [
         "skills/frontend-design"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -483,7 +893,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "d39adf3a983de7dafc75991590d54f091755f7e4163d5a5ed085ecd719157184"
+      "entrySha256": "d39adf3a983de7dafc75991590d54f091755f7e4163d5a5ed085ecd719157184",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "init-agents",
@@ -493,8 +923,6 @@
       "installTargets": [
         "skills/init-agents"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -503,7 +931,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "55e136f46d7cb0f56971aa7f956d689d8a20c5136bbbcbd62a64045be5db95b5"
+      "entrySha256": "55e136f46d7cb0f56971aa7f956d689d8a20c5136bbbcbd62a64045be5db95b5",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "init-ci",
@@ -513,8 +961,6 @@
       "installTargets": [
         "skills/init-ci"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -523,7 +969,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "588f45c4f6bff7e4d9460c83f3a124719e2a12bb4f4fd9915f05582d16c829e3"
+      "entrySha256": "588f45c4f6bff7e4d9460c83f3a124719e2a12bb4f4fd9915f05582d16c829e3",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "init-claude",
@@ -533,8 +999,6 @@
       "installTargets": [
         "skills/init-claude"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -543,7 +1007,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "c32c6468e27a9f073e2d196ebb736475066d641656312f15d6980ed362d91953"
+      "entrySha256": "c32c6468e27a9f073e2d196ebb736475066d641656312f15d6980ed362d91953",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "init-env",
@@ -553,8 +1037,6 @@
       "installTargets": [
         "skills/init-env"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -563,7 +1045,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "9ab66794eabe4a7837ca23b3b9ece0ce68df98703b4ad3cdfdf89b1d50e6074b"
+      "entrySha256": "9ab66794eabe4a7837ca23b3b9ece0ce68df98703b4ad3cdfdf89b1d50e6074b",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "init-monorepo",
@@ -573,8 +1075,6 @@
       "installTargets": [
         "skills/init-monorepo"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -583,7 +1083,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "16beb8adcc7e96202696d4f775990327402f0b01dbf2c19268e8f589726b3a4a"
+      "entrySha256": "16beb8adcc7e96202696d4f775990327402f0b01dbf2c19268e8f589726b3a4a",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "init-tasks",
@@ -593,8 +1113,6 @@
       "installTargets": [
         "skills/init-tasks"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -603,7 +1121,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "7d583ad8bb59442ceacad1fa242d0ffadcc30ccbf97988b2885e4e6be4f6512e"
+      "entrySha256": "7d583ad8bb59442ceacad1fa242d0ffadcc30ccbf97988b2885e4e6be4f6512e",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "init-tests",
@@ -613,8 +1151,6 @@
       "installTargets": [
         "skills/init-tests"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -623,7 +1159,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "6907ae69bd9726fa972121fcd2efa7d7c6a56f672e46d4c0d7f08d1d60c4f1fa"
+      "entrySha256": "6907ae69bd9726fa972121fcd2efa7d7c6a56f672e46d4c0d7f08d1d60c4f1fa",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "logging",
@@ -633,8 +1189,6 @@
       "installTargets": [
         "skills/logging"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -643,7 +1197,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "7d9feeb80c3dfd2f728327dfa515a639a93bffe921c4c48cc994c328e25ea85b"
+      "entrySha256": "7d9feeb80c3dfd2f728327dfa515a639a93bffe921c4c48cc994c328e25ea85b",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "release",
@@ -653,8 +1227,6 @@
       "installTargets": [
         "skills/release"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -663,7 +1235,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "f6506cfa468bff2e5e360aa28ee14f71b62585c2f4b110028fe947431abd957f"
+      "entrySha256": "f6506cfa468bff2e5e360aa28ee14f71b62585c2f4b110028fe947431abd957f",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "render",
@@ -673,8 +1265,6 @@
       "installTargets": [
         "skills/render"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -683,7 +1273,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "5d6e94e8d5b004af0b2a6c9c9aee5494451efb5af444e4d30a9ba950324535f4"
+      "entrySha256": "5d6e94e8d5b004af0b2a6c9c9aee5494451efb5af444e4d30a9ba950324535f4",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "scaffold-app",
@@ -693,8 +1303,6 @@
       "installTargets": [
         "skills/scaffold-app"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -703,7 +1311,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "f83eb3cf4b149df07950df6f5a10b9a20c9974f98675582e7582352f3d036285"
+      "entrySha256": "f83eb3cf4b149df07950df6f5a10b9a20c9974f98675582e7582352f3d036285",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "security",
@@ -713,8 +1341,6 @@
       "installTargets": [
         "skills/security"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -723,7 +1349,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "227ea9895141d0197d3d1abca6f7ca318f2e37825201cdaa5658e8bc650e26e4"
+      "entrySha256": "227ea9895141d0197d3d1abca6f7ca318f2e37825201cdaa5658e8bc650e26e4",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "seo",
@@ -733,8 +1379,6 @@
       "installTargets": [
         "skills/seo"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -743,7 +1387,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "c7f2174a6b2c92ccdf65135af6cd6772913c4b6e3d09dde0dce64c3d0f540460"
+      "entrySha256": "c7f2174a6b2c92ccdf65135af6cd6772913c4b6e3d09dde0dce64c3d0f540460",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "vendor-lens",
@@ -753,8 +1417,6 @@
       "installTargets": [
         "skills/vendor-lens"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -763,7 +1425,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "f32d71134b646dca5adc6de623a5709d8397eb399173a48ace239b9c93a2461f"
+      "entrySha256": "f32d71134b646dca5adc6de623a5709d8397eb399173a48ace239b9c93a2461f",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "autobuild",
@@ -773,8 +1455,6 @@
       "installTargets": [
         "skills/autobuild"
       ],
-      "codexInstallEligible": true,
-      "nativeImplementation": "present-limited",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -785,7 +1465,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "f15a10a744c37dc529a8eaf9e6035f6f50e7a6e301a1c7e77f3bf4912eddac56"
+      "entrySha256": "f15a10a744c37dc529a8eaf9e6035f6f50e7a6e301a1c7e77f3bf4912eddac56",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "partial",
+          "transportId": "codex-autobuild",
+          "limitations": [
+            "LIVE_PROOF_MISSING",
+            "NATIVE_UNVERIFIED",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "blueprint",
@@ -795,10 +1495,12 @@
       "installTargets": [
         "skills/blueprint"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
-      "dependencies": [],
+      "dependencies": [
+        "backlog",
+        "default-stack",
+        "knowledge-map"
+      ],
       "evidenceOwners": [
         "graphs/blueprint/workflows/blueprint-design.js",
         "graphs/blueprint/skills/blueprint/write-docs.mjs"
@@ -806,7 +1508,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "72b4513168007cb4e021314ed62eaea5f2399797c46ac3b5b6f646e49ea9843e"
+      "entrySha256": "72b4513168007cb4e021314ed62eaea5f2399797c46ac3b5b6f646e49ea9843e",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "build-app",
@@ -816,10 +1538,11 @@
       "installTargets": [
         "skills/build-app"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
-      "dependencies": [],
+      "dependencies": [
+        "backlog",
+        "run-records"
+      ],
       "evidenceOwners": [
         "graphs/build/skills/build-app/driver/driver.mjs",
         "graphs/build/skills/build-app/driver/session.mjs"
@@ -827,7 +1550,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "536fade2c5cb5d966f4963968d7f8eecb1875f37a38440362842c74fef8d761d"
+      "entrySha256": "536fade2c5cb5d966f4963968d7f8eecb1875f37a38440362842c74fef8d761d",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "dev",
@@ -837,10 +1580,15 @@
       "installTargets": [
         "skills/dev"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
-      "dependencies": [],
+      "dependencies": [
+        "backlog",
+        "default-stack",
+        "harness-review",
+        "knowledge-map",
+        "verify",
+        "workflow-state"
+      ],
       "evidenceOwners": [
         "graphs/dev/workflows/dev-build.js",
         "graphs/qa/workflows/harness-repair.js"
@@ -848,7 +1596,29 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "1e7d0b75fa3c85c6ec3b5161f979818d85bc0776b39635d0dc15db175dde5b7f"
+      "entrySha256": "1e7d0b75fa3c85c6ec3b5161f979818d85bc0776b39635d0dc15db175dde5b7f",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": [
+        "cp-02f-host-wiring"
+      ]
     },
     {
       "id": "bughunt",
@@ -858,10 +1628,16 @@
       "installTargets": [
         "skills/bughunt"
       ],
-      "codexInstallEligible": true,
-      "nativeImplementation": "present-limited",
       "nativeReadiness": "unknown",
-      "dependencies": [],
+      "dependencies": [
+        "backlog",
+        "bug-lenses",
+        "default-stack",
+        "findings",
+        "knowledge-map",
+        "verify",
+        "workflow-state"
+      ],
       "evidenceOwners": [
         "graphs/hunt/skills/bughunt/native-cli.mjs",
         "graphs/hunt/skills/bughunt/native-runner.mjs",
@@ -870,7 +1646,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "fe2adebf112967fa87be76da8cce730b1265ddbc78fec26b0945caa922cdc910"
+      "entrySha256": "fe2adebf112967fa87be76da8cce730b1265ddbc78fec26b0945caa922cdc910",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "partial",
+          "transportId": "codex-bughunt",
+          "limitations": [
+            "LIVE_PROOF_MISSING",
+            "NATIVE_UNVERIFIED",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "release-pr",
@@ -880,17 +1676,39 @@
       "installTargets": [
         "skills/release-pr"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
-      "dependencies": [],
+      "dependencies": [
+        "backlog",
+        "default-stack",
+        "knowledge-map"
+      ],
       "evidenceOwners": [
         "graphs/release/workflows/release-flow.js"
       ],
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "0b5064d39a6d3b953b51c152445b68eeac2d5273cdbf0a43776012e354f34b6e"
+      "entrySha256": "0b5064d39a6d3b953b51c152445b68eeac2d5273cdbf0a43776012e354f34b6e",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "security-audit",
@@ -900,10 +1718,10 @@
       "installTargets": [
         "skills/security-audit"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
-      "dependencies": [],
+      "dependencies": [
+        "native-runtime"
+      ],
       "evidenceOwners": [
         "graphs/security-audit/workflows/security-audit-flow.js",
         "graphs/security-audit/skills/security-audit/audit-run.mjs",
@@ -913,7 +1731,29 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "d2c11a01333337852c169e47bf89fe9971667023e37d8ebeba7a4090c6dfab9d"
+      "entrySha256": "d2c11a01333337852c169e47bf89fe9971667023e37d8ebeba7a4090c6dfab9d",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_NATIVE_ENTRY",
+            "NO_PROVIDER_TRANSPORT",
+            "PROFILE_UNSUPPORTED",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "seo-check",
@@ -923,8 +1763,6 @@
       "installTargets": [
         "skills/seo-check"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
       "dependencies": [],
       "evidenceOwners": [
@@ -933,7 +1771,27 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "274016cab0c1235ab4049844161b4fb7c36189927970612e38a47cbf96939dc7"
+      "entrySha256": "274016cab0c1235ab4049844161b4fb7c36189927970612e38a47cbf96939dc7",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     },
     {
       "id": "native-runtime",
@@ -943,17 +1801,39 @@
       "installTargets": [
         "skills/native-runtime"
       ],
-      "codexInstallEligible": false,
-      "nativeImplementation": "not-certified",
       "nativeReadiness": "unknown",
-      "dependencies": [],
+      "dependencies": [
+        "run-records"
+      ],
       "evidenceOwners": [
         "core/skills/native-runtime/catalog.mjs"
       ],
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": null
+      "entrySha256": null,
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "LIBRARY_ONLY",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "unavailable",
+          "transportId": null,
+          "limitations": [
+            "LIBRARY_ONLY",
+            "NATIVE_UNVERIFIED",
+            "NO_PROVIDER_TRANSPORT",
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
     }
   ],
   "workflows": [
@@ -966,7 +1846,8 @@
         "slicer",
         "advisor"
       ],
-      "nativeReadiness": "unknown"
+      "nativeReadiness": "unknown",
+      "sha256": "27d2341e13104d69a8f6a00a52c26b4b62d1812ce498fa7f92f8ee35896bd886"
     },
     {
       "source": "graphs/dev/workflows/dev-build.js",
@@ -979,7 +1860,8 @@
         "acceptance-auditor",
         "advisor"
       ],
-      "nativeReadiness": "unknown"
+      "nativeReadiness": "unknown",
+      "sha256": "2ecd380fe46dd4372c935beaf3e7165a184dbfc019891fc0e9223f5b7fc7af64"
     },
     {
       "source": "graphs/hunt/workflows/bughunt-flow.js",
@@ -993,7 +1875,8 @@
         "repairer",
         "fix-verifier"
       ],
-      "nativeReadiness": "unknown"
+      "nativeReadiness": "unknown",
+      "sha256": "624dc9fefd75b0cb938bf2a713ba2dfbcf404cc7d0249430e46b5076f08b84db"
     },
     {
       "source": "graphs/qa/workflows/harness-repair.js",
@@ -1004,7 +1887,8 @@
         "advisor",
         "qa-auditor"
       ],
-      "nativeReadiness": "unknown"
+      "nativeReadiness": "unknown",
+      "sha256": "696413de1aadeb9c1dc550f490259854346ca33d3d602dc2105e0325f77423be"
     },
     {
       "source": "graphs/release/workflows/release-flow.js",
@@ -1015,7 +1899,8 @@
         "deploy-watcher",
         "advisor"
       ],
-      "nativeReadiness": "unknown"
+      "nativeReadiness": "unknown",
+      "sha256": "29b9529eb7657ab31c82bb8ddd68987997a963d20550f925ccf14bce3f480593"
     },
     {
       "source": "graphs/security-audit/workflows/security-audit-flow.js",
@@ -1030,7 +1915,8 @@
         "audit-researcher",
         "audit-analyst"
       ],
-      "nativeReadiness": "unknown"
+      "nativeReadiness": "unknown",
+      "sha256": "cfb6efc23f7f6321f15a86cb02553545ac70cb63aff65d31593e36d92767ba9f"
     }
   ],
   "assets": [
@@ -1847,6 +2733,23 @@
       "source": "loop.md",
       "targetOffering": null,
       "kind": "separate-fixed-instruction-not-certified-alias"
+    }
+  ],
+  "transports": [
+    {
+      "id": "claude-code",
+      "provider": "claude",
+      "entry": "install.sh"
+    },
+    {
+      "id": "codex-autobuild",
+      "provider": "codex",
+      "entry": "graphs/autobuild/tool/lib/codex.mjs"
+    },
+    {
+      "id": "codex-bughunt",
+      "provider": "codex",
+      "entry": "graphs/hunt/skills/bughunt/native-runner.mjs"
     }
   ],
   "limits": [

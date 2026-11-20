@@ -9,7 +9,7 @@ import { test, REPO } from '../scripts/workflow-harness.mjs'
 
 const api = () => import('../core/skills/native-runtime/catalog.mjs')
 const sha = bytes => createHash('sha256').update(bytes).digest('hex')
-const productionV1 = () => JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8'))
+const productionV1 = () => JSON.parse(readFileSync(join(REPO, 'acceptance/native-runtime/oc-01-catalog.fixture.json'), 'utf8'))
 const coded = e => e.code === 'INVALID_CATALOG_INPUT'
 
 // Minimal v1 -> v2 mapping; transport ids for the two codex-eligible offerings.

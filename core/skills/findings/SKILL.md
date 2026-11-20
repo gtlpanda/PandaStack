@@ -13,10 +13,17 @@ the branch name as a slug plus a short hash of the exact name, so `feat/x` and
 detached case keys on a commit; every other key survives a new head, so a new
 head finds the same ledger.
 
+`SKILL_DIR` is the directory that holds this SKILL.md. Claude Code fills it in
+through its `CLAUDE_SKILL_DIR` substitution, so there the helper commands in
+this file run as written. Anywhere else (Codex, or this file read without that
+substitution), start each command with `SKILL_DIR='<dir>';`, where `<dir>` is
+the absolute path of the folder that holds this SKILL.md. A set `SKILL_DIR`
+wins. With neither set, the command fails.
+
 ```
-node ~/.claude/skills/findings/findings.mjs check <ledger.json>
-node ~/.claude/skills/findings/findings.mjs save <ledger.json> <intake.json> <result.json> [--repo <tree>]
-node ~/.claude/skills/findings/findings.mjs report <ledger.json> [evidence dir]
+node "${SKILL_DIR:-${CLAUDE_SKILL_DIR}}/findings.mjs" check <ledger.json>
+node "${SKILL_DIR:-${CLAUDE_SKILL_DIR}}/findings.mjs" save <ledger.json> <intake.json> <result.json> [--repo <tree>]
+node "${SKILL_DIR:-${CLAUDE_SKILL_DIR}}/findings.mjs" report <ledger.json> [evidence dir]
 ```
 
 - `check` prints one line per problem, then `FINDINGS: PASS` or `FINDINGS: FAIL`.

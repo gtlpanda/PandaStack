@@ -10,10 +10,19 @@ time, unattended. `/blueprint` writes it to `docs/backlog.json` in the app's
 repo, after the human's one approval, and nothing else writes it. `/build-app`
 reads it and keeps its progress in a ledger inside `.git`.
 
-`backlog.mjs` in this skill owns every rule below. Check a file with:
+`backlog.mjs` in this skill owns every rule below.
+
+`SKILL_DIR` is the directory that holds this SKILL.md. Claude Code fills it in
+through its `CLAUDE_SKILL_DIR` substitution, so there the helper commands in
+this file run as written. Anywhere else (Codex, or this file read without that
+substitution), start each command with `SKILL_DIR='<dir>';`, where `<dir>` is
+the absolute path of the folder that holds this SKILL.md. A set `SKILL_DIR`
+wins. With neither set, the command fails.
+
+Check a file with:
 
 ```
-node ~/.claude/skills/backlog/backlog.mjs check docs/backlog.json
+node "${SKILL_DIR:-${CLAUDE_SKILL_DIR}}/backlog.mjs" check docs/backlog.json
 ```
 
 It prints one line per problem, then `BACKLOG: PASS` or `BACKLOG: FAIL`.
@@ -21,7 +30,7 @@ It prints one line per problem, then `BACKLOG: PASS` or `BACKLOG: FAIL`.
 `/dev --slice S<n>` gets its task from the same file:
 
 ```
-node ~/.claude/skills/backlog/backlog.mjs task docs/backlog.json S2 [build state dir]
+node "${SKILL_DIR:-${CLAUDE_SKILL_DIR}}/backlog.mjs" task docs/backlog.json S2 [build state dir]
 ```
 
 It prints `{slice, app, task, requiredCriteria}` as JSON: the task text (the

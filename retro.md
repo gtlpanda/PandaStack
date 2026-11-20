@@ -3788,3 +3788,56 @@ Phase 2 acceptance: 97/97.
 - Launch: autobuild runs wave 1 on the Claude backend from branch
   autobuild/codex-parity in pr-first mode. shellcheck 0.11.0 was installed with
   Homebrew, because the preflight requires it.
+
+## 63. The rest of wave 1 frozen in four stacked tiers; run 2 launched (2026-11-19/20)
+
+- Run 1 (PR #69) built CP-01a, CP-02a, CP-02d and CP-03c: 4 features in about
+  1 h, $21.33 estimated. The other 9 wave-1 features were then frozen in
+  dependency tiers, one PR each, so every dependent test imports only names a
+  frozen contract pins:
+  - A, #70: CP-01b (production catalog to v2, drift guard), CP-02b (Codex leaf
+    provider);
+  - B, #71: CP-01c (install plan), CP-01d (offering inspection), CP-02c (role
+    profiles, leaf selection), CP-03a (SKILL_DIR idiom);
+  - C, #72: CP-02e (native graph host), CP-03b (reference closure);
+  - D, #73: CP-02f (harness-repair and dev-build on a new frozen fake codex).
+- Each feature's test was proven to fail on its head only for the reasons the
+  feature fixes, and to pass against a throwaway reference implementation. The
+  references stacked in a local-only branch (codex-parity/reference-local, never
+  pushed): all 13 parity tests (348 cases) and OC-01 pass there, and
+  scripts/test.sh passes with the same counts as main (install 138, secrets 22,
+  workflow 1771 passed / 220 skipped, autobuild 248).
+- /bughunt found five LOW contract gaps, all fixed with new frozen cases or edits:
+  - A F1: the priority table's dependency column did not match the imports;
+  - A F2: CP-02b's leaf timeout left a SIGTERM-ignoring child no time to settle
+    before the runtime deadline (RUNTIME_ABORTED instead of TIMEOUT); fixed with
+    a 500 ms settle margin;
+  - C F2: CP-02e wrote result.json before the close yet promised it only on
+    exit 0; result.json now means "the graph returned", the exit code means
+    success.
+- The stacked reference run found one more: with CP-03a built,
+  tests/native-offering-catalog.test.mjs paired the v1 fixture's hashes with the
+  edited SKILL.md files and turned the baseline red, a file the CP-03a builder
+  may not edit. Host fix: that case reads the production catalog.
+- Host amendments to frozen inputs: the CP-01a test's v1 sample moved to the OC-01
+  fixture; OC-01's SKILL.md hash assertion retired (CP-01b's guard supersedes
+  it); the checker stays build-workspace as the one named exception.
+- Decision: CP-02f's "catalog rows updated" became dev.proofRefs only. Flipping
+  dev's codex row broke 10 frozen cases and would have made install.sh --codex
+  install a Claude-only skill for real users.
+- Freeze PRs end their hunt as manual_review, because lenses mark the
+  not-yet-built code not_covered. The user chose to merge each freeze PR
+  themselves, then said "Merge it" for all four. #70 merged at manual_review;
+  #71-#73 merged at pass. The review-gate hook is still not installed on this
+  Mac, so nothing blocked the #70 merge mechanically.
+- Merging stacked PRs here needs care: deleteBranchOnMerge is off (retarget with
+  gh pr edit --base main), and branch protection requires an up-to-date head
+  (gh pr update-branch, then a fresh CI run) before each later tier merges. One
+  merge attempt got a GitHub 500; it was verified unmerged and retried.
+- p2-02 ("independent processes ... one competing answer/delivery winner") failed
+  once and passed on rerun at the same head on Linux CI: a pre-existing flake,
+  not yet investigated.
+- Launch: run 2 builds the 9 features on the Claude backend from branch
+  autobuild/codex-parity-w1b in pr-first mode, maxIterations 12 (9 features plus
+  retries), bughuntBase 945c3f1 (main after #73). Everything it proves runs
+  against fake codex: wiring proof, not runtime certification.
