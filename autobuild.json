@@ -342,7 +342,15 @@
     "spec/contracts/codex-parity-cp-01b.md",
     "acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs",
     "spec/contracts/codex-parity-cp-02b.md",
-    "acceptance/codex-parity/cp-02b-codex-leaf.test.mjs"
+    "acceptance/codex-parity/cp-02b-codex-leaf.test.mjs",
+    "spec/contracts/codex-parity-cp-01c.md",
+    "acceptance/codex-parity/cp-01c-install-plan.test.mjs",
+    "spec/contracts/codex-parity-cp-01d.md",
+    "acceptance/codex-parity/cp-01d-inspect-offering.test.mjs",
+    "spec/contracts/codex-parity-cp-02c.md",
+    "acceptance/codex-parity/cp-02c-codex-selection.test.mjs",
+    "spec/contracts/codex-parity-cp-03a.md",
+    "acceptance/codex-parity/cp-03a-skill-dir.test.mjs"
   ],
   "writable": [
     "PROGRESS.md",

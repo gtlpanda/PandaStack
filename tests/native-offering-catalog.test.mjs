@@ -216,7 +216,7 @@ await test('linked visibility stays distinct from missing or changed source SKIL
 await test('all declared current sources discover present without certifying any offering', async () => {
   const a = await api()
   fixture(x => {
-    x.catalog = full(); x.installationRoot = REPO
+    x.catalog = JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'))); x.installationRoot = REPO
     const discovery = a.discoverOfferings(args(x))
     assert.equal(discovery.offerings.length, x.catalog.offerings.length)
     for (const row of discovery.offerings) {
