@@ -71,13 +71,13 @@ only frozen features.
 | ID | Depends on | Scope |
 |---|---|---|
 | CP-01a | none | v2 catalog validator and version-independent accessors; v1 unchanged |
-| CP-01b | CP-01a | production catalog converted to v2: same inventory, provider rows, workflow sha256, transports, declared dependencies |
+| CP-01b | CP-01a, CP-03c | production catalog converted to v2: same inventory, provider rows, workflow sha256, transports, declared dependencies |
 | CP-01c | CP-01b | `install-plan.mjs`; `install.sh --codex` derives its targets, `dest_of` and backup allow-check from the catalog; installed set unchanged |
 | CP-01d | CP-01b | `inspectOffering` with ready/unsupported/unknown; preflight-cli keyed on `providers.<backend>`; ready only with an injected probe |
 | CP-02a | none | shared Codex exec launcher (args, process group, timeout, classification); autobuild and hunt untouched; parity table as a drift detector |
 | CP-02b | CP-02a | Codex `provider.runLeaf` on the NR-01 wire (wireSchema to `--output-schema`, `{json}` from `--output-last-message`) |
 | CP-03c | none | role-file loader: frontmatter parse, `skills:` bodies inlined, fail closed |
-| CP-02c | CP-01b, CP-03c | role-to-profile table, profile-to-sandbox, `resolveLeaf` model/effort mapping |
+| CP-02c | CP-01b, CP-02b, CP-03c | role-to-profile table and `resolveLeaf` model/effort mapping (profile-to-sandbox is CP-02b's `sandboxForProfile`, imported) |
 | CP-02d | none | durable file checkpoint store implementing the runtime's reserve/settle/uncertain |
 | CP-02e | CP-01b, CP-02b, CP-02c, CP-02d | native graph host library and CLI: pins from the catalog, one registered workflow, persisted result, refusal before dispatch |
 | CP-02f | CP-02e | harness-repair and dev-build (nested QA) through the host CLI on a fake codex; schema sweep; catalog rows updated |
