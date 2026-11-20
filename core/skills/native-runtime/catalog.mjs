@@ -1,12 +1,13 @@
 // Static inventory only: no installer changes, runtime probes or provider ports.
-import { lstatSync, statSync, realpathSync, readdirSync, openSync, fstatSync, readSync, closeSync } from 'node:fs'
-import { join, isAbsolute } from 'node:path'
+import { lstatSync, statSync, realpathSync, readdirSync, openSync, fstatSync, readSync, readFileSync, closeSync, constants } from 'node:fs'
+import { join, isAbsolute, posix } from 'node:path'
 import { createHash } from 'node:crypto'
 import { TextDecoder } from 'node:util'
-import { fields, exact, json, record, fail } from './boundary.mjs'
+import { fields, exact, json, record, fail, sha } from './boundary.mjs'
 import { sanitizeSettings } from '../run-records/records.mjs'
 import { INPUT, catalogData, discoveryData, safeText, safeFilename, backendInput, blockers,
-  installEligible, nativeImplementationOf } from './catalog-data.mjs'
+  installEligible, nativeImplementationOf, identifier } from './catalog-data.mjs'
+import { loadRoleFile } from './role-files.mjs'
 import { catalogPathContains as contained, catalogPathsEqual } from './catalog-paths.mjs'
 export { validateCatalog, providerImplementation, installEligible, nativeImplementationOf } from './catalog-data.mjs'
 
@@ -163,4 +164,155 @@ export function projectOfferingPreflight(input) {
     runtimes: offering.requiredRuntimes.map(name => ({ name, status: 'unknown', version: null })),
     auth: { status: 'unknown', value: null }, account: { status: 'unknown', value: null },
     payer: { status: 'unknown', value: null }, blockers: row.blockers }
+}
+
+// ---- drift guard (spec/contracts/codex-parity-cp-01b.md) --------------------------
+// A static, read-only check of a v2 catalog against the tree it describes. It is not
+// protection against concurrent replacement. Every path is root-relative under the
+// canonical installation root.
+
+const MENTION = /skills\/([a-z0-9][a-z0-9-]*)\//g
+const STATIC_IMPORT = /^[ \t]*(?:import|export)\b[^;'"`]*?\bfrom[ \t]*(['"])([^'"\n]+)\1|^[ \t]*import[ \t]*(['"])([^'"\n]+)\3/gm
+const CODE_FILE = /\.(?:mjs|js|cjs)$/
+const WORKFLOW_GRAPH = /^graphs\/([^/]+)\/workflows\/[^/]+$/
+const CORE_SKILL = /^core\/skills\/([^/]+)\//
+// Never follow a final symlink. O_NONBLOCK: with it, opening a FIFO returned at once
+// in tests/native-catalog-drift.test.mjs instead of waiting for a writer.
+const NO_FOLLOW = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+
+const problem = (code, ref, dependency = null) => ({ code, ref, dependency })
+// String order with null before any string.
+const order = (a, b) => (a === b ? 0 : a === null ? -1 : b === null ? 1 : a < b ? -1 : 1)
+
+// use(fd) for a regular file, or null when the path is missing, a symlink, a
+// directory or another special file, or cannot be opened or read.
+function withRegularFile(root, rel, use) {
+  let fd
+  try {
+    fd = openSync(join(root, rel), NO_FOLLOW)
+    return fstatSync(fd).isFile() ? use(fd) : null
+  } catch { return null } finally {
+    if (fd !== undefined) {
+      try { closeSync(fd) } catch { fail('IO_ERROR') }
+    }
+  }
+}
+const regularFileBytes = (root, rel) => withRegularFile(root, rel, fd => readFileSync(fd))
+const isRegularFile = (root, rel) => withRegularFile(root, rel, () => true) === true
+
+function isRealDirectory(root, rel) {
+  try { return lstatSync(join(root, rel)).isDirectory() } catch { return false }
+}
+// Dirents of a directory, or [] when it is missing. Their kinds come from lstat, so a
+// symlink is neither a directory nor a file. Any other listing failure is IO_ERROR.
+function listing(root, rel) {
+  try { return readdirSync(join(root, rel), { withFileTypes: true }) } catch (e) {
+    if (missing(e)) return []
+    fail('IO_ERROR')
+  }
+}
+const realDirectories = (root, rel) => listing(root, rel).filter(d => d.isDirectory()).map(d => d.name)
+
+// core/skills, kit/skills and graphs/<g>/skills, each real. `safe` is false when <g>
+// is not a catalog identifier, so no path under it is ever reported.
+function skillContainers(root) {
+  const top = realDirectories(root, '')
+  const parents = ['core', 'kit'].filter(name => top.includes(name)).map(dir => ({ dir, safe: true }))
+  if (top.includes('graphs')) {
+    for (const graph of realDirectories(root, 'graphs')) parents.push({ dir: `graphs/${graph}`, safe: identifier(graph) })
+  }
+  return parents.filter(({ dir }) => realDirectories(root, dir).includes('skills'))
+    .map(({ dir, safe }) => ({ dir: `${dir}/skills`, safe }))
+}
+
+function unlistedSources(root, catalog) {
+  const sources = new Set(catalog.offerings.map(row => row.source))
+  return skillContainers(root).flatMap(({ dir, safe }) => realDirectories(root, dir)
+    .filter(name => !sources.has(`${dir}/${name}`))
+    .map(name => problem('SOURCE_UNLISTED', safe && identifier(name) ? `${dir}/${name}` : null)))
+}
+
+// Rule 1: each role of a graphs/<g>/workflows row gives its `skills:` names to every
+// entry offering under graphs/<g>/skills. Every role is loaded, owner or not, so a
+// role-file error always fails closed with its own code.
+function roleEdges(root, catalog, add) {
+  for (const workflow of catalog.workflows) {
+    const graph = WORKFLOW_GRAPH.exec(workflow.source)?.[1]
+    if (graph === undefined) continue
+    const owners = catalog.offerings.filter(row => row.entrySkill && row.source.startsWith(`graphs/${graph}/skills/`))
+    for (const role of workflow.roles) {
+      const { skills } = loadRoleFile({ installationRoot: root, name: role }).frontmatter
+      for (const owner of owners) for (const skill of skills) add(owner.id, skill)
+    }
+  }
+}
+
+// Rule 2: every skills/<name>/ mention in the entry SKILL.md text.
+function mentionEdges(row, bytes, add) {
+  for (const match of bytes.toString('utf8').matchAll(MENTION)) add(row.id, match[1])
+}
+
+// Regular code files under a source, through real directories only.
+function codeFiles(root, rel) {
+  return listing(root, rel).flatMap(d => {
+    const path = `${rel}/${d.name}`
+    if (d.isDirectory()) return codeFiles(root, path)
+    return d.isFile() && CODE_FILE.test(d.name) ? [path] : []
+  })
+}
+
+// Rule 3: static relative imports that resolve into core/skills/<name>/.
+function importEdges(root, row, add) {
+  for (const file of codeFiles(root, row.source)) {
+    const bytes = regularFileBytes(root, file)
+    if (bytes === null) fail('IO_ERROR')
+    for (const match of bytes.toString('utf8').matchAll(STATIC_IMPORT)) {
+      const specifier = match[2] ?? match[4]
+      if (!specifier.startsWith('.')) continue
+      const target = CORE_SKILL.exec(posix.join(posix.dirname(file), specifier))?.[1]
+      if (target !== undefined) add(row.id, target)
+    }
+  }
+}
+
+export function checkCatalogDrift(input) {
+  const opts = options(input, ['installationRoot'])
+  const catalog = loadOfferingCatalog({ installationRoot: opts.installationRoot })
+  if (catalog.schemaVersion !== 2) fail('CATALOG_NO_PINS')
+  let root
+  try { root = realpathSync(opts.installationRoot) } catch (e) { fail(missing(e) ? 'NOT_FOUND' : 'IO_ERROR') }
+
+  const ids = new Set(catalog.offerings.map(row => row.id))
+  const derived = new Map(catalog.offerings.map(row => [row.id, new Set()]))
+  const add = (from, to) => { if (to !== from && ids.has(to)) derived.get(from).add(to) }
+  const problems = unlistedSources(root, catalog)
+
+  for (const row of catalog.offerings) {
+    if (!isRealDirectory(root, row.source)) {
+      problems.push(problem('SOURCE_MISSING', row.id))
+      continue
+    }
+    if (row.entrySkill) {
+      const bytes = regularFileBytes(root, `${row.source}/SKILL.md`)
+      if (bytes === null || sha(bytes) !== row.entrySha256) problems.push(problem('ENTRY_SHA_MISMATCH', row.id))
+      if (bytes !== null) mentionEdges(row, bytes, add)
+    }
+    importEdges(root, row, add)
+  }
+  roleEdges(root, catalog, add)
+
+  for (const workflow of catalog.workflows) {
+    const bytes = regularFileBytes(root, workflow.source)
+    if (bytes === null || sha(bytes) !== workflow.sha256) problems.push(problem('WORKFLOW_SHA_MISMATCH', workflow.source))
+  }
+  for (const transport of catalog.transports) {
+    if (!isRegularFile(root, transport.entry)) problems.push(problem('TRANSPORT_ENTRY_MISSING', transport.id))
+  }
+  for (const row of catalog.offerings) {
+    for (const dependency of derived.get(row.id)) {
+      if (!row.dependencies.includes(dependency)) problems.push(problem('DEPENDENCY_UNDECLARED', row.id, dependency))
+    }
+  }
+  problems.sort((a, b) => order(a.code, b.code) || order(a.ref, b.ref) || order(a.dependency, b.dependency))
+  return { ok: problems.length === 0, problems }
 }

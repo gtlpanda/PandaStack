@@ -76,7 +76,7 @@
       ],
       "test": "acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-02b",

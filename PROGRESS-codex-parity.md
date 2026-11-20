@@ -353,3 +353,123 @@ Observed limits:
 
 Full regressions, review and the branch hunt remain pending for the PR.
 This is a static loader proof over the source tree, not runtime certification.
+
+## CP-01b — Production catalog converted to v2 with a drift guard
+
+Implemented spec/contracts/codex-parity-cp-01b.md only.
+
+- spec/offering-capabilities.json is v2. It was generated from the frozen OC-01 v1
+  fixture by a one-off script (logs/evidence/cp-01b/convert.mjs, not committed).
+  - The script hashed every entry SKILL.md on disk and stopped on any difference
+    from v1. There were none.
+  - It hashed the 6 workflow files into `sha256` and added the contract's three
+    `transports`.
+  - Per offering, it dropped `codexInstallEligible`/`nativeImplementation` and set
+    `permissionProfile: null`, `proofRefs: []`, the contract's provider rows and the
+    contract's dependency table.
+  - Inventory, counts and every other field are unchanged.
+- `checkCatalogDrift({ installationRoot })` is the one new export of
+  `core/skills/native-runtime/catalog.mjs`.
+  - It reuses `options`/`loadOfferingCatalog` for input and load errors, and gives
+    `CATALOG_NO_PINS` for v1.
+  - Every hashed or checked file is opened `O_NOFOLLOW | O_NONBLOCK` and checked
+    with `fstat`, so a final symlink is never a regular file. A FIFO did not block
+    in the test.
+  - Real directories come from lstat-kind dirents only. A listing failure other
+    than ENOENT/ENOTDIR is IO_ERROR.
+  - Rule 1 loads every role of every `graphs/<g>/workflows/<file>` row through
+    `loadRoleFile`, owner or not, so role errors keep their CP-03c code.
+  - Rules 2 and 3 use the contract's two regexes verbatim. One SKILL.md read serves
+    both the hash and the mentions. Problems are plain objects, deduplicated per
+    `(A, B)` and sorted with null first.
+- tests/native-catalog-v2.test.mjs: `productionV1()` reads the OC-01 fixture (one line).
+- install.sh, preflight, discovery, the validator and the accessors are unchanged.
+
+Decisions recorded:
+- A `graphs/<g>` whose name is not a catalog identifier reports `ref: null` for its
+  unlisted skill directories, the same as an unsafe leaf name, so no unsafe segment
+  is ever echoed.
+- An offering source that cannot be lstat'ed for any reason is `SOURCE_MISSING`
+  (not a real directory). A code file listed under a source that then cannot be
+  opened as a regular file throws IO_ERROR (fail closed); the contract is silent on
+  this case.
+- Two unlisted directories with unsafe names give two identical
+  `{SOURCE_UNLISTED, null, null}` problems, one per directory, as "one problem per
+  row and code" reads.
+
+Observed:
+- At HEAD the guard derives exactly 19 edges, equal to the 19 declared pairs
+  (logs/evidence/cp-01b/derived-exact.mjs clears every declared dependency on a
+  copied tree and compares).
+- The contract's prose says main has "20 undeclared derived edges", but its own
+  table lists 19 pairs. The 19 here are the table's.
+- No non-test code reads a removed v1 field off the parsed catalog. A grep for
+  `codexInstallEligible`, `\.nativeImplementation\b` and `offering-capabilities`,
+  excluding tests/, acceptance/, spec/, docs/, logs/, Markdown and features files,
+  found only:
+  - the v1 branches of the accessors in `catalog-data.mjs`;
+  - discovery's own output field (`discoveryData`);
+  - the loader path in `catalog.mjs`;
+  - message text in `preflight-cli.mjs`.
+
+New implementation test tests/native-catalog-drift.test.mjs (workflow harness, 9
+cases) covers:
+- symlinked SKILL.md, workflow and transport entry pointing at the right bytes;
+- a FIFO (made with `mkfifo`) in place of a SKILL.md, reported without blocking;
+- a symlinked source, skill directory, graph container and code subdirectory;
+- `export … from`, an indented side-effect import in a `.cjs` file, and a library
+  offering's own imports;
+- non-edges:
+  - imports into `graphs/*/skills/*`, bare specifiers and unknown ids;
+  - an import inside a template literal, and a `.ts` file;
+  - self imports, and self or unknown mentions;
+  - role skills naming the owner or a non-catalog name;
+- one problem per pair across two imports plus a role, for both owners in a graph;
+- unsafe graph and leaf names, with null refs sorted first;
+- a non-graph workflow row whose missing role is never loaded;
+- an EACCES subdirectory as IO_ERROR with no echo (skipped under uid 0).
+
+Mutation check: two mutations, each followed by a focused run of the new test.
+- Dropping `O_NOFOLLOW` failed exactly the symlinked-file case.
+- Letting `realDirectories` accept symlinks failed exactly the symlinked-directory
+  case, by reporting `graphs/linked/skills/stray` and `kit/skills/alias` as
+  unlisted.
+
+Both were restored before the runs below. Dropping `O_NONBLOCK` was not run as a
+mutation, because a blocked open would hang the runner. So the FIFO case shows only
+that the guard does not block with the flag set; that the flag is the reason is an
+untested hypothesis.
+
+Verification on Node v25.9.0 (focused only):
+
+```sh
+node --test acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs
+# exit 0; 14 top-level cases (25 tests with subtests), 25 pass, 0 fail
+node --test acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs acceptance/codex-parity/cp-01a-catalog-v2.test.mjs acceptance/native-runtime/oc-01-catalog.test.mjs
+# exit 0; 40 pass, 0 fail
+node logs/evidence/cp-01b/run-focused.mjs tests/native-catalog-v2.test.mjs tests/native-catalog-drift.test.mjs tests/native-offering-catalog.test.mjs tests/native-preflight-cli.test.mjs tests/native-catalog-paths.test.mjs tests/install-codex.test.mjs
+# FOCUSED: 56 passed, 0 failed (harness summary(), real-path TMPDIR as scripts/test-workflow.mjs sets)
+node logs/evidence/cp-01b/derived-exact.mjs
+# EXACT: 19 derived edges equal the 19 declared dependencies
+node --check core/skills/native-runtime/catalog.mjs && node --check tests/native-catalog-drift.test.mjs && git diff --check
+# exit 0
+bash scripts/check-secrets.sh
+bash scripts/check-secrets.sh tests/native-catalog-drift.test.mjs
+# each: check-secrets: clean
+```
+
+Observed limits:
+- No red pre-change run of the acceptance test was observed in this session. The
+  `git archive` export of HEAD for a `PANDASTACK_CANDIDATE_ROOT` run was denied.
+  The contract's "13 of 14 fail on main" is the host's figure, not reproduced here.
+- Ran on darwin as a non-root user only. Linux was not run.
+- The guard is a static check, not protection against concurrent replacement.
+  `lstat` and `O_NOFOLLOW` refuse only a final symlink. A source or file reached
+  through a symlinked intermediate component (for example a linked `graphs/<g>`
+  named directly by a catalog row) would still be read. That follows from the
+  documented `lstat`/`O_NOFOLLOW` semantics and is untested here. The frozen test
+  does not pin it.
+- No caller uses the guard yet (CP-01d and CP-02f will).
+
+Full regressions, review and the branch hunt remain pending for the PR.
+This is catalog data and a static drift check, not runtime certification; no provider ran.
