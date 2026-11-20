@@ -29,7 +29,8 @@ const pretty = value => JSON.stringify(value, null, 2)
 
 // ---------------------------------------------------------------- fixture root
 // Copies only what the host reads: the catalog, the six workflow templates, every
-// role file and every SKILL.md. Regular files only; symlinks are skipped.
+// role file and every file directly in a skill directory (SKILL.md, and the files a
+// CP-03d role token names). Regular files only; symlinks are skipped.
 function copyTree(target) {
   const copy = rel => {
     const from = join(ROOT, rel)
@@ -45,7 +46,7 @@ function copyTree(target) {
   for (const c of ['core', 'kit', ...dirs('graphs').map(g => `graphs/${g}`)]) {
     for (const f of files(`${c}/agents`, '.md')) copy(`${c}/agents/${f}`)
     for (const f of files(`${c}/workflows`, '.js')) copy(`${c}/workflows/${f}`)
-    for (const s of dirs(`${c}/skills`)) copy(`${c}/skills/${s}/SKILL.md`)
+    for (const s of dirs(`${c}/skills`)) for (const f of files(`${c}/skills/${s}`, '')) copy(`${c}/skills/${s}/${f}`)
   }
 }
 // The same partial row CP-02e's fixture uses. A fixture value, never a production row.

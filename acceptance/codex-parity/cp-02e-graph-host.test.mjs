@@ -30,7 +30,8 @@ async function until(check, ms = 5000) {
 
 // ---------------------------------------------------------------- fixture roots
 // Copies only what the host reads: the catalog, the six workflow templates, every
-// role file and every SKILL.md. Regular files only; symlinks are skipped.
+// role file and every file directly in a skill directory (SKILL.md, and the files a
+// CP-03d role token names). Regular files only; symlinks are skipped.
 function copyTree(target) {
   const copy = rel => {
     const from = join(ROOT, rel)
@@ -47,7 +48,7 @@ function copyTree(target) {
   for (const c of containers) {
     for (const f of files(`${c}/agents`, '.md')) copy(`${c}/agents/${f}`)
     for (const f of files(`${c}/workflows`, '.js')) copy(`${c}/workflows/${f}`)
-    for (const s of dirs(`${c}/skills`)) copy(`${c}/skills/${s}/SKILL.md`)
+    for (const s of dirs(`${c}/skills`)) for (const f of files(`${c}/skills/${s}`, '')) copy(`${c}/skills/${s}/${f}`)
   }
 }
 const CATALOG = 'spec/offering-capabilities.json'
@@ -78,7 +79,10 @@ const base = () => (BASE_ROOT ??= makeRoot())
 // ------------------------------------------------------------------- the stub
 // Each spawn takes the step at its call index from <STUB_DIR>/steps.json and
 // appends one record to <STUB_DIR>/calls.jsonl. Step fields: output (written to the
-// --output-last-message path), hang (never exit), trap (ignore SIGTERM).
+// --output-last-message path), hang (never exit), trap (ignore SIGTERM). When the
+// --output-schema file is not the NR-01 wire schema (CP-02h) and output is exactly
+// {"json": <string>}, the inner string is written instead (the bare object).
+const NR01_WIRE = JSON.stringify({ type: 'object', properties: { json: { type: 'string' } }, required: ['json'], additionalProperties: false })
 const STUB_SOURCE = `#!${process.execPath}
 const fs = require('node:fs'), path = require('node:path')
 const dir = process.env.STUB_DIR
@@ -95,10 +99,18 @@ process.stdin.on('end', () => {
   if (!step) process.exit(97)
   if (step.trap) process.on('SIGTERM', () => {})
   if (step.hang) { fs.writeFileSync(path.join(dir, 'ready'), String(process.pid)); setInterval(() => {}, 1000); return }
-  fs.writeFileSync(flag('--output-last-message'), step.output)
+  fs.writeFileSync(flag('--output-last-message'), followSchema(step.output, fs.readFileSync(flag('--output-schema'), 'utf8')))
   process.stdout.write(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } }) + '\\n')
   process.exit(0)
 })
+function followSchema(text, schema) {
+  if (schema === ${JSON.stringify(NR01_WIRE)}) return text
+  let value
+  try { value = JSON.parse(text) } catch { return text }
+  const wire = value !== null && typeof value === 'object' && !Array.isArray(value) &&
+    Object.keys(value).length === 1 && typeof value.json === 'string'
+  return wire ? value.json : text
+}
 `
 const wire = value => JSON.stringify({ json: JSON.stringify(value) })
 const HAPPY_STEPS = [{ output: wire(pass()) }, { output: wire(review()) }, { output: wire(review()) }]

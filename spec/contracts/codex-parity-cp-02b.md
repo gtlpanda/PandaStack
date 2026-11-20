@@ -10,6 +10,11 @@ change.
 Everything it proves runs against a stub executable: wiring proof, not runtime
 certification.
 
+> Amended by CP-02h (spec/contracts/codex-parity-cp-02h.md, wave 2): `--output-schema` now
+> carries the leaf's strict semantic schema, the provider reads a bare object and wraps it
+> as the NR-01 wire, and `SCHEMA_UNSUPPORTED` joins the code set. Where this contract says
+> otherwise, CP-02h governs.
+
 ## Owners
 
 - core/skills/native-runtime/codex-provider.mjs (new): the factory and constants below.

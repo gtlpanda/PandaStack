@@ -357,7 +357,19 @@
     "acceptance/codex-parity/cp-03b-reference-closure.test.mjs",
     "spec/contracts/codex-parity-cp-02f.md",
     "acceptance/codex-parity/cp-02f-native-graphs.test.mjs",
-    "acceptance/codex-parity/cp-02f-fake-codex.cjs"
+    "acceptance/codex-parity/cp-02f-fake-codex.cjs",
+    "spec/contracts/codex-parity-cp-05a.md",
+    "acceptance/codex-parity/cp-05a-checkpoint-operator.test.mjs",
+    "spec/contracts/codex-parity-cp-02h.md",
+    "acceptance/codex-parity/cp-02h-strict-schema.test.mjs",
+    "spec/contracts/codex-parity-cp-03d.md",
+    "acceptance/codex-parity/cp-03d-skill-paths.test.mjs",
+    "spec/contracts/codex-parity-cp-04a.md",
+    "acceptance/codex-parity/cp-04a-blueprint-state.test.mjs",
+    "spec/contracts/codex-parity-cp-05c.md",
+    "acceptance/codex-parity/cp-05c-qa-ledger.test.mjs",
+    "docs/evidence/codex-live-2026-11-20.md",
+    "docs/evidence/codex-live-2026-11-20"
   ],
   "writable": [
     "PROGRESS.md",

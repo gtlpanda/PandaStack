@@ -4,7 +4,7 @@ Selected feature list: features-codex-parity.json (Codex parity). On 2026-11-19 
 user required full Codex parity, reversing D122 (D125): every offering must run
 natively on the Codex CLI with the same stages, gates, recovery and outputs as on
 Claude Code. Phase 2 is complete (D124) and Phase 3 is not launched. The contract is
-spec/contracts/codex-parity-priority.md; wave 1 (CP-01, CP-02, CP-03) is approved
+spec/contracts/codex-parity-priority.md; wave 1 (CP-01, CP-02, CP-03) is built and wave 2 (CP-04, CP-05; D126) is approved
 and its features are frozen one at a time. Fake-codex tests are wiring proof, never
 runtime certification. All execution restrictions above and below remain binding.
 No provider fallback, target application changes, live provider calls in builder

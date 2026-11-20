@@ -7,7 +7,8 @@ recovery and outputs it has on Claude Code. This reverses D122. Phase 2 is compl
 
 The batch plan is spec/codex-parity-completion-matrix.md (CP-00..CP-14). CP-00 (the
 security-audit repairs) is complete: features-security-audit.json, 17/17. This
-contract approves wave 1 (CP-01, CP-02, CP-03) and records the decisions it rests on.
+contract approves wave 1 (CP-01, CP-02, CP-03; built, 13/13, D125) and wave 2 (CP-04,
+CP-05 and three wave-1 amendments; D126), and records the decisions they rest on.
 Later batches are planned in docs/roadmap/codex-parity-priority.md. They are cut into
 features only after the wave-1 seams they consume exist and pass. The matrix's rule
 applies: depend on an accepted shared seam, never on a future API guess.
@@ -43,13 +44,16 @@ certification".
 3. **Shared-host leaves run with `--ignore-user-config`.**
    - SA-08 forbids arbitrary MCP and config inheritance. Neither existing Codex
      transport passes the flag today.
-   - CP-02a pins the flag's presence. Its real effect on Codex 0.167.0 is an untested
-     hypothesis until a bounded, separately authorized probe runs; that probe is a
-     roadmap item.
+   - CP-02a pins the flag's presence. A user-authorized live probe on Codex 0.167.0
+     (2026-11-20, docs/evidence/codex-live-2026-11-20.md) shows it stops
+     `$CODEX_HOME/config.toml` from loading. The `agents.*` keys are accepted; their
+     effect is still untested.
 4. **Held (uncertain) checkpoint calls stay terminal in wave 1.**
    - A rerun with a fresh invocation id re-dispatches.
    - An operator reconcile command is a prerequisite for CP-05, since no graph runs
      unattended on the native host before that.
+   - Wave 2 addendum: a held call is resolved only through that operator command
+     (CP-05a, CP-05b), which can mark it failed or remove a stale lock, never replay it.
 5. **No new code for an existing condition.** The host reports the registry's
    `REGISTRY_MISMATCH` unchanged.
 
@@ -131,7 +135,8 @@ only frozen features.
 - `CODEX_THREAD_ID` is removed from the child environment.
 
 **CP-02b** (wiring proof)
-- The `--output-schema` file equals the runtime `wireSchema`.
+- The `--output-schema` file equals the runtime `wireSchema`. (Amended by CP-02h: the
+  file is now the leaf's strict schema; see spec/contracts/codex-parity-cp-02h.md.)
 - A fixture writes `{"json":...}` and `runLeaf` returns a `returned` envelope that
   `completionFor` accepts.
 - Every failure (non-zero exit, `turn.failed`, timeout, no output, a non-wire
@@ -215,6 +220,80 @@ only frozen features.
 - The six lenses in intake routing equal the files in `core/skills/bug-lenses/lenses`.
 - The reference rows declare dependencies, stay non-`supported`, and state that prose
   guidance has no model-behavior proof.
+
+## Wave 2 (approved 2026-11-20, D126)
+
+Wave 2 ports the QA loop (CP-05) and blueprint (CP-04) onto the wave-1 host, and fixes
+what the first live Codex smoke found (docs/evidence/codex-live-2026-11-20.md):
+- real Codex enforced only the NR-01 `{json:string}` wrapper, not the leaf's semantic
+  schema, so a checker reply with `failures[].excerpt` as an array was rejected at
+  decode and the graph escalated (CP-02h);
+- role bodies hard-code `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/...`, which does not
+  exist in a Codex home (CP-03d).
+
+### Root decisions for wave 2
+
+- **W2-1 Reconcile is `fail` plus `unlock`.** No retry, delete or adopt verb. It never
+  spawns, never writes a `returned` completion, never deletes or renames a row (only
+  `.lock`), never creates a run directory, never acts while `.lock` is held or without
+  the confirm token, and never prints prompt or completion text. A deleted
+  build-workspace row would let a fixer re-dispatch onto a half-modified tree.
+- **W2-2 An oversize prompt is a failed leaf.** The host grows the prompt (role
+  instructions), so the host settles `PROMPT_TOO_LARGE` instead of letting the
+  provider's rejection become a held `DISPATCH_UNCERTAIN` row.
+- **W2-3 Codex gets the leaf's strict semantic schema** through `--output-schema`.
+  NR-01 stays the runtime contract: the provider wraps the bare object as `{json}`.
+- **W2-4 Role-body skill paths are resolved by the role loader**, through one bash
+  token whose default is today's Claude path. The host still adds nothing to the leaf
+  environment.
+- **W2-5 No QA or loop catalog offering in wave 2.** graphs/qa has no skill, the
+  `loop` alias has no target offering, and CP-01b pins 46 offerings. The QA CLIs are
+  proven on fake codex; `dev` (CP-06) carries them.
+- **W2-6 Blueprint becomes Codex `partial` through driver CLIs.** The session asks
+  the interview and approval questions in chat and drives the CLIs.
+- **W2-7 Approval is bound to the hash** of what `show` printed. It cannot prove a
+  person answered, the same as today.
+- **W2-8 The QA loop never commits**, pushes or merges.
+- **W2-9 One fake codex, amended in place and additively.** It writes `{"json":…}`
+  when handed the NR-01 wire schema and the bare object otherwise, so every frozen
+  case holds before and after CP-02h.
+- **W2-10 A freeze never leaves a passing frozen test red on main.** A feature that
+  changes a pinned behavior retires only that pin in the old test and pins the new
+  behavior in its own test.
+
+### Wave 2 features (dependency order)
+
+| Tier | ID | Depends on | Scope |
+|---|---|---|---|
+| 1 | CP-05a | CP-02d (amends its module) | checkpoint store operator API: `checkpointDirOf`, `inspectCheckpoints`, `failHeldCheckpoint`, `breakCheckpointLock` |
+| 1 | CP-02h | CP-02b (amends its provider and `schema.mjs`) | `strictOutputSchema`; Codex gets the strict leaf schema; the provider wraps the bare object as the NR-01 wire |
+| 1 | CP-03d | CP-03c (amends its loader) | provider-neutral skill paths in role bodies, resolved by the loader |
+| 1 | CP-04a | none | `blueprint-state.mjs`: state layout, hashes, code-side redaction, args builders |
+| 1 | CP-05c | none | `qa-ledger.mjs`: the loop ledger rules as pure code |
+| 2 | CP-05b | CP-05a | `graph-reconcile.mjs` CLI (`list`, `fail`, `unlock`) and `completion.mjs` |
+| 2 | CP-04b | CP-04a | `blueprint-decisions.mjs`: interview, gate and approval-edit answers with downstream invalidation |
+| 2 | CP-04d | CP-04a | `blueprint-approve.mjs`: `show` and hash-bound `approve` (branch, write-docs, commit, rollback) |
+| 3 | CP-02g | CP-05a, CP-05b (amends CP-02e's host) | the host settles an oversize prompt as `PROMPT_TOO_LARGE` |
+| 3 | CP-04c | CP-04a, CP-04b, CP-02e, CP-02b, CP-02h | `blueprint-native.mjs` stage CLI; blueprint declares `native-runtime` |
+| 3 | CP-05d | CP-05b, CP-05c, CP-02e, CP-02h, CP-03d | `qa-loop.mjs`: one native loop iteration (loop.md step 3), no commit |
+| 4 | CP-04e | CP-04c, CP-04d, CP-03d, CP-02h | blueprint's Codex runner section, catalog flip to codex `partial`, end-to-end proof |
+| 4 | CP-05e | CP-05d, CP-02h, CP-03d | native QA gate proof on fake codex; `dev.proofRefs` |
+
+Each feature's contract (spec/contracts/codex-parity-<id>.md) and frozen test are
+committed before the feature is selected; features-codex-parity.json lists only frozen
+features. A dependency column lists every feature whose module the feature imports
+directly. CP-04e flips blueprint's codex row, so its freeze amends the frozen
+"partial only for autobuild and bughunt" and two-line install cases (CP-01b, CP-01c,
+CP-01d, CP-03b) in the same commit.
+
+### Live steps around wave 2
+
+Each runs outside builder sessions, under the user's 2026-11-20 authorization, and is
+recorded in docs/evidence/ apart from fake-codex proof:
+- after CP-02h and CP-03d build: a strict-schema probe (real `--output-schema` with the
+  strict harness-repair and blueprint schemas) and a rerun of the wave-1 smoke;
+- after wave 2 merges: a live blueprint smoke and a live harness-repair loop on a
+  fixture repo with a real failing test.
 
 ## Carried restrictions
 

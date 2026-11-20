@@ -55,6 +55,9 @@ export function assembleRoleInstructions({ installationRoot, name })
 //    skills: [{ name, path, body }] in declared order.
 ```
 
+Amended by CP-03d (spec/contracts/codex-parity-cp-03d.md): `instructions` is this text with
+skill-path tokens rewritten; `body` and `skills[].body` are unchanged.
+
 All three are synchronous and read only the files they name. Arguments are one
 options object. `installationRoot` must be an absolute string, else
 INVALID_ROLE_ROOT.
