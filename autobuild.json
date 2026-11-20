@@ -350,7 +350,11 @@
     "spec/contracts/codex-parity-cp-02c.md",
     "acceptance/codex-parity/cp-02c-codex-selection.test.mjs",
     "spec/contracts/codex-parity-cp-03a.md",
-    "acceptance/codex-parity/cp-03a-skill-dir.test.mjs"
+    "acceptance/codex-parity/cp-03a-skill-dir.test.mjs",
+    "spec/contracts/codex-parity-cp-02e.md",
+    "acceptance/codex-parity/cp-02e-graph-host.test.mjs",
+    "spec/contracts/codex-parity-cp-03b.md",
+    "acceptance/codex-parity/cp-03b-reference-closure.test.mjs"
   ],
   "writable": [
     "PROGRESS.md",
