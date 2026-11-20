@@ -94,6 +94,77 @@
       "test": "acceptance/codex-parity/cp-02b-codex-leaf.test.mjs",
       "testKind": "node",
       "passes": false
+    },
+    {
+      "id": "CP-01c",
+      "title": "Codex install plan from the catalog",
+      "description": "Implement only spec/contracts/codex-parity-cp-01c.md: core/skills/native-runtime/install-plan.mjs with installPlan({installationRoot, backend}) and its CLI (install-eligible offerings sorted by dest, transitive dependency sources checked, fixed codes), and install.sh --codex taking its targets, dest_of, --skip names and backup allow-check from one plan run. The installed set and Claude mode are unchanged; the catalog and tests/install-codex.test.mjs are not edited.",
+      "contract": "spec/contracts/codex-parity-cp-01c.md",
+      "dependencies": [
+        "CP-01b"
+      ],
+      "acceptance": [
+        "install-plan prints exactly the two current dest<TAB>src lines for the repo, and tests/install-codex.test.mjs passes unchanged.",
+        "A fixture catalog's third eligible entry is linked once, honors --skip, and a conflict is backed up and restored by --uninstall, also under paths with spaces and colons.",
+        "A missing dependency source exits 2 with DEPENDENCY_MISSING, empty stdout and an untouched target, and uninstall never restores a manifest entry outside the plan."
+      ],
+      "test": "acceptance/codex-parity/cp-01c-install-plan.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CP-01d",
+      "title": "Offering inspection and a provider-keyed preflight gate",
+      "description": "Implement only spec/contracts/codex-parity-cp-01d.md: core/skills/native-runtime/inspect-offering.mjs with inspectOffering (nine fixed checks, drift only from catalog.mjs checkCatalogDrift, ready only with an injected probe, probe called at most once and only after every static check passes, probe timeout) and CLAUDE_ONLY_CONTROLS; and in preflight-cli.mjs make IMPLEMENTATION_NOT_CERTIFIED read providerImplementation(offering, backend) for v2 catalogs while v1 keeps today's rule. No CLI flag or output change, no model or effort table, no process started by the inspection itself, no catalog, accessor or install.sh change.",
+      "contract": "spec/contracts/codex-parity-cp-01d.md",
+      "dependencies": [
+        "CP-01b"
+      ],
+      "acceptance": [
+        "An unavailable provider row, a missing binary, entry drift and a missing dependency each give unsupported with zero probe calls; a throwing probe gives unknown, and no probe never gives ready.",
+        "ready requires an injected probe that reports model, effort and concurrency supported (wiring proof), and each of the six Claude-only caps under codex gives unsupported with UNSUPPORTED_CONTROL and zero probe calls.",
+        "v1 preflight CLI cases are unchanged, v2 refusals are keyed on providers.<backend>, and offline inspection and CLI runs start no process (spawn spy and PATH stubs)."
+      ],
+      "test": "acceptance/codex-parity/cp-01d-inspect-offering.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CP-02c",
+      "title": "Role-to-profile table and Codex leaf selection",
+      "description": "Implement only spec/contracts/codex-parity-cp-02c.md: core/skills/native-runtime/codex-selection.mjs with ROLE_PROFILES, CODEX_REFUSED_WORKFLOWS and resolveLeaf, importing CODEX_PROVIDER and sandboxForProfile (CP-02b), codexExecArgs (CP-02a), autobuild codexModel and DOCTOR_EFFORTS, never copying; add the DOCTOR_EFFORTS export to core/skills/run-records/doctor.mjs. No change to runtime.mjs, the provider, the catalog, role files, autobuild or hunt.",
+      "contract": "spec/contracts/codex-parity-cp-02c.md",
+      "dependencies": [
+        "CP-01b",
+        "CP-02a",
+        "CP-02b",
+        "CP-03c"
+      ],
+      "acceptance": [
+        "Every role in every catalog workflow row has exactly one profile row matching the role files: Edit or Write gives build-workspace, checker is the only other build-workspace role, and the runner has no profile.",
+        "Release and audit roles, any leaf of release-flow or security-audit-flow, and the hunt runner give INVALID_SELECTION through the real runtime with zero reserves and zero provider calls.",
+        "Models map through autobuild codexModel (sonnet, fable, haiku to gpt-6.1-sol, gpt-6-astra, gpt-6-luna), an unmapped claude-* model or an effort outside DOCTOR_EFFORTS is refused with no echo, and the runtime's PROFILE_REFUSED still fires for a resolver that returns a refused profile."
+      ],
+      "test": "acceptance/codex-parity/cp-02c-codex-selection.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CP-03a",
+      "title": "Provider-neutral SKILL_DIR helper invocation",
+      "description": "Implement only spec/contracts/codex-parity-cp-03a.md: rewrite the fenced helper commands in core/skills/{backlog,findings,gtm-brief,verify}/SKILL.md to the pinned idiom \"${SKILL_DIR:-${CLAUDE_SKILL_DIR}}/<helper>\" with the pinned paragraph and no .claude path, and update exactly those four entrySha256 values in spec/offering-capabilities.json. No helper code, install.sh, catalog row or other SKILL.md changes.",
+      "contract": "spec/contracts/codex-parity-cp-03a.md",
+      "dependencies": [
+        "CP-01b"
+      ],
+      "acceptance": [
+        "Every fenced helper command in the four SKILL.md files uses the pinned SKILL_DIR idiom with the documented fallback paragraph, and no file names a .claude path.",
+        "The documented commands give their documented exits from a Codex-layout symlink in a clean HOME with no .claude, and the same exits and verdicts as main's commands in a Claude layout; verify reports capture: direct only off Linux (D123).",
+        "The four entrySha256 values equal the edited SKILL.md bytes and checkCatalogDrift stays ok."
+      ],
+      "test": "acceptance/codex-parity/cp-03a-skill-dir.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }

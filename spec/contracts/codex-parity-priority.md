@@ -77,7 +77,7 @@ only frozen features.
 | CP-02a | none | shared Codex exec launcher (args, process group, timeout, classification); autobuild and hunt untouched; parity table as a drift detector |
 | CP-02b | CP-02a | Codex `provider.runLeaf` on the NR-01 wire (wireSchema to `--output-schema`, `{json}` from `--output-last-message`) |
 | CP-03c | none | role-file loader: frontmatter parse, `skills:` bodies inlined, fail closed |
-| CP-02c | CP-01b, CP-02b, CP-03c | role-to-profile table and `resolveLeaf` model/effort mapping (profile-to-sandbox is CP-02b's `sandboxForProfile`, imported) |
+| CP-02c | CP-01b, CP-02a, CP-02b, CP-03c | role-to-profile table and `resolveLeaf` model/effort mapping (profile-to-sandbox is CP-02b's `sandboxForProfile`, imported) |
 | CP-02d | none | durable file checkpoint store implementing the runtime's reserve/settle/uncertain |
 | CP-02e | CP-01b, CP-02b, CP-02c, CP-02d | native graph host library and CLI: pins from the catalog, one registered workflow, persisted result, refusal before dispatch |
 | CP-02f | CP-02e | harness-repair and dev-build (nested QA) through the host CLI on a fake codex; schema sweep; catalog rows updated |
@@ -155,8 +155,9 @@ only frozen features.
 
 **CP-02c**
 - Every role in every `catalog.workflows` row has a profile row.
-- A role is `build-workspace` if and only if its `tools:` include Edit or Write.
-  `checker` is `build-workspace`.
+- A role whose `tools:` include Edit or Write is `build-workspace`. `checker` is the
+  one other `build-workspace` role (it runs verify, which writes). Bash alone never
+  makes a role `build-workspace`.
 - Release and audit roles, and the hunt `runner`, give `INVALID_SELECTION` before any
   reserve or spawn.
 - Models map through autobuild `codexModel`: sonnet, fable and haiku become

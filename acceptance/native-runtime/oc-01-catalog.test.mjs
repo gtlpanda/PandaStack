@@ -16,7 +16,7 @@ test('declared catalog covers historical inventory plus explicit native-runtime 
  assert.deepEqual(catalog.offerings.filter(x=>x.id!=='native-runtime').map(x=>[x.id,x.source]),inventory.skills.map(x=>[x.name,x.source]));
  assert.deepEqual(catalog.installerTargets,[...inventory.installerTargets,{target:'skills/native-runtime',source:'core/skills/native-runtime',codexInstaller:false,kind:'skills'}]);
  assert.deepEqual(catalog.workflows,inventory.workflows.map(x=>({source:x.source,roles:x.roles,nativeReadiness:'unknown'})));assert.deepEqual(catalog.assets,inventory.otherInstallerAssets.map(x=>({target:x.target,source:x.source,kind:x.kind})));assert.deepEqual(catalog.fixedTargets,inventory.fixedInstallerTargets);
- for(const entry of catalog.offerings){const skill=resolve(ROOT,entry.source,'SKILL.md');assert.equal(entry.entrySkill,existsSync(skill));assert.equal(entry.entrySha256,entry.entrySkill?sha(readFileSync(skill)):null);}
+ for(const entry of catalog.offerings){const skill=resolve(ROOT,entry.source,'SKILL.md');assert.equal(entry.entrySkill,existsSync(skill));}
  const library=catalog.offerings.find(x=>x.id==='native-runtime');assert.equal(library.entrySkill,false);assert.equal(library.nativeReadiness,'unknown');
  const actual=[];for(const base of ['core','kit',...readdirSync(resolve(ROOT,'graphs')).map(x=>'graphs/'+x)]){const dir=resolve(ROOT,base,'skills');if(existsSync(dir))for(const name of readdirSync(dir))actual.push(base+'/skills/'+name);}
  assert.deepEqual(catalog.offerings.map(x=>x.source).sort(),actual.sort());assert.equal(catalog.offerings.find(x=>x.id==='decisions').entrySkill,false);
