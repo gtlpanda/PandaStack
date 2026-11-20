@@ -338,13 +338,18 @@
     "spec/contracts/codex-parity-cp-02d.md",
     "acceptance/codex-parity/cp-02d-checkpoint-store.test.mjs",
     "spec/contracts/codex-parity-cp-03c.md",
-    "acceptance/codex-parity/cp-03c-role-files.test.mjs"
+    "acceptance/codex-parity/cp-03c-role-files.test.mjs",
+    "spec/contracts/codex-parity-cp-01b.md",
+    "acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs",
+    "spec/contracts/codex-parity-cp-02b.md",
+    "acceptance/codex-parity/cp-02b-codex-leaf.test.mjs"
   ],
   "writable": [
     "PROGRESS.md",
     "DECISIONS.md",
     "PROGRESS-security-audit.md",
-    "PROGRESS-codex-parity.md"
+    "PROGRESS-codex-parity.md",
+    "spec/offering-capabilities.json"
   ],
   "env": {
     "pathPrepend": [],

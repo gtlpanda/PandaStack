@@ -14,7 +14,7 @@ const ROOT = process.env.PANDASTACK_CANDIDATE_ROOT || fileURLToPath(new URL('../
 const loadCatalog = () => import(pathToFileURL(resolve(ROOT, 'core/skills/native-runtime/catalog.mjs')))
 const loadRuntime = () => import(pathToFileURL(resolve(ROOT, 'core/skills/native-runtime/runtime.mjs')))
 const sha = bytes => createHash('sha256').update(bytes).digest('hex')
-const productionV1 = () => JSON.parse(readFileSync(resolve(ROOT, 'spec/offering-capabilities.json'), 'utf8'))
+const productionV1 = () => JSON.parse(readFileSync(resolve(ROOT, 'acceptance/native-runtime/oc-01-catalog.fixture.json'), 'utf8'))
 
 const CODEX_TRANSPORTS = { autobuild: 'codex-autobuild', bughunt: 'codex-bughunt' }
 const TRANSPORTS = [

@@ -59,6 +59,41 @@
       "test": "acceptance/codex-parity/cp-03c-role-files.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "CP-01b",
+      "title": "Production catalog converted to v2 with a drift guard",
+      "description": "Implement only spec/contracts/codex-parity-cp-01b.md: rewrite spec/offering-capabilities.json as v2 (same inventory, the pinned provider rows and three transports, workflow sha256, declared dependencies equal to the derived edges) and add checkCatalogDrift to core/skills/native-runtime/catalog.mjs, importing loadOfferingCatalog and role-files.mjs loadRoleFile, never copying. Change tests/native-catalog-v2.test.mjs only so productionV1 reads the OC-01 fixture. No change to install.sh, preflight, the validator, accessors or any SKILL.md; no supported value anywhere.",
+      "contract": "spec/contracts/codex-parity-cp-01b.md",
+      "dependencies": [
+        "CP-01a",
+        "CP-03c"
+      ],
+      "acceptance": [
+        "The production catalog is v2 and valid with 46 offerings, 6 workflows, 46 assets and 4 fixed targets, the same inventory and derived values as the v1 snapshot, and every entrySha256, workflow sha256 and transport entry equal to the files on disk.",
+        "Declared dependencies are a superset of the edges derived from role skills frontmatter, skills/<name>/ mentions in entry SKILL.md and static core/skills imports; codex is partial only for autobuild and bughunt, and no provider row is supported.",
+        "checkCatalogDrift passes on the production root and, on a fixture root, reports a one-byte workflow change, each other drift and each undeclared edge with its fixed code, sorted, without writing anything."
+      ],
+      "test": "acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CP-02b",
+      "title": "Codex leaf provider on the NR-01 wire",
+      "description": "Implement only spec/contracts/codex-parity-cp-02b.md: core/skills/native-runtime/codex-provider.mjs with createCodexProvider (frozen {runLeaf}), sandboxForProfile, CODEX_PROVIDER and CODEX_PROVIDER_CODES. runLeaf writes the runtime wireSchema to --output-schema, runs one codex exec through CP-02a's codexExecArgs/runCodexExec/classifyCodexExec (imported, never copied; --ignore-user-config always), and returns the {json} wire from --output-last-message as an NR-02 envelope. audit-source-only and release-controlled are refused before spawn. runtime.mjs, schema.mjs, codex-exec.mjs, autobuild and hunt are not modified. No real codex, network or HOME.",
+      "contract": "spec/contracts/codex-parity-cp-02b.md",
+      "dependencies": [
+        "CP-02a"
+      ],
+      "acceptance": [
+        "The --output-schema file equals the runtime wireSchema, and a {\"json\":...} fixture yields a returned envelope that the real runtime accepts and decodes.",
+        "Every failure, including refusal, timeout, no output, non-wire and over-1 MiB output, gives a failed envelope with a fixed code and matching receipt after one spawn, and runLeaf never rejects after validation.",
+        "audit-source-only and release-controlled give PROFILE_UNSUPPORTED with zero spawns, no dollar field is emitted, and the prompt never reaches argv, the envelope or a provider-written file."
+      ],
+      "test": "acceptance/codex-parity/cp-02b-codex-leaf.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
