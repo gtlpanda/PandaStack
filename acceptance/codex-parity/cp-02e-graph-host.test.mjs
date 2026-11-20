@@ -363,6 +363,26 @@ describe('CP-02e harness-repair through the library (fake provider)', () => {
     assert.equal(JSON.parse(readFileSync(resultFile(c), 'utf8')).status, 'escalate')
   })
 
+  test('a store close failure after the result is written is exit 3 and leaves result.json in place', async () => {
+    // No fault seam: during the last leaf the provider replaces the run lock with a
+    // directory, so CP-02d's close cannot read its lock (IO_ERROR, lock kept).
+    const c = makeCase()
+    const { provider, calls } = recorder((req, n) => {
+      if (n === 3) { unlinkSync(lockFile(c)); mkdirSync(lockFile(c)) }
+      return completion(req, answerFor(req))
+    })
+    const o = options(c, provider)
+    assert.deepEqual(await host(o), { exitCode: 3, error: 'IO_ERROR' })
+    assert.equal(calls.length, 3)
+    const result = JSON.parse(readFileSync(resultFile(c), 'utf8'))
+    assert.deepEqual([result.invocationId, result.status, result.result.status], ['inv-1', 'done', 'done'])
+    assert.equal(mode(resultFile(c)), 0o600)
+    assert.ok(statSync(lockFile(c)).isDirectory(), 'the lock the store could not read is left for an operator')
+    // The kept lock still refuses the next run, and the host never deletes result.json.
+    assert.deepEqual(await host(options(c, recorder().provider, { invocationId: 'inv-next' })), { exitCode: 4, error: 'OWNER_BUSY' })
+    assert.equal(JSON.parse(readFileSync(resultFile(c), 'utf8')).invocationId, 'inv-1')
+  })
+
   test('a provider throw exits 3, holds the call and writes no result', async () => {
     const c = makeCase(), { provider, calls } = recorder(() => { throw new Error(`provider exploded ${MARK}`) })
     const outcome = await host(options(c, provider))

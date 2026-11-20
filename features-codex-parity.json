@@ -180,7 +180,7 @@
       ],
       "acceptance": [
         "A pin mismatch (REGISTRY_MISMATCH), a v1 catalog (CATALOG_NO_PINS), an unlisted workflow (UNKNOWN_WORKFLOW) and a codex-unavailable offering (OFFERING_UNSUPPORTED) each exit 2 with no checkpoint, no provider call and no run directory; a bad args file exits 1 with one JSON error line.",
-        "A harness-repair run with a fake provider writes result.json (0600) and exits 0 with the graph status, escalate included; a provider throw or the runtime deadline exits 3, and a held run lock exits 4 and is never broken.",
+        "A harness-repair run with a fake provider writes result.json (0600) when the graph returns and exits 0 with the graph status, escalate included, only when both closes succeed; a close failure after the write exits 3 and leaves result.json in place; a provider throw or the runtime deadline exits 3 with no result.json, and a held run lock exits 4 and is never broken.",
         "On resume a completed leaf replays with no provider call, an uncertain leaf is held with CHECKPOINT_UNCERTAIN, and a new invocation id starts fresh."
       ],
       "test": "acceptance/codex-parity/cp-02e-graph-host.test.mjs",

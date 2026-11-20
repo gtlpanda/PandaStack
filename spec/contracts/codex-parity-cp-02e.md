@@ -48,7 +48,7 @@ The one export. It never rejects. Every result, including an unexpected error, i
 an `outcome`:
 
 ```
-{ exitCode: 0, status, result }      // the graph returned; result.json is written
+{ exitCode: 0, status, result }      // the graph returned and both closes succeeded
 { exitCode: 1 | 2 | 3 | 4, error }   // error is a fixed uppercase code
 ```
 
@@ -137,14 +137,26 @@ creates nothing, reserves nothing and calls no provider.
       checkpoint operation cut by the deadline), `CHECKPOINT_ERROR`, `CONFLICT`,
       `INVALID_SELECTION`, `PROFILE_REFUSED`, `CLEANUP_UNCONFIRMED`. A rejection with
       no fixed code is `WORKFLOW_ERROR`.
-11. **Result.** `result.json` (below), written under the lock. A result that boundary
-    `json()` rejects is exit 3 `INVALID_RESULT`; a write failure is exit 3 `IO_ERROR`.
+11. **Result.** Only when the graph returned: `result.json` (below), written under
+    the lock, before step 12. A result that boundary `json()` rejects is exit 3
+    `INVALID_RESULT` and a write failure is exit 3 `IO_ERROR`; neither leaves a
+    result.json from this invocation.
 12. **Close**, on every path after step 9: `runtime.close()`, then `store.close()`,
     so the run lock is released after a success, a failure, a deadline and a signal.
-    A close failure after an otherwise successful run is exit 3 (`CLEANUP_UNCONFIRMED`
-    from the runtime, `IO_ERROR` from the store); an earlier error keeps its code.
+    The order is kept: the runtime is closed first so no leaf or checkpoint work is
+    still running when the store waits for its own operations and releases the lock.
+    - Exit 0 needs both closes to succeed.
+    - A close failure after step 11 is exit 3 and leaves result.json in place. That is
+      the one exit-3 case that has a result.json. The host never removes it.
+    - The store close fails when reading or removing its lock fails for a reason other
+      than "missing" (CP-02d): exit 3 `IO_ERROR`, and the lock stays for an operator.
+    - `runtime.close()` rejects only with the run's own `CLEANUP_UNCONFIRMED`, which
+      already failed the run at step 10. After a run that resolved it does not reject.
+      If it ever did, the outcome is exit 3 `CLEANUP_UNCONFIRMED`.
+    - An earlier error keeps its code.
 
-A graph that ends with any status, including `escalate`, is exit 0. A leaf that
+A graph that ends with any status, including `escalate`, is exit 0 once both closes
+succeed. A leaf that
 fails (a `failed` envelope, for example a leaf `TIMEOUT`) is an ordinary leaf error
 the graph handles: harness-repair escalates, so that is exit 0 too.
 
@@ -173,7 +185,7 @@ invocation in that run directory. The runtime's call ids hash the invocation id.
     <callId>.json         one per leaf call, 0600 (CP-02d layout)
   provider/               CLI only: CP-02b per-call files (<callId>.schema.json,
                           .output.json, .log.jsonl). The library never creates it.
-  result.json             0600, written on exit 0 only
+  result.json             0600, written when the graph returned (step 11)
 ```
 
 `result.json` is written to a unique temp file `result.json.tmp-<random>` (mode
@@ -186,7 +198,19 @@ these keys in this order:
 { "schemaVersion": 1, "workflowId", "offeringId", "invocationId", "status", "result" }
 ```
 
-`status` and `result` are the outcome's. No result.json is written for exits 1-4.
+`status` and `result` are what the graph returned.
+
+### Reading the outcome
+
+result.json means "the graph returned this outcome". The exit code alone means
+success. CP-02f, operators and every other consumer read the exit code first and
+never infer success from the file.
+- Exit 0: result.json was written by this invocation.
+- Exit 3 after a close failure (step 12): result.json was written by this invocation
+  and is left in place.
+- Exits 1, 2 and 4, and every other exit-3 path: this invocation writes no
+  result.json. A file from an earlier invocation in the same run directory is not
+  touched; its `invocationId` says whose it is.
 
 ## CLI
 
@@ -244,10 +268,10 @@ sets `process.exitCode` and lets the event loop drain; it never calls `process.e
 
 | exit | meaning | codes |
 |---|---|---|
-| 0 | the graph returned, any status; result.json written | none |
+| 0 | the graph returned, any status, result.json written, and both closes succeeded | none |
 | 1 | bad input: argv, args file, library options | `INVALID_HOST_INPUT` |
 | 2 | refused before the run directory exists | catalog codes, `CATALOG_NO_PINS`, registry codes (`REGISTRY_MISMATCH`), `UNKNOWN_WORKFLOW`, `OFFERING_UNSUPPORTED`, CP-03c role codes |
-| 3 | the run started and failed, or could not be recorded | runtime codes, store codes other than `OWNER_BUSY`, `IO_ERROR`, `INVALID_RESULT`, `WORKFLOW_ERROR` |
+| 3 | the run started and failed, could not be recorded, or could not be closed (result.json may exist only in that last case) | runtime codes, store codes other than `OWNER_BUSY`, `IO_ERROR`, `INVALID_RESULT`, `WORKFLOW_ERROR` |
 | 4 | the run lock is held | `OWNER_BUSY` |
 
 ## Deadlines nest
@@ -298,13 +322,18 @@ acceptance/native-runtime/nr-02-runtime-support.mjs `completion`. CLI cases spaw
 the host with a minimal environment of its own and a stub `codex` executable that
 records argv, cwd, environment and stdin. No HOME, network or real codex.
 
-At this freeze (main plus the tier A and B freezes) all 25 cases fail: the fixture
+At this freeze (main plus the tier A and B freezes) all 26 cases fail: the fixture
 setup needs the CP-01b v2 catalog, and graph-host.mjs does not exist. Against a
-tree with CP-01b, CP-02b, CP-02c and CP-02d built but no graph-host.mjs, all 25
+tree with CP-01b, CP-02b, CP-02c and CP-02d built but no graph-host.mjs, all 26
 fail on the missing module. No case passes before the feature is built.
+
+A store close failure after the result is written is tested without a fault seam:
+the injected provider replaces `<runDir>/checkpoints/.lock` with a directory during
+the last leaf, so CP-02d's close cannot read its lock.
 
 Not detectable by the test, enforced by review: the CLI removes its signal handlers
 and never calls `process.exit`; a role outside step 7's set is refused through the
-wrapped `resolveLeaf` (no registered template produces one); store and close
-failures other than `OWNER_BUSY` map to exit 3; an existing run directory keeps its
-mode.
+wrapped `resolveLeaf` (no registered template produces one); store open failures
+other than `OWNER_BUSY` map to exit 3; a `runtime.close()` rejection after a run that
+resolved maps to exit 3 (not reachable today, step 12); an existing run directory
+keeps its mode.
