@@ -206,6 +206,25 @@
       "test": "acceptance/codex-parity/cp-03b-reference-closure.test.mjs",
       "testKind": "node",
       "passes": false
+    },
+    {
+      "id": "CP-02f",
+      "title": "harness-repair and dev-build through the native host on a fake codex",
+      "description": "Implement only spec/contracts/codex-parity-cp-02f.md: set dev's proofRefs in spec/offering-capabilities.json to [\"cp-02f-host-wiring\"] and change no other catalog byte (dev's codex row stays unavailable: its SKILL.md is Claude-only, so install.sh --codex must keep installing the same two skills). The frozen test drives the CP-02e host CLI on a fake codex for harness-repair and dev-build (nested QA), sweeps the schemas of all six graphs through the native runtime, and checks the drift guard. No module, workflow, role file, SKILL.md, install.sh or provider change. No real codex, claude, network or HOME.",
+      "contract": "spec/contracts/codex-parity-cp-02f.md",
+      "dependencies": [
+        "CP-01b",
+        "CP-02e",
+        "CP-03c"
+      ],
+      "acceptance": [
+        "Through the host CLI on a fake codex, harness-repair runs exactly 3 spawns in graph order with the checker workspace-write and the reviewer and qa-auditor read-only, and every leaf gets exactly the args file's env.",
+        "dev-build with an approved plan makes no planner or advisor call, its nested QA leaves carry workflowPath [dev-build, harness-repair], the plan bytes reach the leaves verbatim, and a provider refusal escalates after one spawn, replays with zero spawns and never invokes claude.",
+        "A schema sweep over the six registered graphs reaches 36 of 39 nodes with no INVALID_SCHEMA and lists the 3 security-audit nodes as unproven; the drift guard passes and dev's proofRefs include cp-02f-host-wiring."
+      ],
+      "test": "acceptance/codex-parity/cp-02f-native-graphs.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
