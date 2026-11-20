@@ -473,3 +473,115 @@ Observed limits:
 
 Full regressions, review and the branch hunt remain pending for the PR.
 This is catalog data and a static drift check, not runtime certification; no provider ran.
+
+## CP-02b — Codex leaf provider on the NR-01 wire
+
+Implemented spec/contracts/codex-parity-cp-02b.md only. One new module,
+core/skills/native-runtime/codex-provider.mjs (207 lines), with exactly four exports:
+- `CODEX_PROVIDER` (`'codex'`).
+- `sandboxForProfile`: a null-prototype table over the runtime `PROFILES` (imported);
+  anything else, including `__proto__` and `toString`, throws `INVALID_RUNTIME_INPUT`.
+- `CODEX_PROVIDER_CODES`: frozen; derived from `CODEX_EXEC_CODES` minus `SUCCESS`, plus
+  `INVALID_WIRE`, `PROFILE_UNSUPPORTED` and `IO_ERROR`.
+- `createCodexProvider`: validates the seven options through boundary `fields`, keeps
+  a frozen copy of `env`, and returns a frozen `{runLeaf}` that never reads `this`.
+
+`runLeaf` validates the sixteen request keys, then follows the contract's steps:
+- Profile check, timeout `floor(deadline - now - grace - 500)`, then the run directory.
+- One `runCodexExec` with CP-02a `codexExecArgs` (imported, never copied).
+- `classifyCodexExec`, then an `lstat` + `O_NOFOLLOW` + `fstat` read of the output,
+  bounded to 1 MiB.
+- An envelope size check.
+
+The NR-01 wire schema is obtained from `encodeOutputContract`, not hard-coded.
+runtime.mjs, schema.mjs, codex-exec.mjs, autobuild and hunt are unchanged
+(`git status` shows only the two new files before this entry).
+
+Decisions (no human present):
+- Model and effort are checked by calling `codexExecArgs` with a placeholder
+  `read-only` sandbox, converting its error to `INVALID_RUNTIME_INPUT`. The profile may
+  be unsupported, so the real sandbox is not known yet. This keeps CP-02a the only
+  owner of those rules.
+- The clock is read during validation, before the profile check. A failing `nowMs`
+  therefore rejects even for an unsupported profile, and "once valid, never rejects"
+  holds literally.
+- The wire schema is checked on the bytes that will be written
+  (`canonical(JSON.parse(JSON.stringify(wireSchema)))`). So a `BigInt` or a getter
+  that changes between reads cannot reach the file, and the error stays
+  `INVALID_RUNTIME_INPUT`.
+- The schema file is unlinked (ENOENT ignored) and re-created with `O_EXCL`, mode 0600,
+  then `fchmod`ed. A symlink at that name is removed, never followed. A stale output
+  file is unlinked the same way; a directory there is `IO_ERROR`, never removed
+  recursively.
+- An already-aborted signal resolves `failed` `EXIT_NONZERO` (what classification gives
+  for exit 130) without running. Reason: `runCodexExec` returns 130 for it without
+  truncating the log, so a log from an earlier attempt would otherwise be classified,
+  and its refusal or usage reported as this run's.
+- Everything after validation sits in one catch-all that resolves `IO_ERROR`, keeping
+  any counters already read. `runCodexExec` rejects when the log cannot be opened, and
+  `classifyCodexExec` throws on an unreadable log; both must stay envelopes.
+- `cwd`, `runDir` and `env` keys and values with a NUL are rejected at the factory,
+  since spawn and mkdir can never accept them. The contract states NUL only for
+  `codexBin`.
+- A deadline far in the future is clamped to `Number.MAX_SAFE_INTEGER` ms for
+  `runCodexExec`'s safe-integer check. CP-02a's `startTimer` arms it in steps.
+- The output is decoded with `TextDecoder` `fatal` and `ignoreBOM`, so a UTF-8 BOM is
+  `INVALID_WIRE` rather than silently stripped.
+
+New implementation test tests/native-codex-provider.test.mjs (workflow harness, 14
+cases, 218 lines) covers:
+- a symlinked schema name, and a stale 0644 schema file;
+- the already-aborted signal with a stale log;
+- a directory at the output or log name, giving `IO_ERROR` with zero spawns;
+- an unreadable output file, giving `IO_ERROR` with its counters kept (skipped under
+  uid 0);
+- a BOM and `__proto__` keys as `INVALID_WIRE`;
+- the usage bound at `MAX_SAFE_INTEGER` and `+1`, and non-record usage;
+- the far-deadline clamp, `graceMs: 0` and a null-prototype `env`;
+- NUL and getter factory options;
+- clock and request near-misses (a `-m` model, a getter selection, a `BigInt` wire
+  schema, a prototype-only `AbortSignal`, an infinite deadline, and a short string
+  over 1 MiB in bytes);
+- prototype names for `sandboxForProfile`;
+- the four-file run directory.
+
+Mutation check: two mutations, each followed by a focused run of the new test, and
+each restored before the runs below.
+- Removing the aborted-signal guard failed exactly the stale-log case.
+- Opening the schema with `'w'` instead of unlink plus `O_EXCL` failed exactly the
+  symlink case.
+
+Verification on Node v25.9.0 (focused only):
+
+```sh
+node --test acceptance/codex-parity/cp-02b-codex-leaf.test.mjs
+# pre-change: 92 tests, 1 pass (the stub self-check), 91 fail, ERR_MODULE_NOT_FOUND for codex-provider.mjs
+# post-change: 92 tests, 92 pass, 0 fail (~14.5s)
+node --test acceptance/codex-parity/cp-02b-codex-leaf.test.mjs acceptance/codex-parity/cp-02a-codex-exec.test.mjs
+# 161 tests, 161 pass, 0 fail
+node logs/evidence/cp-02b/run-focused.mjs tests/native-codex-provider.test.mjs tests/native-codex-exec.test.mjs tests/native-runtime-executor.test.mjs tests/native-runtime-schema.test.mjs
+# FOCUSED: 51 passed, 0 failed (harness summary(), real-path TMPDIR as scripts/test-workflow.mjs sets)
+node --check core/skills/native-runtime/codex-provider.mjs && node --check tests/native-codex-provider.test.mjs && git diff --check
+# exit 0
+bash scripts/check-secrets.sh
+bash scripts/check-secrets.sh core/skills/native-runtime/codex-provider.mjs tests/native-codex-provider.test.mjs
+# each: check-secrets: clean
+```
+
+Observed limits:
+- Only stub children ran (a node script, and a `/bin/sh` wrapper around it). No real
+  codex, network or HOME. Several things remain untested hypotheses, as the contract
+  states:
+  - whether `--ignore-user-config` and the sandbox flags take effect on Codex 0.167.0;
+  - whether the 500 ms default grace is enough for a real Codex to exit;
+  - whether Codex's real `turn.completed` usage keys match the four kept counters.
+- The settle margin bounds when SIGKILL is sent, not process scheduling under load.
+- The log file is opened by CP-02a's `runCodexExec` with `'w'`. By POSIX open
+  semantics that follows a symlink at that name; this was read from the code and not
+  tested here. The provider names the file inside a host-owned 0700 run directory but
+  does not harden that open; codex-exec.mjs is out of scope here.
+- Ran on darwin as a non-root user only. Linux was not run.
+- No caller uses the provider yet (CP-02c and CP-02e will).
+
+Full regressions, review and the branch hunt remain pending for the PR.
+This is wiring proof on stub executables, not runtime certification.

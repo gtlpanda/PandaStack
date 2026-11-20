@@ -93,7 +93,7 @@
       ],
       "test": "acceptance/codex-parity/cp-02b-codex-leaf.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-01c",
