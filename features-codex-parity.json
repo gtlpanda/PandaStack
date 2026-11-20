@@ -185,7 +185,7 @@
       ],
       "test": "acceptance/codex-parity/cp-02e-graph-host.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-03b",

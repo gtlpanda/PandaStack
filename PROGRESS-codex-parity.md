@@ -988,3 +988,104 @@ Observed limits and untested hypotheses:
   `SKILL_DIR='<dir>';` form (contract). Not tested.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-02e — Native graph host library and CLI
+
+Wiring proof, not runtime certification. Library cases used a recording provider; CLI
+cases used the frozen test's stub `codex`. No real codex, Claude, network or HOME was
+used. No catalog row changed: on the production catalog the host still refuses
+harness-repair and dev-build (dev is codex `unavailable`).
+
+Edits:
+- `core/skills/native-runtime/graph-host.mjs` (new, 359 lines): the one export
+  `runGraphHost` and the `--args-file` CLI in one module (install-plan.mjs pattern).
+  It imports only siblings: catalog, role-files, codex-selection, codex-provider,
+  checkpoint-store, runtime, registry and boundary. No other file changed.
+- Steps 1-7 are pure reads, each in its own try/catch, so the step (not the code)
+  decides the exit: bad input 1, refusals 2 with the seam's own code passed through
+  (`REGISTRY_MISMATCH` and `INVALID_RUNTIME_INPUT` from the registry unchanged). The
+  first write is step 8's `mkdirSync`.
+- Steps 8-12: run dir, store (its `.lock` is the run lock; `OWNER_BUSY` is exit 4),
+  runtime with a wrapped provider (role instructions + `"\n\n"` + the workflow prompt,
+  `this` = the caller's provider, `runLeaf` read once at input) and a wrapped
+  `resolveLeaf` (a role outside step 7's set throws, so the runtime refuses it as
+  `INVALID_SELECTION` before any reserve). result.json is written atomically (unique
+  `O_EXCL|O_NOFOLLOW` 0600 temp, fsync, rename, directory fsync); then
+  `runtime.close()` and `store.close()` in that order on every path after step 9.
+  The first error keeps its code.
+
+Decisions (no human present):
+- A thrown code passes through only when it matches `^[A-Z][A-Z0-9_]{0,63}$`; any
+  other value gets the step's fallback (`IO_ERROR` for catalog, registry, roles, run
+  dir and store; `WORKFLOW_ERROR` for the run). So a system errno or a lower-case
+  code from a template is never echoed.
+- A run directory the host creates is `chmod` 0700 after `mkdirSync`, so the mode
+  does not depend on the umask (the store does the same for its directory). An
+  existing directory is not touched.
+- If the result rename succeeds but the directory fsync fails, the host removes its
+  own result.json and returns exit 3 `IO_ERROR` ("neither leaves a result.json from
+  this invocation"). The earlier file, if any, was already replaced by the rename.
+- `signal` present with the value `undefined` is `INVALID_HOST_INPUT` (it is not an
+  AbortSignal); absent means no signal.
+- The CLI opens the args file `O_NONBLOCK`, so a FIFO is refused by `fstat` instead
+  of blocking the open.
+- An unexpected throw outside the step handlers (not reachable through the steps) is
+  exit 3 `IO_ERROR`, so `runGraphHost` never rejects.
+
+New implementation test `tests/native-graph-host.test.mjs` (workflow harness, 14
+cases, 258 lines). Fixture roots re-pin a replaced harness-repair template in the
+fixture catalog to reach graph results the shipped templates never return:
+- `undefined` result gives `{exitCode: 0, status: null, result: null}`; a `''` or
+  numeric status, an array or a string result gives `status: null`;
+- a BigInt result is exit 3 `INVALID_RESULT` with no result.json or temp file and the
+  lock released;
+- a code-less throw and a lower-case code are `WORKFLOW_ERROR`; `Date.now()` in a
+  template passes the runtime's `NONDETERMINISTIC_WORKFLOW` through;
+- an existing run directory keeps 0750; a run-dir path that is a file is exit 3
+  `IO_ERROR` with no provider call; a pre-aborted signal is exit 3 `RUNTIME_ABORTED`
+  with no call and the lock released;
+- a failed invocation leaves an earlier result.json byte for byte; a later success
+  replaces it;
+- harness-repair (unowned graphs/qa) runs for `bughunt` (codex partial) and is
+  refused for `blueprint` (unavailable);
+- `runLeaf` gets `this` = the caller's provider and exactly CP-02b's 16 request keys;
+- control characters (U+0009, U+0085), a 4097-byte path, a getter `runLeaf`,
+  `signal: undefined`, a fractional timeout, a 129-character invocation id, an
+  upper-case workflow id, and null/undefined/array/string/Proxy options are exit 1;
+- CLI: `timeoutMs` 1000 without `graceMs` is exit 1 (default 500 + 500) and 1001
+  reaches the exit-2 offering refusal; an own `__proto__` key and a FIFO args file
+  are exit 1.
+
+Verification on Node v25.9.0, darwin (focused only):
+
+```sh
+node --test acceptance/codex-parity/cp-02e-graph-host.test.mjs
+# pre-change: 26 tests, 0 pass, 26 fail (ERR_MODULE_NOT_FOUND graph-host.mjs)
+# post-change: 26 tests, 26 pass, 0 fail (duration ~11.1 s)
+node logs/evidence/cp-02c/run-focused.mjs tests/native-graph-host.test.mjs
+# FOCUSED: 14 passed, 0 failed
+node logs/evidence/cp-02c/run-focused.mjs tests/native-graph-host.test.mjs tests/native-catalog-drift.test.mjs tests/native-codex-selection.test.mjs tests/native-checkpoint-store.test.mjs
+# FOCUSED: 42 passed, 0 failed
+node --test acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs   # 25 tests, 25 pass (drift guard clean)
+bash scripts/validate.sh                    # VALIDATE: PASS
+node scripts/check-refs.mjs                 # check-refs: 271 references, all resolve
+git diff --check                            # exit 0 (no tracked changes); new files have no trailing whitespace
+bash scripts/check-secrets.sh               # check-secrets: clean
+bash scripts/check-secrets.sh core/skills/native-runtime/graph-host.mjs tests/native-graph-host.test.mjs   # check-secrets: clean
+```
+
+Observed limits and untested hypotheses:
+- Role instructions plus a workflow prompt can exceed CP-02b's 1 MiB prompt bound
+  even when the workflow prompt alone fits; CP-02b then rejects the request and the
+  runtime holds the call as `DISPATCH_UNCERTAIN`. Not tested (no shipped role is
+  near that size).
+- The CLI's signal-handler removal and the absence of `process.exit` are review
+  items (contract), not tested. A role outside step 7's set and a
+  `runtime.close()` rejection after a resolved run are not reachable through the
+  registered templates and are not tested.
+- The directory-fsync-after-rename failure path is not tested (no fault seam).
+- Timing bounds were observed on one idle macOS machine; that the deadline margins
+  hold under heavy load is not guaranteed (contract).
+- Linux was not run.
+
+Full regressions, review and the branch hunt remain pending for the PR.
