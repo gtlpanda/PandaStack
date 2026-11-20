@@ -354,7 +354,10 @@
     "spec/contracts/codex-parity-cp-02e.md",
     "acceptance/codex-parity/cp-02e-graph-host.test.mjs",
     "spec/contracts/codex-parity-cp-03b.md",
-    "acceptance/codex-parity/cp-03b-reference-closure.test.mjs"
+    "acceptance/codex-parity/cp-03b-reference-closure.test.mjs",
+    "spec/contracts/codex-parity-cp-02f.md",
+    "acceptance/codex-parity/cp-02f-native-graphs.test.mjs",
+    "acceptance/codex-parity/cp-02f-fake-codex.cjs"
   ],
   "writable": [
     "PROGRESS.md",

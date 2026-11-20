@@ -298,7 +298,9 @@ scheduling (CP-02b). That it is enough under heavy load is not guaranteed.
 
 - No catalog row change. On the production catalog today every workflow's offering
   except bughunt is codex `unavailable`, so the host refuses harness-repair and
-  dev-build until CP-02f updates rows. The acceptance test uses fixture catalogs.
+  dev-build until a later feature gives `dev` a native Codex entry and flips its row
+  (CP-02f records the host wiring proof in `dev.proofRefs`). The acceptance test uses
+  fixture catalogs.
 - No workflow-to-offering field in the catalog. Ownership is derived from the graph
   directory (step 6); workflows in an unowned graph are not tied to one offering.
 - No `checkCatalogDrift` call and no CP-01d `inspectOffering` (no probe, no

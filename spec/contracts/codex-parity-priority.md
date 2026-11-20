@@ -80,7 +80,7 @@ only frozen features.
 | CP-02c | CP-01b, CP-02a, CP-02b, CP-03c | role-to-profile table and `resolveLeaf` model/effort mapping (profile-to-sandbox is CP-02b's `sandboxForProfile`, imported) |
 | CP-02d | none | durable file checkpoint store implementing the runtime's reserve/settle/uncertain |
 | CP-02e | CP-01b, CP-02b, CP-02c, CP-02d, CP-03c | native graph host library and CLI: pins from the catalog, one registered workflow, persisted result, refusal before dispatch |
-| CP-02f | CP-02e | harness-repair and dev-build (nested QA) through the host CLI on a fake codex; schema sweep; catalog rows updated |
+| CP-02f | CP-01b, CP-02e, CP-03c | harness-repair and dev-build (nested QA) through the host CLI on a fake codex; schema sweep; `dev.proofRefs` records the host wiring proof (codex rows unchanged: dev has no native Codex entry yet, so flipping its row would make `install.sh --codex` install a Claude-only skill) |
 | CP-03a | CP-01b | provider-neutral `SKILL_DIR` helper invocation in backlog, findings, gtm-brief and verify SKILL.md |
 | CP-03b | CP-01b, CP-01c, CP-03a, CP-03c | reference-content closure: `skills:` names resolve, six lenses match routing, catalog dependencies declared |
 
@@ -199,7 +199,8 @@ only frozen features.
 - A schema sweep over all six registered graphs finds no `INVALID_SCHEMA` or
   `UNSUPPORTED_SCHEMA`. Unreached nodes are listed as unproven.
 - A refusal escalates and is never retried or rerouted to Claude.
-- The catalog drift guard passes.
+- The catalog drift guard passes, and `dev.proofRefs` includes `cp-02f-host-wiring`. The CLI
+  cases run on a fixture root whose only change is dev's codex row.
 
 **CP-03a**
 - No fenced command in the four SKILL.md files hard-codes `~/.claude/` or reads
