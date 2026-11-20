@@ -1,0 +1,153 @@
+{
+  "codex": "0.167.0",
+  "at": "2026-11-20T20:29:03.700Z",
+  "results": [
+    {
+      "id": "A-ignore-user-config",
+      "model": "gpt-6-luna",
+      "extra": [
+        "--ignore-user-config"
+      ],
+      "exit": 0,
+      "signal": null,
+      "markerFiles": 0,
+      "lastMessage": "PROBE-OK",
+      "eventTypes": [
+        "thread.started",
+        "turn.started",
+        "item.completed",
+        "turn.completed"
+      ],
+      "failures": [],
+      "usage": [
+        {
+          "input_tokens": 14118,
+          "cached_input_tokens": 11648,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 8,
+          "reasoning_output_tokens": 0
+        }
+      ],
+      "stderrTail": "",
+      "auth": "unchanged"
+    },
+    {
+      "id": "B-control-loads-config",
+      "model": "gpt-6-luna",
+      "extra": [],
+      "exit": 0,
+      "signal": null,
+      "markerFiles": 2,
+      "lastMessage": "PROBE-OK",
+      "eventTypes": [
+        "thread.started",
+        "turn.started",
+        "item.completed",
+        "turn.completed"
+      ],
+      "failures": [],
+      "usage": [
+        {
+          "input_tokens": 15625,
+          "cached_input_tokens": 11648,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 8,
+          "reasoning_output_tokens": 0
+        }
+      ],
+      "stderrTail": "",
+      "auth": "unchanged"
+    },
+    {
+      "id": "C-model-sol",
+      "model": "gpt-6.1-sol",
+      "extra": [
+        "--ignore-user-config"
+      ],
+      "exit": 0,
+      "signal": null,
+      "markerFiles": 0,
+      "lastMessage": "PROBE-OK",
+      "eventTypes": [
+        "thread.started",
+        "turn.started",
+        "item.completed",
+        "turn.completed"
+      ],
+      "failures": [],
+      "usage": [
+        {
+          "input_tokens": 16316,
+          "cached_input_tokens": 12288,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 8,
+          "reasoning_output_tokens": 0
+        }
+      ],
+      "stderrTail": "",
+      "auth": "unchanged"
+    },
+    {
+      "id": "D-model-astra",
+      "model": "gpt-6-astra",
+      "extra": [
+        "--ignore-user-config"
+      ],
+      "exit": 0,
+      "signal": null,
+      "markerFiles": 0,
+      "lastMessage": "PROBE-OK",
+      "eventTypes": [
+        "thread.started",
+        "turn.started",
+        "item.completed",
+        "turn.completed"
+      ],
+      "failures": [],
+      "usage": [
+        {
+          "input_tokens": 16252,
+          "cached_input_tokens": 12160,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 8,
+          "reasoning_output_tokens": 0
+        }
+      ],
+      "stderrTail": "",
+      "auth": "unchanged"
+    },
+    {
+      "id": "E-agents-keys",
+      "model": "gpt-6-luna",
+      "extra": [
+        "--ignore-user-config",
+        "-c",
+        "agents.default_subagent_model=\"gpt-6.1-sol\"",
+        "-c",
+        "agents.max_concurrent_threads_per_session=2"
+      ],
+      "exit": 0,
+      "signal": null,
+      "markerFiles": 0,
+      "lastMessage": "PROBE-OK",
+      "eventTypes": [
+        "thread.started",
+        "turn.started",
+        "item.completed",
+        "turn.completed"
+      ],
+      "failures": [],
+      "usage": [
+        {
+          "input_tokens": 15625,
+          "cached_input_tokens": 11648,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 8,
+          "reasoning_output_tokens": 0
+        }
+      ],
+      "stderrTail": "",
+      "auth": "unchanged"
+    }
+  ]
+}

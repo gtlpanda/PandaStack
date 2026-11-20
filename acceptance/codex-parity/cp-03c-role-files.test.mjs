@@ -190,9 +190,11 @@ test('every shipped role inlines each declared skill once, in declared order', a
     const bodies = declared.map(name => skillBodyOf(diskSkillText(name)))
     const result = api.assembleRoleInstructions({ installationRoot: ROOT, name: row.stem })
     assert.deepEqual(result.skills.map(s => s.name), declared, row.path)
-    assert.equal(result.instructions, [strip(row.text), ...bodies].join('\n'), row.path)
+    // CP-03d rewrites skill-path tokens in instructions; its own test pins those roles' text.
+    const tokened = row.text.includes('${PANDASTACK_SKILL_PATH:-')
+    if (!tokened) assert.equal(result.instructions, [strip(row.text), ...bodies].join('\n'), row.path)
     for (const body of bodies) assert.equal(result.instructions.split(body).length, 2, `${row.path}: skill once`)
-    if (declared.length === 0) assert.equal(result.instructions, strip(row.text))
+    if (declared.length === 0 && !tokened) assert.equal(result.instructions, strip(row.text))
   }
 })
 

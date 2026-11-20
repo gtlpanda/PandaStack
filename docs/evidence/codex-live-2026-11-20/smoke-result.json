@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "workflowId": "harness-repair",
+  "offeringId": "bughunt",
+  "invocationId": "live-smoke-w1-001",
+  "status": "escalate",
+  "result": {
+    "status": "escalate",
+    "reason": "checker failed: Native output contract rejected.",
+    "fixRounds": 0,
+    "stuckSig": null,
+    "lastVerify": null,
+    "touched": [],
+    "fixed": [],
+    "noted": [],
+    "refuted": [],
+    "history": [
+      {
+        "node": "check",
+        "label": "check #1",
+        "error": "Native output contract rejected."
+      }
+    ]
+  }
+}

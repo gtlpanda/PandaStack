@@ -37,11 +37,15 @@ const FIXED_MESSAGE = 'Native runtime: INVALID_RUNTIME_INPUT.'
 // appends one record to <STUB_DIR>/calls.jsonl. STUB_DIR is never the runDir.
 // Step fields:
 //   events      protocol lines to print (default: one turn.completed with usage)
-//   output      text written to the --output-last-message path
+//   output      text written to the --output-last-message path; when the
+//               --output-schema file is not the NR-01 wire schema (CP-02h) and
+//               the text is exactly {"json": <string>}, the inner string is
+//               written instead (the bare object that schema asks for)
 //   outputFrom  file whose bytes are copied there (large or binary outputs)
 //   outputKind  'dir' | 'symlink' | 'fifo' instead of a file
 //   exit        exit code (default 0)
 //   hang        never exit; `trap` also ignores SIGTERM
+const NR01_WIRE = JSON.stringify({ type: 'object', properties: { json: { type: 'string' } }, required: ['json'], additionalProperties: false })
 const STUB_SOURCE = `#!${process.execPath}
 const fs = require('node:fs'), path = require('node:path'), cp = require('node:child_process')
 const dir = process.env.STUB_DIR
@@ -54,14 +58,14 @@ process.stdin.on('end', () => {
   const index = fs.existsSync(callsFile) ? fs.readFileSync(callsFile, 'utf8').split('\\n').filter(Boolean).length : 0
   const step = JSON.parse(fs.readFileSync(path.join(dir, 'steps.json'), 'utf8'))[index]
   const schemaFile = flag('--output-schema')
+  const schema = schemaFile && fs.existsSync(schemaFile) ? fs.readFileSync(schemaFile, 'utf8') : null
   fs.appendFileSync(callsFile, JSON.stringify({ argv, cwd: process.cwd(), env: { ...process.env }, pid: process.pid,
-    stdin: Buffer.concat(chunks).toString('utf8'),
-    schema: schemaFile && fs.existsSync(schemaFile) ? fs.readFileSync(schemaFile, 'utf8') : null }) + '\\n')
+    stdin: Buffer.concat(chunks).toString('utf8'), schema }) + '\\n')
   if (!step) process.exit(97)
   if (step.trap) process.on('SIGTERM', () => {})
   if (step.hang) { fs.writeFileSync(path.join(dir, 'ready'), String(process.pid)); setInterval(() => {}, 1000); return }
   const out = flag('--output-last-message')
-  if (step.output !== undefined) fs.writeFileSync(out, step.output)
+  if (step.output !== undefined) fs.writeFileSync(out, followSchema(step.output, schema))
   if (step.outputFrom !== undefined) fs.copyFileSync(step.outputFrom, out)
   if (step.outputKind === 'dir') fs.mkdirSync(out)
   if (step.outputKind === 'symlink') fs.symlinkSync(step.target, out)
@@ -71,6 +75,14 @@ process.stdin.on('end', () => {
   }
   process.exit(step.exit ?? 0)
 })
+function followSchema(text, schema) {
+  if (schema === ${JSON.stringify(NR01_WIRE)}) return text
+  let value
+  try { value = JSON.parse(text) } catch { return text }
+  const wire = value !== null && typeof value === 'object' && !Array.isArray(value) &&
+    Object.keys(value).length === 1 && typeof value.json === 'string'
+  return wire ? value.json : text
+}
 `
 
 let WORK, STUB
@@ -196,10 +208,11 @@ describe('CP-02b exports (wiring proof, not runtime certification)', () => {
     assert.equal(typeof mod.createCodexProvider, 'function')
   })
 
-  test('CODEX_PROVIDER_CODES is the closed, frozen set: CP-02a failure codes plus three', async () => {
+  // The closed set is pinned by CP-02h's test (it adds SCHEMA_UNSUPPORTED).
+  test('CODEX_PROVIDER_CODES is frozen and holds the CP-02a failure codes plus three', async () => {
     const { CODEX_PROVIDER_CODES } = await loadProvider()
     const { CODEX_EXEC_CODES } = await loadExec()
-    assert.deepEqual(Object.keys(CODEX_PROVIDER_CODES).sort(), [...PROVIDER_CODES].sort())
+    for (const name of PROVIDER_CODES) assert.equal(CODEX_PROVIDER_CODES[name], name)
     for (const [key, value] of Object.entries(CODEX_PROVIDER_CODES)) { assert.equal(value, key); assert.match(value, CODE_PATTERN) }
     for (const execCode of Object.values(CODEX_EXEC_CODES)) assert.equal(Object.hasOwn(CODEX_PROVIDER_CODES, execCode), execCode !== 'SUCCESS')
     assert.ok(Object.isFrozen(CODEX_PROVIDER_CODES))
@@ -281,7 +294,7 @@ describe('CP-02b factory (wiring proof, not runtime certification)', () => {
 })
 
 describe('CP-02b runLeaf success (wiring proof, not runtime certification)', () => {
-  test('one spawn: wireSchema file, output file, stdin prompt, receipt and private files', async () => {
+  test('one spawn: schema file, output file, stdin prompt, receipt and private files', async () => {
     const c = makeCase()
     const json = JSON.stringify({ verdict: 'PASS', note: 'é ✓' })
     const provider = await makeProvider(c, [{ output: JSON.stringify({ json }) }])
@@ -297,9 +310,8 @@ describe('CP-02b runLeaf success (wiring proof, not runtime certification)', () 
     const logFile = join(c.runDir, `${req.callId}.log.jsonl`)
     assert.equal(argValue(call.argv, '--output-schema'), schemaFile)
     assert.equal(argValue(call.argv, '--output-last-message'), outputFile)
-    // The schema the child saw is the runtime wireSchema, byte for byte.
-    assert.equal(call.schema, JSON.stringify(req.wireSchema))
-    assert.deepEqual(JSON.parse(call.schema), { type: 'object', properties: { json: { type: 'string' } }, required: ['json'], additionalProperties: false })
+    // The schema the child saw is the file the provider wrote (its bytes: CP-02h).
+    assert.equal(call.schema, readFileSync(schemaFile, 'utf8'))
     assert.equal(call.stdin, PROMPT)
     assert.equal(realpathSync(call.cwd), realpathSync(c.cwd))
     assert.equal(call.argv[0], 'exec')
@@ -328,8 +340,9 @@ describe('CP-02b runLeaf success (wiring proof, not runtime certification)', () 
     assert.ok(call.argv.includes('--skip-git-repo-check'))
   })
 
-  test('semantically invalid or unparseable inner JSON is still returned, unchanged', async () => {
-    for (const json of [JSON.stringify({ verdict: 'MAYBE' }), 'not json at all', '', '{"verdict":']) {
+  // Unparseable inner JSON was retired by CP-02h: Codex now writes a bare object.
+  test('semantically invalid JSON is still returned, unchanged', async () => {
+    for (const json of [JSON.stringify({ verdict: 'MAYBE' })]) {
       const c = makeCase()
       const provider = await makeProvider(c, [{ output: JSON.stringify({ json }) }])
       const req = await request()
@@ -367,11 +380,10 @@ describe('CP-02b runLeaf success (wiring proof, not runtime certification)', () 
     const c = makeCase()
     const req = await request()
     const usage = { input_tokens: 1, output_tokens: 1 }
-    const overhead = Buffer.byteLength(JSON.stringify({ outcome: 'returned', wire: { json: '' }, usage, receipt: { ...req.selection, invocationId: req.callId } }))
-    const json = 'x'.repeat(MIB - overhead)
-    const source = join(c.stubDir, 'big.json')
-    writeFileSync(source, JSON.stringify({ json }))
-    const provider = await makeProvider(c, [{ outputFrom: source }])
+    const shaped = n => JSON.stringify({ verdict: 'x'.repeat(n) })
+    const overhead = Buffer.byteLength(JSON.stringify({ outcome: 'returned', wire: { json: shaped(0) }, usage, receipt: { ...req.selection, invocationId: req.callId } }))
+    const json = shaped(MIB - overhead)
+    const provider = await makeProvider(c, [{ output: JSON.stringify({ json }) }])
     const envelope = await runLeaf(provider, req)
     assertReturned(envelope, json, req)
     assert.equal(Buffer.byteLength(JSON.stringify(envelope)), MIB)
@@ -379,6 +391,8 @@ describe('CP-02b runLeaf success (wiring proof, not runtime certification)', () 
 })
 
 // Each row: one stub step and the fixed code it must give, with exactly one spawn.
+// CP-02h retired three rows (a bare result, a non-string json, an extra key): the
+// provider now wraps a bare object, so those outputs are no longer failures.
 const FAILURES = [
   { name: 'non-zero exit with no protocol result', step: { events: [], exit: 3 }, code: 'EXIT_NONZERO' },
   { name: 'turn.completed then a non-zero exit', step: { output: wireText({ verdict: 'PASS' }), exit: 2 }, code: 'EXIT_NONZERO' },
@@ -389,10 +403,7 @@ const FAILURES = [
   { name: 'no protocol result at exit 0', step: { events: [] }, code: 'NO_OUTPUT' },
   { name: 'turn.completed but no output file', step: {}, code: 'NO_OUTPUT' },
   { name: 'empty output file', step: { output: '' }, code: 'NO_OUTPUT' },
-  { name: 'a bare result instead of the wire (never wrapped)', step: { output: JSON.stringify({ verdict: 'PASS' }) }, code: 'INVALID_WIRE' },
   { name: 'output that is not JSON', step: { output: 'hello' }, code: 'INVALID_WIRE' },
-  { name: 'json that is not a string', step: { output: JSON.stringify({ json: 5 }) }, code: 'INVALID_WIRE' },
-  { name: 'an extra key beside json (never stripped)', step: { output: JSON.stringify({ json: '{}', extra: 1 }) }, code: 'INVALID_WIRE' },
   { name: 'an array', step: { output: JSON.stringify(['json']) }, code: 'INVALID_WIRE' },
   { name: 'null', step: { output: 'null' }, code: 'INVALID_WIRE' },
   { name: 'output that is a directory', step: { outputKind: 'dir' }, code: 'INVALID_WIRE' },
@@ -449,11 +460,11 @@ describe('CP-02b runLeaf failures resolve failed envelopes (wiring proof, not ru
     const c = makeCase()
     const req = await request()
     const usage = { input_tokens: 1, output_tokens: 1 }
-    const overhead = Buffer.byteLength(JSON.stringify({ outcome: 'returned', wire: { json: '' }, usage, receipt: { ...req.selection, invocationId: req.callId } }))
-    const source = join(c.stubDir, 'big.json')
-    writeFileSync(source, JSON.stringify({ json: 'x'.repeat(MIB - overhead + 1) }))
-    assert.ok(statSync(source).size <= MIB)
-    const provider = await makeProvider(c, [{ outputFrom: source }])
+    const shaped = n => JSON.stringify({ verdict: 'x'.repeat(n) })
+    const overhead = Buffer.byteLength(JSON.stringify({ outcome: 'returned', wire: { json: shaped(0) }, usage, receipt: { ...req.selection, invocationId: req.callId } }))
+    const json = shaped(MIB - overhead + 1)
+    assert.ok(Buffer.byteLength(JSON.stringify({ json })) <= MIB)
+    const provider = await makeProvider(c, [{ output: JSON.stringify({ json }) }])
     assertFailed(await runLeaf(provider, req), 'INVALID_WIRE', req)
   })
 
@@ -465,7 +476,8 @@ describe('CP-02b runLeaf failures resolve failed envelopes (wiring proof, not ru
     writeFileSync(join(c.runDir, `${req.callId}.schema.json`), 'stale')
     const provider = await makeProvider(c, [{}])
     assertFailed(await runLeaf(provider, req), 'NO_OUTPUT', req)
-    assert.equal(calls(c)[0].schema, JSON.stringify(req.wireSchema))
+    assert.notEqual(calls(c)[0].schema, 'stale')
+    assert.equal(calls(c)[0].schema, readFileSync(join(c.runDir, `${req.callId}.schema.json`), 'utf8'))
   })
 
   test('failed runs keep reported token counters', async () => {
@@ -657,10 +669,9 @@ describe('CP-02b through the real runtime (wiring proof, not runtime certificati
     assert.equal(result.status, 'done')
     assert.equal(spawned.length, 3)
     assert.equal(rows.length, 3)
-    const WIRE_BYTES = JSON.stringify(await wireSchema())
     rows.forEach((row, i) => {
       assert.equal(row.completion.outcome, 'returned')
-      assert.equal(spawned[i].schema, WIRE_BYTES)
+      assert.equal(spawned[i].schema, readFileSync(argValue(spawned[i].argv, '--output-schema'), 'utf8'))
       assert.equal(argValue(spawned[i].argv, '--output-schema'), join(dirnameOf(spawned[i]), `${row.binding.callId}.schema.json`))
       assert.equal(argValue(spawned[i].argv, '--sandbox'), 'workspace-write')
       assert.ok(spawned[i].argv.includes('--ignore-user-config'))
@@ -675,7 +686,7 @@ describe('CP-02b through the real runtime (wiring proof, not runtime certificati
     ['TURN_FAILED', { events: [{ type: 'turn.failed', error: { message: 'stub failure' } }], exit: 1 }],
     ['PROVIDER_REFUSAL', { events: [{ type: 'error', message: REFUSAL }], exit: 1 }],
     ['NO_OUTPUT', {}],
-    ['INVALID_WIRE', { output: JSON.stringify(pass()) }],
+    ['INVALID_WIRE', { output: JSON.stringify([pass()]) }],
   ]
   for (const [expected, step] of RUNTIME_FAILURES) {
     test(`${expected} settles as a durable failed leaf and the graph escalates without a retry`, async t => {
@@ -708,7 +719,8 @@ describe('CP-02b through the real runtime (wiring proof, not runtime certificati
     assert.equal(await until(() => !alive(pid) && !alive(-pid)), true, 'stub process group still alive')
   })
 
-  for (const json of [JSON.stringify({ verdict: 'PASS' }), 'not json']) {
+  // The unparseable 'not json' variant was retired by CP-02h.
+  for (const json of [JSON.stringify({ verdict: 'PASS' })]) {
     test(`semantically invalid output (${json}) is durable returned evidence; decode fails as an ordinary leaf error`, async t => {
       const { result, rows, spawned } = await runtimeCase(t, [{ output: JSON.stringify({ json }) }])
       assert.equal(result.status, 'escalate')

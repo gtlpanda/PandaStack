@@ -887,3 +887,19 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   checkpoint calls stay terminal in wave 1; the host reuses REGISTRY_MISMATCH.
   Features are frozen one at a time (CP-01a first), as the security-audit
   priority did. Phase 3 stays unlaunched until this priority closes.
+- D126 (Codex parity wave 2, 2026-11-20): The user asked to autobuild the rest
+  of the waves and authorized (option 1A) a bounded live Codex 0.167.0 probe plus
+  one live smoke per wave, a $400 estimated cap on the paid runs, merging freeze
+  PRs and hunt-passing build PRs, and continuous work. The probe showed
+  --ignore-user-config stops $CODEX_HOME/config.toml from loading, the three
+  gpt-6 model ids work, and the agents.* keys are accepted (effect untested). The
+  wave-1 smoke showed real Codex writes {"json":...} under --output-schema but
+  enforces only that wrapper, so a semantically wrong reply fails at decode, and
+  role bodies hard-code ~/.claude skill paths (docs/evidence/
+  codex-live-2026-11-20.md). spec/contracts/codex-parity-priority.md now approves
+  wave 2: CP-04 blueprint, CP-05 QA/loop, a held-call reconcile command, and three
+  wave-1 amendments (CP-02h strict schema to Codex, CP-03d role-body skill paths,
+  CP-02g oversize prompt as a failed leaf), 13 features in four tiers, with root
+  decisions W2-1..W2-10. No QA or loop catalog offering is added in wave 2;
+  blueprint becomes codex partial at CP-04e. A freeze never leaves a passing
+  frozen test red on main (W2-10).

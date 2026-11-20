@@ -225,6 +225,87 @@
       "test": "acceptance/codex-parity/cp-02f-native-graphs.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "CP-05a",
+      "title": "Checkpoint store operator API",
+      "description": "Implement only spec/contracts/codex-parity-cp-05a.md: add checkpointDirOf, inspectCheckpoints, failHeldCheckpoint and breakCheckpointLock to core/skills/native-runtime/checkpoint-store.mjs, reusing its private row parse/read/write and lock take/release (never copied). createFileCheckpointStore and its four-method store stay unchanged. No retry, delete or adopt verb, no returned writer, no directory creation; runtime.mjs, graph-host.mjs and any CLI are not changed.",
+      "contract": "spec/contracts/codex-parity-cp-05a.md",
+      "dependencies": [
+        "CP-02d"
+      ],
+      "acceptance": [
+        "inspectCheckpoints lists every row state sorted by callId with only the pinned binding fields, reports corrupt rows, stray names and the lock pid and token, and changes nothing even while a live store holds the lock.",
+        "failHeldCheckpoint turns a prepared or uncertain row into failed with the binding unchanged and a 0600 file, so a new store replays the exact completion and a rerun of harness-repair escalates with zero provider calls; terminal, unknown, corrupt, invalid and lock-held cases are refused with every file unchanged.",
+        "breakCheckpointLock removes a stale lock only for the matching token and a dead pid, refusing CONFIRM_MISMATCH, OWNER_UNKNOWN, OWNER_ALIVE and NOT_FOUND with the lock intact, while the store itself still refuses a stale lock with OWNER_BUSY."
+      ],
+      "test": "acceptance/codex-parity/cp-05a-checkpoint-operator.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CP-02h",
+      "title": "Codex gets the strict leaf schema",
+      "description": "Implement only spec/contracts/codex-parity-cp-02h.md: add strictOutputSchema to core/skills/native-runtime/schema.mjs (every KEYWORDS entry classified, checked at import) and change codex-provider.mjs to write JSON.stringify(strictOutputSchema(request.schema)) to --output-schema, read the output as one bare plain object through copyJSON and return wire {json: JSON.stringify(object)}, and settle an unsupported schema as failed SCHEMA_UNSUPPORTED before any file or spawn (after PROFILE_UNSUPPORTED, before TIMEOUT). wireSchema is still checked against NR-01; runtime.mjs and decode are unchanged. Update tests/native-codex-provider.test.mjs to the new behavior. No real codex, network or HOME.",
+      "contract": "spec/contracts/codex-parity-cp-02h.md",
+      "dependencies": [
+        "CP-02b"
+      ],
+      "acceptance": [
+        "strictOutputSchema over every schema reached by harness-repair, dev-build, blueprint-design and release-flow gives objects that all have additionalProperties false and required equal to their property keys in order, with no dropped keyword, the input unchanged and the result frozen; bughunt's min/max keywords are dropped without error, and each unsupported shape throws UNSUPPORTED_SCHEMA.",
+        "The provider's schema file bytes equal JSON.stringify(strictOutputSchema(request.schema)) (0600); a bare valid object is returned as wire {json: JSON.stringify(object)}, the real runtime completes harness-repair in 3 leaves, and the live-smoke excerpt-as-array reply is returned, rejected by decode and escalated once.",
+        "Non-object, non-finite, invalid UTF-8, symlink, FIFO, over-1 MiB and stale outputs keep INVALID_WIRE/NO_OUTPUT, and an unsupported schema settles failed SCHEMA_UNSUPPORTED with zero spawns, no file and no schema or prompt text in any envelope or error."
+      ],
+      "test": "acceptance/codex-parity/cp-02h-strict-schema.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CP-03d",
+      "title": "Provider-neutral skill paths in role bodies",
+      "description": "Implement only spec/contracts/codex-parity-cp-03d.md: assembleRoleInstructions in core/skills/native-runtime/role-files.mjs rewrites the exact token ${PANDASTACK_SKILL_PATH:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/<id>/<file>} to the regular file in the installation tree, fail closed; checker, fixer, implementer and advisor carry the token; body and skills[].body stay raw; tests/native-graph-host.test.mjs copies every skill-directory file. verify.sh, the hunt runner, the catalog and kit agent-memory lines are not modified.",
+      "contract": "spec/contracts/codex-parity-cp-03d.md",
+      "dependencies": [
+        "CP-03c"
+      ],
+      "acceptance": [
+        "Checker, fixer and implementer instructions run bash \"<root>/core/skills/verify/verify.sh\", and no role of harness-repair, blueprint-design or dev-build has a Claude path in its instructions, while raw bodies keep the token and expand under bash and sh exactly as today.",
+        "Unknown skills, missing, symlinked or directory targets, duplicate skills and unsafe installation roots fail closed with existing codes and no path echoed; near-miss text is untouched.",
+        "Every shipped role assembles, the hunter still equals the runner strip plus bug-lenses, and the CP-03b mentions in raw bodies still resolve."
+      ],
+      "test": "acceptance/codex-parity/cp-03d-skill-paths.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CP-04a",
+      "title": "Blueprint state library",
+      "description": "Implement only spec/contracts/codex-parity-cp-04a.md: graphs/blueprint/skills/blueprint/blueprint-state.mjs with the state dir from git --git-path, the five SKILL.md state files plus meta.json (0700 dir, 0600 atomic files), redactSecrets/redactJSON applied by initState and every writer, readers and validators that fail closed with fixed codes and no echo, designArgs/backlogArgs byte-equal to SKILL.md's two node -e commands, content-hash freshness, and readArgsFile. Import only node built-ins. Do not change SKILL.md, blueprint-design.js, write-docs.mjs, the catalog or any graph.",
+      "contract": "spec/contracts/codex-parity-cp-04a.md",
+      "dependencies": [],
+      "acceptance": [
+        "Every pinned secret shape is replaced by its exact label in initState, writeState and writeRun output, while git SHAs, UUIDs, short key=value pairs, prefix mentions and non-strings are left unchanged, idempotently.",
+        "designArgs and backlogArgs are byte-equal to SKILL.md's two node -e commands over three fixture states, and backlogArgs refuses a run2.json that is not design-ready.",
+        "freshness follows its content-hash table, and malformed, truncated, wrongly typed, symlinked or FIFO files fail closed with fixed codes and no input echoed."
+      ],
+      "test": "acceptance/codex-parity/cp-04a-blueprint-state.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CP-05c",
+      "title": "QA loop ledger rules as code",
+      "description": "Implement only spec/contracts/codex-parity-cp-05c.md: graphs/qa/tool/qa-ledger.mjs (node builtins only, no git), the loop.md QA ledger rules as plain functions - readLedger/writeLedger (atomic 0600 rename), applyResult, workflowArgs, applyIdle/shouldStop, setBlockedOn - with constants equal to loop.md. loop.md, harness-repair.js, install.sh and the catalog are unchanged. No commit, notification, PR tending, bughunt or graph run.",
+      "contract": "spec/contracts/codex-parity-cp-05c.md",
+      "dependencies": [],
+      "acceptance": [
+        "A missing ledger gives the loop.md default silently and an unparseable one gives it with LEDGER_UNPARSEABLE; missing blockedOn and idleRuns default to null and 0; writes are atomic renames at 0600 that never follow a symlink.",
+        "applyResult keeps the last 20 runs stamped as date -u +%FT%TZ, done clears stuckSigs, escalate adds a stuckSig once, other statuses are refused; workflowArgs gives {repo, base?, maxFixRounds (default 3, positive integers only), knownStuckSigs}.",
+        "idleRuns counts idle iterations and resets otherwise with the stop at 2, setBlockedOn notifies only on a changed line and clears silently, and the exported numbers and names equal loop.md and harness-repair.js."
+      ],
+      "test": "acceptance/codex-parity/cp-05c-qa-ledger.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }

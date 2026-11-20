@@ -1,6 +1,7 @@
 # Codex parity priority roadmap
 
-Status: active from 2026-11-19 (D125). The binding contract is
+Status: active from 2026-11-19 (D125). Wave 1 is built (PRs #69, #74; 13/13). Wave 2 is
+approved (D126) and its live Codex findings are in docs/evidence/codex-live-2026-11-20.md. The binding contract is
 spec/contracts/codex-parity-priority.md. The batch plan and its per-offering checks are
 spec/codex-parity-completion-matrix.md and .json.
 
@@ -19,7 +20,7 @@ feature gets a contract and a frozen test committed by the host before selection
 | Wave | Batches | Consumes | Notes |
 |---|---|---|---|
 | 1 | CP-01 catalog + install, CP-02 graph host + Codex leaf, CP-03 shared references | existing native-runtime (NR-01, NR-02, OC-01) | 13 features, approved in the priority contract |
-| 2 | CP-05 QA/loop, CP-04 blueprint | CP-02e host, CP-03c role loader, CP-02d store | needs a held-call reconcile command before any unattended native graph |
+| 2 | CP-05 QA/loop, CP-04 blueprint | CP-02e host, CP-03c role loader, CP-02d store | approved in the priority contract (D126): 13 features incl. the reconcile command (CP-05a/b), strict schema to Codex (CP-02h), role-body paths (CP-03d) |
 | 3 | CP-06 dev, CP-08 release | wave 2; release needs a verified `release-controlled` profile (network, `gh`) | dev uses the dev-build to harness-repair child edge |
 | 4 | CP-07 build-app, CP-09 existing offerings | CP-06; CP-09 migrates autobuild and hunt onto the shared launcher/provider and removes the five duplicated pieces | hunt's `runner` leaf needs a non-model leaf kind |
 | 5 | CP-10 bootstrap/config, CP-11 guided engineering, CP-12 git/docs/service tools, CP-13 marketing/SEO | catalog v2 rows, `install-plan`, `SKILL_DIR` rule | render and seo-check still hard-code `~/.claude` |
