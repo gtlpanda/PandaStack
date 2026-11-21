@@ -3947,6 +3947,13 @@ Phase 2 acceptance: 97/97.
   timeout above 2^31-1 ms was accepted, and Node turns such a timer delay into 1 ms, so every
   file would be killed at once. The setting now refuses values above that limit, and runPool
   clamps a longer delay to it; the hunt's reproduction fails before the fix and passes after.
+- CI on the updated PR then failed in tests/run-placement.test.mjs: ENOENT lstat
+  .git/objects/maintenance.lock. The test's snapshot() walks the fixture repo's .git, and CI's
+  git (2.56) runs automatic maintenance detached after a commit, so its lock file appears and
+  vanishes mid-walk (GIT_TRACE shows `git commit` spawning `maintenance run --auto`; this
+  machine's git 2.43 runs it in the foreground, which is why only CI saw it). The fixture's
+  commit now passes -c maintenance.auto=false -c gc.auto=0 (host amendment to a frozen test;
+  no assertion changed).
 
 ## 68. `autobuild check --shard i/n`: the full gate as n parallel parts (2026-11-21)
 

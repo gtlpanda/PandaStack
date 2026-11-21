@@ -12,7 +12,9 @@ const git = (root, ...args) => execFileSync('git', ['-C', root, ...args], { enco
 function init(root) {
   mkdirSync(root, { recursive: true })
   git(root, 'init', '-q')
-  git(root, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com', 'commit', '--allow-empty', '-qm', 'initial')
+  // No automatic maintenance: newer git runs it detached after a commit, and its
+  // .git/objects/maintenance.lock would appear and vanish while snapshot() walks the tree.
+  git(root, '-c', 'maintenance.auto=false', '-c', 'gc.auto=0', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com', 'commit', '--allow-empty', '-qm', 'initial')
 }
 function snapshot(root) {
   return readdirSync(root).sort().map(name => {
