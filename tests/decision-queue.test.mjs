@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DatabaseSync } from 'node:sqlite'
 import { test, NO_LINUX_STORES } from '../scripts/workflow-harness.mjs'
+import { withLstat, withLinkCount } from './fs-fault-support.mjs'
 import { createDecisionQueue } from '../core/skills/decisions/queue.mjs'
 
 const NOW = '2026-11-10T12:00:00.000Z'
@@ -195,4 +196,44 @@ await test('concurrent queue connections agree on namespace and preserve a singl
     assert.ok(acks.every(value => value.ok)); assert.equal(acks.filter(value => value.result.created).length, 1)
     assert.equal(q.read('choice').state, 'acknowledged')
   } finally { q?.close(); fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+// journal_mode=delete unlinks -journal at every commit, so a concurrent opener's lstat can
+// resolve the name after the unlink began and see nlink 0. Under load this made the
+// concurrent-namespace test above fail with CORRUPT about 1 run in 24. lstat is patched
+// here so each case is deterministic.
+const DB = 'decisions.sqlite'
+
+await test('a -journal seen mid-unlink (nlink 0) counts as absent: opening and writing still succeed', { skip: NO_LINUX_STORES }, () => {
+  const root = fs.mkdtempSync(join(tmpdir(), 'decision-queue-unlinking-'))
+  let seen = 0
+  try {
+    withLstat((path, real) => {
+      if (!path.endsWith(`${DB}-journal`)) return undefined
+      let db
+      try { db = real(path.slice(0, -'-journal'.length)) } catch { return undefined }
+      seen += 1
+      return withLinkCount(db, 0)
+    }, () => {
+      const q = createDecisionQueue(root, { now: () => NOW })
+      try {
+        assert.equal(typeof q.readNamespace(), 'string')
+        assert.equal(q.request(decision()).created, true)
+        assert.equal(q.read('choice').state, 'pending')
+      } finally { q.close() }
+    })
+    assert.ok(seen > 0, 'the unlinking -journal was observed')
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+await test('a hard-linked -journal (nlink 2) and an unlinked database file (nlink 0) are still CORRUPT', { skip: NO_LINUX_STORES }, () => {
+  const root = fs.mkdtempSync(join(tmpdir(), 'decision-queue-links-'))
+  try {
+    createDecisionQueue(root, { now: () => NOW }).close()
+    const hardLinkedJournal = (path, real) => path.endsWith(`${DB}-journal`) ? withLinkCount(real(path.slice(0, -'-journal'.length)), 2) : undefined
+    const unlinkedDatabase = (path, real) => path.endsWith(`/${DB}`) ? withLinkCount(real(path), 0) : undefined
+    for (const override of [hardLinkedJournal, unlinkedDatabase]) {
+      withLstat(override, () => assert.throws(() => createDecisionQueue(root, { now: () => NOW }), code('CORRUPT')))
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
 })

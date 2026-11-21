@@ -3842,6 +3842,33 @@ Phase 2 acceptance: 97/97.
   retries), bughuntBase 945c3f1 (main after #73). Everything it proves runs
   against fake codex: wiring proof, not runtime certification.
 
+## 64. SQLite stores no longer read a sidecar mid-unlink as corruption (2026-11-21)
+
+- Symptom: PR #76's CI failed in tests/decision-queue.test.mjs ("concurrent queue
+  connections ... single answer/delivery winner"): one of six workers opening a
+  fresh queue got CORRUPT. Locally it passed 15/15 idle and failed 1 in 24 runs with
+  24 copies in parallel.
+- Root cause, from an instrumented copy of the store: every failure was
+  `checkFiles` reading `decisions.sqlite-journal` with mode 600, the right owner and
+  nlink 0. journal_mode=delete unlinks -journal at each commit; a concurrent
+  opener's lstat resolved the name after the unlink began, and the `nlink === 1`
+  check (meant to refuse hard links) reported CORRUPT. A product race, not only a
+  test flake: any two processes sharing a queue could hit it.
+- Fix: a sidecar seen with nlink 0 counts as absent. The database file never gets
+  this allowance; a hard link, wrong mode, symlink or directory still refuses.
+  graphs/security-audit/.../journal-storage.mjs had the same check (its -journal
+  and owner.lock), fixed the same way.
+- Tests: deterministic cases inject nlink 0 / 2 through a shared `withLstat`
+  helper in tests/fs-fault-support.mjs (new; the frozen workflow harness is
+  untouched); each fails on the unfixed store and passes on the fix. Full workflow
+  suite: 2073 passed, 0 failed (2070 before plus the 3 new cases). Under load the focused six-worker race went from 5 failures in
+  1200 iterations to 0 in 2400, and the original test from 1/24 to 0/48.
+- Not shown: p2-02 (named in the handoff as a Linux CI flake) passed 16/16 under
+  load on both main and the fix, so this fix is not claimed for it.
+- Found while measuring: p2-09 "installed directory-symlink verify ... exit 7"
+  fails about 1 in 5 combined acceptance runs on main too. Pre-existing, load
+  sensitive, not yet investigated; it must be fixed before test parallelism ships.
+
 ## 66. The decision-launch test no longer writes into the real autobuild state (2026-11-21)
 
 - Found while profiling the workflow suite: ~/.local/state/autobuild/gate held a

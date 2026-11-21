@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { test, NO_LINUX_STORES } from '../../../scripts/workflow-harness.mjs'
+import { withLstat, withLinkCount } from '../../../tests/fs-fault-support.mjs'
 import { openAuditJournal, readAuditJournal } from '../skills/security-audit/dispatch-journal.mjs'
 import { BODY_LIMIT, ROW_LIMIT } from '../skills/security-audit/journal-data.mjs'
 
@@ -124,4 +125,25 @@ await test('journal reader accepts exact byte and ID boundaries with detached re
   value.rows[0].input.text = 'local mutation'
   assert.deepEqual(x.read().rows[0].input, input)
   assert.deepEqual(readFileSync(x.file), before)
+}))
+
+// The -journal (unlinked at commit) and owner.lock (unlinked at release) can be seen
+// mid-unlink with nlink 0 by a concurrent reader. They count as absent; a hard link or
+// an unlinked database file still refuses. lstat is patched so each case is deterministic.
+await test('journal reader treats a sidecar or lease seen mid-unlink (nlink 0) as absent and still refuses hard links', { skip: NO_LINUX_STORES }, () => fixture(x => {
+  const before = x.read()
+  const unlinking = new Set(['journal.sqlite-journal', 'owner.lock'])
+  let seen = 0
+  withLstat((path, real) => {
+    const name = path.slice(path.lastIndexOf('/') + 1)
+    if (!unlinking.has(name)) return undefined
+    seen += 1
+    return withLinkCount(real(x.file), 0)
+  }, () => assert.deepEqual(x.read(), before))
+  assert.ok(seen > 0, 'the unlinking entries were observed')
+  const hardLinkedJournal = (path, real) => path.endsWith('/journal.sqlite-journal') ? withLinkCount(real(x.file), 2) : undefined
+  const unlinkedDatabase = (path, real) => path.endsWith('/journal.sqlite') ? withLinkCount(real(path), 0) : undefined
+  for (const override of [hardLinkedJournal, unlinkedDatabase]) {
+    withLstat(override, () => assert.throws(() => x.read(), code('CORRUPT')))
+  }
 }))
