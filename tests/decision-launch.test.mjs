@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import childProcess from 'node:child_process'
 import { syncBuiltinESMExports } from 'node:module'
 import { EventEmitter } from 'node:events'
-import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdtempSync, rmSync, writeFileSync, existsSync, readdirSync, readFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, NO_LINUX_STORES } from '../scripts/workflow-harness.mjs'
 import { createDecisionQueue } from '../core/skills/decisions/queue.mjs'
@@ -15,12 +15,20 @@ import { runLoop } from '../graphs/autobuild/tool/lib/loop.mjs'
 // processes below are synthetic mocks. These tests provide no live Git/provider
 // acceptance evidence. Unexpected commands fail rather than starting a process.
 const revision = 'a'.repeat(40), newerRevision = 'b'.repeat(40)
+const gateDir = stateHome => join(stateHome, 'autobuild', 'gate')
+const listDir = dir => { try { return readdirSync(dir) } catch { return [] } }
+const readText = file => { try { return readFileSync(file, 'utf8') } catch { return '' } }
 async function fixture(backend, patch = {}) {
   const root = mkdtempSync(join(tmpdir(), 'decision-launch-'))
   const trackingRoot = mkdtempSync(join(tmpdir(), 'decision-launch-tracking-'))
   const oldRunsDir = process.env.PANDASTACK_RUNS_DIR
   const oldMaxSleep = process.env.AUTOBUILD_MAX_SLEEP_MS
+  const oldStateHome = process.env.AUTOBUILD_STATE_HOME
+  // The loop's final gate writes a gate-cache file under the autobuild state home and
+  // prunes entries whose project is gone; without this it touched the real ~/.local/state.
+  const outerGateDir = gateDir(oldStateHome || process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'))
   process.env.PANDASTACK_RUNS_DIR = join(trackingRoot, 'runs')
+  process.env.AUTOBUILD_STATE_HOME = join(trackingRoot, 'state')
   process.env.AUTOBUILD_MAX_SLEEP_MS = '0'
   const store = join(root, 'queue'), queue = createDecisionQueue(store)
   const features = { features: ['F-1', 'F-2'].map(id => ({ id, title: id, passes: patch.completed ?? false, dependencies: [], test: 'unused', testKind: 'unit' })) }
@@ -127,7 +135,9 @@ async function fixture(backend, patch = {}) {
     const code = await runLoop(config)
     const runs = patch.tracking ? createRunStore(process.env.PANDASTACK_RUNS_DIR).listRuns() : []
     return { code, calls, events, logs, commands, observerFailures, state: queue.read('choice'),
-      runs, lockRemoved: !existsSync(join(root, '.harness', 'loop.pid')) }
+      runs, lockRemoved: !existsSync(join(root, '.harness', 'loop.pid')),
+      privateGateFiles: listDir(gateDir(join(trackingRoot, 'state'))),
+      leakedGateFiles: listDir(outerGateDir).filter(name => readText(join(outerGateDir, name)).includes(root)) }
   } finally {
     childProcess.spawn = original.spawn; childProcess.spawnSync = original.spawnSync
     childProcess.execFileSync = original.execFileSync; syncBuiltinESMExports()
@@ -136,6 +146,8 @@ async function fixture(backend, patch = {}) {
     else process.env.PANDASTACK_RUNS_DIR = oldRunsDir
     if (oldMaxSleep === undefined) delete process.env.AUTOBUILD_MAX_SLEEP_MS
     else process.env.AUTOBUILD_MAX_SLEEP_MS = oldMaxSleep
+    if (oldStateHome === undefined) delete process.env.AUTOBUILD_STATE_HOME
+    else process.env.AUTOBUILD_STATE_HOME = oldStateHome
     queue.close(); rmSync(root, { recursive: true, force: true })
     rmSync(trackingRoot, { recursive: true, force: true })
   }
@@ -274,4 +286,10 @@ await test('Codex uncertain context writes preserve provider outcome and cannot 
     assert.deepEqual(result.events.map(e => e.event), ['waiting', 'received', 'trace_closed'])
     assert.deepEqual(result.events.at(-1).contextEventIds, [])
   }
+})
+
+await test('the loop\'s gate cache goes to a private state home, never the real ~/.local/state', { skip: NO_LINUX_STORES }, async () => {
+  const result = await fixture('claude', { completed: true })
+  assert.ok(result.privateGateFiles.length > 0, 'the final gate wrote its cache into the private state home')
+  assert.deepEqual(result.leakedGateFiles, [], 'no gate-cache file for this fixture appeared in the outer state home')
 })

@@ -3841,3 +3841,20 @@ Phase 2 acceptance: 97/97.
   autobuild/codex-parity-w1b in pr-first mode, maxIterations 12 (9 features plus
   retries), bughuntBase 945c3f1 (main after #73). Everything it proves runs
   against fake codex: wiring proof, not runtime certification.
+
+## 66. The decision-launch test no longer writes into the real autobuild state (2026-11-21)
+
+- Found while profiling the workflow suite: ~/.local/state/autobuild/gate held a
+  gate-cache entry whose root was /tmp/decision-launch-*, written during a local
+  test run. tests/decision-launch.test.mjs runs the autobuild loop in-process; its
+  final gate writes a cache file under the autobuild state home and prunes entries
+  whose project is gone. The test isolated PANDASTACK_RUNS_DIR but not
+  AUTOBUILD_STATE_HOME, so every run touched the developer's real state.
+  scripts/test-autobuild.sh already sets a private AUTOBUILD_STATE_HOME;
+  scripts/test-workflow.sh (frozen) does not.
+- Fix: the fixture sets AUTOBUILD_STATE_HOME to its own temp directory and restores
+  it, like PANDASTACK_RUNS_DIR. A new case asserts the cache lands in the private
+  home and no entry for the fixture appears in the outer one.
+- Proof: with the isolation line removed, the new case fails ("the final gate wrote
+  its cache into the private state home") and one real file leaked (removed after
+  inspection); with it, 20/20 pass and the real gate directory count is unchanged.
