@@ -3947,3 +3947,35 @@ Phase 2 acceptance: 97/97.
   timeout above 2^31-1 ms was accepted, and Node turns such a timer delay into 1 ms, so every
   file would be killed at once. The setting now refuses values above that limit, and runPool
   clamps a longer delay to it; the hunt's reproduction fails before the fix and passes after.
+
+## 68. `autobuild check --shard i/n`: the full gate as n parallel parts (2026-11-21)
+
+- Why: PandaStack's CI runs the full gate in one 4-vCPU job (981s; the regression suite alone
+  904s). Even with the workflow tests parallel inside the job, the gate is CPU-bound there. To
+  reach a 2-4 minute CI the gate has to spread over several jobs, and the union of those jobs
+  must provably be the whole gate.
+- What: `check --phase full --shard i/n`. The split is a pure function of the gate's job list
+  (`shardPlan` in gate.mjs: the config, the feature list and the check's options), so shards on
+  the same commit with the same options compute the same one on any machine; recorded timings are
+  never used because they differ between machines and runs. A whole step runs in
+  exactly one shard (heaviest `shardWeight` first, to the least loaded shard). A `shardable`
+  step and the settled CI-parity configuration check run in every shard; a shardable step gets
+  `AUTOBUILD_SHARD=i/n` and runs its own part. A step owned by another shard is reported as
+  `SKIP <name>: runs in shard k/n`, never as passed. The gate cache key carries the shard.
+- Validation: `shardable` (boolean) and `shardWeight` (whole number >= 1, not with shardable)
+  on gate entries only; `--shard` outside the full gate is refused; `i/n` must be 1 <= i <= n
+  with no leading zeros.
+- Tests: graphs/autobuild/tool/test/gate-shard.test.mjs (6 cases): every whole step exactly
+  once across 3 shards and the shardable step once per shard with its part; a failure fails only
+  its owner's shard; a deterministic balanced split; no cross-shard cache reuse; parseShard
+  negatives; validation. Mutations caught: dropping AUTOBUILD_SHARD from the step env (2 cases
+  fail), dropping it from the cache key (1 case fails). Autobuild suite 254 passed, 0 failed.
+- The branch hunt reproduced F1 (LOW): `autobuild status` printed shard-skipped steps as
+  "(no path match)", because the timing log kept only skipped names. Records now carry
+  `skipReasons`; status names the shard, and old records still read "no path match". The
+  hunt's reproduction is kept as test/status-shard-skip.test.mjs. Its impact map also caught
+  the docs claiming the split depends on "the config alone"; corrected to the job list. The
+  re-hunt's impact map noted shard keys were honoured on runner, browser and CI-parity entries
+  but validated on gate entries only; they are now read from gate entries only (a runner with
+  `shardable: true` still runs in exactly one shard; the test fails on the old code).
+- Nothing adopts it yet: this repo's CI and autobuild.json change in the next PR.
