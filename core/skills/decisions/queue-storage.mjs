@@ -82,6 +82,11 @@ export function openQueueStorage(directory) {
             if (error.code === 'ENOENT' && (suffix || allowMissingDatabase)) continue
             throw error
           }
+          // journal_mode=delete unlinks -journal at every commit, and lstat can
+          // land mid-unlink: the name resolved but the inode already has nlink 0.
+          // Such a sidecar is no longer reachable by path, so it counts as absent.
+          // The database file itself never gets this allowance.
+          if (suffix && info.nlink === 0) continue
           requireStorage(info.isFile() && privateMode(info, 0o600) && info.nlink === 1)
           if (!suffix && dbIdentity) requireStorage(info.dev === dbIdentity.dev && info.ino === dbIdentity.ino)
         }
