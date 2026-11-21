@@ -228,6 +228,16 @@ function validateScheduleFields(entry, where) {
   if (entry.memoryMb !== undefined && !wholeNumber(entry.memoryMb, 0)) throw new Error(`${where}.memoryMb must be a whole number of MiB`);
 }
 
+// Sharding keys, on gate entries only (gate.mjs shardPlan): `shardable: true` runs the step in
+// every shard with AUTOBUILD_SHARD=i/n so it splits its own work; `shardWeight` (rough
+// seconds, default 1) balances whole steps across shards.
+function validateShardFields(entry, where) {
+  if (!entry || typeof entry !== "object") return;
+  if (entry.shardable !== undefined && typeof entry.shardable !== "boolean") throw new Error(`${where}.shardable must be true or false`);
+  if (entry.shardWeight !== undefined && !wholeNumber(entry.shardWeight, 1)) throw new Error(`${where}.shardWeight must be a whole number of at least 1`);
+  if (entry.shardable === true && entry.shardWeight !== undefined) throw new Error(`${where}: shardWeight applies only to a step that is not shardable`);
+}
+
 function validateGateSchedule(config) {
   if (!wholeNumber(config.gateConcurrency, 1)) throw new Error("gateConcurrency must be a whole number of at least 1");
   if (!wholeNumber(config.gateMinFreeMb, 0)) throw new Error("gateMinFreeMb must be a whole number of MiB");
@@ -240,6 +250,7 @@ function validateGateSchedule(config) {
   const names = new Set();
   (Array.isArray(config.gate) ? config.gate : []).forEach((entry, index) => {
     validateScheduleFields(entry, `gate[${index}]`);
+    validateShardFields(entry, `gate[${index}]`);
     // Timings, the cache and "failed last time" are kept per name.
     if (config.gateOrder === "fastest" || config.gateCache || config.gateConcurrency > 1) {
       if (names.has(entry?.name)) throw new Error(`gate has two entries named "${entry.name}"; names must be unique when gateOrder, gateCache or gateConcurrency is set`);

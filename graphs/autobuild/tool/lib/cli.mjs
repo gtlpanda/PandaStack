@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG_FILE, findProjectRoot, loadConfig, statePath } from "./config.mjs";
 import { blockedClosure, countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures } from "./features.mjs";
-import { failureExcerpt, runGate } from "./gate.mjs";
+import { failureExcerpt, parseShard, runGate } from "./gate.mjs";
 import { runLoop } from "./loop.mjs";
 import { huntStatus } from "./bughunt.mjs";
 import { readSession } from "./session.mjs";
@@ -27,7 +27,7 @@ const HELP = `autobuild — autonomous, test-gated build loop for Claude Code or
   autobuild next                       print the feature the next session builds
   autobuild status                     passing count, next feature, blockers, last log lines
   autobuild test <ID> [ID...]          run features' frozen acceptance tests
-  autobuild check [--phase full|commit] [--feature ID] [--base SHA] [--fail-fast] [--json] [--skip-browser] [--scope full|affected]
+  autobuild check [--phase full|commit] [--feature ID] [--base SHA] [--fail-fast] [--json] [--skip-browser] [--scope full|affected] [--shard i/n]
                                        run the full gate
   autobuild mark-passed <ID>           rerun a feature's test; set passes:true only if it passes
   autobuild init [--backend claude|codex] scaffold autobuild.json, PROGRESS.md and the CLAUDE.md rules
@@ -62,7 +62,11 @@ export function timingReport(records) {
     lines.push(`last gate run (${gate.at}, ${gate.caller}, ${gate.feature ?? "no feature"}, ${gate.scope ?? "full"}): ${gate.ok ? "PASS" : "FAIL"} in ${gate.wallSeconds}s`);
     for (const step of [...gate.steps].sort((a, b) => b.seconds - a.seconds).slice(0, 12)) lines.push(`  ${step.ok ? "PASS" : "FAIL"} ${String(step.cached ? "cached" : `${step.seconds}s`).padStart(7)}  ${step.name}`);
     if (gate.steps.length > 12) lines.push(`  … ${gate.steps.length - 12} faster steps`);
-    for (const name of gate.skipped ?? []) lines.push(`  SKIP          ${name} (no path match)`);
+    // Records written before sharding have no skipReasons; path selection was the only reason then.
+    for (const name of gate.skipped ?? []) {
+      const why = gate.skipReasons?.[name];
+      lines.push(`  SKIP          ${name} (${typeof why === "string" && why.startsWith("runs in shard") ? why : "no path match"})`);
+    }
     for (const name of gate.notRun ?? []) lines.push(`  ----          ${name} (not run)`);
   }
   return lines;
@@ -150,6 +154,7 @@ export async function main(argv = process.argv.slice(2)) {
         failFast: flag(args, "--fail-fast"),
         skipBrowser: flag(args, "--skip-browser") || flag(args, "--skip-e2e"),
         scope: value(args, "--scope") ?? "full",
+        shard: parseShard(value(args, "--shard")),
       });
       if (flag(args, "--json")) {
         console.log(JSON.stringify(summary));
