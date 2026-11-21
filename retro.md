@@ -3841,3 +3841,25 @@ Phase 2 acceptance: 97/97.
   autobuild/codex-parity-w1b in pr-first mode, maxIterations 12 (9 features plus
   retries), bughuntBase 945c3f1 (main after #73). Everything it proves runs
   against fake codex: wiring proof, not runtime certification.
+
+## 65. Frozen acceptance /proc scanners accept ESRCH as a vanished process (2026-11-21)
+
+- Symptom: p2-09 "installed directory-symlink verify executes actual task and
+  preserves exit 7" failed with "Owned fixture execution did not settle normally;
+  remaining=[]; ESRCH: no such process". It failed on main too: 1 in 5 combined
+  acceptance runs, 4 of 72 runs of p2-09 alone with 24 copies in parallel.
+- Root cause: the test's own process tracker (`identity(pid)`) treated only ENOENT
+  as "gone". Reading /proc/<pid>/stat of a process that is exiting can also fail
+  with ESRCH; the scan then recorded a fatal error even though every tracked
+  process had ended (remaining=[]). More parallel load means more exits mid-scan.
+- Fix (a host amendment to frozen acceptance files; no assertion changed): ESRCH
+  counts as gone in the three frozen scanners with the same pattern:
+  acceptance/phase2/p2-09.test.mjs, acceptance/phase2/p2-trace-integration-support.mjs
+  (used by p2-06) and the child script in acceptance/harness/capture-descendant.test.mjs.
+- Evidence: p2-09 under the same load went from 4/72 failed runs to 0/144. All 97
+  Phase 2 and 19 harness acceptance tests pass; validate, refs, secrets clean.
+- Product code was checked for the same pattern: core/skills/verify/retention.mjs
+  reads only processes that must be alive (an error there is correct), and
+  capture-owner.sh already treats a vanished proc as harmless. Its stricter case (a
+  stat file that still exists but cannot be read) was not reproduced and is left as
+  an untested hypothesis.

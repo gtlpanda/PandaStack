@@ -9,7 +9,7 @@ export const load=async()=>({...(await import(pathToFileURL(join(ROOT,'core/skil
 export const git=(repo,...args)=>execFileSync('git',['-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 export async function bounded(p,ms=20000){let timer;try{return await Promise.race([p,new Promise((_,reject)=>timer=setTimeout(()=>reject(Error('owned fixture deadline')),ms))]);}finally{clearTimeout(timer);}}
-const identity=pid=>{try{return fs.readFileSync('/proc/'+pid+'/stat','utf8').split(') ')[1].split(' ')[19];}catch(e){if(e.code==='ENOENT')return null;throw e;}};
+const identity=pid=>{try{return fs.readFileSync('/proc/'+pid+'/stat','utf8').split(') ')[1].split(' ')[19];}catch(e){if(e.code==='ENOENT'||e.code==='ESRCH')return null;throw e;}};
 const rows=p=>fs.existsSync(p)?fs.readFileSync(p,'utf8').split('\n').filter(Boolean).map(JSON.parse):[];
 export function setup(api,t,backend,{question=true,brokenTracking=false,failedSpawn=false,emissionFailure=false,pipeFailure=false,featureIds=['F-1'],steps=[{build:'F-1'}],limits={}}={}){
  const base=fs.mkdtempSync(join(tmpdir(),'p2-trace-'));fs.chmodSync(base,0o700);

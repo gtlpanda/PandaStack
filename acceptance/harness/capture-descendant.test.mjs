@@ -21,7 +21,7 @@ test('bounded capture failure settles same-group child after its direct payload 
   "const me=fs.readFileSync('/proc/self/stat','utf8');const fields=me.slice(me.lastIndexOf(')')+2).split(' ');",
   "fs.writeFileSync("+JSON.stringify(marker)+",JSON.stringify({pid:process.pid,start:fields[19]}));",
   "const parent=Number(process.argv[2]);let gone=false;const deadline=Date.now()+3000;",
-  "while(!gone&&Date.now()<deadline){try{const raw=fs.readFileSync('/proc/'+parent+'/stat','utf8');gone=raw.slice(raw.lastIndexOf(')')+2).split(' ')[0]==='Z';}catch(e){if(e.code==='ENOENT')gone=true;else throw e;}if(!gone)await new Promise(r=>setTimeout(r,10));}",
+  "while(!gone&&Date.now()<deadline){try{const raw=fs.readFileSync('/proc/'+parent+'/stat','utf8');gone=raw.slice(raw.lastIndexOf(')')+2).split(' ')[0]==='Z';}catch(e){if(e.code==='ENOENT'||e.code==='ESRCH')gone=true;else throw e;}if(!gone)await new Promise(r=>setTimeout(r,10));}",
   "if(!gone)throw Error('owned payload parent did not exit');",
   "process.stdout.on('error',()=>{});process.stdout.write(Buffer.alloc(17*1024*1024,120));setInterval(()=>{},1000);"
  ].join('\n'),{mode:0o600});
