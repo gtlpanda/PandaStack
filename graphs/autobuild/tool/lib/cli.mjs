@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG_FILE, findProjectRoot, loadConfig, statePath } from "./config.mjs";
 import { blockedClosure, countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures } from "./features.mjs";
-import { failureExcerpt, runGate } from "./gate.mjs";
+import { failureExcerpt, parseShard, runGate } from "./gate.mjs";
 import { runLoop } from "./loop.mjs";
 import { huntStatus } from "./bughunt.mjs";
 import { readSession } from "./session.mjs";
@@ -27,7 +27,7 @@ const HELP = `autobuild — autonomous, test-gated build loop for Claude Code or
   autobuild next                       print the feature the next session builds
   autobuild status                     passing count, next feature, blockers, last log lines
   autobuild test <ID> [ID...]          run features' frozen acceptance tests
-  autobuild check [--phase full|commit] [--feature ID] [--base SHA] [--fail-fast] [--json] [--skip-browser] [--scope full|affected]
+  autobuild check [--phase full|commit] [--feature ID] [--base SHA] [--fail-fast] [--json] [--skip-browser] [--scope full|affected] [--shard i/n]
                                        run the full gate
   autobuild mark-passed <ID>           rerun a feature's test; set passes:true only if it passes
   autobuild init [--backend claude|codex] scaffold autobuild.json, PROGRESS.md and the CLAUDE.md rules
@@ -150,6 +150,7 @@ export async function main(argv = process.argv.slice(2)) {
         failFast: flag(args, "--fail-fast"),
         skipBrowser: flag(args, "--skip-browser") || flag(args, "--skip-e2e"),
         scope: value(args, "--scope") ?? "full",
+        shard: parseShard(value(args, "--shard")),
       });
       if (flag(args, "--json")) {
         console.log(JSON.stringify(summary));

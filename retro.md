@@ -3907,3 +3907,26 @@ Phase 2 acceptance: 97/97.
 - Proof: with the isolation line removed, the new case fails ("the final gate wrote
   its cache into the private state home") and one real file leaked (removed after
   inspection); with it, 20/20 pass and the real gate directory count is unchanged.
+
+## 68. `autobuild check --shard i/n`: the full gate as n parallel parts (2026-11-21)
+
+- Why: PandaStack's CI runs the full gate in one 4-vCPU job (981s; the regression suite alone
+  904s). Even with the workflow tests parallel inside the job, the gate is CPU-bound there. To
+  reach a 2-4 minute CI the gate has to spread over several jobs, and the union of those jobs
+  must provably be the whole gate.
+- What: `check --phase full --shard i/n`. The split is a pure function of the config
+  (`shardPlan` in gate.mjs), so every shard computes the same one on any machine; recorded
+  timings are never used because they differ between machines and runs. A whole step runs in
+  exactly one shard (heaviest `shardWeight` first, to the least loaded shard). A `shardable`
+  step and the settled CI-parity configuration check run in every shard; a shardable step gets
+  `AUTOBUILD_SHARD=i/n` and runs its own part. A step owned by another shard is reported as
+  `SKIP <name>: runs in shard k/n`, never as passed. The gate cache key carries the shard.
+- Validation: `shardable` (boolean) and `shardWeight` (whole number >= 1, not with shardable)
+  on gate entries only; `--shard` outside the full gate is refused; `i/n` must be 1 <= i <= n
+  with no leading zeros.
+- Tests: graphs/autobuild/tool/test/gate-shard.test.mjs (6 cases): every whole step exactly
+  once across 3 shards and the shardable step once per shard with its part; a failure fails only
+  its owner's shard; a deterministic balanced split; no cross-shard cache reuse; parseShard
+  negatives; validation. Mutations caught: dropping AUTOBUILD_SHARD from the step env (2 cases
+  fail), dropping it from the cache key (1 case fails). Autobuild suite 254 passed, 0 failed.
+- Nothing adopts it yet: this repo's CI and autobuild.json change in the next PR.
