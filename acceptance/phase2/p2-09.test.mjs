@@ -9,7 +9,7 @@ import {createHash} from 'node:crypto';
 const ROOT=resolve(process.env.PANDASTACK_CANDIDATE_ROOT||fileURLToPath(new URL('../../',import.meta.url)));
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 const watchdog=setTimeout(()=>{console.error('Isolated symlink acceptance watchdog expired; cleanup unconfirmed');process.exit(1);},120000);watchdog.unref();
-function identity(pid){try{const v=fs.readFileSync('/proc/'+pid+'/stat','utf8');const f=v.slice(v.lastIndexOf(')')+2).split(' ');return {pid,parent:Number(f[1]),start:f[19],state:f[0]};}catch(e){if(e.code==='ENOENT')return null;throw e;}}
+function identity(pid){try{const v=fs.readFileSync('/proc/'+pid+'/stat','utf8');const f=v.slice(v.lastIndexOf(')')+2).split(' ');return {pid,parent:Number(f[1]),start:f[19],state:f[0]};}catch(e){if(e.code==='ENOENT'||e.code==='ESRCH')return null;throw e;}}
 const alive=r=>{const now=identity(r.pid);return now?.start===r.start&&now.state!=='Z';};
 function fixture(t,exit){
  const root=fs.mkdtempSync(join(tmpdir(),'pandastack-verify-link-'));fs.chmodSync(root,0o700);
