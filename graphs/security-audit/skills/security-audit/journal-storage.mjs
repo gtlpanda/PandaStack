@@ -64,6 +64,11 @@ export function openStorage(runDir, write, initialize) {
         for (const name of allowed) {
           const s = stat(`${anchor(dirFd)}/${name}`)
           if (!s) { if (name === FILE && !allowMissing) fail('CORRUPT'); continue }
+          // A sidecar or lease another connection is unlinking (the -journal at
+          // commit, owner.lock at release) can be seen mid-unlink with nlink 0. It
+          // is no longer reachable by path, so it counts as absent. The database
+          // file itself never gets this allowance.
+          if (name !== FILE && s.nlink === 0) continue
           need(s.isFile() && privateMode(s, 0o600) && s.nlink === 1)
           if (name === FILE && databaseIdentity) need(same(s, databaseIdentity))
         }
