@@ -34,7 +34,7 @@ back. It makes no model call, runs no graph, and never pushes, fetches or merges
 
 ### `BLUEPRINT_APPROVE_CODES`
 
-A frozen object whose keys and values are exactly these seventeen codes. The CLI
+A frozen object whose keys and values are exactly these eighteen codes. The CLI
 reports no other code.
 
 | code | exit | when |
@@ -56,6 +56,7 @@ reports no other code.
 | `WRITE_DOCS_FAILED` | 3 | write-docs did not succeed, or printed a path outside the three targets |
 | `IO_ERROR` | 2 or 3 | a filesystem step of this CLI failed, or CP-04a reported `IO_ERROR` |
 | `ROLLBACK_FAILED` | 4 | a rollback step failed |
+| `UNEXPECTED_COMMIT_PATHS` | 4 | the design commit holds a path set other than the paths write-docs printed (step 12) |
 
 The codes with a choice of exit follow the exit rule below. A CP-04a error with any
 other code is reported as `IO_ERROR`. No new code names a condition CP-04a already
@@ -101,8 +102,8 @@ node graphs/blueprint/skills/blueprint/blueprint-approve.mjs <show|approve> --ar
 | 0 | success |
 | 1 | bad input; nothing was read from the repo |
 | 2 | refused or failed before `switch -c` succeeded. The repo is as it was: HEAD, every ref, the index and the working tree. The one exception: a start commit this call made in step 5 stays when a later step before the switch (6 or 7) fails. |
-| 3 | failed after `switch -c` succeeded, and the rollback below finished. The repo is as it was, except for a start commit this call made in step 5. (Step 11 below is the one case with no rollback.) |
-| 4 | failed after `switch -c` succeeded, and at least one rollback step failed |
+| 3 | failed after `switch -c` succeeded, and the rollback below finished. The repo is as it was, except for a start commit this call made in step 5. (Steps 11 and 12 below are the cases with no rollback.) |
+| 4 | failed after `switch -c` succeeded, and at least one rollback step failed; or the design commit holds other paths than write-docs printed (step 12). Either way the repo needs a person. |
 
 The CLI sets `process.exitCode` and never calls `process.exit`.
 
@@ -243,14 +244,29 @@ After the checks it runs these steps in order. The first refusal or failure wins
    - its `out` starts with `write-docs: wrote `;
    - the rest, split on single spaces, is a non-empty list of distinct target paths.
 
+   write-docs writes knowledge-map.json only when the design has knowledge items, so
+   a design with an empty `knowledge` list prints two paths. "The printed paths"
+   below always means this list, never the three targets.
+
    Anything else is `WRITE_DOCS_FAILED`. The rest of `out` is never printed.
 10. **Commit.** `git -C <repo> add -- <the printed paths>`, then
     `git -C <repo> commit -m "blueprint: design and backlog for <app>"`. Either
-    failure is `COMMIT_FAILED`, exit 3. Nothing else is staged: step 2 found the
-    index clean.
+    failure is `COMMIT_FAILED`, exit 3. Step 2 found the index clean, so this call
+    stages nothing else. A pre-commit hook still can (for example `git add -u`), and
+    a pathspec or `--only` does not stop it, because the hook stages into the
+    commit's own index. Step 12 catches that.
 11. **Commit id.** `git -C <repo> rev-parse HEAD` gives `commit`. Once the commit
     has succeeded no rollback runs: a failure here is `GIT_FAILED`, exit 3, with the
     commit in place on `integration/<app>`.
+12. **Committed paths.** `git -C <repo> diff-tree --no-commit-id --name-only -r -z
+    <commit>^ <commit>` lists the paths the commit changed, split on NUL with the
+    trailing empty entry dropped.
+    - A failure is `GIT_FAILED`, exit 3, with the commit in place.
+    - The set must equal the set of printed paths. Otherwise it is
+      `UNEXPECTED_COMMIT_PATHS`, exit 4. No rollback runs: HEAD stays on
+      `integration/<app>` with the commit, the original branch is untouched, and the
+      working tree is not changed. Undoing the commit would leave the hook's extra
+      paths staged, so a person decides.
 
 ### Rollback
 
@@ -290,7 +306,8 @@ untracked and modified files are never touched by any step.
   - `switch`;
   - `add`;
   - `reset`;
-  - `branch -D`.
+  - `branch -D`;
+  - `diff-tree` (step 12 only).
 - It never runs `push`, `fetch`, `pull`, `merge`, `remote` or `gh`. It never touches
   a remote ref.
 
@@ -319,7 +336,7 @@ untracked and modified files are never touched by any step.
 
 ## Acceptance
 
-acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs (node:test, 27 cases, about
+acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs (node:test, 29 cases, about
 12 seconds).
 
 **Setup.**
@@ -347,7 +364,9 @@ acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs (node:test, 27 cases, 
 - **approve, happy path.**
   - HEAD is on `integration/<app>`, one commit on the original HEAD.
   - The commit holds exactly the three paths, byte-equal to what write-docs writes for
-    the same runs.
+    the same runs, and step 12's `diff-tree` call runs on the new commit.
+  - A design with an empty `knowledge` list commits exactly the design doc and
+    backlog.json (what write-docs prints for it). No knowledge map is written.
   - Untracked and modified files are untouched. The original branch, remote refs and
     the bare origin are unchanged.
   - The gh log is empty. Every git argv starts `-C <repo>`, with no push, fetch,
@@ -373,3 +392,7 @@ acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs (node:test, 27 cases, 
   - The same from a detached HEAD comes back detached at the same commit.
   - A rollback step that cannot run (a directory made read-only by the hook) is
     `ROLLBACK_FAILED`, exit 4, after the other steps still ran.
+  - A successful pre-commit hook that stages a modified tracked file and an untracked
+    file is `UNEXPECTED_COMMIT_PATHS`, exit 4. HEAD stays on `integration/<app>` with
+    that commit, the original branch, the origin and the working-tree bytes are
+    unchanged, and no `reset`, `branch` or second `switch` runs.

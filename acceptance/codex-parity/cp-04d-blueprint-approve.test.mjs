@@ -24,12 +24,12 @@ const load = () => import(pathToFileURL(MODULE_PATH).href)
 
 const CODES = ['INVALID_ARGS', 'NOT_A_REPO', 'MISSING', 'MALFORMED', 'STALE', 'NOT_DESIGN_READY', 'NOT_BACKLOG_READY',
   'INVALID_APP', 'APPROVAL_MISMATCH', 'STAGED_CHANGES', 'BRANCH_EXISTS', 'TARGET_INVALID', 'COMMIT_FAILED', 'GIT_FAILED',
-  'WRITE_DOCS_FAILED', 'IO_ERROR', 'ROLLBACK_FAILED']
+  'WRITE_DOCS_FAILED', 'IO_ERROR', 'ROLLBACK_FAILED', 'UNEXPECTED_COMMIT_PATHS']
 const APP = 'reading-list'
 const BRANCH = `integration/${APP}`
 const DOC = `docs/blueprint/${APP}.md`
 const TARGETS = [DOC, 'docs/backlog.json', 'docs/knowledge-map.json']
-const ALLOWED_SUBCOMMANDS = new Set(['rev-parse', 'diff', 'symbolic-ref', 'commit', 'switch', 'add', 'reset', 'branch'])
+const ALLOWED_SUBCOMMANDS = new Set(['rev-parse', 'diff', 'symbolic-ref', 'commit', 'switch', 'add', 'reset', 'branch', 'diff-tree'])
 const FORBIDDEN_SUBCOMMANDS = ['push', 'fetch', 'pull', 'merge', 'remote', 'clone', 'ls-remote']
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 const sha = bytes => createHash('sha256').update(bytes).digest('hex')
@@ -478,6 +478,31 @@ describe('approve: the happy path', () => {
     assert.ok(r.gitCalls.some(c => c[2] === 'switch' && c[3] === '-c' && c[4] === BRANCH))
     assert.ok(r.gitCalls.some(c => c[2] === 'add' && c[3] === '--' && JSON.stringify(c.slice(4)) === JSON.stringify(TARGETS)))
     assert.ok(!r.gitCalls.some(c => c[2] === 'commit' && c.includes('--allow-empty')), 'no start commit when HEAD exists')
+    // Step 12: the committed paths are read back from the new commit itself.
+    const checkCall = ['diff-tree', '--no-commit-id', '--name-only', '-r', '-z', `${out.commit}^`, out.commit]
+    assert.ok(r.gitCalls.some(c => JSON.stringify(c.slice(2)) === JSON.stringify(checkCall)), 'the committed paths are checked')
+  })
+
+  test('a design with no knowledge items commits exactly the design doc and backlog.json, and no knowledge map', async () => {
+    await load()
+    const r0 = makeRepo()
+    const { repo } = r0
+    const { hash, run2Path, run3Path } = writeState(repo, { run2: RUN2({ design: DESIGN({ knowledge: [] }) }), run3: RUN3({ owners: [] }) })
+    const expected = expectedDocs(run2Path, run3Path)
+    const two = [DOC, 'docs/backlog.json']
+    assert.deepEqual(Object.keys(expected).sort(), [...two].sort(), 'write-docs writes no map for an empty knowledge list')
+    const r = approve(repo, hash)
+    assert.equal(r.stderr, '')
+    assert.equal(r.status, 0)
+    const out = JSON.parse(r.stdout)
+    assert.deepEqual(out.paths, two)
+    assert.equal(out.commit, git(repo, ['rev-parse', 'HEAD']).trim())
+    assert.deepEqual(git(repo, ['diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD^', 'HEAD']).trim().split('\n').sort(), [...two].sort())
+    for (const p of two) assert.deepEqual(execFileSync(REAL_GIT, ['-C', repo, 'show', `HEAD:${p}`], { env: BASE_ENV() }), expected[p], p)
+    assert.ok(!existsSync(join(repo, 'docs', 'knowledge-map.json')), 'no knowledge map is synthesized')
+    assert.ok(r.gitCalls.some(c => c[2] === 'add' && c[3] === '--' && JSON.stringify(c.slice(4)) === JSON.stringify(two)))
+    assert.equal(gitStatus(repo, ['diff', '--cached', '--quiet']).status, 0, 'nothing left staged')
+    assertGitDiscipline(r, repo)
   })
 
   test('a repo with no commit gets the empty start commit first', async () => {
@@ -701,5 +726,41 @@ describe('approve: failure after the switch rolls back', () => {
     } finally {
       chmodSync(join(repo, 'docs', 'blueprint'), 0o755)
     }
+  })
+})
+
+// =====================================================================
+describe('approve: a successful hook that widens the commit', () => {
+  test('a pre-commit hook that stages unrelated files is UNEXPECTED_COMMIT_PATHS, exit 4: the commit stays on the new branch, nothing is rolled back', async () => {
+    await load()
+    const r0 = makeRepo()
+    const { repo, origin } = r0
+    const { hash } = writeState(repo)
+    writeFile(repo, 'notes.txt', 'untracked notes\n')
+    writeFileSync(join(repo, 'README.md'), '# app\nlocal edit\n')
+    const mainBefore = git(repo, ['rev-parse', 'refs/heads/main']).trim()
+    const originBefore = git(origin, ['for-each-ref', '--format=%(refname) %(objectname)'])
+    // A formatter-style hook: it stages every tracked edit and one untracked file, then
+    // succeeds. It calls the real git, so the wrapper logs only the CLI's own calls.
+    hook(repo, `'${REAL_GIT}' add -u && '${REAL_GIT}' add notes.txt`)
+    const r = approve(repo, hash)
+    assertError(r, 'UNEXPECTED_COMMIT_PATHS', 4)
+    // The hook did widen the commit: this is the condition the CLI must not report as success.
+    assert.equal(git(repo, ['symbolic-ref', 'HEAD']).trim(), `refs/heads/${BRANCH}`, 'HEAD stays on the new branch')
+    assert.equal(subject(repo, 'HEAD'), `blueprint: design and backlog for ${APP}`)
+    assert.equal(git(repo, ['rev-parse', 'HEAD^']).trim(), mainBefore)
+    assert.deepEqual(git(repo, ['diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD^', 'HEAD']).trim().split('\n').sort(),
+      [...TARGETS, 'README.md', 'notes.txt'].sort())
+    // Nothing is undone and no unrelated work is lost.
+    assert.equal(git(repo, ['rev-parse', 'refs/heads/main']).trim(), mainBefore, 'the original branch is unchanged')
+    assert.equal(readFileSync(join(repo, 'notes.txt'), 'utf8'), 'untracked notes\n')
+    assert.equal(readFileSync(join(repo, 'README.md'), 'utf8'), '# app\nlocal edit\n')
+    assert.equal(git(origin, ['for-each-ref', '--format=%(refname) %(objectname)']), originBefore)
+    const commit = git(repo, ['rev-parse', 'HEAD']).trim()
+    const checkCall = ['diff-tree', '--no-commit-id', '--name-only', '-r', '-z', `${commit}^`, commit]
+    assert.ok(r.gitCalls.some(c => JSON.stringify(c.slice(2)) === JSON.stringify(checkCall)), 'the committed paths were checked')
+    assert.ok(!r.gitCalls.some(c => ['reset', 'branch'].includes(c[2])), 'no rollback runs once the commit exists')
+    assert.equal(r.gitCalls.filter(c => c[2] === 'switch').length, 1, 'only the switch -c: HEAD is not moved back')
+    assertGitDiscipline(r, repo)
   })
 })

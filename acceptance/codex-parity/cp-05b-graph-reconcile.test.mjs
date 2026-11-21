@@ -576,7 +576,10 @@ describe('CP-05b refusals', () => {
       const text = readFileSync(path, 'utf8')
       assert.ok(!/\bimport\s*\(/.test(text), `${relative(ROOT, path)} has a dynamic import`)
       assert.ok(!text.includes('child_process'), `${relative(ROOT, path)} mentions child_process`)
-      for (const [, spec] of text.matchAll(/^\s*(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]/gm)) {
+      // Both `import … from '…'` and a bare side-effect `import '…'` (same pattern as CP-04d).
+      const specs = [...text.matchAll(/^[ \t]*(?:import|export)\b[^;'"`]*?\bfrom[ \t]*(['"])([^'"\n]+)\1|^[ \t]*import[ \t]*(['"])([^'"\n]+)\3/gm)]
+        .map(m => m[2] ?? m[4])
+      for (const spec of specs) {
         if (spec.startsWith('.')) visit(resolve(dirname(path), spec))
         else builtins.add(spec)
       }
