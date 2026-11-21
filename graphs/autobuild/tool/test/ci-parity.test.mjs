@@ -38,7 +38,13 @@ test("reads cherry-crm's real workflow: steps, directories, step env and service
 
 test("reads PandaStack's own workflow", () => {
   const doc = parseWorkflowYaml(readFileSync(path.join(KIT, "..", "..", "..", ".github", "workflows", "test.yml"), "utf8"));
-  assert.ok(doc.jobs.test.steps.some((s) => s.run && s.run.includes("check --phase full")));
+  // CI runs the full gate as matrix shards; the required `test` job waits for all of them and
+  // runs even when one failed, so it cannot pass with a shard red, cancelled or skipped.
+  assert.ok(doc.jobs.shard.steps.some((s) => s.run && s.run.includes("check --phase full --shard")));
+  assert.ok(Array.isArray(doc.jobs.shard.strategy.matrix.shard) && doc.jobs.shard.strategy.matrix.shard.length >= 2);
+  assert.equal(doc.jobs.test.needs, "shard");
+  assert.equal(doc.jobs.test.if, "always()");
+  assert.ok(doc.jobs.test.steps.some((s) => s.run && s.run.includes("!= success")));
 });
 
 test("scalars, comments, block chomping and flow collections", () => {

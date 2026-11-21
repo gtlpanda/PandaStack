@@ -46,6 +46,22 @@ function sizeOf(file) {
   try { return statSync(file).size } catch { return 0 }
 }
 
+// The files of shard `index` (1-based) of `count`, for AUTOBUILD_SHARD. Every shard must compute
+// the same split, so it uses file size (the same on every checkout of one commit), never
+// recorded timings: largest first, each to the lightest shard (ties: the lowest shard). The
+// result keeps the given order. Every file lands in exactly one shard.
+export function shardFiles(files, { index, count }) {
+  const loads = new Array(count).fill(0)
+  const owner = new Map()
+  const bySize = files.map((f, i) => ({ f, i, w: sizeOf(f) })).sort((a, b) => b.w - a.w || a.i - b.i)
+  for (const { f, w } of bySize) {
+    const target = loads.indexOf(Math.min(...loads))
+    loads[target] += w
+    owner.set(f, target + 1)
+  }
+  return files.filter(f => owner.get(f) === index)
+}
+
 // Turns one finished child into {pass, fail, skipped, text}.
 export function settle({ countsText, code, signal, output, label, timedOutMs = null }) {
   let counts = null

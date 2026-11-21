@@ -7,12 +7,15 @@
 // running after PANDASTACK_TEST_FILE_TIMEOUT_MS (default 10 minutes) is killed and fails.
 // PANDASTACK_TEST_JOBS=1 keeps the original serial run: every file imported, in order,
 // into this one process. Use it to bisect an interaction between files.
+// AUTOBUILD_SHARD=i/n (set by `autobuild check --shard` on a shardable step) runs only this
+// shard's part of the test files; the n parts together are every file, each exactly once.
 import { readdirSync, existsSync, realpathSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { availableParallelism, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { REPO, test, load, summary, entryDirs } from './workflow-harness.mjs'
-import { DEFAULT_FILE_TIMEOUT_MS, MAX_TIMER_MS, positiveSetting, runPool } from './workflow-pool.mjs'
+import { DEFAULT_FILE_TIMEOUT_MS, MAX_TIMER_MS, positiveSetting, runPool, shardFiles } from './workflow-pool.mjs'
+import { parseShard } from '../graphs/autobuild/tool/lib/shard.mjs'
 
 function testFiles() {
   const graphs = existsSync(join(REPO, 'graphs')) ? readdirSync(join(REPO, 'graphs')).map(g => join('graphs', g)) : []
@@ -51,16 +54,19 @@ function saveTimings(timings) {
 // Children inherit this through the environment.
 process.env.TMPDIR = realpathSync(tmpdir())
 
-let jobs, fileTimeoutMs
+let jobs, fileTimeoutMs, shard
 try {
+  shard = parseShard(process.env.AUTOBUILD_SHARD, 'AUTOBUILD_SHARD')
   jobs = positiveSetting('PANDASTACK_TEST_JOBS', process.env.PANDASTACK_TEST_JOBS, availableParallelism())
   fileTimeoutMs = positiveSetting('PANDASTACK_TEST_FILE_TIMEOUT_MS', process.env.PANDASTACK_TEST_FILE_TIMEOUT_MS, DEFAULT_FILE_TIMEOUT_MS, MAX_TIMER_MS)
 } catch (e) { console.log(`TEST-WORKFLOW: 0 passed, 1 failed (${e.message})`); process.exit(1) }
 
-const files = testFiles()
+const allFiles = testFiles()
 await test('at least one workflow test file exists', () => {
-  if (!files.length) throw new Error('no tests/*.test.mjs or graphs/*/tests/*.test.mjs found')
+  if (!allFiles.length) throw new Error('no tests/*.test.mjs or graphs/*/tests/*.test.mjs found')
 })
+const files = shard ? shardFiles(allFiles, shard) : allFiles
+if (shard) console.log(`== shard ${shard.index}/${shard.count}: ${files.length} of ${allFiles.length} test files`)
 let pooled = { pass: 0, fail: 0, skipped: 0 }
 if (jobs === 1) {
   for (const f of files) {

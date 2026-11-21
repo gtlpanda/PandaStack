@@ -256,7 +256,7 @@ One repo, one install. Each piece, where it lives, and the state it keeps:
 | The rules | `CLAUDE.md` | `~/.claude/CLAUDE.md` (one link) | at most 200 lines; `validate.sh` pins its rails |
 | Settings | `settings.json` | merged into your own `~/.claude/settings.json` | your values win; `permissions` untouched |
 | Status line | `core/bin/statusline.sh` | `~/.claude/bin/statusline.sh` | none |
-| CI and branch protection | `.github/workflows/test.yml` | GitHub | `autobuild check --phase full` (including `scripts/test.sh`) on every PR and push to `main`; `main` requires the `test` check, admins included |
+| CI and branch protection | `.github/workflows/test.yml` | GitHub | The full gate (`scripts/test.sh`'s suites as separate steps, plus the acceptance steps) on every PR and push to `main`, as three parallel `autobuild check --phase full --shard i/3` jobs; `main` requires the `test` check, which passes only when all three shards pass, admins included |
 
 How a change reaches `main`:
 1. Build and run the selected commit checks. In full mode, finish `/bughunt`

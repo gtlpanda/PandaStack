@@ -27,6 +27,9 @@ import path from "node:path";
 import { featureById, featuresWithoutPasses, readFeatures } from "./features.mjs";
 import { buildEnv, git, runSpec, sh, shSpec, specOutput, tail } from "./proc.mjs";
 import { featureTestCommands, runFeatureTests } from "./tests.mjs";
+import { parseShard } from "./shard.mjs";
+
+export { parseShard };
 
 const POOL = path.join(import.meta.dirname, "gate-pool.mjs");
 const KEPT_POOL_RUNS = 10;
@@ -253,13 +256,6 @@ function fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, c
 //     least loaded shard (ties: config order, then the lowest shard).
 // A step left to another shard is reported as skipped with that shard named, never as passed.
 
-/** "i/n" with 1 <= i <= n, no leading zeros, or undefined for no sharding. */
-export function parseShard(text) {
-  if (text === undefined) return null;
-  const match = /^([1-9][0-9]*)\/([1-9][0-9]*)$/.exec(String(text));
-  if (!match || Number(match[1]) > Number(match[2])) throw new Error(`--shard must be i/n with 1 <= i <= n, got ${JSON.stringify(text)}`);
-  return { index: Number(match[1]), count: Number(match[2]) };
-}
 
 /** Map of job id to the shard (1..count) that runs it, or 0 for every shard. */
 export function shardPlan(jobs, count) {
