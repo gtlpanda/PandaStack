@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { REPO, test } from '../scripts/workflow-harness.mjs'
-import { positiveSetting, scheduleOrder, settle, runPool } from '../scripts/workflow-pool.mjs'
+import { MAX_TIMER_MS, positiveSetting, scheduleOrder, settle, runPool } from '../scripts/workflow-pool.mjs'
 
 const HARNESS = pathToFileURL(join(REPO, 'scripts', 'workflow-harness.mjs')).href
 // Writes fixture test files (name -> body); each body may use `test` from the real harness.
@@ -98,6 +98,19 @@ await test('positiveSetting: only a positive integer is accepted, named in the e
   assert.equal(positiveSetting('X', '1', 8), 1)
   assert.equal(positiveSetting('X', '12', 8), 12)
   for (const bad of ['0', '-2', '1.5', ' 3', '3 ', 'four', '07', '1e2']) assert.throws(() => positiveSetting('PANDASTACK_TEST_JOBS', bad, 8), /^Error: PANDASTACK_TEST_JOBS must be a positive integer/, bad)
+  // Above the maximum is refused too: a timer delay over 2^31-1 ms would fire after 1 ms.
+  assert.equal(positiveSetting('T', String(MAX_TIMER_MS), 8, MAX_TIMER_MS), MAX_TIMER_MS)
+  for (const big of [String(MAX_TIMER_MS + 1), '3000000000', '99999999999999999999']) {
+    assert.throws(() => positiveSetting('PANDASTACK_TEST_FILE_TIMEOUT_MS', big, 600000, MAX_TIMER_MS), /at most 2147483647/, big)
+  }
+})
+
+await test('pool: a file timeout longer than a timer can hold acts as a long timeout, not 1 ms; a non-positive one is refused', async () => {
+  const r = await pool({ 'slow.test.mjs': "await test('slow but fine', async () => { await new Promise(r => setTimeout(r, 400)) })" }, { fileTimeoutMs: 3e9 })
+  assert.deepEqual([r.pass, r.fail], [1, 0], r.out)
+  for (const fileTimeoutMs of [0, -5, 1.5, NaN]) {
+    await assert.rejects(runPool([], { jobs: 1, cwd: REPO, fileTimeoutMs }), /fileTimeoutMs must be a whole number of ms of at least 1/, String(fileTimeoutMs))
+  }
 })
 
 await test('scheduleOrder: longest recorded time first; size order until every file has a time', () => {

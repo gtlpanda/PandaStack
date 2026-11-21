@@ -12,7 +12,7 @@ import { availableParallelism, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { REPO, test, load, summary, entryDirs } from './workflow-harness.mjs'
-import { DEFAULT_FILE_TIMEOUT_MS, positiveSetting, runPool } from './workflow-pool.mjs'
+import { DEFAULT_FILE_TIMEOUT_MS, MAX_TIMER_MS, positiveSetting, runPool } from './workflow-pool.mjs'
 
 function testFiles() {
   const graphs = existsSync(join(REPO, 'graphs')) ? readdirSync(join(REPO, 'graphs')).map(g => join('graphs', g)) : []
@@ -54,7 +54,7 @@ process.env.TMPDIR = realpathSync(tmpdir())
 let jobs, fileTimeoutMs
 try {
   jobs = positiveSetting('PANDASTACK_TEST_JOBS', process.env.PANDASTACK_TEST_JOBS, availableParallelism())
-  fileTimeoutMs = positiveSetting('PANDASTACK_TEST_FILE_TIMEOUT_MS', process.env.PANDASTACK_TEST_FILE_TIMEOUT_MS, DEFAULT_FILE_TIMEOUT_MS)
+  fileTimeoutMs = positiveSetting('PANDASTACK_TEST_FILE_TIMEOUT_MS', process.env.PANDASTACK_TEST_FILE_TIMEOUT_MS, DEFAULT_FILE_TIMEOUT_MS, MAX_TIMER_MS)
 } catch (e) { console.log(`TEST-WORKFLOW: 0 passed, 1 failed (${e.message})`); process.exit(1) }
 
 const files = testFiles()

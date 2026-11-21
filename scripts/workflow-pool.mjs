@@ -23,11 +23,15 @@ const RUNNER = join(import.meta.dirname, 'workflow-file-runner.mjs')
 // stdout open must not hold the whole suite; its output after this point is dropped.
 const PIPE_GRACE_MS = 5000
 
+// The longest delay setTimeout honours; Node turns anything larger into 1 ms.
+export const MAX_TIMER_MS = 2 ** 31 - 1
+
 // A positive-integer setting from the environment (PANDASTACK_TEST_JOBS,
-// PANDASTACK_TEST_FILE_TIMEOUT_MS): unset means the default; anything else is refused, not guessed.
-export function positiveSetting(name, value, defaultValue) {
+// PANDASTACK_TEST_FILE_TIMEOUT_MS): unset means the default; anything else, or anything above
+// `max`, is refused rather than guessed.
+export function positiveSetting(name, value, defaultValue, max = Number.MAX_SAFE_INTEGER) {
   if (value === undefined || value === '') return defaultValue
-  if (!/^[1-9][0-9]*$/.test(value)) throw new Error(`${name} must be a positive integer, got ${JSON.stringify(value)}`)
+  if (!/^[1-9][0-9]*$/.test(value) || Number(value) > max) throw new Error(`${name} must be a positive integer of at most ${max}, got ${JSON.stringify(value)}`)
   return Number(value)
 }
 
@@ -97,6 +101,9 @@ function runChild(file, { cwd, env, label, timeoutMs }) {
 // fileTimeoutMs: how long one file may run before its child is killed and the file fails.
 export const DEFAULT_FILE_TIMEOUT_MS = 10 * 60 * 1000
 export async function runPool(files, { jobs, cwd, env = process.env, timings = {}, labelOf = f => f, write = t => process.stdout.write(t), alone = [], fileTimeoutMs = DEFAULT_FILE_TIMEOUT_MS }) {
+  if (!Number.isInteger(fileTimeoutMs) || fileTimeoutMs < 1) throw new Error(`fileTimeoutMs must be a whole number of ms of at least 1, got ${fileTimeoutMs}`)
+  // A longer delay than a timer can hold is clamped to the longest one, so it stays a long timeout.
+  const timeoutMs = Math.min(fileTimeoutMs, MAX_TIMER_MS)
   const results = new Array(files.length)
   const index = new Map(files.map((f, i) => [f, i]))
   const solo = files.filter(f => alone.includes(f))
@@ -106,7 +113,7 @@ export async function runPool(files, { jobs, cwd, env = process.env, timings = {
     while (printed < files.length && results[printed]) write(results[printed++].text)
   }
   const runOne = async file => {
-    results[index.get(file)] = await runChild(file, { cwd, env, label: labelOf(file), timeoutMs: fileTimeoutMs })
+    results[index.get(file)] = await runChild(file, { cwd, env, label: labelOf(file), timeoutMs })
     flush()
   }
   const worker = async () => {

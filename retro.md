@@ -3943,4 +3943,7 @@ Phase 2 acceptance: 97/97.
   alone lane ignored; one state home shared by all children.
 - The branch hunt found no bug, but its impact map caught the first version sharing one state
   home across all children while the docs said "private", and its errors lens named the
-  open-handle hang. Both were fixed before the PR.
+  open-handle hang. Both were fixed before the PR. The re-hunt then reproduced F1 (LOW): a
+  timeout above 2^31-1 ms was accepted, and Node turns such a timer delay into 1 ms, so every
+  file would be killed at once. The setting now refuses values above that limit, and runPool
+  clamps a longer delay to it; the hunt's reproduction fails before the fix and passes after.
