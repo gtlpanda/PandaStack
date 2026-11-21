@@ -478,6 +478,13 @@ scripts/check-secrets.sh  # the scanner itself (prints "check-secrets: clean" or
 
 The test scripts end with an explicit `PASS`/`FAIL` line.
 
+`scripts/test-workflow.sh` runs its test files side by side, one child process per file, as
+many at once as `PANDASTACK_TEST_JOBS` (default: the machine's available parallelism). Each
+child gets a private `AUTOBUILD_STATE_HOME`; output is printed per file in sorted order, and
+counts are taken when each child exits. A few files with sub-second wall-clock budgets run
+first, alone. `PANDASTACK_TEST_JOBS=1` keeps the original serial run in one process, for
+bisecting an interaction between files.
+
 ### Managed configuration doctor
 
 Run `node scripts/pandastack.mjs doctor --repo "/absolute/project path" --backend codex --json`

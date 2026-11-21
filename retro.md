@@ -3907,3 +3907,33 @@ Phase 2 acceptance: 97/97.
 - Proof: with the isolation line removed, the new case fails ("the final gate wrote
   its cache into the private state home") and one real file leaked (removed after
   inspection); with it, 20/20 pass and the real gate directory count is unchanged.
+
+## 68. The workflow suite runs its files in parallel (2026-11-21)
+
+- Why: scripts/test-workflow.mjs imported all 188 test files into one process, one after
+  another: 452s of the 525s local `scripts/test.sh` (904s of CI's 981s), and every agent
+  `/verify` in this repo waited on it. Per-file profile: CPU/wall 0.89 (CPU-bound in total, no
+  single file dominant; the longest, graphs/build/tests/driver.test.mjs, is 54s).
+- What: scripts/workflow-pool.mjs runs each file in its own child
+  (scripts/workflow-file-runner.mjs), PANDASTACK_TEST_JOBS at a time (default: available
+  parallelism), longest first (logs/workflow-timings.json, else file size). Counts are written
+  to fd 3 when the child exits, so un-awaited async tests are counted (9 in render-*), and test
+  output can never be mistaken for counts. A child that reports no counts, or exits non-zero
+  after passing tests, adds a failure. Output is printed per file in sorted order. Every child
+  gets a private AUTOBUILD_STATE_HOME. PANDASTACK_TEST_JOBS=1 keeps the original in-process
+  serial run. Host amendment to the frozen scripts/test-workflow.mjs; the two new modules are
+  frozen with it. The `TEST-WORKFLOW:` line keeps its format (nothing parses it).
+- Serial lane: decision-managed and decision-routing each failed once in five 32-job runs (a 300
+  ms expiry, a 100 ms wait). Four files with sub-second wall-clock assertions now run first,
+  alone (about 4.5s); no threshold was changed.
+- Proof (10 runs pinned to 4 cores with taskset, 10 at default concurrency, each compared with a
+  serial run by the sorted list of test names and outcomes): 20/20 identical, 2084 passed, 0
+  failed. Before the serial lane: 2 of 5 default runs failed. Wall: serial 455s, 4 cores 127s,
+  32 jobs 77s. `/verify` on this tree: 127s, VERIFY: PASS.
+- Under `/verify` the suite counts 3 fewer tests (2081) than run directly (2084). That is
+  pre-existing: verify-payload-umask (and siblings) print a "skip" line outside test() when
+  VERIFY_CAPTURE_SCOPE_DIR is set; the serial runner shows the same -3 (2073 vs 2070).
+- Tests: tests/workflow-pool.test.mjs (11 cases): counting, un-awaited tests, import failure,
+  a SIGKILLed child, a non-zero exit after passes, output order, private state home, the
+  alone lane, jobs parsing, scheduling, malformed counts. Mutations caught: counts written at
+  import instead of exit; a non-zero exit ignored; the alone lane ignored.
