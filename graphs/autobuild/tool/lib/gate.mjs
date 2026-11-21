@@ -175,7 +175,9 @@ export function gateHasPaths(config) {
 }
 
 // Scheduling fields a gate entry, a runner, `browser` or `ciParity` may carry.
-const schedule = (entry) => ({ resources: entry?.resources ?? null, memoryMb: entry?.memoryMb ?? 0, paths: entry?.paths ?? null, shardable: entry?.shardable === true, shardWeight: entry?.shardWeight ?? 1 });
+const schedule = (entry) => ({ resources: entry?.resources ?? null, memoryMb: entry?.memoryMb ?? 0, paths: entry?.paths ?? null });
+// Shard keys are read from gate entries only, the one place config.mjs validates them.
+const shardKeys = (entry) => ({ shardable: entry?.shardable === true, shardWeight: entry?.shardWeight ?? 1 });
 
 function commandJob(config, { id, name, command, entry }) {
   return { id, name, spec: shSpec(config, command), keyEnv: config.env, ...schedule(entry) };
@@ -205,7 +207,7 @@ function fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, c
     return uniqueIds(jobs);
   }
   if (current && current.testKind !== browserKind) jobs.push(...featureJobs([current], `current feature ${current.id}`).map((job) => ({ ...job, pinned: true })));
-  for (const entry of config.gate ?? []) jobs.push(commandJob(config, { id: `gate: ${entry.name}`, name: entry.name, command: entry.command, entry }));
+  for (const entry of config.gate ?? []) jobs.push({ ...commandJob(config, { id: `gate: ${entry.name}`, name: entry.name, command: entry.command, entry }), ...shardKeys(entry) });
 
   // CI's own test steps, exactly as CI runs them (ci-parity.mjs). The Stop hook skips them: its
   // time budget covers the gate commands, not a CI suite plus a lock wait. The loop's final gate,

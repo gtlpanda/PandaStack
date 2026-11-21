@@ -3,7 +3,7 @@
 // to another shard is reported as skipped, never as passed; the split depends on the config
 // alone, and one shard's cached PASS is never reused for another.
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -115,4 +115,19 @@ test("--shard is refused outside the full gate, and shard keys are validated", (
     writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), gate: [entry] }));
     assert.throws(() => loadConfig(root, {}), message, JSON.stringify(entry));
   }
+});
+
+test("shard keys on a runner are ignored: only gate entries can be shardable or weighted", (t) => {
+  const { config } = fixture(t, [{ name: "a" }]);
+  // One passing feature, so the gate has a "passing features: unit" runner job.
+  const featuresFile = path.join(config.root, "features.json");
+  writeFileSync(featuresFile, JSON.stringify({ features: [{ id: "done", title: "done", dependencies: [], test: "tests/done.test", testKind: "unit", passes: true }] }));
+  mkdirSync(path.join(config.root, "tests"), { recursive: true });
+  writeFileSync(path.join(config.root, "tests", "done.test"), "");
+  config.runners.unit.command = "true";
+  config.runners.unit.shardable = true;
+  const results = [1, 2].map((index) => runGate(config, { shard: { index, count: 2 } }));
+  for (const summary of results) assert.equal(summary.ok, true, JSON.stringify(summary.steps));
+  const owners = results.filter((summary) => summary.steps.some((step) => step.name.startsWith("passing features")));
+  assert.equal(owners.length, 1, "the runner job runs in exactly one shard, not every shard");
 });

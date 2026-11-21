@@ -3934,5 +3934,8 @@ Phase 2 acceptance: 97/97.
   "(no path match)", because the timing log kept only skipped names. Records now carry
   `skipReasons`; status names the shard, and old records still read "no path match". The
   hunt's reproduction is kept as test/status-shard-skip.test.mjs. Its impact map also caught
-  the docs claiming the split depends on "the config alone"; corrected to the job list.
+  the docs claiming the split depends on "the config alone"; corrected to the job list. The
+  re-hunt's impact map noted shard keys were honoured on runner, browser and CI-parity entries
+  but validated on gate entries only; they are now read from gate entries only (a runner with
+  `shardable: true` still runs in exactly one shard; the test fails on the old code).
 - Nothing adopts it yet: this repo's CI and autobuild.json change in the next PR.
