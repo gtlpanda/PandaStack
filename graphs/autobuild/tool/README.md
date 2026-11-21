@@ -346,11 +346,14 @@ On a `gate` entry only:
 | `shardWeight` | Rough seconds the step takes (whole number, default 1). With `--shard`, whole steps are spread heaviest first, each to the least loaded shard. Not allowed on a `shardable` step. |
 
 **Shards.** `autobuild check --phase full --shard i/n` runs one of `n` parts of the full gate, so CI
-can run the gate as `n` parallel jobs. The split is computed from the config alone, so every shard
-agrees on it on any machine: each step runs in exactly one shard, except a `shardable` step and the
+can run the gate as `n` parallel jobs. The split is computed from the gate's job list alone (the
+config, the feature list and the check's options, never recorded timings), so shards that run on the
+same commit with the same options agree on it on any machine: each step runs in exactly one shard,
+except a `shardable` step and the
 CI-parity configuration check, which run in every shard. A step that belongs to another shard is
 reported as `SKIP <name>: runs in shard k/n`, never as passed, and the gate cache keeps one shard's
-PASS of a shardable step apart from another's. The union of the `n` shards is the whole gate only
+PASS of a shardable step apart from another's. `autobuild status` shows such a step as
+`SKIP <name> (runs in shard k/n)`. The union of the `n` shards is the whole gate only
 when every shard runs on the same commit and config and every shard passes; CI should require all
 of them (for example one aggregating required job).
 

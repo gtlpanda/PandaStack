@@ -62,7 +62,11 @@ export function timingReport(records) {
     lines.push(`last gate run (${gate.at}, ${gate.caller}, ${gate.feature ?? "no feature"}, ${gate.scope ?? "full"}): ${gate.ok ? "PASS" : "FAIL"} in ${gate.wallSeconds}s`);
     for (const step of [...gate.steps].sort((a, b) => b.seconds - a.seconds).slice(0, 12)) lines.push(`  ${step.ok ? "PASS" : "FAIL"} ${String(step.cached ? "cached" : `${step.seconds}s`).padStart(7)}  ${step.name}`);
     if (gate.steps.length > 12) lines.push(`  … ${gate.steps.length - 12} faster steps`);
-    for (const name of gate.skipped ?? []) lines.push(`  SKIP          ${name} (no path match)`);
+    // Records written before sharding have no skipReasons; path selection was the only reason then.
+    for (const name of gate.skipped ?? []) {
+      const why = gate.skipReasons?.[name];
+      lines.push(`  SKIP          ${name} (${typeof why === "string" && why.startsWith("runs in shard") ? why : "no path match"})`);
+    }
     for (const name of gate.notRun ?? []) lines.push(`  ----          ${name} (not run)`);
   }
   return lines;

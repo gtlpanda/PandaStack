@@ -241,8 +241,10 @@ function fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, c
 
 // ---------- shards ----------
 // `autobuild check --shard i/n` runs one of n parts of the full gate, so CI can spread the gate
-// over n jobs whose union is the whole gate. Every shard must compute the same split, so it
-// depends on the config alone (never on recorded timings, which differ between machines):
+// over n jobs whose union is the whole gate. Every shard must compute the same split, so it is
+// computed from the gate's job list alone (the config, the feature list and this check's options),
+// never from recorded timings, which differ between machines. Every shard must therefore run on
+// the same commit with the same options:
 //   - a settled job (the CI-parity configuration check) and a `shardable` step run in every
 //     shard; a shardable step gets AUTOBUILD_SHARD=i/n and runs only its own part;
 //   - every other step runs in exactly one shard: heaviest `shardWeight` first, each to the
@@ -406,7 +408,7 @@ export function runGate(config, { featureId = null, baseSha = null, failFast = f
       wallSeconds: Math.round((Date.now() - gateStarted) / 1000),
       steps: steps.map((step) => ({ name: step.name, ok: step.ok, seconds: Math.round((step.ms ?? 0) / 1000), tail: step.ok ? "" : failureExcerpt(step.output ?? ""), ...(step.cachedFrom ? { cached: true, cachedFrom: step.cachedFrom } : {}) })),
     };
-    appendTiming(config, { type: "gate", caller, feature: featureId, phase, scope, focused, ...(shard ? { shard: result.shard } : {}), ok: result.ok, wallSeconds: result.wallSeconds, steps: result.steps.map(({ name, ok, seconds, cached }) => ({ name, ok, seconds, ...(cached ? { cached: true } : {}) })), skipped: skipped.map((entry) => entry.name), notRun });
+    appendTiming(config, { type: "gate", caller, feature: featureId, phase, scope, focused, ...(shard ? { shard: result.shard } : {}), ok: result.ok, wallSeconds: result.wallSeconds, steps: result.steps.map(({ name, ok, seconds, cached }) => ({ name, ok, seconds, ...(cached ? { cached: true } : {}) })), skipped: skipped.map((entry) => entry.name), skipReasons: Object.fromEntries(skipped.map((entry) => [entry.name, entry.reason])), notRun });
     return result;
   };
 
