@@ -1,12 +1,12 @@
 // The parallel workflow runner (scripts/workflow-pool.mjs, scripts/workflow-file-runner.mjs):
 // counting, failure accounting and output order, on tiny fixture test files in a temp dir.
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { REPO, test } from '../scripts/workflow-harness.mjs'
-import { jobsFrom, scheduleOrder, settle, runPool } from '../scripts/workflow-pool.mjs'
+import { positiveSetting, scheduleOrder, settle, runPool } from '../scripts/workflow-pool.mjs'
 
 const HARNESS = pathToFileURL(join(REPO, 'scripts', 'workflow-harness.mjs')).href
 // Writes fixture test files (name -> body); each body may use `test` from the real harness.
@@ -68,18 +68,36 @@ await test('pool: output is printed in the given file order, whatever order chil
   assert.deepEqual([...r.out.matchAll(/ok {3}t(\d+)/g)].map(m => m[1]), ['600', '10', '300'])
 })
 
-await test('pool: every child gets a private AUTOBUILD_STATE_HOME and the caller\'s other variables', async () => {
-  const body = "await test('env', () => { if (!process.env.AUTOBUILD_STATE_HOME?.includes('workflow-tests-state-')) throw new Error('state home ' + process.env.AUTOBUILD_STATE_HOME); if (process.env.POOL_PROBE !== 'kept') throw new Error('probe lost') })"
-  const r = await pool({ 'env.test.mjs': body }, { env: { ...process.env, AUTOBUILD_STATE_HOME: '/should/not/be/used', POOL_PROBE: 'kept' } })
-  assert.deepEqual([r.pass, r.fail], [1, 0], r.out)
+await test('pool: every child gets its own AUTOBUILD_STATE_HOME, removed after it, and the caller\'s other variables', async () => {
+  const seen = join(mkdtempSync(join(tmpdir(), 'workflow-pool-homes-')), 'homes')
+  const body = `import { appendFileSync, existsSync } from 'node:fs'
+await test('env', () => {
+  const home = process.env.AUTOBUILD_STATE_HOME
+  if (!home?.includes('workflow-tests-state-') || !existsSync(home)) throw new Error('state home ' + home)
+  if (process.env.POOL_PROBE !== 'kept') throw new Error('probe lost')
+  appendFileSync(${JSON.stringify(seen)}, home + '\\n')
+})`
+  try {
+    const r = await pool({ 'one.test.mjs': body, 'two.test.mjs': body }, { env: { ...process.env, AUTOBUILD_STATE_HOME: '/should/not/be/used', POOL_PROBE: 'kept' } })
+    assert.deepEqual([r.pass, r.fail], [2, 0], r.out)
+    const homes = readFileSync(seen, 'utf8').trim().split('\n')
+    assert.equal(new Set(homes).size, 2, 'two children, two state homes')
+    for (const home of homes) assert.equal(existsSync(home), false, `${home} removed after its child`)
+  } finally { rmSync(dirname(seen), { recursive: true, force: true }) }
 })
 
-await test('jobsFrom: only a positive integer is accepted; unset means the default', () => {
-  assert.equal(jobsFrom(undefined, 8), 8)
-  assert.equal(jobsFrom('', 8), 8)
-  assert.equal(jobsFrom('1', 8), 1)
-  assert.equal(jobsFrom('12', 8), 12)
-  for (const bad of ['0', '-2', '1.5', ' 3', '3 ', 'four', '07', '1e2']) assert.throws(() => jobsFrom(bad, 8), /positive integer/, bad)
+await test('pool: a file still running after the per-file timeout is killed and fails, by name', async () => {
+  const r = await pool({ 'hangs.test.mjs': "await test('passes, then leaves a handle open', () => {}); setInterval(() => {}, 1000)" }, { fileTimeoutMs: 1500 })
+  assert.deepEqual([r.pass, r.fail], [0, 1], r.out)
+  assert.match(r.out, /hangs\.test\.mjs still running after 1500 ms \(PANDASTACK_TEST_FILE_TIMEOUT_MS\); killed/)
+})
+
+await test('positiveSetting: only a positive integer is accepted, named in the error; unset means the default', () => {
+  assert.equal(positiveSetting('X', undefined, 8), 8)
+  assert.equal(positiveSetting('X', '', 8), 8)
+  assert.equal(positiveSetting('X', '1', 8), 1)
+  assert.equal(positiveSetting('X', '12', 8), 12)
+  for (const bad of ['0', '-2', '1.5', ' 3', '3 ', 'four', '07', '1e2']) assert.throws(() => positiveSetting('PANDASTACK_TEST_JOBS', bad, 8), /^Error: PANDASTACK_TEST_JOBS must be a positive integer/, bad)
 })
 
 await test('scheduleOrder: longest recorded time first; size order until every file has a time', () => {

@@ -480,9 +480,10 @@ The test scripts end with an explicit `PASS`/`FAIL` line.
 
 `scripts/test-workflow.sh` runs its test files side by side, one child process per file, as
 many at once as `PANDASTACK_TEST_JOBS` (default: the machine's available parallelism). Each
-child gets a private `AUTOBUILD_STATE_HOME`; output is printed per file in sorted order, and
-counts are taken when each child exits. A few files with sub-second wall-clock budgets run
-first, alone. `PANDASTACK_TEST_JOBS=1` keeps the original serial run in one process, for
+child gets its own `AUTOBUILD_STATE_HOME`; output is printed per file in sorted order, and
+counts are taken when each child exits. A file still running after
+`PANDASTACK_TEST_FILE_TIMEOUT_MS` (default 10 minutes) is killed and fails. A few files with
+sub-second wall-clock budgets run first, alone. `PANDASTACK_TEST_JOBS=1` keeps the original serial run in one process, for
 bisecting an interaction between files.
 
 ### Managed configuration doctor

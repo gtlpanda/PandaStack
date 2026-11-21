@@ -3908,7 +3908,7 @@ Phase 2 acceptance: 97/97.
   its cache into the private state home") and one real file leaked (removed after
   inspection); with it, 20/20 pass and the real gate directory count is unchanged.
 
-## 68. The workflow suite runs its files in parallel (2026-11-21)
+## 67. The workflow suite runs its files in parallel (2026-11-21)
 
 - Why: scripts/test-workflow.mjs imported all 188 test files into one process, one after
   another: 452s of the 525s local `scripts/test.sh` (904s of CI's 981s), and every agent
@@ -3920,8 +3920,11 @@ Phase 2 acceptance: 97/97.
   to fd 3 when the child exits, so un-awaited async tests are counted (9 in render-*), and test
   output can never be mistaken for counts. A child that reports no counts, or exits non-zero
   after passing tests, adds a failure. Output is printed per file in sorted order. Every child
-  gets a private AUTOBUILD_STATE_HOME. PANDASTACK_TEST_JOBS=1 keeps the original in-process
-  serial run. Host amendment to the frozen scripts/test-workflow.mjs; the two new modules are
+  gets its own AUTOBUILD_STATE_HOME, removed after it. A file still running after
+  PANDASTACK_TEST_FILE_TIMEOUT_MS (default 10 min; the slowest file takes 54s) is killed and
+  fails by name: the old serial run ended with process.exit, which hid a test that left a
+  handle open; a child would otherwise wait on it forever. PANDASTACK_TEST_JOBS=1 keeps the
+  original in-process serial run. Host amendment to the frozen scripts/test-workflow.mjs; the two new modules are
   frozen with it. The `TEST-WORKFLOW:` line keeps its format (nothing parses it).
 - Serial lane: decision-managed and decision-routing each failed once in five 32-job runs (a 300
   ms expiry, a 100 ms wait). Four files with sub-second wall-clock assertions now run first,
@@ -3933,7 +3936,11 @@ Phase 2 acceptance: 97/97.
 - Under `/verify` the suite counts 3 fewer tests (2081) than run directly (2084). That is
   pre-existing: verify-payload-umask (and siblings) print a "skip" line outside test() when
   VERIFY_CAPTURE_SCOPE_DIR is set; the serial runner shows the same -3 (2073 vs 2070).
-- Tests: tests/workflow-pool.test.mjs (11 cases): counting, un-awaited tests, import failure,
-  a SIGKILLed child, a non-zero exit after passes, output order, private state home, the
-  alone lane, jobs parsing, scheduling, malformed counts. Mutations caught: counts written at
-  import instead of exit; a non-zero exit ignored; the alone lane ignored.
+- Tests: tests/workflow-pool.test.mjs (12 cases): counting, un-awaited tests, import failure,
+  a SIGKILLed child, a non-zero exit after passes, output order, one state home per child,
+  the per-file timeout, the alone lane, setting parsing, scheduling, malformed counts.
+  Mutations caught: counts written at import instead of exit; a non-zero exit ignored; the
+  alone lane ignored; one state home shared by all children.
+- The branch hunt found no bug, but its impact map caught the first version sharing one state
+  home across all children while the docs said "private", and its errors lens named the
+  open-handle hang. Both were fixed before the PR.

@@ -3,7 +3,8 @@
 // graphs/<name>/tests/*.test.mjs. Ends with TEST-WORKFLOW: N passed, M failed[, K skipped].
 //
 // Files run side by side, one child process each (scripts/workflow-pool.mjs), as many at
-// once as PANDASTACK_TEST_JOBS (default: the machine's available parallelism).
+// once as PANDASTACK_TEST_JOBS (default: the machine's available parallelism). A file still
+// running after PANDASTACK_TEST_FILE_TIMEOUT_MS (default 10 minutes) is killed and fails.
 // PANDASTACK_TEST_JOBS=1 keeps the original serial run: every file imported, in order,
 // into this one process. Use it to bisect an interaction between files.
 import { readdirSync, existsSync, realpathSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
@@ -11,7 +12,7 @@ import { availableParallelism, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { REPO, test, load, summary, entryDirs } from './workflow-harness.mjs'
-import { jobsFrom, runPool } from './workflow-pool.mjs'
+import { DEFAULT_FILE_TIMEOUT_MS, positiveSetting, runPool } from './workflow-pool.mjs'
 
 function testFiles() {
   const graphs = existsSync(join(REPO, 'graphs')) ? readdirSync(join(REPO, 'graphs')).map(g => join('graphs', g)) : []
@@ -50,9 +51,11 @@ function saveTimings(timings) {
 // Children inherit this through the environment.
 process.env.TMPDIR = realpathSync(tmpdir())
 
-let jobs
-try { jobs = jobsFrom(process.env.PANDASTACK_TEST_JOBS, availableParallelism()) }
-catch (e) { console.log(`TEST-WORKFLOW: 0 passed, 1 failed (${e.message})`); process.exit(1) }
+let jobs, fileTimeoutMs
+try {
+  jobs = positiveSetting('PANDASTACK_TEST_JOBS', process.env.PANDASTACK_TEST_JOBS, availableParallelism())
+  fileTimeoutMs = positiveSetting('PANDASTACK_TEST_FILE_TIMEOUT_MS', process.env.PANDASTACK_TEST_FILE_TIMEOUT_MS, DEFAULT_FILE_TIMEOUT_MS)
+} catch (e) { console.log(`TEST-WORKFLOW: 0 passed, 1 failed (${e.message})`); process.exit(1) }
 
 const files = testFiles()
 await test('at least one workflow test file exists', () => {
@@ -67,7 +70,7 @@ if (jobs === 1) {
   }
 } else {
   console.log(`== ${files.length} test files, ${jobs} at a time`)
-  pooled = await runPool(files, { jobs, cwd: REPO, timings: readTimings(), labelOf: relative, alone: ALONE })
+  pooled = await runPool(files, { jobs, cwd: REPO, timings: readTimings(), labelOf: relative, alone: ALONE, fileTimeoutMs })
   saveTimings(pooled.timings)
 }
 
