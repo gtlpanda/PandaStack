@@ -237,8 +237,11 @@ let group = ''; try { const s = readFileSync('/proc/self/stat', 'utf8'); group =
 writeFileSync(${JSON.stringify(join(dir, 'group'))}, group)
 writeFileSync(${JSON.stringify(join(dir, 'grand.pid'))}, String(process.pid))
 setInterval(() => {}, 1000)`
+  // The file passes its test only once the whole tree is up, so the timeout cannot win the race.
   return `import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 spawn(process.execPath, ['-e', ${JSON.stringify(grand)}], { stdio: 'ignore' })
+while (!existsSync(${JSON.stringify(join(dir, 'great.pid'))}) || !existsSync(${JSON.stringify(join(dir, 'grand.pid'))})) await new Promise(r => setTimeout(r, 20))
 await test('starts a process tree, then hangs', () => {})
 setInterval(() => {}, 1000)`
 }
@@ -247,9 +250,10 @@ await test('pool: a timeout kills every process below the file, and children sta
   const dir = mkdtempSync(join(tmpdir(), 'workflow-pool-tree-'))
   let grand = null, great = null
   try {
-    const r = await pool({ 'spawns.test.mjs': spawnsTreeAndHangs(dir) }, { fileTimeoutMs: 2500 })
-    assert.equal(r.fail, 1, r.out)
-    assert.match(r.out, /spawns\.test\.mjs still running after 2500 ms/)
+    const r = await pool({ 'spawns.test.mjs': spawnsTreeAndHangs(dir) }, { fileTimeoutMs: 6000 })
+    assert.deepEqual([r.pass, r.fail], [0, 1], r.out)
+    assert.match(r.out, /ok {3}starts a process tree, then hangs/, 'the whole tree was up before the timeout')
+    assert.match(r.out, /spawns\.test\.mjs still running after 6000 ms/)
     grand = await waitForFile(join(dir, 'grand.pid'))
     great = await waitForFile(join(dir, 'great.pid'))
     assert.equal(await settles(grand), true, `grandchild ${grand} outlived its timed-out file`)
@@ -265,6 +269,7 @@ await test('pool: a timeout kills every process below the file, and children sta
 await test('pool: a child that exits in time is not timed out, even while a grandchild keeps its output open', async () => {
   // After the child exits it has been reaped, so its pid may already belong to another process:
   // the timeout must never fire for it (no kill by a stale pid) and the file is not a timeout.
+  // 3000 ms: inside the 5 s pipe grace (so an armed timer would fire), with room for a slow start.
   const dir = mkdtempSync(join(tmpdir(), 'workflow-pool-exited-'))
   const pidFile = join(dir, 'holder.pid')
   const body = `import { spawn } from 'node:child_process'
@@ -275,7 +280,7 @@ holder.unref()
 await test('passes and exits at once', () => {})`
   let holder = null
   try {
-    const r = await pool({ 'exits.test.mjs': body }, { fileTimeoutMs: 1000 })
+    const r = await pool({ 'exits.test.mjs': body }, { fileTimeoutMs: 3000 })
     holder = await waitForFile(pidFile)
     assert.deepEqual([r.pass, r.fail], [1, 0], r.out)
     assert.doesNotMatch(r.out, /still running/)
