@@ -176,6 +176,8 @@ export function gateHasPaths(config) {
 
 // Scheduling fields a gate entry, a runner, `browser` or `ciParity` may carry.
 const schedule = (entry) => ({ resources: entry?.resources ?? null, memoryMb: entry?.memoryMb ?? 0, paths: entry?.paths ?? null });
+// Shard keys are read from gate entries only, the one place config.mjs validates them.
+const shardKeys = (entry) => ({ shardable: entry?.shardable === true, shardWeight: entry?.shardWeight ?? 1 });
 
 function commandJob(config, { id, name, command, entry }) {
   return { id, name, spec: shSpec(config, command), keyEnv: config.env, ...schedule(entry) };
@@ -205,7 +207,7 @@ function fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, c
     return uniqueIds(jobs);
   }
   if (current && current.testKind !== browserKind) jobs.push(...featureJobs([current], `current feature ${current.id}`).map((job) => ({ ...job, pinned: true })));
-  for (const entry of config.gate ?? []) jobs.push(commandJob(config, { id: `gate: ${entry.name}`, name: entry.name, command: entry.command, entry }));
+  for (const entry of config.gate ?? []) jobs.push({ ...commandJob(config, { id: `gate: ${entry.name}`, name: entry.name, command: entry.command, entry }), ...shardKeys(entry) });
 
   // CI's own test steps, exactly as CI runs them (ci-parity.mjs). The Stop hook skips them: its
   // time budget covers the gate commands, not a CI suite plus a lock wait. The loop's final gate,
@@ -237,6 +239,61 @@ function fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, c
     jobs.push(...featureJobs(specs, "browser", { withRegressionBrowser: true }).map((job) => (own && job.id === `browser: ${own}` ? { ...job, pinned: true } : job)));
   }
   return uniqueIds(jobs);
+}
+
+// ---------- shards ----------
+// `autobuild check --shard i/n` runs one of n parts of the full gate, so CI can spread the gate
+// over n jobs whose union is the whole gate. Every shard must compute the same split, so it is
+// computed from the gate's job list alone (the config, the feature list and this check's options),
+// never from recorded timings, which differ between machines. Every shard must therefore run on
+// the same commit with the same options:
+//   - a settled job (the CI-parity configuration check) and a `shardable` step run in every
+//     shard; a shardable step gets AUTOBUILD_SHARD=i/n and runs only its own part;
+//   - every other step runs in exactly one shard: heaviest `shardWeight` first, each to the
+//     least loaded shard (ties: config order, then the lowest shard).
+// A step left to another shard is reported as skipped with that shard named, never as passed.
+
+/** "i/n" with 1 <= i <= n, no leading zeros, or undefined for no sharding. */
+export function parseShard(text) {
+  if (text === undefined) return null;
+  const match = /^([1-9][0-9]*)\/([1-9][0-9]*)$/.exec(String(text));
+  if (!match || Number(match[1]) > Number(match[2])) throw new Error(`--shard must be i/n with 1 <= i <= n, got ${JSON.stringify(text)}`);
+  return { index: Number(match[1]), count: Number(match[2]) };
+}
+
+/** Map of job id to the shard (1..count) that runs it, or 0 for every shard. */
+export function shardPlan(jobs, count) {
+  const plan = new Map();
+  const loads = new Array(count).fill(0);
+  const whole = [];
+  jobs.forEach((job, order) => {
+    if (job.result || job.shardable) plan.set(job.id, 0);
+    else whole.push({ job, order, weight: job.shardWeight ?? 1 });
+  });
+  whole.sort((a, b) => b.weight - a.weight || a.order - b.order);
+  for (const { job, weight } of whole) {
+    const target = loads.indexOf(Math.min(...loads));
+    loads[target] += weight;
+    plan.set(job.id, target + 1);
+  }
+  return plan;
+}
+
+// This shard's jobs; the rest are recorded in `skipped`. Shardable steps learn their part.
+function shardJobs(jobs, shard, skipped) {
+  if (!shard) return jobs;
+  const plan = shardPlan(jobs, shard.count);
+  const label = `${shard.index}/${shard.count}`;
+  const mine = [];
+  for (const job of jobs) {
+    const owner = plan.get(job.id);
+    if (owner !== 0 && owner !== shard.index) { skipped.push({ name: job.name, reason: `runs in shard ${owner}/${shard.count}` }); continue; }
+    if (job.shardable && job.spec) {
+      // The cache key carries the shard too, so one shard's PASS is never reused for another part.
+      mine.push({ ...job, spec: { ...job.spec, env: { ...job.spec.env, AUTOBUILD_SHARD: label } }, keyEnv: { ...(job.keyEnv ?? {}), AUTOBUILD_SHARD: label } });
+    } else mine.push(job);
+  }
+  return mine;
 }
 
 /** Execution order: the feature's own test first; then as configured, or failed-last-time and fastest first. */
@@ -317,8 +374,9 @@ function poolResults(config, jobs, dir, { failFast, keptLogs }) {
  * the prelude and the feature's own test (the Stop hook, when the full gate runs host-side).
  * The summary adds: steps[].cached / cachedFrom, skipped [{name, reason}], notRun [names], wallSeconds.
  */
-export function runGate(config, { featureId = null, baseSha = null, failFast = false, skipBrowser = false, phase = "full", ciParity = true, scope = "full", focused = false, caller = "check" } = {}) {
+export function runGate(config, { featureId = null, baseSha = null, failFast = false, skipBrowser = false, phase = "full", ciParity = true, scope = "full", focused = false, caller = "check", shard = null } = {}) {
   if (!["full", "commit"].includes(phase)) throw new Error("Unknown gate phase");
+  if (shard && (phase !== "full" || focused)) throw new Error("--shard applies only to the full gate");
   if (!["full", "affected"].includes(scope)) throw new Error("Unknown gate scope");
   if (phase === "commit" && config.deliveryMode !== "pr-first") throw new Error("Commit gate requires pr-first deliveryMode");
   const gateStarted = Date.now();
@@ -344,6 +402,7 @@ export function runGate(config, { featureId = null, baseSha = null, failFast = f
       feature: featureId,
       phase,
       scope,
+      shard: shard ? `${shard.index}/${shard.count}` : null,
       deferred,
       warnings,
       skipped,
@@ -351,7 +410,7 @@ export function runGate(config, { featureId = null, baseSha = null, failFast = f
       wallSeconds: Math.round((Date.now() - gateStarted) / 1000),
       steps: steps.map((step) => ({ name: step.name, ok: step.ok, seconds: Math.round((step.ms ?? 0) / 1000), tail: step.ok ? "" : failureExcerpt(step.output ?? ""), ...(step.cachedFrom ? { cached: true, cachedFrom: step.cachedFrom } : {}) })),
     };
-    appendTiming(config, { type: "gate", caller, feature: featureId, phase, scope, focused, ok: result.ok, wallSeconds: result.wallSeconds, steps: result.steps.map(({ name, ok, seconds, cached }) => ({ name, ok, seconds, ...(cached ? { cached: true } : {}) })), skipped: skipped.map((entry) => entry.name), notRun });
+    appendTiming(config, { type: "gate", caller, feature: featureId, phase, scope, focused, ...(shard ? { shard: result.shard } : {}), ok: result.ok, wallSeconds: result.wallSeconds, steps: result.steps.map(({ name, ok, seconds, cached }) => ({ name, ok, seconds, ...(cached ? { cached: true } : {}) })), skipped: skipped.map((entry) => entry.name), skipReasons: Object.fromEntries(skipped.map((entry) => [entry.name, entry.reason])), notRun });
     return result;
   };
 
@@ -376,7 +435,7 @@ export function runGate(config, { featureId = null, baseSha = null, failFast = f
     return summary();
   }
 
-  const all = fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, ciParity, focused, warnings, deferred });
+  const all = shardJobs(fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, ciParity, focused, warnings, deferred }), shard, skipped);
 
   // Path selection: only with a base to diff against; when the change cannot be listed, everything runs.
   const changed = scope === "affected" && baseSha ? changedSince(config, baseSha) : null;

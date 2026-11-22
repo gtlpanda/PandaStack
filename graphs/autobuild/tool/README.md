@@ -338,6 +338,25 @@ Per step, on a `gate` entry, a `runners.<kind>` entry, `browser` or `ciParity` (
 | `memoryMb` | Free memory the step needs, on top of `gateMinFreeMb`, before it starts. |
 | `paths` | The files that can affect the step: globs (`server/**`, `shared/*.js`) or plain file and directory names (`server` covers everything under it). In a per-feature gate, a step whose `paths` match no file changed since the session's base is skipped (`skipped (no path match)`); a moved file counts at both paths. A step without `paths` always runs, and so does a step with a glob that matches no file in the repository (with a warning: it is a typo). |
 
+On a `gate` entry only:
+
+| Key | Effect |
+|---|---|
+| `shardable` | `true`: with `--shard i/n` the step runs in every shard with `AUTOBUILD_SHARD=i/n` in its environment and must run only its own part (for example a test runner that splits its files). |
+| `shardWeight` | Rough seconds the step takes (whole number, default 1). With `--shard`, whole steps are spread heaviest first, each to the least loaded shard. Not allowed on a `shardable` step. |
+
+**Shards.** `autobuild check --phase full --shard i/n` runs one of `n` parts of the full gate, so CI
+can run the gate as `n` parallel jobs. The split is computed from the gate's job list alone (the
+config, the feature list and the check's options, never recorded timings), so shards that run on the
+same commit with the same options agree on it on any machine: each step runs in exactly one shard,
+except a `shardable` step and the
+CI-parity configuration check, which run in every shard. A step that belongs to another shard is
+reported as `SKIP <name>: runs in shard k/n`, never as passed, and the gate cache keeps one shard's
+PASS of a shardable step apart from another's. `autobuild status` shows such a step as
+`SKIP <name> (runs in shard k/n)`. The union of the `n` shards is the whole gate only
+when every shard runs on the same commit and config and every shard passes; CI should require all
+of them (for example one aggregating required job).
+
 How they fit together:
 
 - **Per-feature gate.** The feature's own test, every step whose `paths` the change touches and
