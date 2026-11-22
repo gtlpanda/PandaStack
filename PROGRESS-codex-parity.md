@@ -1652,3 +1652,110 @@ Observed limits and untested hypotheses:
   tested.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-05b — Held-call reconcile CLI and shared failed envelope
+
+Implements only spec/contracts/codex-parity-cp-05b.md. There are two new files and
+no edits to existing code. The catalog, workflows, role files, SKILL.md, runtime,
+registry, provider, selection, store and host are all untouched. The fake codex in
+the acceptance crash cases is wiring proof, not runtime certification.
+
+- `core/skills/native-runtime/completion.mjs`: `failedCompletion({selection, code,
+  invocationId})`. It checks its options with boundary `fields` + `exact`, its strings
+  with `nonempty`, and the code with `^[A-Z][A-Z0-9_]{0,63}$`. It returns a new
+  ordinary `{outcome: 'failed', code, usage: null, receipt: {provider, model, effort,
+  invocationId}}`. Bad input throws boundary `fail('INVALID_RUNTIME_INPUT')`.
+- `core/skills/native-runtime/graph-reconcile.mjs`: the CLI, with `list`, `fail` and
+  `unlock` over CP-05a's `checkpointDirOf`, `inspectCheckpoints`, `failHeldCheckpoint`
+  and `breakCheckpointLock`. It exports nothing and runs only when
+  `realpathSync(process.argv[1])` is this file.
+  - argv is parsed purely, before any filesystem access. The verb and value rules are
+    Maps, so an inherited name is never a verb or flag.
+  - `fail` runs the steps in the contract's order: confirm, read-only inspect preview,
+    `.lock` → OWNER_BUSY, then the row checks, `failedCompletion`, and finally the
+    single write through `failHeldCheckpoint` under the store's lock.
+  - Error codes go through a Map to exits 1–4. Any value not in the table prints
+    `IO_ERROR` and exits 3.
+  - The CLI only sets `process.exitCode`. It never calls `process.exit` and installs
+    no signal handler.
+  - Its import closure is checkpoint-store, completion, boundary and schema, plus
+    `node:fs`, `node:fs/promises`, `node:path`, `node:url`, `node:crypto` and
+    `node:util`.
+
+Decisions (no human present):
+- If a stored selection that is not null is refused by `failedCompletion`, the result
+  is `SELECTION_MISSING` (exit 2) and the row is never written. This covers a blank
+  provider, model or effort, which CP-05a's `selectionOf` passes through. The
+  contract names only `null`. Its stated reason applies here too: a selection like
+  this cannot get a conformant failed completion. A row-data problem is also not a
+  usage error.
+- The store's `INVALID_RUNTIME_INPUT` is printed as `INVALID_RECONCILE_INPUT` (exit
+  1). The exit-1 row of the table lists only that code. The store code cannot be
+  reached after the argv checks.
+- The CP-02e run-dir path rule (absolute, at most 4096 UTF-8 bytes, no U+0000–U+001F
+  or U+007F–U+009F) is restated in the CLI rather than imported. graph-host.mjs is
+  banned from the import closure, the store's own path check rejects only NUL, and
+  the contract allows no store or boundary edit. The entry-point check repeats
+  graph-host's for the same reason.
+
+New implementation test `tests/native-graph-reconcile.test.mjs` (workflow harness, 10
+cases), covering edges the frozen test leaves open:
+- flags given in any order;
+- `--run-dir` at exactly 4096 bytes is accepted by argv. The run then fails with exit 3
+  `IO_ERROR`, because `<run-dir>/checkpoints` is over the kernel PATH_MAX. The case
+  tests that boundary: a run dir of 4083 bytes (4095 with `/checkpoints`) is
+  `NOT_FOUND`, and one of 4084 bytes (4096) is `IO_ERROR`.
+- 4097 bytes, a multibyte path over the bound, DEL, U+0085, U+009F, a tab, or an empty
+  value is usage; U+00A0 is not;
+- a confirm mismatch on a missing run directory is `CONFIRM_MISMATCH`, which shows the
+  confirm check runs before any filesystem access;
+- a symlinked `.lock`: `list` shows `{pid: null, token: null}`, `fail` is OWNER_BUSY,
+  `unlock` is OWNER_UNKNOWN, and nothing changes;
+- a directory row and a mode-000 row are exit 3 `IO_ERROR`;
+- a blank stored model or effort is `SELECTION_MISSING`, and the row stays
+  byte-identical with no lock left. A mutation that dropped this mapping was caught:
+  it exited 1 `INVALID_RECONCILE_INPUT`.
+- stdin is never read;
+- a static check that neither module calls `process.exit`, adds a process listener, or
+  names a signal;
+- a getter on the selection is refused without being run, and the output is not frozen
+  or shared.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-05b-graph-reconcile.test.mjs
+# pre-change: tests 17, pass 0, fail 17 (the output tail shown was ERR_MODULE_NOT_FOUND for completion.mjs; not every case's cause was read)
+# post-change: tests 17, pass 17, fail 0
+node --test acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs acceptance/codex-parity/cp-02d-checkpoint-store.test.mjs acceptance/codex-parity/cp-02e-graph-host.test.mjs acceptance/codex-parity/cp-05a-checkpoint-operator.test.mjs
+# tests 89, pass 89, fail 0, skipped 0
+node logs/evidence/cp-05b/run-focused.mjs tests/native-graph-reconcile.test.mjs tests/native-checkpoint-operator.test.mjs
+# FOCUSED: 22 passed, 0 failed, 0 skipped
+node logs/evidence/cp-05b/run-focused.mjs tests/native-graph-reconcile.test.mjs   # after adding the PATH_MAX boundary pair
+# FOCUSED: 10 passed, 0 failed, 0 skipped
+bash scripts/validate.sh                    # VALIDATE: PASS
+node scripts/check-refs.mjs                 # check-refs: 271 references, all resolve
+git diff --check                            # no output (new files grep-checked: no trailing whitespace)
+bash scripts/check-secrets.sh               # check-secrets: clean
+bash scripts/check-secrets.sh --worktree    # check-secrets: clean
+bash scripts/check-secrets.sh core/skills/native-runtime/completion.mjs core/skills/native-runtime/graph-reconcile.mjs tests/native-graph-reconcile.test.mjs   # check-secrets: clean
+autobuild mark-passed CP-05b                # === node (1 file): PASS
+```
+
+These outputs are from the session transcript, and most were read through `grep` or
+`tail`, so they are summary lines, not observed exit codes. Only the focused runner
+script is under logs/evidence/cp-05b/; no output logs were saved.
+
+Observed limits and untested hypotheses:
+- The contract lists three rules enforced by review, not by a case:
+  - No signal handler and no `process.exit`. The new static check covers both.
+  - An unexpected thrown value maps to exit 3 `IO_ERROR`. This is review only: no
+    case throws a value outside the table.
+  - The write goes through `failHeldCheckpoint`, and so happens under the lock. This
+    is review only.
+- A host that starts between the read-only preview and the write is refused by
+  CP-05a's lock and row re-check. That is reasoned from the code, not tested.
+- macOS was not run, and neither was uid 0, where the mode-000 case skips.
+- The fake codex crash cases prove wiring only. No real codex was run.
+
+Full regressions, review and the branch hunt remain pending for the PR.

@@ -323,7 +323,7 @@
       ],
       "test": "acceptance/codex-parity/cp-05b-graph-reconcile.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-04b",
