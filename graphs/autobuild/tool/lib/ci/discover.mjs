@@ -8,6 +8,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { CONFIG_FILE, DEFAULTS, loadConfig } from "../config.mjs";
 import { ciFiles, ciProviderOf, GITHUB_PROVIDER, readWorkflow, workflowFiles } from "../ci-parity.mjs";
+import { GITLAB_PROVIDER, readGitlabPipeline } from "./gitlab.mjs";
+import { INSTALL_COMMAND, TEST_COMMAND, wholeNumberOf } from "./patterns.mjs";
 import { CiError, readState, STATE_SCHEMA_VERSION, writeState } from "./state.mjs";
 
 const sha256hex = (value) => createHash("sha256").update(value).digest("hex");
@@ -212,8 +214,8 @@ const STEP_KINDS = [
   ["setup", (s) => s.uses?.startsWith("actions/setup-")],
   ["artifact-upload", (s) => s.uses?.startsWith("actions/upload-artifact")],
   ["artifact-download", (s) => s.uses?.startsWith("actions/download-artifact")],
-  ["install", (s) => s.run !== null && /\b(npm ci|npm install|pnpm install|yarn install|bun install|pip install|poetry install|bundle install|go mod download)\b/.test(s.run)],
-  ["test", (s) => s.run !== null && /\b(npm|pnpm|yarn|bun)( run)? test\b|\bnode --test\b|\b(vitest|jest|mocha|pytest|tox|rspec)\b|\bgo test\b|\bcargo test\b|\bmvn\b.*\b(test|verify)\b|\bgradlew?\b.*\btest\b|(^|[\s\/])test[\w.-]*\.sh\b|\bcli\.mjs check\b|\bautobuild check\b/.test(s.run)],
+  ["install", (s) => s.run !== null && INSTALL_COMMAND.test(s.run)],
+  ["test", (s) => s.run !== null && TEST_COMMAND.test(s.run)],
 ];
 
 function stepModel(raw, index) {
@@ -281,8 +283,6 @@ function matrixSizeOf(strategy, where, unknowns) {
   return size;
 }
 
-const timeoutOf = (value) => (typeof value === "string" && /^\d+$/.test(value) ? Number(value) : null);
-
 function jobModel(file, id, raw, unknowns) {
   const job = plainObject(raw) ? raw : {};
   return {
@@ -291,7 +291,7 @@ function jobModel(file, id, raw, unknowns) {
     runsOn: runsOnOf(job["runs-on"]),
     needs: needsOf(job.needs),
     matrixSize: matrixSizeOf(job.strategy, `${file}#${id}`, unknowns),
-    timeoutMinutes: timeoutOf(job["timeout-minutes"]),
+    timeoutMinutes: wholeNumberOf(job["timeout-minutes"]),
     steps: (Array.isArray(job.steps) ? job.steps : []).map(stepModel),
   };
 }
@@ -327,11 +327,15 @@ function readCi(root) {
       firstError ??= message.startsWith(file) ? message : `${file}: ${message}`;
     }
   }
+  const pipelines = byProvider.has(GITLAB_PROVIDER) ? [readGitlabPipeline(root)] : [];
+  const gitlabError = pipelines.find((pipeline) => "error" in pipeline)?.error ?? null;
+  const parseStatus = (error) => (error === null ? { status: "parsed" } : { status: "unparsed", error });
   const providers = [...byProvider].map(([id, files]) => {
-    if (id !== GITHUB_PROVIDER) return { id, files: files.sort(), status: "detected" };
-    return firstError === null ? { id, files: files.sort(), status: "parsed" } : { id, files: files.sort(), status: "unparsed", error: firstError };
+    if (id === GITHUB_PROVIDER) return { id, files: files.sort(), ...parseStatus(firstError) };
+    if (id === GITLAB_PROVIDER) return { id, files: files.sort(), ...parseStatus(gitlabError) };
+    return { id, files: files.sort(), status: "detected" };
   }).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  return { ci: { providers, workflows, pipelines: [] }, unknowns };
+  return { ci: { providers, workflows, pipelines }, unknowns };
 }
 
 // ---------- the gate ----------

@@ -54,3 +54,50 @@ Focused validation (all exit 0):
 - `autobuild mark-passed CO-01`: PASS.
 
 Still pending for the PR: the full regressions, review and the bug hunt.
+
+## CO-02 — GitLab CI reader
+
+Built (Claude backend, iteration 2):
+- `graphs/autobuild/tool/lib/ci/gitlab.mjs`: `readGitlabPipeline(root)` (synchronous) and
+  `GITLAB_PROVIDER`. Returns `{ file, stages, jobs }` or `{ file, error }`. Parsing reuses
+  `parseWorkflowYaml`. The file name comes from ci-parity's `CI_FILE_PROVIDERS`, not restated.
+- `lib/ci/discover.mjs`: `readCi` fills `ci.pipelines` when a GitLab file is present. The
+  `gitlab` provider is now `parsed`, or `unparsed` with the pipeline's error. Other non-GitHub
+  providers stay `detected`.
+- `lib/ci/patterns.mjs` (new, not named in the feature description): `TEST_COMMAND`,
+  `INSTALL_COMMAND` and `wholeNumberOf`. They moved out of `discover.mjs` so the GitHub step
+  kinds, CO-01's `timeoutMinutes` and the GitLab job `test`/`parallel` share one definition.
+  Behavior is unchanged: the CO-01 acceptance and implementation tests stay green.
+
+Decisions (unattended, recorded here):
+- `image: { name: ... }` (GitLab's object form) counts as the job's image string, for both the
+  job and the top level. An object without a string `name` falls through to the top level.
+  This goes beyond the contract's literal "image string". Without it, a job using the object
+  form would wrongly take the top-level image.
+- Top-level `cache` is reserved, and jobs do not inherit it. Only the job's own `cache` key or
+  `default.cache` sets `cache: true`, as the contract lists. The key's presence counts
+  whatever its value.
+- `{ file, error }` errors are `.gitlab-ci.yml: <message>`, matching the GitHub provider's
+  `<file>: <message>` form. An unreadable file (for example a directory) or a top level that
+  parses to a non-mapping (a list) is also `{ file, error }`, never thrown. An empty file
+  parses to the default stages and no jobs.
+- Each of these is `null`: a non-list `needs` (for example a bare string), an empty matrix
+  list, a matrix with non-object entries, and a `parallel` that is neither a digit string nor
+  `{ matrix }`. `needs` entries that are neither a string nor an object with a string `job`
+  are dropped. Non-string `script` and `stages` entries are dropped, and a non-list `stages`
+  gives the defaults.
+- `parallel: "0"` becomes `0`. The contract's literal rule is "a whole number N becomes the
+  integer N".
+- A profile stored before this change keeps `pipelines: []` and `gitlab(detected)` until its
+  inputs digest changes or `--refresh` is passed. This is the contract's reuse rule, unchanged.
+
+Focused validation (all exit 0; logs under `logs/evidence/`, gitignored):
+- `node --test acceptance/ci-optimizer/co-02-gitlab.test.mjs`: 12/12 pass.
+- `node --test graphs/autobuild/tool/test/ci-gitlab.test.mjs graphs/autobuild/tool/test/ci-discover.test.mjs acceptance/ci-optimizer/co-01-discover.test.mjs graphs/autobuild/tool/test/ci-parity.test.mjs`:
+  91/91 pass. `ci-gitlab.test.mjs` holds 17 new implementation tests. The other three files
+  are tripwires for the `discover.mjs` refactor and the ci-parity reuse.
+- `bash scripts/check-secrets.sh` (tracked) and the same script run on the three new files:
+  clean.
+- `autobuild mark-passed CO-02`: PASS.
+
+Still pending for the PR: the full regressions, review and the bug hunt.

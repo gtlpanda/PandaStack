@@ -29,7 +29,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-02-gitlab.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-03",
