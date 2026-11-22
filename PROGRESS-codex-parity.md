@@ -1759,3 +1759,93 @@ Observed limits and untested hypotheses:
 - The fake codex crash cases prove wiring only. No real codex was run.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-04b — Blueprint decision rules
+
+Implemented spec/contracts/codex-parity-cp-04b.md only.
+
+- New `graphs/blueprint/skills/blueprint/blueprint-decisions.mjs`. It is synchronous.
+  Its imports are `lstatSync` and `unlinkSync` from `node:fs`, `join` from `node:path`,
+  and CP-04a's `FILES`, `readRequest`, `readState`, `readRun`, `writeState`,
+  `validateState`, `redactSecrets` and `freshness`. It has no dynamic import and no
+  write call of its own. It exports:
+  - the frozen `BLUEPRINT_DECISION_CODES` (twelve codes);
+  - `applyInterviewAnswers(dir, { answers, have?, overrides? })` (SKILL.md 3.4-3.5);
+  - `applyGateAnswers(dir, { answers })` (4.2 and 5.2 `needs-human`, `G<k>` ids);
+  - `applyApprovalEdit(dir, { edit })` (6.4).
+- Each function checks in the contract's order. Caller input comes first, then the
+  CP-04a readers, then status, freshness, shape, id checks (duplicate, unknown,
+  missing) and preflight. The state is saved with `writeState`, then run3.json,
+  run2.json and meta.json are unlinked. Refusals are `Blueprint decisions: <CODE>.`
+  with only `code`, `file` (a `FILES` value) or `ids` (ids that match the id shape).
+  CP-04a errors pass through unchanged.
+- New `tests/blueprint-decisions.test.mjs` (8 cases, harness `test()`):
+  - errors have no other own fields, no `cause` and no case path in the stack;
+  - an explicit `undefined` for `have` or `overrides` takes the default, and a
+    null-prototype options object is accepted;
+  - a sparse `answers`, `overrides` or `have` array is `INVALID_INPUT` before any read,
+    with the directory unchanged;
+  - the next `D<n>` after `D999999999` and `D1000000000` is `D1000000001`;
+  - overriding an assumption whose text is not a string gives `question: ""`;
+  - an exact option label that holds a token is still redacted on disk;
+  - `G0` and `G01` are unknown ids, and a duplicate is reported before an unknown id;
+  - a challenged `D4` assumption becomes a decision, and the next id is `D5`;
+  - a design gate, then a backlog gate, then a third gate gives
+    `GATE_ROUNDS_EXHAUSTED`, and an approval edit after them leaves `gateRounds` at 2.
+- SKILL.md, blueprint-design.js, write-docs.mjs, blueprint-state.mjs, the catalog and
+  every graph are unchanged.
+
+Decisions (no human present):
+- `have` and `overrides` treat an explicit `undefined` like an absent key, so both
+  default to `[]`. CP-04a's `initState` reads options the same way. `answers: undefined`
+  counts as missing, so it is `INVALID_INPUT`.
+- A gate question's `about` is checked against the state as it was read, then looked
+  up again when that answer is applied, decision first. This makes the contract's
+  "an assumption challenged twice is a decision by the second question" hold.
+- `nextDecisionId` skips an id that is already taken, as the contract requires. The
+  contract's `^D([0-9]{1,9})$` counts at most nine digits, so `D999999999` next to
+  `D1000000000` gives `D1000000001`. A case covers this.
+- Answer lists and `have` are checked with `Array.from(...).every`. `every` skips the
+  holes of a sparse array (observed: `[, x].every(v => v !== undefined)` is `true`), so a
+  sparse list would otherwise get past the input check. It would then fail later with a
+  raw `TypeError`, or after files were read.
+- `GATE_ROUNDS_EXHAUSTED` is checked as `gateRounds >= 2`. `validateState` already
+  limits the value to 0, 1 or 2.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-04b-blueprint-decisions.test.mjs
+# 31 tests, 31 pass, 0 fail (first run after writing the module)
+node logs/evidence/cp-05b/run-focused.mjs tests/blueprint-decisions.test.mjs tests/blueprint-state.test.mjs
+# FOCUSED: 20 passed, 0 failed, 0 skipped (after the sparse-array and D-skip cases)
+node --test --test-reporter=dot acceptance/codex-parity/cp-04a-blueprint-state.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs acceptance/codex-parity/cp-03b-reference-closure.test.mjs acceptance/codex-parity/cp-01c-install-plan.test.mjs acceptance/codex-parity/cp-04b-blueprint-decisions.test.mjs
+# exit 0; rerun with --test-reporter=tap into logs/evidence/cp-04b-related-acceptance.tap:
+# tests 151, pass 151, fail 0, skipped 0
+bash scripts/validate.sh                     # VALIDATE: PASS
+node scripts/check-refs.mjs                  # check-refs: 271 references, all resolve
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+bash scripts/check-secrets.sh graphs/blueprint/skills/blueprint/blueprint-decisions.mjs tests/blueprint-decisions.test.mjs   # check-secrets: clean
+autobuild mark-passed CP-04b                 # === node (1 file): PASS
+```
+
+`mark-passed` ran before the sparse-array and D-skip edits. The TAP batch above,
+which includes the 31 cp-04b cases, was rerun after them: 151 pass, 0 fail. The two
+new-file secret scans were rerun after them too, and came back clean.
+
+These outputs are from the session transcript. Only the TAP file named above was saved
+under logs/evidence/ (gitignored).
+
+Observed limits and untested hypotheses:
+- The acceptance test was not run against the tree before the change. The module did
+  not exist, so every case would fail at import, but that was not observed.
+- Neither test file was mutation-checked against a broken module.
+- No case covers an `lstat` failure other than ENOENT or ENOTDIR (`IO_ERROR`). It
+  needs a permission fault that the CP-04a reader would hit first.
+- The gate and edit paths have no `IO_ERROR`-on-delete case. A non-regular run2 or
+  run3 is refused earlier, by the reader or as stale. The interview case and the new
+  meta.json case cover the shared `save` path.
+- macOS was not run, and neither was uid 0.
+
+Full regressions, review and the branch hunt remain pending for the PR.
