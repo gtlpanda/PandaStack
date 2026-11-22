@@ -14,21 +14,21 @@ const HISTORY = "history";
 const GH_MAX_BUFFER = 256 * 1024 * 1024;
 const GH_TIMEOUT_MS = 5 * 60 * 1000;
 
-// GitHub owner and repository names. The value is interpolated into gh api paths, so it is
-// checked against the full `owner/name` shape and never passed through otherwise.
-const OWNER = "[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?";
-const NAME = "[A-Za-z0-9._-]+";
-const REPO_SHAPE = new RegExp(`^${OWNER}/${NAME}$`);
+// GitHub owner and repository names. The value is interpolated into gh api paths, so both
+// parts are limited to a path-safe class (no `/`, `?`, `#`, `%`, whitespace) and neither may be
+// a dot segment. The class is wider than GitHub's own rules (managed-user logins hold `_`).
+const SEGMENT = "[A-Za-z0-9._-]+";
+const REPO_SHAPE = new RegExp(`^${SEGMENT}/${SEGMENT}$`);
 const GITHUB_REMOTES = [
-  new RegExp(`^https://github\\.com/(${OWNER})/(${NAME}?)(?:\\.git)?$`),
-  new RegExp(`^git@github\\.com:(${OWNER})/(${NAME}?)(?:\\.git)?$`),
+  new RegExp(`^https://github\\.com/(${SEGMENT})/(${SEGMENT}?)(?:\\.git)?$`),
+  new RegExp(`^git@github\\.com:(${SEGMENT})/(${SEGMENT}?)(?:\\.git)?$`),
 ];
+const DOT_SEGMENT = /^\.\.?$/;
 
 /** True for an `owner/name` GitHub repository string. */
 export function isGithubRepo(value) {
   if (typeof value !== "string" || !REPO_SHAPE.test(value)) return false;
-  const name = value.slice(value.indexOf("/") + 1);
-  return name !== "." && name !== "..";
+  return value.split("/").every((part) => !DOT_SEGMENT.test(part));
 }
 
 /** `"owner/name"` from the `origin` remote of `root` when it is a GitHub URL, else null. */

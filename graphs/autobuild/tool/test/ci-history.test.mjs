@@ -160,15 +160,18 @@ test("fetchGithubHistory: a bad repository or limit is USAGE and gh is never cal
 
 test("githubRepo and isGithubRepo: only the two exact remote forms with a safe owner/name", (t) => {
   assert.equal(githubRepo(gitRepo(t, "https://github.com/acme/widgets.js.git")), "acme/widgets.js", "dots in the name are kept; only a final .git is dropped");
+  assert.equal(githubRepo(gitRepo(t, "git@github.com:jdoe_acme/widgets.git")), "jdoe_acme/widgets", "a managed-user login with _ is accepted");
   for (const url of [
     "https://github.com/acme/widgets/extra", "https://github.com/acme/widgets/", "http://github.com/acme/widgets",
-    "ssh://git@github.com/acme/widgets.git", "https://github.com/acme/..", "https://github.com/-acme/widgets",
-    "https://user@github.com/acme/widgets", " https://github.com/acme/widgets",
+    "ssh://git@github.com/acme/widgets.git", "https://github.com/acme/..", "https://github.com/../widgets",
+    "https://user@github.com/acme/widgets", " https://github.com/acme/widgets", "https://github.com/acme/wid%2Fgets",
   ]) assert.strictEqual(githubRepo(gitRepo(t, url)), null, url);
   assert.strictEqual(githubRepo(tempDir(t)), null, "not a git repository");
 
-  for (const ok of ["acme/widgets", "a/b", "acme-co/w_i.d-g"]) assert.equal(isGithubRepo(ok), true, ok);
-  for (const bad of ["acme/widgets?per_page=1", "acme/wid gets", "acme//widgets", "acme/.", "acme-/w", 7, undefined]) assert.equal(isGithubRepo(bad), false, String(bad));
+  for (const ok of ["acme/widgets", "a/b", "acme-co/w_i.d-g", "jdoe_acme/widgets", "acme-/w"]) assert.equal(isGithubRepo(ok), true, ok);
+  for (const bad of ["acme/widgets?per_page=1", "acme/wid gets", "acme//widgets", "acme/.", "./widgets", "../widgets", "acme/w#x", "acme/w%2F", 7, undefined]) {
+    assert.equal(isGithubRepo(bad), false, String(bad));
+  }
 });
 
 // ---------- the command line ----------

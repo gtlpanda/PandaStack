@@ -117,12 +117,14 @@ Built (Claude backend, iteration 3):
 
 Decisions (unattended, recorded here):
 - `owner/name` is checked by an anchored regex, for `--repo` (`USAGE`, exit 2) and in
-  `githubRepo`, because it is interpolated into the `gh api` path. `--repo a/b/../../orgs`
-  never reaches gh. Remotes that `githubRepo` rejects:
+  `githubRepo`, because it is interpolated into the `gh api` path. Each part must match
+  `[A-Za-z0-9._-]+` and must not be `.` or `..`. The class is wider than GitHub's own rules,
+  so a managed-user login with `_` and a legacy login ending in `-` are both accepted. A
+  `/`, `?`, `#`, `%` or whitespace never reaches gh, and `--repo a/b/../../orgs` is refused.
+  Remotes that `githubRepo` rejects:
   - a trailing slash or an extra path segment;
   - `http://`, `ssh://` or a `user@` HTTPS remote;
-  - whitespace around the URL;
-  - a name of `.` or `..`.
+  - whitespace around the URL.
 - Things that are `GH_FAILED` (exit 3):
   - a gh that cannot be spawned (ENOENT), is killed by a signal or times out;
   - a gh whose output overflows the buffer;
@@ -154,7 +156,8 @@ Decisions (unattended, recorded here):
   replaced on the next write, the same treatment the common rules give junk.
 - With no source flag, `history: none` means no stored document. `--json` then gives
   `source: null`.
-- `--limit` accepts digits only (`040` is 40; `1e2`, `" 5"` and `2.5` are `USAGE`). Other
+- `--limit` accepts digits only, through `patterns.mjs`'s `wholeNumberOf` (`040` is 40;
+  `1e2`, `" 5"` and `2.5` are `USAGE`). Other
   `USAGE` errors:
   - a flag value that is missing or starts with `--`;
   - a value flag given twice;

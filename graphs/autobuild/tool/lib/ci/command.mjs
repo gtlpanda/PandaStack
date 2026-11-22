@@ -10,6 +10,7 @@ import { findProjectRoot } from "../config.mjs";
 import { SAFE_GIT } from "../proc.mjs";
 import { loadProfile, projectConfig } from "./discover.mjs";
 import { attemptKey, fetchGithubHistory, githubRepo, importedAttempts, isGithubRepo, mergeHistory, readHistory, writeHistory } from "./history.mjs";
+import { wholeNumberOf } from "./patterns.mjs";
 import { ciPolicy } from "./policy.mjs";
 import { CiError } from "./state.mjs";
 
@@ -38,8 +39,8 @@ async function discover({ root, flags, env, json }) {
 function historyLimit(values, policy) {
   if (!values.has("--limit")) return policy.historyLimit;
   const text = values.get("--limit");
-  const limit = /^[0-9]+$/.test(text) ? Number(text) : Number.NaN;
-  if (!(limit >= 1 && limit <= 100)) throw usageError(`--limit must be a whole number from 1 to 100, got ${JSON.stringify(text)}`);
+  const limit = wholeNumberOf(text);
+  if (limit === null || limit < 1 || limit > 100) throw usageError(`--limit must be a whole number from 1 to 100, got ${JSON.stringify(text)}`);
   return limit;
 }
 
