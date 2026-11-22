@@ -159,7 +159,58 @@ test("isBaselineDocument accepts a captured document and refuses look-alikes", (
   }
 });
 
+test("an imported workflow without a name captures, validates and compares (null sorts last)", () => {
+  const doc = capture({ attempts: [...days(0, 3, { workflow: null }), ...days(0, 3)] });
+  assert.deepEqual(doc.workflows.map((w) => w.workflow), ["test", null]);
+  assert.equal(isBaselineDocument(doc), true, "capture never writes a document its own validator refuses");
+  assert.deepEqual(compareBaselines(doc, doc).workflows.map((w) => w.workflow), ["test", null]);
+});
+
 // ---------- CLI ----------
+
+/** Imports `attempts` into the repo's stored history, replacing what was there. */
+function replaceHistory(t, repo, home, attempts) {
+  rmSync(path.join(ciStateDir(repo, { AUTOBUILD_STATE_HOME: home }), "history.json"), { force: true });
+  const file = path.join(tempDir(t), "attempts.json");
+  writeFileSync(file, JSON.stringify({ attempts }));
+  const r = ci(repo, home, "history", "--import", file);
+  assert.equal(r.code, 0, r.stderr);
+}
+
+test("ci baseline: no stored history is insufficient data; over target alone prints the steps and the advice", (t) => {
+  const repo = repoWith(t, { ".github/workflows/test.yml": WORKFLOW });
+  const home = tempDir(t);
+  replaceHistory(t, repo, home, days(0, 3, { steps: { Work: 700 } }));
+  assert.equal(ci(repo, home, "baseline", "--capture").code, 0);
+
+  rmSync(path.join(ciStateDir(repo, { AUTOBUILD_STATE_HOME: home }), "history.json"));
+  const none = ci(repo, home, "baseline", "--json");
+  assert.equal(none.code, 0, none.stderr);
+  assert.equal(JSON.parse(none.stdout).regression.workflows[0].status, "insufficient-data");
+
+  replaceHistory(t, repo, home, days(10, 3, { steps: { Work: 700 } }));
+  const steady = ci(repo, home, "baseline", "--fail-on-regression");
+  assert.equal(steady.code, 1, "over target makes the top level regressed");
+  assert.equal(steady.stdout, [
+    "test: baseline p50 700s, recent p50 700s (0%) ok, over target",
+    "test: top slower steps",
+    "  none measured on both sides",
+    "  run: autobuild ci analyze",
+    "",
+  ].join("\n"));
+});
+
+test("ci baseline --capture in a repository without commits records head null", (t) => {
+  const repo = tempDir(t);
+  writeFileSync(path.join(repo, "README.md"), "x\n");
+  git(repo, "init", "-q");
+  const home = tempDir(t);
+  replaceHistory(t, repo, home, days(0, 3));
+  const r = ci(repo, home, "baseline", "--capture");
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.stdout, "baseline: captured at no commit, 1 workflows\n");
+  assert.equal(JSON.parse(ci(repo, home, "baseline", "--json").stdout).baseline.head, null);
+});
 
 test("ci baseline: flag combinations and a missing --after are usage errors", (t) => {
   const repo = repoWith(t, { ".github/workflows/test.yml": WORKFLOW });

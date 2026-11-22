@@ -17,7 +17,7 @@ const sum = (values) => values.reduce((total, value) => total + value, 0);
 const maxOrNull = (values) => (values.length ? Math.max(...values) : null);
 const notNull = (values) => values.filter((value) => value !== null);
 /** Text order with null last, for names an import may leave null. */
-const byText = (a, b) => (a === b ? 0 : a === null ? 1 : b === null ? -1 : String(a).localeCompare(String(b)));
+export const byText = (a, b) => (a === b ? 0 : a === null ? 1 : b === null ? -1 : String(a).localeCompare(String(b)));
 
 /** Whole seconds from `a` to `b`, or null when either is missing or unparseable. */
 export function seconds(a, b) {

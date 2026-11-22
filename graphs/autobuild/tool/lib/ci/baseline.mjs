@@ -5,7 +5,7 @@
 // (compareBaselines). Pure functions: the caller reads history, the profile and gate timings.
 
 import { isPlainObject } from "./history.mjs";
-import { computeMetrics, gateMetrics } from "./metrics.mjs";
+import { byText, computeMetrics, gateMetrics } from "./metrics.mjs";
 import { STATE_SCHEMA_VERSION } from "./state.mjs";
 
 export const INSUFFICIENT_DATA = "insufficient-data";
@@ -18,7 +18,8 @@ const GITLAB_SCRIPT_STEP = "script";
 
 const list = (value) => (Array.isArray(value) ? value : []);
 const isText = (value) => typeof value === "string" && value !== "";
-const byText = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+/** Code-point order, for the identity lists (always strings). Names that may be null use metrics' byText. */
+const byCodePoint = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 /** Rounds to 1 decimal; -0 becomes 0, so a tiny drop never prints as "-0". */
 export function round1(x) {
@@ -42,7 +43,7 @@ export function stepIdentity(step) {
 function checksOf(profile) {
   const github = list(profile?.ci?.workflows).flatMap((workflow) => list(workflow.jobs).map((job) => `${workflow.file}#${job.id}`));
   const gitlab = list(profile?.ci?.pipelines).flatMap((pipeline) => list(pipeline.jobs).map((job) => `${pipeline.file}#${job.id}`));
-  return [...github, ...gitlab].sort(byText);
+  return [...github, ...gitlab].sort(byCodePoint);
 }
 
 /** `<file>#<job id>#<step identity>` for GitHub steps of kind test and GitLab jobs with test: true, sorted. */
@@ -55,7 +56,7 @@ function testStepsOf(profile) {
   const gitlab = list(profile?.ci?.pipelines).flatMap((pipeline) => list(pipeline.jobs)
     .filter((job) => job.test === true)
     .map((job) => `${pipeline.file}#${job.id}#${GITLAB_SCRIPT_STEP}`));
-  return [...github, ...gitlab].sort(byText);
+  return [...github, ...gitlab].sort(byCodePoint);
 }
 
 /** Gate entry names in config order. */
@@ -116,7 +117,7 @@ function topSteps(baselineSteps, recentSteps) {
       return { job: step.job, step: step.step, baselineP50: step.p50, recentP50, deltaSeconds: recentP50 - step.p50 };
     })
     .filter((step) => step.deltaSeconds > 0)
-    .sort((a, b) => b.deltaSeconds - a.deltaSeconds || byText(String(a.job), String(b.job)) || byText(String(a.step), String(b.step)))
+    .sort((a, b) => b.deltaSeconds - a.deltaSeconds || byText(a.job, b.job) || byText(a.step, b.step))
     .slice(0, TOP_STEPS);
 }
 
@@ -198,6 +199,7 @@ export function isBaselineDocument(doc) {
   return isPlainObject(doc)
     && doc.schemaVersion === STATE_SCHEMA_VERSION
     && Array.isArray(doc.workflows)
-    && doc.workflows.every((w) => isPlainObject(w) && typeof w.workflow === "string" && Array.isArray(w.steps))
+    // A workflow name is null when an imported attempt had none (history.mjs allows it).
+    && doc.workflows.every((w) => isPlainObject(w) && (typeof w.workflow === "string" || w.workflow === null) && Array.isArray(w.steps))
     && IDENTITY_LISTS.every((key) => isTextList(doc[key]));
 }

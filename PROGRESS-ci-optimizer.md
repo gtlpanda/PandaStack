@@ -532,4 +532,20 @@ Focused validation:
   `lib/ci/baseline.mjs` and `test/ci-baseline.test.mjs`: clean.
 - `autobuild mark-passed CO-08`: PASS (`=== node (1 file): PASS`).
 
+- Follow-up in the same feature:
+  - An imported attempt may have `workflow: null` (`history.mjs` allows it). Tested before the
+    fix: `captureBaseline` wrote such a workflow, and `isBaselineDocument` refused that
+    document (`false`). So `baseline --capture` succeeded, and then `baseline` answered
+    `NO_BASELINE`.
+  - The validator now accepts a null workflow name. Workflow names sort with `metrics.mjs`'s
+    `byText`, now exported, which puts null last. The identity lists keep code-point order.
+  - Three more CLI tests: no stored history, over target alone (top-step and advice lines,
+    exit 1), and a repository without commits (`captured at no commit`, `head: null`).
+  - After the follow-up:
+    - `ci-baseline.test.mjs` 16/16.
+    - CO-08 acceptance 14/14 (spec output in `logs/evidence/co-08-acceptance.log`,
+      gitignored).
+    - Tripwires (same command, with a spec log to `logs/evidence/co-08-tripwires.log`):
+      345/345 pass, 0 fail.
+
 Still pending for the PR: the full regressions, review and the bug hunt.
