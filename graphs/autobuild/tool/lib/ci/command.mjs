@@ -16,7 +16,9 @@ import { attemptKey, fetchGithubHistory, githubRepo, importedAttempts, isGithubR
 import { computeMetrics, gateMetrics, noHistoryMetrics } from "./metrics.mjs";
 import { wholeNumberOf } from "./patterns.mjs";
 import { ciPolicy } from "./policy.mjs";
-import { CiError } from "./state.mjs";
+import { CiError, STATE_SCHEMA_VERSION } from "./state.mjs";
+import { changedFiles, planValidation, recordValidation, resolveBase, TIERS, treeState } from "./validate.mjs";
+import { gateStepLines, runGate } from "../gate.mjs";
 
 const NOT_A_GIT_REPOSITORY = "NOT_A_GIT_REPOSITORY";
 const usageError = (detail) => new CiError("USAGE", detail, 2);
@@ -258,6 +260,45 @@ async function analyzeRepo({ root, env, json }) {
   return { code: 0, lines: [...findings.map(findingLine), `findings: ${findings.length} (${toApply} to apply, ${findings.length - toApply} to propose)`] };
 }
 
+// ---------- ci validate (spec/contracts/ci-optimizer-co-07.md) ----------
+
+function validateTier(values) {
+  const tier = values.has("--tier") ? values.get("--tier") : "fast";
+  if (!TIERS.includes(tier)) throw usageError(`--tier must be fast or full, got ${JSON.stringify(tier)}`);
+  return tier;
+}
+
+function validationHeader(plan, base, changed) {
+  if (plan.tier === "fast") return `validation tier: fast (affected; base ${base.ref} ${base.sha.slice(0, 12)}; ${changed.length} files changed)`;
+  return plan.escalated ? `validation tier: full (escalated: ${plan.reasons.join(", ")})` : "validation tier: full (requested)";
+}
+
+function validationVerdict(plan, ok) {
+  if (!ok) return "VALIDATION: FAIL";
+  return plan.tier === "fast" ? "VALIDATION: PASS (fast tier, not merge validation)" : "VALIDATION: PASS (full gate)";
+}
+
+async function validate({ root, flags, values, env, json }) {
+  const tier = validateTier(values);
+  const config = projectConfig(root, env);
+  if (!config) throw new CiError("NO_AUTOBUILD_CONFIG", `ci validate needs ${CONFIG_FILE} in the project root`, 2);
+  // An explicit --base that does not resolve is NO_BASE (an escalation), not a usage error.
+  const base = resolveBase(config, values.has("--base") ? values.get("--base") : null);
+  // Without a base, or when git cannot list the change, `changed` is null: planValidation's NO_BASE.
+  const changed = tier === "fast" && base ? changedFiles(config, base.sha) : null;
+  const plan = planValidation({ config, root, changed, tier });
+  // The tree as validated: read before the gate's steps run.
+  const tree = treeState(config);
+  const failFast = flags.has("--fail-fast");
+  const gate = plan.tier === "fast"
+    ? runGate(config, { phase: "full", scope: "affected", affectedBase: base.sha, caller: "ci-validate", ciParity: false, failFast })
+    : runGate(config, { phase: "full", caller: "ci-validate", failFast });
+  recordValidation(root, { schemaVersion: STATE_SCHEMA_VERSION, head: tree.head, dirty: tree.dirty, tier: plan.tier, ok: gate.ok, at: new Date().toISOString(), base: base?.sha ?? null, reasons: plan.reasons }, env);
+  const code = gate.ok ? 0 : 1;
+  if (json) return { code, json: { plan, gate, ok: gate.ok } };
+  return { code, lines: [validationHeader(plan, base, changed), ...gateStepLines(gate), validationVerdict(plan, gate.ok)] };
+}
+
 // `flags` are booleans; each of `values` takes the next argument.
 const SUBCOMMANDS = {
   discover: { flags: ["--refresh", "--json"], values: [], run: discover },
@@ -265,6 +306,7 @@ const SUBCOMMANDS = {
   metrics: { flags: ["--json"], values: ["--workflow", "--window"], run: metrics },
   apply: { flags: ["--dry-run", "--json"], values: ["--shards"], run: apply },
   analyze: { flags: ["--json"], values: [], run: analyzeRepo },
+  validate: { flags: ["--fail-fast", "--json"], values: ["--tier", "--base"], run: validate },
 };
 const USAGE = `usage: autobuild ci <${Object.keys(SUBCOMMANDS).join("|")}> [flags] [--json]`;
 

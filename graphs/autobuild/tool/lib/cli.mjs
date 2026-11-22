@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG_FILE, findProjectRoot, loadConfig, statePath } from "./config.mjs";
 import { blockedClosure, countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures } from "./features.mjs";
-import { failureExcerpt, parseShard, runGate } from "./gate.mjs";
+import { failureExcerpt, gateStepLines, parseShard, runGate } from "./gate.mjs";
 import { runLoop } from "./loop.mjs";
 import { huntStatus } from "./bughunt.mjs";
 import { readSession } from "./session.mjs";
@@ -39,6 +39,7 @@ const HELP = `autobuild — autonomous, test-gated build loop for Claude Code or
   autobuild ci metrics [--workflow NAME] [--window N] [--json]   wall, queue, critical path, cost and flakes from stored history
   autobuild ci apply [--dry-run] [--shards N] [--json]   recalibrate gate shardWeight from measured durations (only if the slowest shard gets faster)
   autobuild ci analyze [--json]   findings over the profile, stored history and gate (proposals; only shard weights may be applied)
+  autobuild ci validate [--tier fast|full] [--base REF] [--fail-fast] [--json]   fast tier: gate steps the change since the merge-base touches (not merge validation)
 
 Exit codes of \`run\`: 0 verified completion or PR-first handoff, 2 no progress, 3 blocked, 4 frozen files changed, 5 preflight,
 6 total budget, 7 max iterations, 8 usage limit resets too far away, 9 billing, 10 auth,
@@ -164,13 +165,7 @@ export async function main(argv = process.argv.slice(2)) {
       if (flag(args, "--json")) {
         console.log(JSON.stringify(summary));
       } else {
-        for (const step of summary.steps) {
-          console.log(`${step.ok ? "PASS" : "FAIL"}  ${step.name} (${step.cached ? `reused from ${step.cachedFrom}, tree unchanged` : `${step.seconds}s`})`);
-          if (!step.ok) console.log(step.tail);
-        }
-        for (const entry of summary.skipped) console.log(`SKIP  ${entry.name}: ${entry.reason}`);
-        for (const name of summary.notRun) console.log(`----  ${name}: not run (stopped at the first failure)`);
-        for (const warning of summary.warnings ?? []) console.log(`WARN  ${warning}`);
+        for (const line of gateStepLines(summary)) console.log(line);
         console.log(summary.ok ? `\n${summary.phase === "commit" ? "COMMIT GATE" : "GATE"}: PASS` : "\nGATE: FAIL");
         if (summary.deferred.length) console.log(`Pending PR checks: ${summary.deferred.map(step => step.name).join(", ")}`);
       }

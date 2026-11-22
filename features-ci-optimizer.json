@@ -112,7 +112,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-07-validate.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-08",

@@ -374,3 +374,78 @@ Focused validation (all exit 0):
 - `autobuild mark-passed CO-06`: PASS.
 
 Still pending for the PR: the full regressions, review and the bug hunt.
+
+## CO-07 — Fast validation tier
+
+Built (Claude backend, iteration 7):
+- `gate.mjs`:
+  - `runGate` gains `affectedBase` (default `null`). Path selection diffs against
+    `affectedBase ?? baseSha`. The frozen-file and evidence block is unchanged and still keyed
+    on `baseSha` alone.
+  - The path-selection filter moved verbatim into the exported `selectByPaths(config, jobs,
+    changed)`, which `runGate` calls. It keeps the dead-glob rule and the skip reason, now the
+    exported `PATH_SKIP_REASON`.
+  - Also exported:
+    - `pathEntries(config)`, which `gateHasPaths` now uses;
+    - `gateJobs(config, { ciParity })`, the full phase's job list as `runGate` builds it, with
+      no feature and no shard;
+    - `gateStepLines(summary)`, the step, SKIP, not-run and WARN lines that `autobuild check`
+      printed inline before. `cli.mjs` now calls it, with the same output.
+- `lib/ci/validate.mjs` exports `resolveBase`, `changedFiles` (which is `changedSince`),
+  `planValidation`, `recordValidation` and `treeState`.
+  - The plan's steps are `gateJobs` under `selectByPaths`, so the plan names exactly the jobs
+    the gate run will consider, dead-glob rule included.
+  - `UNMAPPED_CHANGE` uses `pathPattern` over `pathEntries`.
+- `lib/ci/command.mjs` adds `autobuild ci validate [--tier fast|full] [--base REF] [--fail-fast]
+  [--json]`. `cli.mjs` gains one help line.
+
+Decisions (unattended, recorded here):
+- `CI_CONFIG_CHANGED` also fires for any path `ciProviderOf` names (for example a deleted
+  `.gitlab-ci.yml` or `Jenkinsfile`). `ciFiles(root)` lists only files that exist, so without
+  this a deleted CI file would not escalate. This can only escalate more often.
+- `gitlabFile` is not defined anywhere else. It is read as one more exact CI-configuration
+  path, a custom GitLab CI file location, normalized with `path.posix.normalize`. The CLI does
+  not pass it.
+- `resolveBase`:
+  - A ref that is empty or starts with `-` resolves to nothing, so it is never passed to git
+    as an option. `ci validate --base -h` is therefore `NO_BASE`.
+  - With no `--base`, the first default ref whose merge-base with HEAD exists wins. A ref
+    with no shared history is skipped.
+- When git cannot list the change after a base resolved (`changedSince` returns `null`), the
+  request is treated as `NO_BASE` and escalates. It is never an empty change set.
+- The progress and features file names are normalized before the exemption, so `./PROGRESS.md`
+  in config still matches.
+- CLI check order: `USAGE` (including a bad `--tier`), then `NO_AUTOBUILD_CONFIG` (nothing
+  written), then the run.
+- The record's `head` and `dirty` are read before the gate's steps run, so they describe the
+  tree that was validated. Anything git cannot report counts as dirty, and a repository without
+  commits has `head: null`.
+- The record's `base` is the resolved merge-base SHA for either tier (for a `--tier full`
+  request too, when one resolves), and `null` when none resolves.
+- The human output is the header, then `gateStepLines` (the same lines `autobuild check`
+  prints), then the VALIDATION line. The `GATE:` and `Pending PR checks` lines are not printed;
+  the VALIDATION line takes their place.
+
+Focused validation:
+- `node --test acceptance/ci-optimizer/co-07-validate.test.mjs`: 33/33 pass, exit 0.
+- `node --test graphs/autobuild/tool/test/ci-validate.test.mjs`: 10/10 pass, exit 0. These are
+  new implementation tests with private `AUTOBUILD_STATE_HOME` directories.
+- Tripwires for `gate.mjs`, `cli.mjs` and `command.mjs`:
+  - Run directly in this session: `node --test graphs/autobuild/tool/test/gate-*.test.mjs
+    graphs/autobuild/tool/test/pr-first-gate.test.mjs graphs/autobuild/tool/test/entrypoint.test.mjs
+    graphs/autobuild/tool/test/status-shard-skip.test.mjs graphs/autobuild/tool/test/ci-*.test.mjs
+    acceptance/ci-optimizer/co-0[1-7]-*.test.mjs` gives 370/377 pass. All 7 failures are in
+    `gate-schedule.test.mjs` (Stop hook and loop tests).
+  - Cause, tested: this session's environment has `AUTOBUILD_DELIVERY_MODE=pr-first`. Those
+    tests pass `process.env` to their child processes, and the environment overrides each
+    fixture's `deliveryMode` (`config.mjs:142`).
+  - Rerun with that one variable removed from the child environment (helper script in
+    `logs/evidence/`, gitignored), over every `graphs/autobuild/tool/test/*.test.mjs` file plus
+    `acceptance/ci-optimizer/co-0[1-7]-*.test.mjs`: 538/538 pass, exit 0.
+  - Not tested: those 7 tests on unmodified HEAD in this session. The guard blocks `git stash`
+    and the shell blocked an exported copy, so whether they fail the same way at HEAD is an
+    untested hypothesis.
+- `bash scripts/check-secrets.sh` (tracked files), and the same script run on
+  `lib/ci/validate.mjs` and `test/ci-validate.test.mjs`: clean.
+
+Still pending for the PR: the full regressions, review and the bug hunt.
