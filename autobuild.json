@@ -9,15 +9,18 @@
     "sessionTimeoutMinutes": 30
   },
   "bughunt": true,
-  "bughuntBase": "cd8660978ab9424c0d7654341a628d8c473cbc1b",
+  "bughuntBase": "1a7076ff2d2dfbc0ba47a012cac2815292aa2d89",
   "limits": {
-    "maxIterations": 12,
+    "maxIterations": 16,
     "noProgressLimit": 3,
     "reviewEvery": 4,
     "finalReview": true,
     "bughuntTimeoutMinutes": 120,
     "maxLimitWaitHours": 1,
-    "probeEveryMinutes": 5
+    "probeEveryMinutes": 5,
+    "totalBudgetUsd": 55,
+    "bughuntBudgetUsd": 20,
+    "maxBudgetUsd": 15
   },
   "runners": {
     "node": {
