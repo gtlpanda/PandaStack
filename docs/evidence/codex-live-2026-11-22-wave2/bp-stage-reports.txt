@@ -1,0 +1,3 @@
+interview: {"status":"needs-human","file":"run1.json","invocationId":"bp-interview-20261122T182644Z-403c1093","redacted":false}
+design: {"status":"design-ready","file":"run2.json","invocationId":"bp-design-20261122T182826Z-6d4545de","redacted":false}
+backlog: {"status":"backlog-ready","file":"run3.json","invocationId":"bp-backlog-20261122T183248Z-75e9ec12","redacted":false}

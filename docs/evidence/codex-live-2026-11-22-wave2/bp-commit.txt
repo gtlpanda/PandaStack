@@ -1,0 +1,8 @@
+commit 7c76a8f
+author blueprint-smoke <blueprint-smoke@example.invalid>
+blueprint: design and backlog for temperature-converter
+
+ docs/backlog.json                       | 152 ++++++++++++++++++++++++++++++++
+ docs/blueprint/temperature-converter.md |  55 ++++++++++++
+ docs/knowledge-map.json                 |  30 +++++++
+ 3 files changed, 237 insertions(+)

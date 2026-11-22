@@ -1,0 +1,1 @@
+{"schemaVersion":1,"repo":"<scratch>/qa/live/repo","installationRoot":"<scratch>/qa/root","codexBin":"<home>/.npm-global/bin/codex","env":{"HOME":"<scratch>/home","CODEX_HOME":"<scratch>/codex-home","PATH":"<node-bin>:/usr/bin:/bin"},"timeoutMs":1800000,"base":"main"}

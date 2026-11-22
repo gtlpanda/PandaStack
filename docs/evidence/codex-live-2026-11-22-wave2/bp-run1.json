@@ -1,0 +1,177 @@
+{
+  "status": "needs-human",
+  "reason": "2 question(s) for the human; 0 more assumed",
+  "brief": {
+    "goal": "Build a small command-line tool that reads a number and a temperature unit and prints the converted value between Celsius and Fahrenheit.",
+    "mode": "app",
+    "users": [
+      "Command-line users converting temperatures between Celsius and Fahrenheit."
+    ],
+    "requirements": [
+      {
+        "id": "R1",
+        "text": "Provide a command-line interface.",
+        "source": "request"
+      },
+      {
+        "id": "R2",
+        "text": "Read a numeric temperature and its unit.",
+        "source": "request"
+      },
+      {
+        "id": "R3",
+        "text": "Convert Celsius input to Fahrenheit.",
+        "source": "request"
+      },
+      {
+        "id": "R4",
+        "text": "Convert Fahrenheit input to Celsius.",
+        "source": "request"
+      },
+      {
+        "id": "R5",
+        "text": "Print the converted value.",
+        "source": "request"
+      }
+    ],
+    "decided": [
+      {
+        "decision": "The application is a small command-line tool.",
+        "source": "request"
+      },
+      {
+        "decision": "Supported temperature scales are Celsius and Fahrenheit.",
+        "source": "request"
+      },
+      {
+        "decision": "Use no network, accounts, or database.",
+        "source": "request"
+      }
+    ],
+    "gaps": [
+      "Implementation language and runtime are unspecified.",
+      "Input method is unspecified: command-line arguments, standard input, or interactive prompts.",
+      "Accepted unit spellings and case sensitivity are unspecified.",
+      "Output format, precision, and rounding are unspecified.",
+      "Handling of invalid numbers, unsupported units, and missing input is unspecified.",
+      "Target operating systems and distribution method are unspecified."
+    ],
+    "contradictions": [],
+    "constraints": [
+      "Keep the tool small (source: request).",
+      "No network (source: request).",
+      "No accounts (source: request).",
+      "No database (source: request)."
+    ],
+    "existing_stack": "Greenfield: repository inspection found only .git and no commits. No source files exist to cite; no language, framework, entry points, data model, authentication, build, deployment, or tests are established."
+  },
+  "questions": [
+    {
+      "id": "Q1",
+      "question": "The small, offline CLI requirement calls for a simpler implementation than the default web scaffold. Which language and runtime should the tool use?",
+      "stakes": "Changing languages later requires rewriting the tool and changes what users must install.",
+      "options": [
+        {
+          "label": "Node.js",
+          "description": "Keep the default stack's language and use built-in libraries only; users need Node.js installed."
+        },
+        {
+          "label": "Python 3",
+          "description": "Use Python's standard library; users need Python 3 installed, and this departs from the default language."
+        },
+        {
+          "label": "Go",
+          "description": "Produce an executable that needs no installed runtime; this adds compilation and departs from the default language."
+        }
+      ],
+      "recommended": "Node.js",
+      "default_if_unasked": "Use Node.js with built-in libraries, without a frontend or web server.",
+      "resolves": []
+    },
+    {
+      "id": "Q2",
+      "question": "How should users supply the temperature and source unit?",
+      "stakes": "This defines the command's interface; changing it later can break scripts or users' workflows.",
+      "options": [
+        {
+          "label": "Command-line arguments",
+          "description": "Accept a value and unit as arguments, such as tempconvert 100 C; convenient for scripts and quick commands."
+        },
+        {
+          "label": "Interactive prompts",
+          "description": "Ask for the value and unit after launch; approachable for manual use but requires interaction."
+        },
+        {
+          "label": "Standard input",
+          "description": "Read one value-and-unit pair from standard input; convenient for pipes but less discoverable."
+        }
+      ],
+      "recommended": "Command-line arguments",
+      "default_if_unasked": "Accept two positional arguments: the numeric temperature followed by its source unit.",
+      "resolves": []
+    }
+  ],
+  "preflight": [],
+  "assumptions": [
+    {
+      "id": "A1",
+      "assumption": "Use no third-party dependencies. Record an ADR if the selected language departs from the default.",
+      "why": "Standard libraries suffice, keep the tool small, and avoid network-dependent installation."
+    },
+    {
+      "id": "A2",
+      "assumption": "Support Windows, macOS, and Linux through the selected runtime or a locally compiled executable.",
+      "why": "The conversion needs no operating-system-specific features."
+    },
+    {
+      "id": "A3",
+      "assumption": "Deliver source code with local run instructions; public package publishing and downloadable release binaries are outside the initial build.",
+      "why": "Local delivery fulfills the brief without requiring accounts, signing credentials, or publishing decisions."
+    },
+    {
+      "id": "A4",
+      "assumption": "Accept C, Celsius, F, and Fahrenheit without case sensitivity, and ignore surrounding whitespace.",
+      "why": "These spellings are predictable and inexpensive to extend."
+    },
+    {
+      "id": "A5",
+      "assumption": "Accept signed decimal and scientific-notation numbers, reject non-finite values, and impose no physical temperature limits.",
+      "why": "The requested operation is numeric conversion rather than physical validation."
+    },
+    {
+      "id": "A6",
+      "assumption": "Print the converted number rounded to two decimal places, trim trailing fractional zeros, normalize negative zero, and append the destination unit and a newline.",
+      "why": "A compact output such as 212 F is readable; precision and formatting are inexpensive to adjust."
+    },
+    {
+      "id": "A7",
+      "assumption": "Report missing input, invalid numbers, unsupported units, extra input, and non-finite conversion results on standard error with a nonzero exit status.",
+      "why": "Predictable failures make the tool usable from scripts without requiring a product decision."
+    },
+    {
+      "id": "A8",
+      "assumption": "Provide built-in help and verify conversions using synthetic examples, including freezing points, boiling points, negative values, and invalid input.",
+      "why": "No human-supplied test data or external services are needed."
+    }
+  ],
+  "design": null,
+  "gate": null,
+  "designRounds": 0,
+  "backlog": null,
+  "owners": [],
+  "backlogRounds": 0,
+  "issues": [],
+  "notes": [],
+  "history": [
+    {
+      "node": "extract",
+      "requirements": 5
+    },
+    {
+      "node": "ask",
+      "questions": 2,
+      "asked": 2,
+      "trimmed": 0
+    }
+  ]
+}

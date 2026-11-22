@@ -4079,3 +4079,74 @@ Phase 2 acceptance: 97/97.
     workspace-write sandbox, and got VERIFY: PASS. In wave 1 that step was exit 127.
 - Not established: certification of any offering; the fix, advise and unstick leaves (the
   fixture's tests passed); any blueprint graph run; the effect of the agents.* keys.
+
+## 72. Codex parity wave 2, tier 3 frozen: CP-02g, CP-04c, CP-05d (2026-11-22)
+
+- What: contracts and frozen tests for the oversize-prompt leaf failure (CP-02g), the blueprint
+  stage CLI on the native runtime (CP-04c, new contract) and one native QA loop iteration
+  (CP-05d). PR #85, merged as f727a6c. Each test failed on main only for its own feature's
+  reasons and passed against a throwaway local reference by another author (never pushed).
+- Pins: the catalog edit "blueprint depends on native-runtime" (CP-01b rule 3) broke no frozen
+  test (full gate PASS on the stacked references).
+- Bugs caught while freezing: a CP-02g line citation; CP-05d's already-recorded path skipped the
+  inflight removal; a CP-05d mutation gap (a verify line that only contains `VERIFY: PASS`);
+  a CP-04c exit-table error. Bughunt F1 (MEDIUM): a resumed CP-05d invocation rebuilt its args
+  from the updated ledger and hit the store's CONFLICT; fixed in the contract, case 9b.
+- Seen once, not explained: one security-audit checkpoint test failed in one full-gate run and
+  never reproduced (6 sequential and 24 concurrent runs). Load sensitivity is an untested
+  hypothesis.
+
+## 73. Codex parity wave 2, tier 4 frozen: CP-04e, CP-05e (2026-11-22)
+
+- What: CP-04e (blueprint's Codex runner section, the codex row flipped to `partial` on one
+  shared `codex-graph-host` transport, and an end-to-end proof through an `install.sh --codex`
+  symlink on the production catalog) and CP-05e (the native QA gate proof on a real failing
+  test; dev's proofRefs). PR #86, merged as 3aca4d9; hunt pass.
+- Pins: a full-gate probe with the flip found 14 frozen and 8 implementation-test cases. Each was
+  retired to "today's state, or exactly the new one", green on main and on the flipped references
+  (two full gates). Mutations: flipping dev too fails 7 files; a near-miss row or an extra
+  transport fails CP-01b. The CP-02e and CP-04c refusal cases now set blueprint unavailable on
+  their own fixture roots.
+- The fake codex gained an optional `writes` reply field (W2-9, additive), so a scripted fixer
+  can change the tree.
+- The test and reference authors found five CP-04e contract defects (the pre-flip failure point,
+  the roots check, the `.claude` check inside a `.claude` checkout, the roots tool set, approve's
+  exit 4); all fixed before merge.
+
+## 74. Codex parity wave 2, run B: 26/26, and a qa-loop lock (2026-11-22)
+
+- What: autobuild built CP-02g, CP-04c, CP-05d, CP-04e and CP-05e on autobuild/codex-parity-w2b
+  (Claude backend, pr-first, runner pinned at 3aca4d9). 5/5 first try, **$24.96 estimated**,
+  45 min. PR #87, merged as de9cae6. Wave 2 is complete; parity runs so far about $140 of $400.
+- Bughunt F1 (MEDIUM, reproduced): qa-loop read the ledger before claiming the inflight
+  invocation and took no lock, so a second iteration during verify re-ran and double-recorded
+  the invocation. #85 had listed it as a known limit, untested. CP-05d step 2a adds a
+  per-repository loop lock: a live owner is OWNER_BUSY, a dead owner's lock is taken over.
+  Frozen case 13 (10 subtests) fails 10/29 without the fix.
+- Bughunt F2 (LOW, reproduced against the first fix): the rename-then-compare takeover could
+  hide a live lock from a third iteration. A stale lock is now removed only by the holder of a
+  break lock, after re-reading it; a lock that exists is never moved.
+- Mutations: no takeover turns case 8 red; no live-owner check turns case 13 red. Known limit:
+  pid reuse and pid namespaces.
+- Final hunt: 0 new findings, F1 and F2 stale, disposition manual_review (the regression lens
+  only skimmed the new blueprint-native.mjs). 22 permission denials, all compound Bash
+  commands: the allowlist follow-up stays open.
+
+## 75. Live Codex, wave 2: a real failing test fixed, blueprint end to end (2026-11-22)
+
+- The two live steps the priority contract schedules after wave 2, under D126.
+  docs/evidence/codex-live-2026-11-22-wave2.md has the details. 13 live leaf calls, auth.json
+  symlinked and unchanged, the temporary CODEX_HOME removed.
+- QA loop (5 leaves, 136 s, on a copy of the root with only dev flipped): the checker failed on
+  an off-by-one `average()`, the fixer corrected the divisor and added an assertion, the checker
+  passed, review and QA were clean, and qa-loop's own verify and touched checks passed. Nothing
+  was committed. The fixer leaf ran live for the first time.
+- Blueprint (8 leaves, about 12 min, production catalog, installed through `install.sh --codex`
+  and driven by following the runner section): interview, answer, design (round 1), backlog
+  (round 2), show and the hash-bound approve, which committed the design and backlog on
+  integration/temperature-converter.
+- Seen: the slicer over-scoped a tiny CLI's last slice into three-OS CI verification and named a
+  preflight item only inside the slice text, so the report said none was owed. A content issue,
+  not a Codex-path one; the Claude path is untested for it.
+- Not established: a Codex agent following the section unaided; a person answering or approving;
+  dev's production row (still unavailable until CP-06); any certification.

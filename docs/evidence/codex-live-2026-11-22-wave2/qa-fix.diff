@@ -1,0 +1,23 @@
+diff --git a/src/math.mjs b/src/math.mjs
+index 8fd8857..10622fb 100644
+--- a/src/math.mjs
++++ b/src/math.mjs
+@@ -6,5 +6,5 @@ export function sum(values) {
+ 
+ export function average(values) {
+   if (values.length === 0) return 0
+-  return sum(values) / (values.length + 1)
++  return sum(values) / values.length
+ }
+diff --git a/test/average.test.mjs b/test/average.test.mjs
+index 528ccde..69bf855 100644
+--- a/test/average.test.mjs
++++ b/test/average.test.mjs
+@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
+ import { average } from '../src/math.mjs'
+ 
+ test('average is the mean of the values', () => {
++  assert.equal(average([-2, 4]), 1)
+   assert.equal(average([2, 4, 6]), 4)
+   assert.equal(average([5]), 5)
+   assert.equal(average([]), 0)

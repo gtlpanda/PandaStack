@@ -1,0 +1,47 @@
+[
+  {
+    "phase": "Check",
+    "occurrence": 1,
+    "role": "checker",
+    "profile": "build-workspace",
+    "model": "gpt-6-luna",
+    "effort": "high",
+    "state": "returned"
+  },
+  {
+    "phase": "QA",
+    "occurrence": 1,
+    "role": "qa-auditor",
+    "profile": "source-review",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "state": "returned"
+  },
+  {
+    "phase": "Check",
+    "occurrence": 1,
+    "role": "checker",
+    "profile": "build-workspace",
+    "model": "gpt-6-luna",
+    "effort": "high",
+    "state": "returned"
+  },
+  {
+    "phase": "Fix",
+    "occurrence": 1,
+    "role": "fixer",
+    "profile": "build-workspace",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "state": "returned"
+  },
+  {
+    "phase": "Review",
+    "occurrence": 1,
+    "role": "reviewer",
+    "profile": "source-review",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "state": "returned"
+  }
+]
