@@ -152,20 +152,27 @@ row flipped to partial). CP-06's freeze amends the refusal case.
      the iteration is refused: exit 4 `OWNER_BUSY` with `invocationId: null` and the
      hint `another qa-loop iteration (pid <pid>) is running in this repository; run it
      again after that one exits`. Nothing else is read, written, removed or spawned.
-   - Otherwise (`ESRCH`, or bytes that are not valid) the lock is **stale** and is taken
-     over: it is renamed to `<ledgerDir>/native-loop.lock.stale-<process.pid>-<8 hex>`,
-     and the renamed file's bytes must equal the bytes judged stale. Then the renamed
-     file is removed and publishing is tried again. When the renamed bytes differ
-     (another process took the lock over in between), the file is linked back to
-     `native-loop.lock` and the attempt starts again from the read; if that link fails
-     with `EEXIST`, it is exit 3 `IO_ERROR` and the renamed file is kept for an operator.
-     A rename failing with `ENOENT` (another process removed the lock) also starts
-     again. After 3 attempts it is exit 3 `IO_ERROR`. Any other filesystem failure here
-     is exit 3 `IO_ERROR`.
+   - Otherwise (`ESRCH`, or bytes that are not valid) the lock is **stale**. It is
+     removed only by the holder of the break lock, `<ledgerDir>/native-loop.lock.break`
+     (same bytes rule, published the same exclusive way). Holding it, qa-loop reads the
+     lock again and removes it only when the bytes still equal the ones judged stale and
+     their owner is still not alive; then it releases the break lock and tries to publish
+     its own lock again. A lock that exists is never renamed, moved or replaced (bughunt
+     F2: a rename-based takeover could hide a live lock from a third iteration), and only
+     the break-lock holder removes a stale one, so those bytes cannot change before the
+     removal.
+     - When the break lock exists and its owner is alive, another iteration is taking
+       the lock over: exit 4 `OWNER_BUSY` as above, naming that pid. When its owner is
+       dead (killed in the middle of a takeover), it is exit 3 `IO_ERROR` for an operator
+       to remove it; nothing is removed. A break lock removed before it is read starts
+       the attempt again.
+     - After 3 attempts it is exit 3 `IO_ERROR`. Any other filesystem failure here is exit
+       3 `IO_ERROR`.
    - The lock is held for the rest of the iteration and released on every exit after
      this step (0, 2, 3 and 4): it is removed only while it still holds this process's
-     bytes. A process killed before its release (qa-loop installs no signal handler)
-     leaves a lock whose `pid` is dead, and the next iteration takes it over.
+     bytes. The break lock is released the same way as soon as the removal is decided.
+     A process killed before its release (qa-loop installs no signal handler) leaves a
+     lock whose `pid` is dead, and the next iteration takes it over.
    - Why this differs from W2-1 (a checkpoint store lock is never broken
      automatically): the loop lock guards only qa-loop's own bookkeeping, from the
      ledger read to the inflight removal. A held leaf is still held by the checkpoint
@@ -413,8 +420,9 @@ Cases:
 At this freeze qa-loop.mjs does not exist, so every case fails. Against a tree with
 every dependency built and no qa-loop.mjs, every case fails on the missing module.
 
-Enforced by review, not by a case: the loop lock's link-back and `IO_ERROR` paths (a
-three-way takeover race); qa-loop installs no signal handler and never calls
+Enforced by review and implementation tests (tests/qa-loop-stale-lock-takeover.test.mjs),
+not by a case: a takeover never hides a live lock, and the live and dead break-lock paths;
+qa-loop installs no signal handler and never calls
 `process.exit`; the verify timeout and the 64 MiB stdout bound; the `EEXIST` race on the
 inflight file; `INVALID_RESULT` on a tampered result.json; `IO_ERROR` and
 `LEDGER_IO_ERROR` paths; `HOST_FAILED`.
