@@ -270,7 +270,7 @@ what the first live Codex smoke found (docs/evidence/codex-live-2026-11-20.md):
 | 1 | CP-03d | CP-03c (amends its loader) | provider-neutral skill paths in role bodies, resolved by the loader |
 | 1 | CP-04a | none | `blueprint-state.mjs`: state layout, hashes, code-side redaction, args builders |
 | 1 | CP-05c | none | `qa-ledger.mjs`: the loop ledger rules as pure code |
-| 2 | CP-05b | CP-05a | `graph-reconcile.mjs` CLI (`list`, `fail`, `unlock`) and `completion.mjs` |
+| 2 | CP-05b | CP-02d, CP-05a | `graph-reconcile.mjs` CLI (`list`, `fail`, `unlock`) and `completion.mjs` |
 | 2 | CP-04b | CP-04a | `blueprint-decisions.mjs`: interview, gate and approval-edit answers with downstream invalidation |
 | 2 | CP-04d | CP-04a | `blueprint-approve.mjs`: `show` and hash-bound `approve` (branch, write-docs, commit, rollback) |
 | 3 | CP-02g | CP-05a, CP-05b (amends CP-02e's host) | the host settles an oversize prompt as `PROMPT_TOO_LARGE` |
