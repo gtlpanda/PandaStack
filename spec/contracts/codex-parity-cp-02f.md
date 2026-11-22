@@ -102,6 +102,15 @@ The CP-02f fake:
 - appends one line per spawn to `calls.jsonl`: role, argv, cwd, the whole env, pid,
   stdin, and the `--sandbox` and `--model` values.
 
+Amended at the wave-2 freeze (W2-9, PR #75), additively, so every case above holds
+before and after CP-02h:
+- it writes `{"json": ...}` only when the `--output-schema` file it is handed is the
+  NR-01 wire schema (matched by exact bytes); for any other schema (CP-02h's strict
+  leaf schema) it writes the reply's `json` string itself, a bare object;
+- `replies[role]` may be an array, one entry per spawn of that role, the last one
+  repeating; the per-role spawn count comes from `calls.jsonl`;
+- each `calls.jsonl` line also records the schema file's bytes as `schema`.
+
 The test copies it into each case's owned directory and sets mode 0755 there, so git
 mode bits do not matter. `codexBin` is that absolute path.
 
