@@ -11,9 +11,13 @@
 //   - reports no counts (crashed, killed, or exited before the harness loaded), or
 //   - exits non-zero although every test it counted passed, or
 //   - runs past the per-file timeout (a handle left open keeps a child alive; the old serial
-//     run hid that by ending with process.exit). The child is killed.
+//     run hid that by ending with process.exit). The child and every process below it are
+//     killed (killTree), so a server or helper the test started does not outlive it.
 // The last three add one failure each, so nothing that went wrong can be counted as passed.
-import { spawn } from 'node:child_process'
+//
+// Children stay in this process's group, so Ctrl-C and a caller that owns the group (verify
+// runs each step in an owned group it cannot outlive) still reach them.
+import { execFileSync, spawn } from 'node:child_process'
 import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -70,13 +74,76 @@ export function settle({ countsText, code, signal, output, label, timedOutMs = n
   return { pass, fail, skipped, text }
 }
 
+// Every process below `root` in a process table ([{pid, ppid}]), found by walking parent links
+// down from root. Root itself is not included. Only real pids (> 1) are ever returned.
+export function descendants(root, table) {
+  const children = new Map()
+  for (const { pid, ppid } of table) {
+    if (!children.has(ppid)) children.set(ppid, [])
+    children.get(ppid).push(pid)
+  }
+  const found = new Set()
+  const pending = [...(children.get(root) ?? [])]
+  while (pending.length) {
+    const pid = pending.pop()
+    if (pid <= 1 || pid === root || found.has(pid)) continue
+    found.add(pid)
+    pending.push(...(children.get(pid) ?? []))
+  }
+  return [...found]
+}
+
+// The machine's process table from `ps` (Linux and macOS), as [{pid, ppid}].
+export function processTable() {
+  const text = execFileSync('ps', ['-A', '-o', 'pid=,ppid='], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+  const rows = []
+  for (const line of text.split('\n')) {
+    const match = /^\s*(\d+)\s+(\d+)\s*$/.exec(line)
+    if (match) rows.push({ pid: Number(match[1]), ppid: Number(match[2]) })
+  }
+  return rows
+}
+
+function signalPid(pid, signal) {
+  // Only an exact, real pid: never 0, 1, a negative (group) pid, or this process.
+  if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) return
+  try { process.kill(pid, signal) } catch { /* already gone */ }
+}
+
+// Kills `root` and every process below it. The tree is first frozen with SIGSTOP, re-reading
+// the process table until a pass finds no process not already stopped, so nothing can start a
+// new process between the listing and the kill. Then each frozen pid gets SIGKILL. A process
+// that left the tree on its own (double-forked to pid 1) is out of reach, as with any tree kill.
+// Returns a note when the table could not be read; the root is still killed.
+export function killTree(root, { table = processTable } = {}) {
+  if (!Number.isInteger(root) || root <= 1 || root === process.pid) return null
+  const frozen = new Set([root])
+  signalPid(root, 'SIGSTOP')
+  let note = null
+  try {
+    for (let pass = 0; pass < 10; pass++) {
+      const fresh = descendants(root, table()).filter(pid => !frozen.has(pid))
+      if (fresh.length === 0) break
+      for (const pid of fresh) { frozen.add(pid); signalPid(pid, 'SIGSTOP') }
+    }
+  } catch (error) {
+    note = `could not list processes below ${root} (${error.code ?? error.message}); killed only ${root}`
+  }
+  for (const pid of frozen) signalPid(pid, 'SIGKILL')
+  return note
+}
+
 function runChild(file, { cwd, env, label, timeoutMs }) {
   return new Promise(resolve => {
     const started = Date.now()
     const stateHome = mkdtempSync(join(tmpdir(), 'workflow-tests-state-'))
     const child = spawn(process.execPath, [RUNNER, file], { cwd, env: { ...env, AUTOBUILD_STATE_HOME: stateHome }, stdio: ['ignore', 'pipe', 'pipe', 'pipe'] })
     let output = '', countsText = '', exit = null, finished = false, timedOut = false
-    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL') }, timeoutMs)
+    const timer = setTimeout(() => {
+      timedOut = true
+      const note = killTree(child.pid)
+      if (note) output += `  note: ${note}\n`
+    }, timeoutMs)
     child.stdout.on('data', b => { output += b })
     child.stderr.on('data', b => { output += b })
     child.stdio[3].on('data', b => { countsText += b })
@@ -85,11 +152,15 @@ function runChild(file, { cwd, env, label, timeoutMs }) {
       finished = true
       clearTimeout(timer)
       for (const stream of [child.stdout, child.stderr, child.stdio[3]]) stream.destroy()
-      rmSync(stateHome, { recursive: true, force: true })
+      // A leftover writer must not crash the pool: the run still settles and reports.
+      try { rmSync(stateHome, { recursive: true, force: true }) }
+      catch (error) { output += `  note: could not remove ${stateHome}: ${error.code ?? error.message}\n` }
       resolve({ ...settle({ countsText, code: exit?.code ?? null, signal: exit?.signal ?? null, output, label, timedOutMs: timedOut ? timeoutMs : null }), ms: Date.now() - started })
     }
     child.once('error', error => { output += `${error.message}\n`; exit ??= { code: null, signal: 'spawn-error' }; finish() })
-    child.once('exit', (code, signal) => { exit = { code, signal }; setTimeout(finish, PIPE_GRACE_MS).unref() })
+    // Once the child has exited it is reaped and its pid may be reused: stop the timeout now,
+    // so nothing is ever killed by that pid. The file is not a timeout; it only waits for pipes.
+    child.once('exit', (code, signal) => { exit = { code, signal }; clearTimeout(timer); setTimeout(finish, PIPE_GRACE_MS).unref() })
     child.once('close', (code, signal) => { exit ??= { code, signal }; finish() })
   })
 }

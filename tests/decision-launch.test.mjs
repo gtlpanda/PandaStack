@@ -26,7 +26,10 @@ async function fixture(backend, patch = {}) {
   const oldStateHome = process.env.AUTOBUILD_STATE_HOME
   // The loop's final gate writes a gate-cache file under the autobuild state home and
   // prunes entries whose project is gone; without this it touched the real ~/.local/state.
-  const outerGateDir = gateDir(oldStateHome || process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'))
+  // Watch every place a leak could land: the state home this process was given (under the
+  // parallel runner, the pool's private one) and the real default (XDG, then ~/.local/state).
+  const outerGateDirs = [...new Set([oldStateHome, process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state')]
+    .filter(Boolean).map(gateDir))]
   process.env.PANDASTACK_RUNS_DIR = join(trackingRoot, 'runs')
   process.env.AUTOBUILD_STATE_HOME = join(trackingRoot, 'state')
   process.env.AUTOBUILD_MAX_SLEEP_MS = '0'
@@ -137,7 +140,7 @@ async function fixture(backend, patch = {}) {
     return { code, calls, events, logs, commands, observerFailures, state: queue.read('choice'),
       runs, lockRemoved: !existsSync(join(root, '.harness', 'loop.pid')),
       privateGateFiles: listDir(gateDir(join(trackingRoot, 'state'))),
-      leakedGateFiles: listDir(outerGateDir).filter(name => readText(join(outerGateDir, name)).includes(root)) }
+      leakedGateFiles: outerGateDirs.flatMap(dir => listDir(dir).filter(name => readText(join(dir, name)).includes(root)).map(name => join(dir, name))) }
   } finally {
     childProcess.spawn = original.spawn; childProcess.spawnSync = original.spawnSync
     childProcess.execFileSync = original.execFileSync; syncBuiltinESMExports()

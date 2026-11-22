@@ -3936,7 +3936,7 @@ Phase 2 acceptance: 97/97.
 - Under `/verify` the suite counts 3 fewer tests (2081) than run directly (2084). That is
   pre-existing: verify-payload-umask (and siblings) print a "skip" line outside test() when
   VERIFY_CAPTURE_SCOPE_DIR is set; the serial runner shows the same -3 (2073 vs 2070).
-- Tests: tests/workflow-pool.test.mjs (12 cases): counting, un-awaited tests, import failure,
+- Tests (first version): tests/workflow-pool.test.mjs (12 cases): counting, un-awaited tests, import failure,
   a SIGKILLed child, a non-zero exit after passes, output order, one state home per child,
   the per-file timeout, the alone lane, setting parsing, scheduling, malformed counts.
   Mutations caught: counts written at import instead of exit; a non-zero exit ignored; the
@@ -3954,6 +3954,29 @@ Phase 2 acceptance: 97/97.
   machine's git 2.43 runs it in the foreground, which is why only CI saw it). The fixture's
   commit now passes -c maintenance.auto=false -c gc.auto=0 (host amendment to a frozen test;
   no assertion changed).
+- The third hunt (head 2d2b58a) reproduced two LOW findings, both fixed here:
+  - F1: decision-launch's leak guard watched only the state home it was given, which under the
+    pool is the child's private one, so a gate cache leaking into the real ~/.local/state went
+    unseen. It now watches that home and the real default (XDG_STATE_HOME, then
+    ~/.local/state). tests/decision-launch-leak-guard.test.mjs runs the real test file through
+    the real pool with a simulated leak, and fails against the old guard.
+  - F2: a timed-out file's own child processes outlived it, because only the runner was killed.
+    killTree now freezes the child and everything below it with SIGSTOP, re-reading `ps` until
+    nothing new appears, then sends SIGKILL to each exact pid. It never signals pid 0, pid 1, a
+    negative (group) pid, or the pool itself. Children stay in the caller's process group, so
+    Ctrl-C and verify's owned group still reach them. A first version made each child a
+    process-group leader (`detached`); it failed `/verify` (monorepo-evidence's nested-verify
+    subtests) and was dropped. Which part of it broke them was not isolated. The timeout is
+    now cleared as soon as the child exits, because an exited child's pid may be reused and
+    must never be signalled.
+- Tests now 17 cases in tests/workflow-pool.test.mjs: descendants (nesting, pid 0/1 and loop
+  rows), killTree (refused pids; root still killed when `ps` fails), a three-level tree killed
+  on timeout and kept in the caller's group, and no timeout after the child exits. Mutations
+  caught: root-only kill, one-level walk, `detached` children, the timer left armed after exit.
+  The alone-lane test failed once in five runs; it compared performance.timeOrigin + now() across
+  processes, which is not guaranteed to agree, so it now uses Date.now() (cause not isolated;
+  untested hypothesis). After these fixes: three
+  runs of the suite, 2091 passed, 0 failed each (76-78s).
 
 ## 68. `autobuild check --shard i/n`: the full gate as n parallel parts (2026-11-21)
 
