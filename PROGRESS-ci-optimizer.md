@@ -183,9 +183,9 @@ Built (Claude backend, iteration 4):
 - `graphs/autobuild/tool/lib/ci/metrics.mjs` exports the contract's functions: `seconds`,
   `percentile`, `jobKey`, `attemptFacts`, `computeMetrics` and `gateMetrics`. They are pure;
   the command reads the history and the gate timings.
-- `lib/ci/history.mjs` now exports its existing `newestFirst` comparator, unchanged. Metrics
-  reuse it for "most recent", so the window, `criticalPathJobs` and the stored history share
-  one ordering.
+- `lib/ci/history.mjs` now exports its existing `newestFirst` comparator and `isPlainObject`
+  guard, both unchanged. Metrics reuse the comparator for "most recent", so the window,
+  `criticalPathJobs` and the stored history share one ordering.
 - `lib/ci/command.mjs` adds `autobuild ci metrics [--workflow NAME] [--window N] [--json]`.
   Gate timings come through `gate-timings.mjs`'s `readTimings`, only when `autobuild.json`
   exists.
@@ -199,9 +199,13 @@ Decisions (unattended, recorded here):
   the frozen reference. A counted job with no setup steps contributes 0 setup seconds.
 - Null facts are left out of the workflow percentiles; for example, an attempt without
   `updatedAt` has no wall. `wallSeconds.max` is `null` when nothing was measured.
-- A workflow with no timing attempt has `criticalPathJobs: []` and `runs: 0`. Its timing
-  percentiles are `null`, and with every label rated its `costUsd` is
-  `{ total: 0, perSuccessfulRun: null }`.
+- A workflow with no timing attempt has `criticalPathJobs: []` and `runs: 0`, and its timing
+  percentiles are `null`. It has no counted labels, so its `costUsd` is
+  `{ total: 0, perSuccessfulRun: null }` even when no rates are configured.
+- "Most recent" (the window and `criticalPathJobs`) uses the history comparator, which
+  compares `startedAt` as text. The frozen reference uses `Date.parse` instead. The two
+  agree on GitHub's `…Z` timestamps, but an import that mixes UTC offsets or fractional
+  seconds could window differently. That case is untested and left as it is.
 - Cost sums whole minutes per label, then multiplies by the rate once. Rates are looked up
   with `Object.hasOwn` and must be numbers, so an inherited key like `constructor` or a
   string rate is missing. A job with no label is `RATE_MISSING:unlabeled`.

@@ -74,7 +74,7 @@ function callGh(ghBin, args, env) {
   }
 }
 
-const isPlainObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+export const isPlainObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const isPositiveInteger = (value) => Number.isInteger(value) && value >= 1;
 
 function listFrom(doc, key, args) {

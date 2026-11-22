@@ -2,7 +2,7 @@
 // local gate figures, all computed from recorded timestamps. Pure functions: the caller reads the
 // stored history and the gate timings. A value that cannot be measured is null, never a guess.
 
-import { newestFirst } from "./history.mjs";
+import { isPlainObject, newestFirst } from "./history.mjs";
 
 /** Permanent unknowns: the GitHub Actions REST API reports neither (ci-optimizer-priority.md, "Deferred"). */
 const PERMANENT_UNKNOWNS = ["CI_CACHE_HIT_RATE", "RUNNER_UTILIZATION"];
@@ -197,7 +197,6 @@ export function computeMetrics(attempts, { rates = {}, window = null } = {}) {
 
 // ---------- the local gate ----------
 
-const isPlainObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const stepsOf = (record) => (Array.isArray(record.steps) ? record.steps.filter(isPlainObject) : []);
 
 /** Full-phase gate metrics from gate-timings.jsonl records (readTimings), or null when there are none. */
