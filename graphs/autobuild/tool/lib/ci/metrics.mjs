@@ -195,6 +195,11 @@ export function computeMetrics(attempts, { rates = {}, window = null } = {}) {
   return { schemaVersion: 1, workflows, gate: null, unknowns: [...unknowns].sort() };
 }
 
+/** The metrics stand-in when there is no stored history (spec/contracts/ci-optimizer-co-06.md). */
+export function noHistoryMetrics() {
+  return { workflows: [], gate: null, unknowns: [...PERMANENT_UNKNOWNS, "NO_HISTORY"].sort() };
+}
+
 // ---------- the local gate ----------
 
 const stepsOf = (record) => (Array.isArray(record.steps) ? record.steps.filter(isPlainObject) : []);

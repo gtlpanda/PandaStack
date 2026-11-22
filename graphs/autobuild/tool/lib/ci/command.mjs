@@ -8,11 +8,12 @@ import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { CONFIG_FILE, findProjectRoot } from "../config.mjs";
 import { SAFE_GIT } from "../proc.mjs";
-import { applyShardWeights, configIsCommitted, measuredSeconds, planShardWeights, shardCountFromProfile } from "./apply.mjs";
+import { analyze } from "./analyze.mjs";
+import { applyShardWeights, configIsCommitted, describeChange, measuredSeconds, planShardWeights, shardCountFromProfile } from "./apply.mjs";
 import { loadProfile, projectConfig } from "./discover.mjs";
 import { readTimings, TIMINGS_FILE } from "../gate-timings.mjs";
 import { attemptKey, fetchGithubHistory, githubRepo, importedAttempts, isGithubRepo, mergeHistory, readHistory, writeHistory } from "./history.mjs";
-import { computeMetrics, gateMetrics } from "./metrics.mjs";
+import { computeMetrics, gateMetrics, noHistoryMetrics } from "./metrics.mjs";
 import { wholeNumberOf } from "./patterns.mjs";
 import { ciPolicy } from "./policy.mjs";
 import { CiError } from "./state.mjs";
@@ -190,7 +191,7 @@ function applyLines(plan, verdict) {
   return [
     `shards: ${plan.shardCount}`,
     `slowest shard before: ${plan.before.maxShardSeconds}s, after: ${plan.after.maxShardSeconds}s (computed from measured durations)`,
-    ...plan.changes.map((change) => `  ${change.step}: shardWeight ${change.from ?? "unset"} -> ${change.to}`),
+    ...plan.changes.map((change) => `  ${describeChange(change)}`),
     `unmeasured: ${listOrNone(plan.unmeasured)}`,
     ...verdict,
   ];
@@ -224,12 +225,45 @@ async function apply({ root, flags, values, env, json }) {
   return { code: outcome.code, lines: applyLines(plan, outcome.lines) };
 }
 
+// ---------- ci analyze (spec/contracts/ci-optimizer-co-06.md) ----------
+
+/** CO-04 metrics over each workflow's newest `baselineRuns` stored attempts, or the no-history document. */
+function analysisMetrics(root, env, policy, records) {
+  const stored = readHistory(root, env);
+  if (!stored) return noHistoryMetrics();
+  const doc = computeMetrics(stored.attempts, { rates: policy.ratesPerMinute, window: policy.baselineRuns });
+  doc.gate = records === null ? null : gateMetrics(records);
+  return doc;
+}
+
+function findingLine(f) {
+  return `[${f.risk}/${f.action}] ${f.rule} ${f.target}${f.job === null ? "" : `#${f.job}`}: ${f.summary}`;
+}
+
+async function analyzeRepo({ root, env, json }) {
+  const config = projectConfig(root, env);
+  const policy = ciPolicy(config);
+  const { profile } = await loadProfile(root, { env, config });
+  const records = config ? gateRecords(config) : null;
+  const metricsDoc = analysisMetrics(root, env, policy, records);
+  // The CO-05 plan needs autobuild.json and a shard count from the profile; otherwise no gate plan.
+  const shardCount = config ? shardCountFromProfile(profile) : null;
+  const gate = shardCount === null ? null : { plan: planShardWeights(config.gate, measuredSeconds(records), shardCount) };
+  const findings = analyze({ profile, metrics: metricsDoc, gate, config, policy });
+  const unknowns = [...new Set([...profile.unknowns, ...metricsDoc.unknowns])].sort();
+  // A finding is not a failed check: analyze exits 0 whatever it finds.
+  if (json) return { code: 0, json: { findings, unknowns } };
+  const toApply = findings.filter((f) => f.action === "apply").length;
+  return { code: 0, lines: [...findings.map(findingLine), `findings: ${findings.length} (${toApply} to apply, ${findings.length - toApply} to propose)`] };
+}
+
 // `flags` are booleans; each of `values` takes the next argument.
 const SUBCOMMANDS = {
   discover: { flags: ["--refresh", "--json"], values: [], run: discover },
   history: { flags: ["--from-gh", "--json"], values: ["--repo", "--limit", "--import"], run: history },
   metrics: { flags: ["--json"], values: ["--workflow", "--window"], run: metrics },
   apply: { flags: ["--dry-run", "--json"], values: ["--shards"], run: apply },
+  analyze: { flags: ["--json"], values: [], run: analyzeRepo },
 };
 const USAGE = `usage: autobuild ci <${Object.keys(SUBCOMMANDS).join("|")}> [flags] [--json]`;
 

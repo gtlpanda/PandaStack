@@ -296,3 +296,76 @@ Focused validation (all exit 0):
 - `autobuild mark-passed CO-05`: PASS.
 
 Still pending for the PR: the full regressions, review and the bug hunt.
+
+## CO-06 — Analysis rules
+
+Built (Claude backend, iteration 6):
+- `graphs/autobuild/tool/lib/ci/analyze.mjs` exports `analyze` and `compareFindings`. It is
+  pure: no I/O, and its inputs are not mutated. It implements the 11 rules over the profile,
+  CO-04 metrics, the CO-05 plan and autobuild.json. Only `gate-shard-weights` uses
+  `action: "apply"`.
+- Reuse:
+  - The GitLab install check uses `INSTALL_COMMAND` from `patterns.mjs`.
+  - Job mapping uses `jobKey` from `metrics.mjs`.
+  - The CLI's plan comes from `shardCountFromProfile`, `measuredSeconds` and
+    `planShardWeights`.
+  - `apply.mjs` now exports `describeChange`, which is the one change-line format used by both
+    `ci apply` output and the `gate-shard-weights` evidence.
+  - `metrics.mjs` now exports `noHistoryMetrics()`, the contract's no-history document, built
+    from its permanent unknowns.
+- `lib/ci/command.mjs` adds `autobuild ci analyze [--json]`. Its metrics cover each workflow's
+  newest `policy.baselineRuns` attempts, with policy rates. Without history it uses the
+  no-history document. The gate plan is computed only when `autobuild.json` exists and the
+  profile gives a shard count; otherwise `gate` is null. A missing timings file is not an error
+  here: the plan simply does not improve. `unknowns` is the sorted, de-duplicated union of the
+  profile and metrics unknowns. The command exits 0 whatever it finds.
+- `lib/cli.mjs` gains one help line.
+
+Decisions (unattended, recorded here):
+- `long-single-job` mapping: the CO-04 step `job` is `jobKey(name)`, in which digit runs become
+  `*`. The rule therefore compares it with `jobKey(name ?? id)` of each job model. A literal
+  comparison would never match a job such as `e2e`. The rule fires only when exactly one model
+  matches; zero or several matches give no finding, so nothing is guessed. `job` is the model's
+  id.
+- Serial flags are checked one command line at a time, and only on `kind: "test"` steps, so
+  `pip install -i` never fires.
+  - Digits are anchored, so `--test-concurrency=10` and `go test -p 16` do not fire.
+    `--test-concurrency 1` and `go test -p=1` do.
+  - jest's `-i` counts only on a line that runs jest.
+  - pytest counts as parallel when the line has `-n…` or `--numprocesses`.
+  - There is one finding per step, and it lists every flag found.
+- Framework-command findings are de-duplicated by (manifest, command), because jest and vitest
+  can share one `scripts.test`. The target is the framework's first evidence file in
+  discovery's scan order: the root first, then child directories by path. That is the
+  directory discovery took the command from. This is exact when the framework has one
+  evidence file. When several directories declare the framework and the root's test script is
+  absent, it can name the root manifest although the command came from a child; that is an
+  untested edge.
+- `needs-without-artifacts` skips a `needs` entry that names no job model, and fires once for a
+  repeated need. A job with no steps counts as an aggregator, because all of its zero steps are
+  `other`.
+- `gate-shard-weights` saving is `Math.round(before - after)`. The finding schema needs an
+  integer, and imported timings may hold fractional p50s.
+- `gate-serial` counts entries whose `resources` is a non-empty array. Gate rules read
+  `config.gateConcurrency` and `config.gateCache` literally. The CLI passes the loaded config,
+  which already holds the defaults (`gateCache: false`, `gate: []`).
+- Sort: rule and target compare by code unit, which is locale-independent and matches the
+  frozen test's `<`. `job` compares with `localeCompare`, with null after any string (contract
+  clarification).
+- Summaries and evidence are single lines. Control characters in step names and commands
+  become spaces, and evidence quotes only the first non-empty line of a `run`.
+
+Focused validation (all exit 0):
+- `node --test --test-reporter=spec acceptance/ci-optimizer/co-06-analyze.test.mjs`: 22/22 pass.
+- `node --test --test-reporter=spec graphs/autobuild/tool/test/ci-analyze.test.mjs`: 13/13 pass.
+  These are new implementation tests: hand-built profiles plus one CLI test with a private
+  `AUTOBUILD_STATE_HOME`.
+- `node --test --test-reporter=spec` on the CO-01 to CO-05 acceptance files, plus
+  `test/ci-history`, `ci-discover`, `ci-gitlab`, `ci-metrics`, `ci-apply` and `entrypoint`:
+  202/202 pass. These are tripwires for the `command.mjs`, `apply.mjs`, `metrics.mjs` and
+  `cli.mjs` changes.
+- `bash scripts/check-secrets.sh` (tracked files), and the same script run on
+  `lib/ci/analyze.mjs` and `test/ci-analyze.test.mjs`: clean.
+- `autobuild mark-passed CO-06`: PASS.
+
+Still pending for the PR: the full regressions, review and the bug hunt.

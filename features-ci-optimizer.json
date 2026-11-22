@@ -96,7 +96,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-06-analyze.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-07",

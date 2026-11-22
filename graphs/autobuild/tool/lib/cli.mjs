@@ -38,6 +38,7 @@ const HELP = `autobuild — autonomous, test-gated build loop for Claude Code or
   autobuild ci history [--from-gh [--repo o/r] [--limit N] | --import FILE] [--json]   fetch (gh), import or show CI attempts
   autobuild ci metrics [--workflow NAME] [--window N] [--json]   wall, queue, critical path, cost and flakes from stored history
   autobuild ci apply [--dry-run] [--shards N] [--json]   recalibrate gate shardWeight from measured durations (only if the slowest shard gets faster)
+  autobuild ci analyze [--json]   findings over the profile, stored history and gate (proposals; only shard weights may be applied)
 
 Exit codes of \`run\`: 0 verified completion or PR-first handoff, 2 no progress, 3 blocked, 4 frozen files changed, 5 preflight,
 6 total budget, 7 max iterations, 8 usage limit resets too far away, 9 billing, 10 auth,

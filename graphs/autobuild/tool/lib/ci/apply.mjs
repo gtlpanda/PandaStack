@@ -104,6 +104,11 @@ export function planShardWeights(gateEntries, measured, shardCount) {
   };
 }
 
+/** One plan change as text, `<step>: shardWeight <from|unset> -> <to>` (the apply output and the CO-06 evidence). */
+export function describeChange(change) {
+  return `${change.step}: shardWeight ${change.from ?? "unset"} -> ${change.to}`;
+}
+
 /**
  * True when autobuild.json is tracked and both the working tree and the index match HEAD, so the
  * printed `git checkout -- autobuild.json` restores the pre-apply bytes. (A staged edit reverted in
