@@ -176,6 +176,14 @@ is the object of the verb's own keys from the args file, without `repo`.
    The session reads the questions, design or backlog from that file, which is already
    redacted.
 
+**What stays unredacted.** The host's own records under `runDir` are not redacted:
+- `result.json` (CP-02e) holds the graph's raw result;
+- the checkpoint rows hold each leaf's raw completion.
+
+They stay 0600 inside `.git`, and they are never printed or committed. Redaction
+(SKILL.md: "every returned ledger before it is written to run1.json, run2.json, or
+run3.json") applies to the run files the session reads, as it does on the Claude path.
+
 ## Output and exit codes
 
 - **Exit 0.** stdout is exactly one line, `JSON.stringify(report) + "\n"`, with keys in
@@ -192,7 +200,7 @@ is the object of the verb's own keys from the args file, without `repo`.
 |---|---|---|
 | 0 | done | none |
 | 1 | bad input; nothing in the repository was read | `INVALID_ARGS`; the host's `INVALID_HOST_INPUT` |
-| 2 | refused; no run file written | `NOT_A_REPO`, `STALE`, every CP-04a and CP-04b refusal code except `IO_ERROR`, and the host's exit-2 codes (for example `OFFERING_UNSUPPORTED`) |
+| 2 | refused; no run file written | `NOT_A_REPO`, `STALE`, every CP-04a and CP-04b refusal code except `IO_ERROR` and `INVALID_ARGS` (exit 1), and the host's exit-2 codes (for example `OFFERING_UNSUPPORTED`) |
 | 3 | failed | `INVALID_RESULT`, `IO_ERROR` (this CLI's, CP-04a's or CP-04b's), the host's exit-3 codes, and writeRun refusals after a run |
 | 4 | the host's exit 4 | `OWNER_BUSY` (not expected: every run directory is new) |
 
@@ -285,6 +293,8 @@ case 1 fails on the missing module and the dependency, and the rest fail on the 
 module.
 
 Enforced by review, not by a case:
+- the workflow args' key order (`argsHash` canonicalizes key order, so the case pins
+  keys and values only);
 - the SIGINT and SIGTERM handlers and their removal;
 - `INVALID_RESULT` (blueprint-design itself returns only statuses its stage's run
   accepts);
