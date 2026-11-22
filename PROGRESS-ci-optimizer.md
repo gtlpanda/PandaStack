@@ -176,3 +176,62 @@ Focused validation (all exit 0):
 - `autobuild mark-passed CO-03`: PASS.
 
 Still pending for the PR: the full regressions, review and the bug hunt.
+
+## CO-04 — CI metrics
+
+Built (Claude backend, iteration 4):
+- `graphs/autobuild/tool/lib/ci/metrics.mjs` exports the contract's functions: `seconds`,
+  `percentile`, `jobKey`, `attemptFacts`, `computeMetrics` and `gateMetrics`. They are pure;
+  the command reads the history and the gate timings.
+- `lib/ci/history.mjs` now exports its existing `newestFirst` comparator, unchanged. Metrics
+  reuse it for "most recent", so the window, `criticalPathJobs` and the stored history share
+  one ordering.
+- `lib/ci/command.mjs` adds `autobuild ci metrics [--workflow NAME] [--window N] [--json]`.
+  Gate timings come through `gate-timings.mjs`'s `readTimings`, only when `autobuild.json`
+  exists.
+- `lib/cli.mjs` gains one help line.
+
+Decisions (unattended, recorded here):
+- A job or step counts only when both timestamps are present and parse. A record whose
+  timestamps do not parse counts as unmeasured, not as zero.
+- An attempt with no counted job has these facts: `queue`, `setup` and `efficiency` are
+  `null`, `criticalPath` is `{ jobs: [], seconds: 0 }` and `runnerMinutes` is 0. These match
+  the frozen reference. A counted job with no setup steps contributes 0 setup seconds.
+- Null facts are left out of the workflow percentiles; for example, an attempt without
+  `updatedAt` has no wall. `wallSeconds.max` is `null` when nothing was measured.
+- A workflow with no timing attempt has `criticalPathJobs: []` and `runs: 0`. Its timing
+  percentiles are `null`, and with every label rated its `costUsd` is
+  `{ total: 0, perSuccessfulRun: null }`.
+- Cost sums whole minutes per label, then multiplies by the rate once. Rates are looked up
+  with `Object.hasOwn` and must be numbers, so an inherited key like `constructor` or a
+  string rate is missing. A job with no label is `RATE_MISSING:unlabeled`.
+- A null workflow, job or step name groups as null and sorts last. `jobKey` of a non-string
+  is `null`.
+- Gate: a step is cached only when `cached === true`. Non-object records, a missing `steps`
+  list and non-number `seconds` or `wallSeconds` are skipped, not thrown on.
+- CLI:
+  - `--window` takes digits only and must be at least 1, through `wholeNumberOf`; anything
+    else is `USAGE`. Without it every stored attempt counts.
+  - `--workflow` filters the attempts before computing, so `RATE_MISSING` names only that
+    workflow's labels. A name that matches nothing exits 0 with
+    `metrics: no attempts for workflow "<name>"`.
+  - A stored history with zero attempts is not `NO_HISTORY`; it prints
+    `metrics: the stored history has no attempts`.
+  - An unreadable `gate-timings.jsonl`, for example a directory, is `TIMINGS_UNREADABLE`
+    (exit 3).
+  - Human output prints an unmeasured figure as `unknown`. After the workflow blocks come a
+    `gate:` line (only with gate metrics) and an `unknowns:` line. Only the step lines are
+    indented.
+
+Focused validation (all exit 0):
+- `node --test acceptance/ci-optimizer/co-04-metrics.test.mjs`: 27/27 pass.
+- `node --test graphs/autobuild/tool/test/ci-metrics.test.mjs`: 23/23 pass. These are new
+  implementation tests with private state homes.
+- `node --test acceptance/ci-optimizer/co-01-discover.test.mjs acceptance/ci-optimizer/co-02-gitlab.test.mjs acceptance/ci-optimizer/co-03-history.test.mjs graphs/autobuild/tool/test/ci-history.test.mjs graphs/autobuild/tool/test/ci-discover.test.mjs graphs/autobuild/tool/test/ci-gitlab.test.mjs graphs/autobuild/tool/test/entrypoint.test.mjs`:
+  118/118 pass. These are tripwires for the `command.mjs`, `history.mjs` and `cli.mjs`
+  changes.
+- `bash scripts/check-secrets.sh` (tracked) and the same script run on the two new files:
+  clean.
+- `autobuild mark-passed CO-04`: PASS.
+
+Still pending for the PR: the full regressions, review and the bug hunt.

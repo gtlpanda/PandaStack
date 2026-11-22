@@ -9,7 +9,9 @@ import path from "node:path";
 import { findProjectRoot } from "../config.mjs";
 import { SAFE_GIT } from "../proc.mjs";
 import { loadProfile, projectConfig } from "./discover.mjs";
+import { readTimings, TIMINGS_FILE } from "../gate-timings.mjs";
 import { attemptKey, fetchGithubHistory, githubRepo, importedAttempts, isGithubRepo, mergeHistory, readHistory, writeHistory } from "./history.mjs";
+import { computeMetrics, gateMetrics } from "./metrics.mjs";
 import { wholeNumberOf } from "./patterns.mjs";
 import { ciPolicy } from "./policy.mjs";
 import { CiError } from "./state.mjs";
@@ -113,10 +115,61 @@ async function history(context) {
   return { code: 0, lines: [stored ? `history: ${attempts.length} attempts stored` : "history: none"] };
 }
 
+// ---------- ci metrics (spec/contracts/ci-optimizer-co-04.md) ----------
+
+/** The --window value, or null (every attempt); a whole number of at least 1. */
+function metricsWindow(values) {
+  if (!values.has("--window")) return null;
+  const text = values.get("--window");
+  const window = wholeNumberOf(text);
+  if (window === null || window < 1) throw usageError(`--window must be a whole number of at least 1, got ${JSON.stringify(text)}`);
+  return window;
+}
+
+/** The project's gate timings; an unreadable file is TIMINGS_UNREADABLE (exit 3). */
+function gateRecords(config) {
+  try {
+    return readTimings(config);
+  } catch (error) {
+    throw new CiError("TIMINGS_UNREADABLE", `cannot read ${path.join(config.logsDir, TIMINGS_FILE)}: ${error.code ?? error.message}`);
+  }
+}
+
+const sec = (value) => (value === null ? "unknown" : `${value}s`);
+const figure = (value) => (value === null ? "unknown" : String(value));
+
+function metricsLines(doc, workflowName) {
+  if (!doc.workflows.length) return [workflowName === null ? "metrics: the stored history has no attempts" : `metrics: no attempts for workflow ${JSON.stringify(workflowName)}`];
+  const lines = [];
+  for (const w of doc.workflows) {
+    const chain = w.criticalPathJobs.length ? w.criticalPathJobs.join(" → ") : "none";
+    lines.push(`workflow ${w.workflow}: ${w.runs} runs, wall p50 ${sec(w.wallSeconds.p50)} p90 ${sec(w.wallSeconds.p90)}, queue p50 ${sec(w.queueSeconds.p50)}, critical path p50 ${sec(w.criticalPathSeconds.p50)} (${chain}), efficiency ${figure(w.parallelEfficiency.p50)}, runner minutes ${w.runnerMinutes.total}, flake rate ${figure(w.reliability.flakeRate)}`);
+    // Only these step lines are indented.
+    for (const s of w.steps.slice(0, 5)) lines.push(`  ${s.job} / ${s.step}: p50 ${s.seconds.p50}s p90 ${s.seconds.p90}s (${s.samples})`);
+  }
+  if (doc.gate) lines.push(`gate: ${doc.gate.runs} full runs, wall p50 ${sec(doc.gate.wallSeconds.p50)} p90 ${sec(doc.gate.wallSeconds.p90)}, cache hit rate ${figure(doc.gate.cacheHitRate)}`);
+  lines.push(`unknowns: ${listOrNone(doc.unknowns)}`);
+  return lines;
+}
+
+async function metrics({ root, values, env, json }) {
+  const window = metricsWindow(values);
+  const config = projectConfig(root, env);
+  const stored = readHistory(root, env);
+  if (!stored) throw new CiError("NO_HISTORY", "no stored CI history; run `autobuild ci history --from-gh` or `--import FILE` first", 2);
+  const workflowName = values.has("--workflow") ? values.get("--workflow") : null;
+  const attempts = workflowName === null ? stored.attempts : stored.attempts.filter((attempt) => attempt.workflow === workflowName);
+  const doc = computeMetrics(attempts, { rates: ciPolicy(config).ratesPerMinute, window });
+  doc.gate = config ? gateMetrics(gateRecords(config)) : null;
+  if (json) return { code: 0, json: doc };
+  return { code: 0, lines: metricsLines(doc, workflowName) };
+}
+
 // `flags` are booleans; each of `values` takes the next argument.
 const SUBCOMMANDS = {
   discover: { flags: ["--refresh", "--json"], values: [], run: discover },
   history: { flags: ["--from-gh", "--json"], values: ["--repo", "--limit", "--import"], run: history },
+  metrics: { flags: ["--json"], values: ["--workflow", "--window"], run: metrics },
 };
 const USAGE = `usage: autobuild ci <${Object.keys(SUBCOMMANDS).join("|")}> [flags] [--json]`;
 

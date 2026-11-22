@@ -62,7 +62,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-04-metrics.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-05",

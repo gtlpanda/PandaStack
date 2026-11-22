@@ -36,6 +36,7 @@ const HELP = `autobuild — autonomous, test-gated build loop for Claude Code or
   autobuild evidence verify FILE       check the evidence dir against a manifest
   autobuild ci discover [--refresh] [--json]   profile the repo's languages, tests, CI and gate (stored per machine)
   autobuild ci history [--from-gh [--repo o/r] [--limit N] | --import FILE] [--json]   fetch (gh), import or show CI attempts
+  autobuild ci metrics [--workflow NAME] [--window N] [--json]   wall, queue, critical path, cost and flakes from stored history
 
 Exit codes of \`run\`: 0 verified completion or PR-first handoff, 2 no progress, 3 blocked, 4 frozen files changed, 5 preflight,
 6 total budget, 7 max iterations, 8 usage limit resets too far away, 9 billing, 10 auth,

@@ -179,7 +179,7 @@ export function normalizeAttempt(run, jobsDoc) {
 export const attemptKey = (attempt) => `${attempt.runId}#${attempt.attempt}`;
 
 /** startedAt descending (ISO strings compare as text), runId descending, attempt descending; null startedAt last. */
-function newestFirst(x, y) {
+export function newestFirst(x, y) {
   const xNull = x.startedAt === null;
   const yNull = y.startedAt === null;
   if (xNull !== yNull) return xNull ? 1 : -1;
