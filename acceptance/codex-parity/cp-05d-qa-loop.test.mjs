@@ -110,6 +110,8 @@ case "$mode" in
   fail) printf 'VERIFY: FAIL\\n'; exit 1 ;;
   pass-exit1) printf 'VERIFY: PASS\\n'; exit 1 ;;
   pass-then-text) printf 'VERIFY: PASS\\ntrailing note\\n'; exit 0 ;;
+  pass-suffix) printf 'VERIFY: PASS (partial)\\n'; exit 0 ;;
+  pass-prefix) printf 'NOT VERIFY: PASS\\n'; exit 0 ;;
 esac
 exit 9
 `
@@ -643,6 +645,8 @@ describe('CP-05d qa-loop (frozen acceptance; wiring proof on the fake codex)', (
     const variants = [
       { label: 'exit 1 after a VERIFY: PASS line', verifyMode: 'pass-exit1', dirty: false, touched: 'MATCH' },
       { label: 'exit 0 with text after the VERIFY: PASS line', verifyMode: 'pass-then-text', dirty: false, touched: 'MATCH' },
+      { label: 'exit 0 with a last line that only contains VERIFY: PASS (suffix)', verifyMode: 'pass-suffix', dirty: false, touched: 'MATCH' },
+      { label: 'exit 0 with a last line that only contains VERIFY: PASS (prefix)', verifyMode: 'pass-prefix', dirty: false, touched: 'MATCH' },
       { label: 'verify and touched both failed', verifyMode: 'fail', dirty: true, touched: 'MISMATCH' },
     ]
     await Promise.all(variants.map(async v => {
