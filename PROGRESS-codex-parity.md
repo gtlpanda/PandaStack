@@ -1558,3 +1558,97 @@ Observed limits and untested hypotheses:
 - macOS was not run.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-05c — QA loop ledger rules as code
+
+Implemented spec/contracts/codex-parity-cp-05c.md only.
+
+- New `graphs/qa/tool/qa-ledger.mjs` (synchronous, `node:` imports only, never runs
+  git). It exports `RUNS_KEPT` 20, `IDLE_STOP_RUNS` 2, `DEFAULT_MAX_FIX_ROUNDS` 3,
+  `LEDGER_GIT_PATH`, `LEDGER_FILE_NAME`, the frozen `QA_LEDGER_CODES`, and the
+  functions below. Every error is the fixed `qa-ledger: <CODE>.` with no cause.
+  - `emptyLedger`.
+  - `readLedger`: only an `lstat` ENOENT counts as missing. A symlink, directory or
+    FIFO is decided from `lstat` before any open, then `O_NOFOLLOW | O_NONBLOCK` and
+    `fstat`. Decoding is fatal UTF-8, and missing keys take their defaults.
+  - `writeLedger`: serialize and check first, then create the directories, then an
+    exclusive 0600 temp file, fsync, and rename. The directory fsync after the rename
+    is best effort.
+  - `applyResult`, `workflowArgs`, `applyIdle`, `shouldStop` and `setBlockedOn`.
+- New `tests/qa-ledger.test.mjs` (10 cases, harness `test()`). It covers:
+  - errors carry only `code` and message, with no case path in the stack;
+  - a parent that is a file fails the write and leaves the file unchanged;
+  - a BigInt, cyclic or `toJSON` run is `INVALID_LEDGER` and creates nothing;
+  - a result is judged on its JSON copy;
+  - `now` outside years 0000–9999, or a forged Date, is refused, and an undefined
+    `now` is the clock;
+  - nested directories are 0700 under umask 0277;
+  - a BOM is unparseable and a `__proto__` key is ignored;
+  - a null prototype is valid, while symbol, non-enumerable and sparse `runs` are not;
+  - the idle count stops at the safe-integer ceiling;
+  - returned arrays are never shared with the input.
+- loop.md, harness-repair.js, install.sh, autobuild.json and the catalog are
+  unchanged. graphs/qa/tool/ is not an install target or a catalog source. This was
+  re-read in this session:
+  - install.sh:41 `DIR_TARGETS=(skills agents workflows commands bin)`;
+  - install.sh:48 `PATH_TOOLS` names only autobuild;
+  - catalog.mjs:216-226 scans only `<root>/skills`.
+
+Decisions (no human present):
+- `node:` builtins only, as the contract requires. So the atomic write and read are a
+  copy of the CP-04a pattern, not a shared import.
+- A valid-shaped ledger that does not serialize to JSON reading back as a valid ledger
+  is `INVALID_LEDGER`, thrown before any filesystem step. Examples: a BigInt, a cycle,
+  or a run whose `toJSON` returns a non-object.
+- `applyResult` checks the status on both the input and its JSON copy, and takes the
+  `stuckSig` from the copy, so what is stored is what was judged.
+- `applyResult` options `{now: undefined}` means the clock, as an absent `now` does. A
+  `now` outside years 0000–9999 is `INVALID_ARGS`, because `toISOString` stops
+  matching `date -u +%FT%TZ` there.
+- Missing directories are created one at a time, top-down, and each is chmodded to
+  0700 before the next. A plain `mkdirSync(recursive, 0o700)` threw `LEDGER_IO_ERROR`
+  for `a/b/ledger.json` under umask 0277; that was observed. The cause is derived, not
+  observed separately: 0700 & ~0277 = 0500 leaves `a` without owner write. An EEXIST
+  from a concurrent creator is accepted.
+- Arrays are validated with an index loop, because `every()` skips holes. The
+  null-prototype, symbol and sparse case failed before this change and passed after
+  it. The only other change in between, the mkdir fix, is not on that case's path.
+  Which assertion failed was not printed.
+- `applyIdle(true)` at `Number.MAX_SAFE_INTEGER` throws `INVALID_LEDGER`, since the
+  result could not be a valid ledger.
+- Pure functions return new `runs` and `stuckSigs` arrays but share the run entries.
+  Copying the entries would change in-memory values a caller put there.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-05c-qa-ledger.test.mjs   # before the module: ERR_MODULE_NOT_FOUND (red, observed)
+node --test acceptance/codex-parity/cp-05c-qa-ledger.test.mjs   # 28 tests, 28 pass, 0 fail, 0 skipped (non-root)
+node tests/qa-ledger.test.mjs                 # 10 ok, 0 FAIL (after the mkdir and sparse-array fixes)
+node logs/evidence/cp-05c/run-focused.mjs tests/qa-ledger.test.mjs   # FOCUSED: 10 passed, 0 failed, 0 skipped
+node scripts/check-refs.mjs                   # check-refs: 271 references, all resolve
+bash scripts/validate.sh                      # VALIDATE: PASS
+git diff --check HEAD~1 HEAD                  # no output (run on the feat commit)
+bash scripts/check-secrets.sh                 # check-secrets: clean
+bash scripts/check-secrets.sh --worktree      # check-secrets: clean
+bash scripts/check-secrets.sh graphs/qa/tool/qa-ledger.mjs tests/qa-ledger.test.mjs   # check-secrets: clean
+autobuild mark-passed CP-05c                  # === node (1 file): PASS
+```
+
+These outputs are from the session transcript. Only the focused runner script is under
+logs/evidence/cp-05c/; no output logs were saved.
+
+Observed limits and untested hypotheses:
+- The new implementation tests were not mutation-checked beyond the two failures
+  observed before the fixes.
+- Crash atomicity rests on rename(2). No case simulates a crash, as the contract says.
+- A concurrent Claude-path writer racing this module is last-writer-wins by contract,
+  and it is not exercised.
+- macOS was not run, and neither was uid 0, where two acceptance cases skip.
+- `writeLedger` does not check deep-equality. A run holding a value that JSON
+  changes (`undefined`, a Date, NaN) is still accepted, and the bytes written are then
+  not deep-equal to the in-memory ledger. The read → `applyResult` → write flow
+  stores JSON copies only, so it cannot produce such a run. That is reasoned, not
+  tested.
+
+Full regressions, review and the branch hunt remain pending for the PR.

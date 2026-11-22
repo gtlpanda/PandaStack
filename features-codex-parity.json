@@ -305,7 +305,7 @@
       ],
       "test": "acceptance/codex-parity/cp-05c-qa-ledger.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-05b",
