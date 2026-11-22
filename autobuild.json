@@ -264,6 +264,8 @@
     "scripts/test-install.sh",
     "scripts/test-secrets.sh",
     "scripts/test-workflow.mjs",
+    "scripts/workflow-pool.mjs",
+    "scripts/workflow-file-runner.mjs",
     "scripts/test-workflow.sh",
     "scripts/test.sh",
     "scripts/validate.sh",

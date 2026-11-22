@@ -3908,6 +3908,83 @@ Phase 2 acceptance: 97/97.
   its cache into the private state home") and one real file leaked (removed after
   inspection); with it, 20/20 pass and the real gate directory count is unchanged.
 
+## 67. The workflow suite runs its files in parallel (2026-11-21)
+
+- Why: scripts/test-workflow.mjs imported all 188 test files into one process, one after
+  another: 452s of the 525s local `scripts/test.sh` (904s of CI's 981s), and every agent
+  `/verify` in this repo waited on it. Per-file profile: CPU/wall 0.89 (CPU-bound in total, no
+  single file dominant; the longest, graphs/build/tests/driver.test.mjs, is 54s).
+- What: scripts/workflow-pool.mjs runs each file in its own child
+  (scripts/workflow-file-runner.mjs), PANDASTACK_TEST_JOBS at a time (default: available
+  parallelism), longest first (logs/workflow-timings.json, else file size). Counts are written
+  to fd 3 when the child exits, so un-awaited async tests are counted (9 in render-*), and test
+  output can never be mistaken for counts. A child that reports no counts, or exits non-zero
+  after passing tests, adds a failure. Output is printed per file in sorted order. Every child
+  gets its own AUTOBUILD_STATE_HOME, removed after it. A file still running after
+  PANDASTACK_TEST_FILE_TIMEOUT_MS (default 10 min; the slowest file takes 54s) is killed and
+  fails by name: the old serial run ended with process.exit, which hid a test that left a
+  handle open; a child would otherwise wait on it forever. PANDASTACK_TEST_JOBS=1 keeps the
+  original in-process serial run. Host amendment to the frozen scripts/test-workflow.mjs; the two new modules are
+  frozen with it. The `TEST-WORKFLOW:` line keeps its format (nothing parses it).
+- Serial lane: decision-managed and decision-routing each failed once in five 32-job runs (a 300
+  ms expiry, a 100 ms wait). Four files with sub-second wall-clock assertions now run first,
+  alone (about 4.5s); no threshold was changed.
+- Proof (10 runs pinned to 4 cores with taskset, 10 at default concurrency, each compared with a
+  serial run by the sorted list of test names and outcomes): 20/20 identical, 2084 passed, 0
+  failed. Before the serial lane: 2 of 5 default runs failed. Wall: serial 455s, 4 cores 127s,
+  32 jobs 77s. `/verify` on this tree: 127s, VERIFY: PASS.
+- Under `/verify` the suite counts 3 fewer tests (2081) than run directly (2084). That is
+  pre-existing: verify-payload-umask (and siblings) print a "skip" line outside test() when
+  VERIFY_CAPTURE_SCOPE_DIR is set; the serial runner shows the same -3 (2073 vs 2070).
+- Tests (first version): tests/workflow-pool.test.mjs (12 cases): counting, un-awaited tests, import failure,
+  a SIGKILLed child, a non-zero exit after passes, output order, one state home per child,
+  the per-file timeout, the alone lane, setting parsing, scheduling, malformed counts.
+  Mutations caught: counts written at import instead of exit; a non-zero exit ignored; the
+  alone lane ignored; one state home shared by all children.
+- The branch hunt found no bug, but its impact map caught the first version sharing one state
+  home across all children while the docs said "private", and its errors lens named the
+  open-handle hang. Both were fixed before the PR. The re-hunt then reproduced F1 (LOW): a
+  timeout above 2^31-1 ms was accepted, and Node turns such a timer delay into 1 ms, so every
+  file would be killed at once. The setting now refuses values above that limit, and runPool
+  clamps a longer delay to it; the hunt's reproduction fails before the fix and passes after.
+- CI on the updated PR then failed in tests/run-placement.test.mjs: ENOENT lstat
+  .git/objects/maintenance.lock. The test's snapshot() walks the fixture repo's .git, and CI's
+  git (2.56) runs automatic maintenance detached after a commit, so its lock file appears and
+  vanishes mid-walk (GIT_TRACE shows `git commit` spawning `maintenance run --auto`; this
+  machine's git 2.43 runs it in the foreground, which is why only CI saw it). The fixture's
+  commit now passes -c maintenance.auto=false -c gc.auto=0 (host amendment to a frozen test;
+  no assertion changed).
+- The third hunt (head 2d2b58a) reproduced two LOW findings, both fixed here:
+  - F1: decision-launch's leak guard watched only the state home it was given, which under the
+    pool is the child's private one, so a gate cache leaking into the real ~/.local/state went
+    unseen. It now watches that home and the real default (XDG_STATE_HOME, then
+    ~/.local/state). tests/decision-launch-leak-guard.test.mjs runs the real test file through
+    the real pool with a simulated leak, and fails against the old guard.
+  - F2: a timed-out file's own child processes outlived it, because only the runner was killed.
+    killTree now freezes the child and everything below it with SIGSTOP, re-reading `ps` until
+    nothing new appears, then sends SIGKILL to each exact pid. It never signals pid 0, pid 1, a
+    negative (group) pid, or the pool itself. Children stay in the caller's process group, so
+    Ctrl-C and verify's owned group still reach them. A first version made each child a
+    process-group leader (`detached`); it failed `/verify` (monorepo-evidence's nested-verify
+    subtests) and was dropped. Which part of it broke them was not isolated. The timeout is
+    now cleared as soon as the child exits, because an exited child's pid may be reused and
+    must never be signalled.
+- Tests now 17 cases in tests/workflow-pool.test.mjs: descendants (nesting, pid 0/1 and loop
+  rows), killTree (refused pids; root still killed when `ps` fails), a three-level tree killed
+  on timeout and kept in the caller's group, and no timeout after the child exits. Mutations
+  caught: root-only kill, one-level walk, `detached` children, the timer left armed after exit.
+  The alone-lane test failed once in five runs; it compared performance.timeOrigin + now() across
+  processes, which is not guaranteed to agree, so it now uses Date.now() (cause not isolated;
+  untested hypothesis). After these fixes: three
+  runs of the suite, 2091 passed, 0 failed each (76-78s).
+- The fourth hunt (head 23ff5d0) found no bug (manual_review: logic and regression partly
+  covered). Its concurrency lens noted that the new "exits in time" test gave its child only
+  1000 ms, which a loaded 4-vCPU runner might not meet. It now uses 3000 ms, still inside the
+  5 s pipe grace, so a timer left armed would still fire. The three-level tree fixture now
+  passes its test only once the whole tree is up, and its timeout is 6000 ms, so the timeout
+  cannot fire before the tree exists. Both still fail against the bugs they guard. A run
+  pinned to 4 cores (taskset -c 0-3): 2092 passed, 0 failed, 154s.
+
 ## 68. `autobuild check --shard i/n`: the full gate as n parallel parts (2026-11-21)
 
 - Why: PandaStack's CI runs the full gate in one 4-vCPU job (981s; the regression suite alone
