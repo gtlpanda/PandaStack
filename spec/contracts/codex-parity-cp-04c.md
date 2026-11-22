@@ -102,7 +102,8 @@ refusals pass through (`NO_REQUEST`, `DOC_INVALID`, `DOC_MISSING`, `STATE_EXISTS
 
 Report: `{stateDir: dir, redacted}`. `redacted` is true when the stored `request` differs
 from the given request after `trim` (CP-04a redacted something). It is false when the
-request is absent or null.
+request is absent, null, or blank after `trim` (CP-04a then stores null; nothing was
+redacted).
 
 ### `answer`, `gate`, `edit`
 
@@ -293,6 +294,8 @@ case 1 fails on the missing module and the dependency, and the rest fail on the 
 module.
 
 Enforced by review, not by a case:
+- `maxConcurrentSubagents: 1` (blueprint-design runs its leaves one at a time, so the
+  value is not observable);
 - the workflow args' key order (`argsHash` canonicalizes key order, so the case pins
   keys and values only);
 - the SIGINT and SIGTERM handlers and their removal;
