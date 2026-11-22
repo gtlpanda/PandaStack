@@ -426,10 +426,20 @@ Decisions (unattended, recorded here):
   prints), then the VALIDATION line. The `GATE:` and `Pending PR checks` lines are not printed;
   the VALIDATION line takes their place.
 
+- Follow-up in the same feature:
+  - `ciProviderOf` (`ci-parity.mjs`) now looks up own keys only. `validate.mjs` feeds it every
+    changed path, and a file named `constructor` or `toString` used to read as a CI file.
+  - `ci validate` reads `validation.json` before the gate runs, so a linked state directory
+    fails with `STATE_UNSAFE` (exit 3) before any step runs.
+
 Focused validation:
-- `node --test acceptance/ci-optimizer/co-07-validate.test.mjs`: 33/33 pass, exit 0.
-- `node --test graphs/autobuild/tool/test/ci-validate.test.mjs`: 10/10 pass, exit 0. These are
-  new implementation tests with private `AUTOBUILD_STATE_HOME` directories.
+- `node --test acceptance/ci-optimizer/co-07-validate.test.mjs`: 33/33 pass. This was read
+  through `| tail`, so its exit status was not seen directly. It is included in the helper run
+  below, which exited 0.
+- `node --test graphs/autobuild/tool/test/ci-validate.test.mjs`: 11/11 pass after the
+  follow-up, also read through `| tail`. These are new implementation tests with private
+  `AUTOBUILD_STATE_HOME` directories. They include a negative test for prototype names and a
+  linked-state-directory CLI test.
 - Tripwires for `gate.mjs`, `cli.mjs` and `command.mjs`:
   - Run directly in this session: `node --test graphs/autobuild/tool/test/gate-*.test.mjs
     graphs/autobuild/tool/test/pr-first-gate.test.mjs graphs/autobuild/tool/test/entrypoint.test.mjs
@@ -441,11 +451,15 @@ Focused validation:
     fixture's `deliveryMode` (`config.mjs:142`).
   - Rerun with that one variable removed from the child environment (helper script in
     `logs/evidence/`, gitignored), over every `graphs/autobuild/tool/test/*.test.mjs` file plus
-    `acceptance/ci-optimizer/co-0[1-7]-*.test.mjs`: 538/538 pass, exit 0.
+    `acceptance/ci-optimizer/co-0[1-7]-*.test.mjs`: 539/539 pass after the follow-up, exit 0.
   - Not tested: those 7 tests on unmodified HEAD in this session. The guard blocks `git stash`
     and the shell blocked an exported copy, so whether they fail the same way at HEAD is an
     untested hypothesis.
 - `bash scripts/check-secrets.sh` (tracked files), and the same script run on
   `lib/ci/validate.mjs` and `test/ci-validate.test.mjs`: clean.
+- `autobuild mark-passed CO-07`: PASS.
+- Not tested: `ci validate` with `autobuild.json` below the git top level. `git diff
+  --name-only` prints paths relative to the top level, so reason codes and `paths` matching may
+  differ there. This is the existing `changedSince` behavior, unchanged in this feature.
 
 Still pending for the PR: the full regressions, review and the bug hunt.

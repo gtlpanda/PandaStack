@@ -92,6 +92,10 @@ test("planValidation: a deleted CI file and a custom gitlabFile path count as CI
   assert.deepEqual(plan(repo, ["api/ci/pipeline.yml"], { gitlabFile: "./api/ci/pipeline.yml" }).reasons, ["CI_CONFIG_CHANGED:api/ci/pipeline.yml"]);
   // Look-alikes outside .github/ are not CI configuration.
   assert.deepEqual(plan(repo, ["api/.github-notes.md", "api/github/x.yml"]).reasons, []);
+  // Object prototype names are paths like any other, never CI files.
+  for (const name of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+    assert.deepEqual(plan(repo, [name]).reasons, [`UNMAPPED_CHANGE:${name}`], `${name} is an unmapped file, not a CI file`);
+  }
 });
 
 test("planValidation: a nested progress file and features file are exempt; other files beside them are not", (t) => {
@@ -159,6 +163,19 @@ test("ci validate: an option-like --base escalates with NO_BASE; the fast tier p
   assert.ok(lines.includes("SKIP  web: skipped (no path match)"), fast.stdout);
   assert.ok(lines.some((line) => /^PASS {2}api \(/.test(line)) && lines.some((line) => /^PASS {2}lint \(/.test(line)), fast.stdout);
   assert.equal(lines.at(-1), "VALIDATION: PASS (fast tier, not merge validation)");
+});
+
+test("ci validate: a linked state directory is refused (exit 3) before any gate step runs", (t) => {
+  const marker = path.join(tempDir(t, "ci-validate-calls-"), "ran");
+  const repo = project(t, { config: { gate: [{ name: "lint", command: `touch '${marker}'` }] } });
+  const home = tempDir(t, "ci-validate-state-");
+  const dir = ciStateDir(repo, { AUTOBUILD_STATE_HOME: home });
+  mkdirSync(path.dirname(dir), { recursive: true });
+  symlinkSync(tempDir(t, "ci-validate-elsewhere-"), dir);
+  const run = runCli(repo, ["ci", "validate", "--json"], home);
+  assert.equal(run.code, 3, run.stderr);
+  assert.equal(JSON.parse(run.stdout).error, "STATE_UNSAFE");
+  assert.equal(existsSync(marker), false, "the gate did not run");
 });
 
 test("autobuild check: step lines are unchanged after moving to gateStepLines", (t) => {

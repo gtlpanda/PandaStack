@@ -16,7 +16,7 @@ import { attemptKey, fetchGithubHistory, githubRepo, importedAttempts, isGithubR
 import { computeMetrics, gateMetrics, noHistoryMetrics } from "./metrics.mjs";
 import { wholeNumberOf } from "./patterns.mjs";
 import { ciPolicy } from "./policy.mjs";
-import { CiError, STATE_SCHEMA_VERSION } from "./state.mjs";
+import { CiError, readState, STATE_SCHEMA_VERSION } from "./state.mjs";
 import { changedFiles, planValidation, recordValidation, resolveBase, TIERS, treeState } from "./validate.mjs";
 import { gateStepLines, runGate } from "../gate.mjs";
 
@@ -287,6 +287,8 @@ async function validate({ root, flags, values, env, json }) {
   // Without a base, or when git cannot list the change, `changed` is null: planValidation's NO_BASE.
   const changed = tier === "fast" && base ? changedFiles(config, base.sha) : null;
   const plan = planValidation({ config, root, changed, tier });
+  // A refused state directory or file fails here, before the gate spends its time.
+  readState(root, "validation", env);
   // The tree as validated: read before the gate's steps run.
   const tree = treeState(config);
   const failFast = flags.has("--fail-fast");

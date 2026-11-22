@@ -37,8 +37,8 @@ export const CI_FILE_PROVIDERS = Object.freeze({
 });
 const CI_FILES = Object.keys(CI_FILE_PROVIDERS);
 
-/** The CI provider id of a file `ciFiles` returns. */
-export const ciProviderOf = (file) => (file.startsWith(`${WORKFLOW_DIR}/`) ? GITHUB_PROVIDER : CI_FILE_PROVIDERS[file] ?? null);
+/** The CI provider id of a repository path, or null when it is not a CI file. Own keys only: "constructor" is no CI file. */
+export const ciProviderOf = (file) => (file.startsWith(`${WORKFLOW_DIR}/`) ? GITHUB_PROVIDER : Object.hasOwn(CI_FILE_PROVIDERS, file) ? CI_FILE_PROVIDERS[file] : null);
 // Options that leave tests out, and options that pick which suite runs, across
 // common runners (vitest, jest, pytest, mocha, go test). ciParity can replace either list.
 export const EXCLUDE_FLAGS = ["--exclude", "--ignore", "--ignore-glob", "--testPathIgnorePatterns", "--deselect", "--skip", "-skip"];
