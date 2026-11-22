@@ -1468,3 +1468,93 @@ Observed limits and untested hypotheses:
 - macOS was not run; the two unreadable-mode cases are skipped when run as root.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-04a — Blueprint state library
+
+Implemented spec/contracts/codex-parity-cp-04a.md only.
+
+- New `graphs/blueprint/skills/blueprint/blueprint-state.mjs` (synchronous, `node:`
+  imports only, no dynamic import): `STATE_DIR_NAME`, frozen `FILES` and
+  `BLUEPRINT_STATE_CODES`, `resolveStateDir` (`git -C <cwd> rev-parse
+  --path-format=absolute --git-path harness-blueprint`, no shell, 10 s timeout),
+  `redactSecrets` (the twelve table shapes in order, left boundary on the token
+  prefixes, the long-random rule decided per maximal run with 40/64-hex exempt),
+  `redactJSON` (deep copy, keys too, `defineProperty` output keys; refuses non-JSON,
+  cycles, stack-deep nesting and colliding redacted keys), `initState` (all checks
+  before any create or delete; deletes all six files; writes the redacted trimmed
+  request), the three readers (lstat, `O_NOFOLLOW | O_NONBLOCK`, fatal UTF-8),
+  `validateState` / `validateRun`, `writeState` / `writeRun` (redact, validate,
+  temp-exclusive 0600 file, fsync, rename, directory fsync; meta.json basis after
+  the run file), content-hash `freshness`, `designArgs` / `backlogArgs`, and
+  `readArgsFile` (graph-host's rules plus the allowed-key check).
+- New `tests/blueprint-state.test.mjs` (12 cases, harness `test()`): refusals carry
+  only code/message/file with no case path in the stack; 0700/0600 under umask 000
+  and 077; a failed rename is `IO_ERROR` naming the file with no temp file left;
+  40/64-hex exemptions and the 31/32/41/63-hex and 23/24-char boundaries, padding,
+  left boundary; an AWS or Google key glued to an `sk_live_` key is fully redacted in
+  one call (idempotence); `__proto__` stays an own key, symbol keys and holes refused; a
+  BOM-prefixed state.json is `MALFORMED`; `writeRun(1)` leaves meta.json alone and
+  2/3 keep each other's entry while a malformed meta is replaced; a symlinked run2 or
+  a directory run3 is stale; a linked worktree's per-worktree state path; undefined
+  options take defaults; `readArgsFile` follows a symlink and allows a listed
+  `__proto__`.
+- SKILL.md, write-docs.mjs, blueprint-design.js, the catalog and every graph are
+  unchanged.
+
+Decisions (no human present):
+- `redactSecrets` repeats the whole table pass until the text stops changing. One pass
+  was not idempotent: observed in this session, `AKIA…` + `sk_live_…` with no separator
+  gave `<redacted: AWS access key>sk_live_…`, and a second call redacted the rest.
+  The left boundary had shielded the glued token, and the Google row had the same gap.
+  The loop ends because every match after the first pass uses up characters outside
+  any label.
+- A JWT part's "10 or more" counts its `eyJ` (`eyJ` + 7 or more): the wider reading,
+  since over-redaction is accepted and misses are not.
+- The long-random length rule (24) counts the trailing `=` padding; the hex rule
+  needs no padding and checks the run alone. A run of exactly 40 or 64 hex digits is
+  exempt in either case, whatever its letter case.
+- State readers decode with `ignoreBOM: true`, so a BOM-prefixed file SKILL.md's
+  `JSON.parse` would reject is `MALFORMED` here too (byte equality for every
+  accepted state). `readArgsFile` keeps graph-host's default decoder.
+- `freshness` reports a run file that exists but is not a regular file (symlink,
+  directory) as `stale`, not `fresh`: it can never be read, so this is the safe side
+  of the table's "otherwise".
+- meta.json is valid only as a whole (exact keys, version 1, known basis entries with
+  64-lower-hex values); otherwise it is treated as empty, so `writeRun` keeps no
+  entry from a partly malformed meta.
+- `initState` options: an absent key and an `undefined` value both take the default;
+  a non-string doc is `DOC_INVALID`; a doc `stat` failure other than ENOENT/ENOTDIR is
+  `IO_ERROR`. ENOTDIR counts as absent everywhere.
+- Error objects carry no `cause`, since filesystem errors hold paths.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-04a-blueprint-state.test.mjs
+# 79 tests, 79 pass, 0 fail
+node --test acceptance/codex-parity/cp-04a-blueprint-state.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs acceptance/codex-parity/cp-03b-reference-closure.test.mjs acceptance/codex-parity/cp-01c-install-plan.test.mjs
+# 120 tests, 120 pass, 0 fail
+node logs/evidence/cp-05a/run-focused.mjs tests/blueprint-state.test.mjs graphs/blueprint/tests/write-docs.test.mjs
+# FOCUSED: 22 passed, 0 failed, 0 skipped (after the idempotence fix; exit 0)
+node --test --test-reporter=dot acceptance/codex-parity/cp-04a-blueprint-state.test.mjs
+# exit 0 after the idempotence fix
+bash scripts/validate.sh                     # VALIDATE: PASS
+node scripts/check-refs.mjs                  # check-refs: 271 references, all resolve
+git diff --check HEAD                        # no output
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+bash scripts/check-secrets.sh graphs/blueprint/skills/blueprint/blueprint-state.mjs tests/blueprint-state.test.mjs   # check-secrets: clean
+autobuild mark-passed CP-04a                 # === node (1 file): PASS
+```
+
+The outputs above are from the session transcript; no logs were saved under
+logs/evidence/ for this feature.
+
+Observed limits and untested hypotheses:
+- The acceptance test was not run against the pre-change tree in this session (the
+  module did not exist, so every case would fail at import; not observed).
+- The new implementation tests were not mutation-checked against a broken library.
+- Crash atomicity rests on rename(2); no case simulates a crash, as the contract says.
+- macOS was not run.
+
+Full regressions, review and the branch hunt remain pending for the PR.
