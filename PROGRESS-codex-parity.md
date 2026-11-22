@@ -1227,3 +1227,748 @@ Observed limits and untested hypotheses:
 - Linux was not run.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-05a — Checkpoint store operator API
+
+Implements only spec/contracts/codex-parity-cp-05a.md in
+`core/skills/native-runtime/checkpoint-store.mjs`: new named exports
+`checkpointDirOf`, `inspectCheckpoints`, `failHeldCheckpoint` and
+`breakCheckpointLock`. `createFileCheckpointStore` and its frozen four-method store
+are unchanged in behavior. runtime.mjs, graph-host.mjs and every CLI are untouched.
+The fake provider in the runtime case is wiring proof, not runtime certification.
+
+Edit:
+- The row read (`readRow`), the atomic row write (`writeRow`) and the nonce-checked
+  lock release moved out of the factory closure into module-level functions that
+  take `dir`. The factory and the operator functions call the same ones; nothing was
+  copied. The release is split into `unlinkOwnLock` (compare whole bytes, unlink)
+  plus a directory fsync. The factory's `releaseOwnLock` still marks the store
+  released as soon as the lock is gone or changed, as it did before.
+- The factory's option check now goes through the shared `optionsInput` and
+  `absolutePathInput` helpers. It accepts and refuses the same inputs as before.
+- New: read-only lock inspection (`O_NOFOLLOW | O_NONBLOCK`, regular-file check),
+  token (first 16 hex characters of the SHA-256 of the raw bytes), diagnostic pid,
+  row summaries with only the pinned binding fields, `failHeldCheckpoint` under the
+  store's own `takeLock`/release, and `breakCheckpointLock` with the step-6 re-read.
+  Four new error codes: NOT_HELD, CONFIRM_MISMATCH, OWNER_UNKNOWN and OWNER_ALIVE.
+
+Decisions (no human present):
+- Re-read in `breakCheckpointLock` step 6: a lock that has become unreadable is
+  CONFIRM_MISMATCH, because its bytes can no longer be shown to equal the confirmed
+  ones. The contract names only gone (NOT_FOUND) and different bytes for this step.
+- `failHeldCheckpoint`: if the lock release fails after a refusal, the call rejects
+  IO_ERROR rather than the refusal code, because a `.lock` may then be left behind.
+  The contract specifies only the case after success.
+- An `open()` failure on `.lock` counts as "exists but unreadable" ({pid: null,
+  token: null} / OWNER_UNKNOWN) only for EACCES, EPERM, ELOOP, EMLINK, EFTYPE, EISDIR
+  and ENXIO. Any other errno is IO_ERROR. ENOENT and ENOTDIR mean the lock is absent.
+- A `breakCheckpointLock` unlink that hits ENOENT after the re-read is NOT_FOUND:
+  this call did not remove the lock.
+
+New implementation test `tests/native-checkpoint-operator.test.mjs` (workflow
+harness, 12 cases), covering edges the frozen test leaves open:
+- a symlinked `.lock`, one with mode 000 and a FIFO `.lock` all read as unreadable
+  (inspect gives null pid and token; break is OWNER_UNKNOWN even with the target's
+  token; fail is OWNER_BUSY), and the FIFO case returns without waiting for a writer;
+- the token is checked before the pid (a live pid with a wrong token is
+  CONFIRM_MISMATCH), and pid 1 and pid 2^40 are OWNER_ALIVE;
+- every wrongly typed binding field is null, a selection is cut to
+  provider/model/effort, and no unpinned binding, receipt or usage field appears;
+- look-alike names are strays, and a symlinked `dir` is followed by inspect and fail;
+- a `dir` that is a file is NOT_FOUND for inspect, fail and break;
+- a symlinked row, a directory row or a mode-000 row fails inspect with IO_ERROR;
+- a non-conformant failed completion is stored as given and replayed exactly;
+- a refusal after the lock is taken leaves no `.lock`;
+- proxy, getter and inherited options are refused without running a getter;
+- the four new codes carry the fixed message, with no path in message or stack.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-05a-checkpoint-operator.test.mjs
+# pre-change: fails (TypeError: inspectCheckpoints is not a function)
+# post-change: 12 tests, 12 pass, 0 fail
+node --test acceptance/codex-parity/cp-05a-checkpoint-operator.test.mjs acceptance/codex-parity/cp-02d-checkpoint-store.test.mjs acceptance/codex-parity/cp-02e-graph-host.test.mjs
+# 64 tests, 64 pass, 0 fail
+node logs/evidence/cp-05a/run-focused.mjs tests/native-checkpoint-operator.test.mjs tests/native-checkpoint-store.test.mjs tests/native-checkpoint-signals.test.mjs
+# FOCUSED: 28 passed, 0 failed, 0 skipped
+bash scripts/validate.sh                    # VALIDATE: PASS
+node scripts/check-refs.mjs                 # check-refs: 271 references, all resolve
+git diff --check                            # no output
+bash scripts/check-secrets.sh               # check-secrets: clean
+bash scripts/check-secrets.sh --worktree    # check-secrets: clean
+bash scripts/check-secrets.sh tests/native-checkpoint-operator.test.mjs   # check-secrets: clean
+```
+
+Observed limits and untested hypotheses:
+- Two things are enforced by review, not by a test: the step-6 re-read in
+  `breakCheckpointLock`, and that `failHeldCheckpoint` takes the lock rather than
+  only checking for one. The residual race between the re-read and the unlink is the
+  window the contract accepts.
+- Only Linux errno behavior was exercised. EMLINK and EFTYPE are in the unreadable
+  set for systems that report them on an `O_NOFOLLOW` symlink. That is an untested
+  hypothesis.
+- macOS was not run. The new test was not run against a store with the operator API
+  removed.
+
+Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-02h — Codex gets the strict leaf schema
+
+Contract: spec/contracts/codex-parity-cp-02h.md (W2-3). Wiring proof against a stub
+executable and in-memory providers, not runtime certification. Nothing here shows
+that a real Codex enforces the strict schema; the live strict-schema probe is a
+separate, authorized step.
+
+What changed:
+- `core/skills/native-runtime/schema.mjs` gains `strictOutputSchema(schema)`. It
+  validates through the same `captureSchema` as `encodeOutputContract`, so
+  `INVALID_SCHEMA` and `UNSUPPORTED_SCHEMA` come back unchanged. It then rebuilds
+  every node into frozen ordinary objects and arrays. `type` must be a single type
+  or exactly `[x, 'null']`, and the root must be the single type `'object'`. The
+  rebuilt node keeps `description` and `enum`, and object nodes get every property
+  in `required` (property order) plus `additionalProperties: false`. The six range
+  and annotation keywords are dropped. Optional properties, a stray `required` key,
+  missing or empty `properties`, `additionalProperties: true` and an array with no
+  `items` are `UNSUPPORTED_SCHEMA`. The three keyword classes are checked against
+  `KEYWORDS` at import. `__proto__` stays an own property (defineProperty). Nothing
+  else in the module changed.
+- `core/skills/native-runtime/codex-provider.mjs`:
+  - `CODEX_PROVIDER_CODES` gains `SCHEMA_UNSUPPORTED` (12 codes). The four exports
+    are unchanged.
+  - `wireSchema` is still checked against NR-01 but no longer written.
+  - The request computes the strict schema bytes while it is validated. An
+    unsupported schema settles `failed` `SCHEMA_UNSUPPORTED`, after
+    `PROFILE_UNSUPPORTED` and before `TIMEOUT`, with no file, directory or spawn.
+    Any other schema failure rejects `INVALID_RUNTIME_INPUT`.
+  - `<callId>.schema.json` holds `JSON.stringify(strictOutputSchema(request.schema))`.
+  - The output file is read as before, then parsed as one bare plain object through
+    `copyJSON(…, 'INVALID_WIRE')` and wrapped as `{json: JSON.stringify(object)}`. It
+    is never unwrapped.
+- `tests/native-codex-provider.test.mjs` moves to bare-object outputs and a
+  strict-expressible default schema. The stale-schema case now expects the strict
+  bytes. New cases:
+  - SCHEMA_UNSUPPORTED leaves an existing run directory's stale files untouched;
+  - INVALID_SCHEMA wins over an unsupported shape (it rejects rather than settles);
+  - a BOM is still INVALID_WIRE;
+  - `__proto__` keys stay own keys of the wire string;
+  - duplicate keys follow JSON.parse (last wins);
+  - a nested `type: 'null'` and a null enum entry are kept, and the result shares
+    no object with its input.
+
+Decisions made without a human (autonomous run):
+- A schema that validation itself classes `UNSUPPORTED_SCHEMA`, such as one with a
+  foreign keyword, settles `SCHEMA_UNSUPPORTED` like the strict-only shapes. The
+  contract keys the settle on the code, and the runtime's `encodeOutputContract`
+  would already have refused such a schema.
+- The old implementation case "a BOM and a `__proto__` key are INVALID_WIRE" was
+  split. A BOM is still INVALID_WIRE. Objects with a `__proto__` key are now
+  `returned`, under the contract's "any bare object, never unwrapped" rule.
+- A `copyJSON` error with a code other than INVALID_WIRE is rethrown into the
+  existing IO_ERROR catch-all instead of being reported as INVALID_WIRE. No test
+  reaches that path.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-02h-strict-schema.test.mjs
+# 69 tests, 69 pass, 0 fail
+node --test acceptance/codex-parity/cp-02b-codex-leaf.test.mjs acceptance/codex-parity/cp-02c-codex-selection.test.mjs acceptance/codex-parity/cp-02e-graph-host.test.mjs acceptance/codex-parity/cp-02f-native-graphs.test.mjs
+# 146 tests, 146 pass, 0 fail
+node --test acceptance/native-runtime/nr-01-schema.test.mjs
+# 15 tests, 15 pass, 0 fail
+node logs/evidence/cp-05a/run-focused.mjs tests/native-codex-provider.test.mjs tests/native-codex-selection.test.mjs tests/native-graph-host.test.mjs tests/native-runtime-schema.test.mjs
+# FOCUSED: 49 passed, 0 failed, 0 skipped (provider test: 19 cases)
+bash scripts/validate.sh                     # VALIDATE: PASS
+node scripts/check-refs.mjs                  # check-refs: 271 references, all resolve
+git diff --check                             # no output
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+```
+
+No new untracked source or test file was added, so there was no per-file secret scan.
+The session's permission mode refused shell redirection into files, so no logs were
+saved under logs/evidence/cp-02h/. The outputs above are from the session transcript.
+
+Observed limits and untested hypotheses:
+- The acceptance test was not run against the pre-change tree in this session.
+- acceptance/codex-parity/cp-05b-graph-reconcile.test.mjs was run once alongside
+  these and failed 17 cases with `Cannot find module …/graph-reconcile.mjs`. CP-05b
+  is `passes: false` and that module does not exist on this branch. It was not run
+  on HEAD before this change, so this entry makes no claim about it beyond that
+  observation.
+- Whether Codex enforces `--output-schema`, follows `description` or rejects an extra
+  key is unverified (contract "Not in scope").
+- macOS was not run.
+
+Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-03d — Provider-neutral skill paths in role bodies
+
+Implements spec/contracts/codex-parity-cp-03d.md (autonomous build, Claude backend).
+
+- `core/skills/native-runtime/role-files.mjs`: `assembleRoleInstructions` builds the
+  CP-03c text, then rewrites every exact
+  `${PANDASTACK_SKILL_PATH:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/<id>/<file>}`
+  token to `join(root, <skills dir>, <id>, <file>)`, in text order. The skill is
+  located by the same rule as `resolveSkill`, now shared as `locateSkill` (real
+  directory with a regular SKILL.md; zero hits `UNKNOWN_SKILL`, several
+  `DUPLICATE_SKILL`). `<file>` must be a regular file in that directory's listing
+  (lstat kinds), otherwise `UNKNOWN_SKILL`. A listing failure other than ENOENT is
+  `IO_ERROR`. The file's bytes are never read. When the text holds a token, the root
+  is checked for `"`, `$`, backtick, backslash and newline (`INVALID_ROLE_ROOT`)
+  before any lookup. `body` and `skills[].body` stay raw. `listRoleFiles` and
+  `loadRoleFile` are unchanged.
+- Role files: checker, fixer and implementer carry the verify token inside their
+  existing `bash "..."`; the advisor carries the backlog token inside its existing
+  backticks. One line changed per file.
+- `tests/native-graph-host.test.mjs` `copyFixture` copies every regular file of each
+  skill directory, so the fixture holds `core/skills/verify/verify.sh`.
+- New `tests/native-role-skill-paths.test.mjs` (7 cases): text-order lookup decides
+  the code, no root/id/file in error stacks, a token carried only by an inlined
+  SKILL.md triggers the root check, a token-free role with skills assembles under an
+  unsafe root, a SKILL.md-less directory does not shadow the real skill in another
+  root, a symlinked skills root is absent, and a 64-character id and a dot-led file
+  name resolve.
+
+Decisions (no human present):
+- The token check uses a non-global copy of the regex, so the module-level `g` regex
+  never carries `lastIndex` state between calls.
+- verify.sh, the hunt runner, the catalog, kit agent-memory lines, frozen tests and
+  contracts were not modified. The three host amendments listed in the contract were
+  already present on this branch.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-03d-skill-paths.test.mjs
+# 12 tests, 12 pass, 0 fail
+node --test acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs acceptance/codex-parity/cp-02c-codex-selection.test.mjs acceptance/codex-parity/cp-02e-graph-host.test.mjs acceptance/codex-parity/cp-02f-native-graphs.test.mjs acceptance/codex-parity/cp-03b-reference-closure.test.mjs acceptance/codex-parity/cp-03c-role-files.test.mjs
+# 104 tests, 104 pass, 0 fail
+node logs/evidence/cp-05a/run-focused.mjs tests/native-role-skill-paths.test.mjs tests/native-role-files.test.mjs tests/native-graph-host.test.mjs tests/native-codex-selection.test.mjs
+# FOCUSED: 39 passed, 0 failed, 0 skipped
+bash scripts/validate.sh                     # VALIDATE: PASS
+node scripts/check-refs.mjs                  # check-refs: 271 references, all resolve
+git diff --check                             # no output
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+bash scripts/check-secrets.sh tests/native-role-skill-paths.test.mjs   # check-secrets: clean
+```
+
+The outputs above are from the session transcript; no logs were saved under
+logs/evidence/ for this feature.
+
+Observed limits and untested hypotheses:
+- The acceptance test was not run against the pre-change tree in this session.
+- acceptance/codex-parity/cp-05b-graph-reconcile.test.mjs was run once alongside the
+  role-loader suites and failed 17 cases with `Cannot find module
+  …/graph-reconcile.mjs`. CP-05b is `passes: false` and that module does not exist on
+  this branch. No claim is made about it beyond that observation.
+- The bash cases are fixture wiring proof. No live Codex run of the checker was made.
+- macOS was not run; the two unreadable-mode cases are skipped when run as root.
+
+Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-04a — Blueprint state library
+
+Implemented spec/contracts/codex-parity-cp-04a.md only.
+
+- New `graphs/blueprint/skills/blueprint/blueprint-state.mjs` (synchronous, `node:`
+  imports only, no dynamic import): `STATE_DIR_NAME`, frozen `FILES` and
+  `BLUEPRINT_STATE_CODES`, `resolveStateDir` (`git -C <cwd> rev-parse
+  --path-format=absolute --git-path harness-blueprint`, no shell, 10 s timeout),
+  `redactSecrets` (the twelve table shapes in order, left boundary on the token
+  prefixes, the long-random rule decided per maximal run with 40/64-hex exempt),
+  `redactJSON` (deep copy, keys too, `defineProperty` output keys; refuses non-JSON,
+  cycles, stack-deep nesting and colliding redacted keys), `initState` (all checks
+  before any create or delete; deletes all six files; writes the redacted trimmed
+  request), the three readers (lstat, `O_NOFOLLOW | O_NONBLOCK`, fatal UTF-8),
+  `validateState` / `validateRun`, `writeState` / `writeRun` (redact, validate,
+  temp-exclusive 0600 file, fsync, rename, directory fsync; meta.json basis after
+  the run file), content-hash `freshness`, `designArgs` / `backlogArgs`, and
+  `readArgsFile` (graph-host's rules plus the allowed-key check).
+- New `tests/blueprint-state.test.mjs` (12 cases, harness `test()`): refusals carry
+  only code/message/file with no case path in the stack; 0700/0600 under umask 000
+  and 077; a failed rename is `IO_ERROR` naming the file with no temp file left;
+  40/64-hex exemptions and the 31/32/41/63-hex and 23/24-char boundaries, padding,
+  left boundary; an AWS or Google key glued to an `sk_live_` key is fully redacted in
+  one call (idempotence); `__proto__` stays an own key, symbol keys and holes refused; a
+  BOM-prefixed state.json is `MALFORMED`; `writeRun(1)` leaves meta.json alone and
+  2/3 keep each other's entry while a malformed meta is replaced; a symlinked run2 or
+  a directory run3 is stale; a linked worktree's per-worktree state path; undefined
+  options take defaults; `readArgsFile` follows a symlink and allows a listed
+  `__proto__`.
+- SKILL.md, write-docs.mjs, blueprint-design.js, the catalog and every graph are
+  unchanged.
+
+Decisions (no human present):
+- `redactSecrets` repeats the whole table pass until the text stops changing. One pass
+  was not idempotent: observed in this session, `AKIA…` + `sk_live_…` with no separator
+  gave `<redacted: AWS access key>sk_live_…`, and a second call redacted the rest.
+  The left boundary had shielded the glued token, and the Google row had the same gap.
+  The loop ends because every match after the first pass uses up characters outside
+  any label.
+- A JWT part's "10 or more" counts its `eyJ` (`eyJ` + 7 or more): the wider reading,
+  since over-redaction is accepted and misses are not.
+- The long-random length rule (24) counts the trailing `=` padding; the hex rule
+  needs no padding and checks the run alone. A run of exactly 40 or 64 hex digits is
+  exempt in either case, whatever its letter case.
+- State readers decode with `ignoreBOM: true`, so a BOM-prefixed file SKILL.md's
+  `JSON.parse` would reject is `MALFORMED` here too (byte equality for every
+  accepted state). `readArgsFile` keeps graph-host's default decoder.
+- `freshness` reports a run file that exists but is not a regular file (symlink,
+  directory) as `stale`, not `fresh`: it can never be read, so this is the safe side
+  of the table's "otherwise".
+- meta.json is valid only as a whole (exact keys, version 1, known basis entries with
+  64-lower-hex values); otherwise it is treated as empty, so `writeRun` keeps no
+  entry from a partly malformed meta.
+- `initState` options: an absent key and an `undefined` value both take the default;
+  a non-string doc is `DOC_INVALID`; a doc `stat` failure other than ENOENT/ENOTDIR is
+  `IO_ERROR`. ENOTDIR counts as absent everywhere.
+- Error objects carry no `cause`, since filesystem errors hold paths.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-04a-blueprint-state.test.mjs
+# 79 tests, 79 pass, 0 fail
+node --test acceptance/codex-parity/cp-04a-blueprint-state.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs acceptance/codex-parity/cp-03b-reference-closure.test.mjs acceptance/codex-parity/cp-01c-install-plan.test.mjs
+# 120 tests, 120 pass, 0 fail
+node logs/evidence/cp-05a/run-focused.mjs tests/blueprint-state.test.mjs graphs/blueprint/tests/write-docs.test.mjs
+# FOCUSED: 22 passed, 0 failed, 0 skipped (after the idempotence fix; exit 0)
+node --test --test-reporter=dot acceptance/codex-parity/cp-04a-blueprint-state.test.mjs
+# exit 0 after the idempotence fix
+bash scripts/validate.sh                     # VALIDATE: PASS
+node scripts/check-refs.mjs                  # check-refs: 271 references, all resolve
+git diff --check HEAD                        # no output
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+bash scripts/check-secrets.sh graphs/blueprint/skills/blueprint/blueprint-state.mjs tests/blueprint-state.test.mjs   # check-secrets: clean
+autobuild mark-passed CP-04a                 # === node (1 file): PASS
+```
+
+The outputs above are from the session transcript; no logs were saved under
+logs/evidence/ for this feature.
+
+Observed limits and untested hypotheses:
+- The acceptance test was not run against the pre-change tree in this session (the
+  module did not exist, so every case would fail at import; not observed).
+- The new implementation tests were not mutation-checked against a broken library.
+- Crash atomicity rests on rename(2); no case simulates a crash, as the contract says.
+- macOS was not run.
+
+Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-05c — QA loop ledger rules as code
+
+Implemented spec/contracts/codex-parity-cp-05c.md only.
+
+- New `graphs/qa/tool/qa-ledger.mjs` (synchronous, `node:` imports only, never runs
+  git). It exports `RUNS_KEPT` 20, `IDLE_STOP_RUNS` 2, `DEFAULT_MAX_FIX_ROUNDS` 3,
+  `LEDGER_GIT_PATH`, `LEDGER_FILE_NAME`, the frozen `QA_LEDGER_CODES`, and the
+  functions below. Every error is the fixed `qa-ledger: <CODE>.` with no cause.
+  - `emptyLedger`.
+  - `readLedger`: only an `lstat` ENOENT counts as missing. A symlink, directory or
+    FIFO is decided from `lstat` before any open, then `O_NOFOLLOW | O_NONBLOCK` and
+    `fstat`. Decoding is fatal UTF-8, and missing keys take their defaults.
+  - `writeLedger`: serialize and check first, then create the directories, then an
+    exclusive 0600 temp file, fsync, and rename. The directory fsync after the rename
+    is best effort.
+  - `applyResult`, `workflowArgs`, `applyIdle`, `shouldStop` and `setBlockedOn`.
+- New `tests/qa-ledger.test.mjs` (10 cases, harness `test()`). It covers:
+  - errors carry only `code` and message, with no case path in the stack;
+  - a parent that is a file fails the write and leaves the file unchanged;
+  - a BigInt, cyclic or `toJSON` run is `INVALID_LEDGER` and creates nothing;
+  - a result is judged on its JSON copy;
+  - `now` outside years 0000–9999, or a forged Date, is refused, and an undefined
+    `now` is the clock;
+  - nested directories are 0700 under umask 0277;
+  - a BOM is unparseable and a `__proto__` key is ignored;
+  - a null prototype is valid, while symbol, non-enumerable and sparse `runs` are not;
+  - the idle count stops at the safe-integer ceiling;
+  - returned arrays are never shared with the input.
+- loop.md, harness-repair.js, install.sh, autobuild.json and the catalog are
+  unchanged. graphs/qa/tool/ is not an install target or a catalog source. This was
+  re-read in this session:
+  - install.sh:41 `DIR_TARGETS=(skills agents workflows commands bin)`;
+  - install.sh:48 `PATH_TOOLS` names only autobuild;
+  - catalog.mjs:216-226 scans only `<root>/skills`.
+
+Decisions (no human present):
+- `node:` builtins only, as the contract requires. So the atomic write and read are a
+  copy of the CP-04a pattern, not a shared import.
+- A valid-shaped ledger that does not serialize to JSON reading back as a valid ledger
+  is `INVALID_LEDGER`, thrown before any filesystem step. Examples: a BigInt, a cycle,
+  or a run whose `toJSON` returns a non-object.
+- `applyResult` checks the status on both the input and its JSON copy, and takes the
+  `stuckSig` from the copy, so what is stored is what was judged.
+- `applyResult` options `{now: undefined}` means the clock, as an absent `now` does. A
+  `now` outside years 0000–9999 is `INVALID_ARGS`, because `toISOString` stops
+  matching `date -u +%FT%TZ` there.
+- Missing directories are created one at a time, top-down, and each is chmodded to
+  0700 before the next. A plain `mkdirSync(recursive, 0o700)` threw `LEDGER_IO_ERROR`
+  for `a/b/ledger.json` under umask 0277; that was observed. The cause is derived, not
+  observed separately: 0700 & ~0277 = 0500 leaves `a` without owner write. An EEXIST
+  from a concurrent creator is accepted.
+- Arrays are validated with an index loop, because `every()` skips holes. The
+  null-prototype, symbol and sparse case failed before this change and passed after
+  it. The only other change in between, the mkdir fix, is not on that case's path.
+  Which assertion failed was not printed.
+- `applyIdle(true)` at `Number.MAX_SAFE_INTEGER` throws `INVALID_LEDGER`, since the
+  result could not be a valid ledger.
+- Pure functions return new `runs` and `stuckSigs` arrays but share the run entries.
+  Copying the entries would change in-memory values a caller put there.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-05c-qa-ledger.test.mjs   # before the module: ERR_MODULE_NOT_FOUND (red, observed)
+node --test acceptance/codex-parity/cp-05c-qa-ledger.test.mjs   # 28 tests, 28 pass, 0 fail, 0 skipped (non-root)
+node tests/qa-ledger.test.mjs                 # 10 ok, 0 FAIL (after the mkdir and sparse-array fixes)
+node logs/evidence/cp-05c/run-focused.mjs tests/qa-ledger.test.mjs   # FOCUSED: 10 passed, 0 failed, 0 skipped
+node scripts/check-refs.mjs                   # check-refs: 271 references, all resolve
+bash scripts/validate.sh                      # VALIDATE: PASS
+git diff --check HEAD~1 HEAD                  # no output (run on the feat commit)
+bash scripts/check-secrets.sh                 # check-secrets: clean
+bash scripts/check-secrets.sh --worktree      # check-secrets: clean
+bash scripts/check-secrets.sh graphs/qa/tool/qa-ledger.mjs tests/qa-ledger.test.mjs   # check-secrets: clean
+autobuild mark-passed CP-05c                  # === node (1 file): PASS
+```
+
+These outputs are from the session transcript. Only the focused runner script is under
+logs/evidence/cp-05c/; no output logs were saved.
+
+Observed limits and untested hypotheses:
+- The new implementation tests were not mutation-checked beyond the two failures
+  observed before the fixes.
+- Crash atomicity rests on rename(2). No case simulates a crash, as the contract says.
+- A concurrent Claude-path writer racing this module is last-writer-wins by contract,
+  and it is not exercised.
+- macOS was not run, and neither was uid 0, where two acceptance cases skip.
+- `writeLedger` does not check deep-equality. A run holding a value that JSON
+  changes (`undefined`, a Date, NaN) is still accepted, and the bytes written are then
+  not deep-equal to the in-memory ledger. The read → `applyResult` → write flow
+  stores JSON copies only, so it cannot produce such a run. That is reasoned, not
+  tested.
+
+Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-05b — Held-call reconcile CLI and shared failed envelope
+
+Implements only spec/contracts/codex-parity-cp-05b.md. There are two new files and
+no edits to existing code. The catalog, workflows, role files, SKILL.md, runtime,
+registry, provider, selection, store and host are all untouched. The fake codex in
+the acceptance crash cases is wiring proof, not runtime certification.
+
+- `core/skills/native-runtime/completion.mjs`: `failedCompletion({selection, code,
+  invocationId})`. It checks its options with boundary `fields` + `exact`, its strings
+  with `nonempty`, and the code with `^[A-Z][A-Z0-9_]{0,63}$`. It returns a new
+  ordinary `{outcome: 'failed', code, usage: null, receipt: {provider, model, effort,
+  invocationId}}`. Bad input throws boundary `fail('INVALID_RUNTIME_INPUT')`.
+- `core/skills/native-runtime/graph-reconcile.mjs`: the CLI, with `list`, `fail` and
+  `unlock` over CP-05a's `checkpointDirOf`, `inspectCheckpoints`, `failHeldCheckpoint`
+  and `breakCheckpointLock`. It exports nothing and runs only when
+  `realpathSync(process.argv[1])` is this file.
+  - argv is parsed purely, before any filesystem access. The verb and value rules are
+    Maps, so an inherited name is never a verb or flag.
+  - `fail` runs the steps in the contract's order: confirm, read-only inspect preview,
+    `.lock` → OWNER_BUSY, then the row checks, `failedCompletion`, and finally the
+    single write through `failHeldCheckpoint` under the store's lock.
+  - Error codes go through a Map to exits 1–4. Any value not in the table prints
+    `IO_ERROR` and exits 3.
+  - The CLI only sets `process.exitCode`. It never calls `process.exit` and installs
+    no signal handler.
+  - Its import closure is checkpoint-store, completion, boundary and schema, plus
+    `node:fs`, `node:fs/promises`, `node:path`, `node:url`, `node:crypto` and
+    `node:util`.
+
+Decisions (no human present):
+- If a stored selection that is not null is refused by `failedCompletion`, the result
+  is `SELECTION_MISSING` (exit 2) and the row is never written. This covers a blank
+  provider, model or effort, which CP-05a's `selectionOf` passes through. The
+  contract names only `null`. Its stated reason applies here too: a selection like
+  this cannot get a conformant failed completion. A row-data problem is also not a
+  usage error.
+- The store's `INVALID_RUNTIME_INPUT` is printed as `INVALID_RECONCILE_INPUT` (exit
+  1). The exit-1 row of the table lists only that code. The store code cannot be
+  reached after the argv checks.
+- The CP-02e run-dir path rule (absolute, at most 4096 UTF-8 bytes, no U+0000–U+001F
+  or U+007F–U+009F) is restated in the CLI rather than imported. graph-host.mjs is
+  banned from the import closure, the store's own path check rejects only NUL, and
+  the contract allows no store or boundary edit. The entry-point check repeats
+  graph-host's for the same reason.
+
+New implementation test `tests/native-graph-reconcile.test.mjs` (workflow harness, 10
+cases), covering edges the frozen test leaves open:
+- flags given in any order;
+- `--run-dir` at exactly 4096 bytes is accepted by argv. The run then fails with exit 3
+  `IO_ERROR`, because `<run-dir>/checkpoints` is over the kernel PATH_MAX. The case
+  tests that boundary: a run dir of 4083 bytes (4095 with `/checkpoints`) is
+  `NOT_FOUND`, and one of 4084 bytes (4096) is `IO_ERROR`.
+- 4097 bytes, a multibyte path over the bound, DEL, U+0085, U+009F, a tab, or an empty
+  value is usage; U+00A0 is not;
+- a confirm mismatch on a missing run directory is `CONFIRM_MISMATCH`, which shows the
+  confirm check runs before any filesystem access;
+- a symlinked `.lock`: `list` shows `{pid: null, token: null}`, `fail` is OWNER_BUSY,
+  `unlock` is OWNER_UNKNOWN, and nothing changes;
+- a directory row and a mode-000 row are exit 3 `IO_ERROR`;
+- a blank stored model or effort is `SELECTION_MISSING`, and the row stays
+  byte-identical with no lock left. A mutation that dropped this mapping was caught:
+  it exited 1 `INVALID_RECONCILE_INPUT`.
+- stdin is never read;
+- a static check that neither module calls `process.exit`, adds a process listener, or
+  names a signal;
+- a getter on the selection is refused without being run, and the output is not frozen
+  or shared.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-05b-graph-reconcile.test.mjs
+# pre-change: tests 17, pass 0, fail 17 (the output tail shown was ERR_MODULE_NOT_FOUND for completion.mjs; not every case's cause was read)
+# post-change: tests 17, pass 17, fail 0
+node --test acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs acceptance/codex-parity/cp-02d-checkpoint-store.test.mjs acceptance/codex-parity/cp-02e-graph-host.test.mjs acceptance/codex-parity/cp-05a-checkpoint-operator.test.mjs
+# tests 89, pass 89, fail 0, skipped 0
+node logs/evidence/cp-05b/run-focused.mjs tests/native-graph-reconcile.test.mjs tests/native-checkpoint-operator.test.mjs
+# FOCUSED: 22 passed, 0 failed, 0 skipped
+node logs/evidence/cp-05b/run-focused.mjs tests/native-graph-reconcile.test.mjs   # after adding the PATH_MAX boundary pair
+# FOCUSED: 10 passed, 0 failed, 0 skipped
+bash scripts/validate.sh                    # VALIDATE: PASS
+node scripts/check-refs.mjs                 # check-refs: 271 references, all resolve
+git diff --check                            # no output (new files grep-checked: no trailing whitespace)
+bash scripts/check-secrets.sh               # check-secrets: clean
+bash scripts/check-secrets.sh --worktree    # check-secrets: clean
+bash scripts/check-secrets.sh core/skills/native-runtime/completion.mjs core/skills/native-runtime/graph-reconcile.mjs tests/native-graph-reconcile.test.mjs   # check-secrets: clean
+autobuild mark-passed CP-05b                # === node (1 file): PASS
+```
+
+These outputs are from the session transcript, and most were read through `grep` or
+`tail`, so they are summary lines, not observed exit codes. Only the focused runner
+script is under logs/evidence/cp-05b/; no output logs were saved.
+
+Observed limits and untested hypotheses:
+- The contract lists three rules enforced by review, not by a case:
+  - No signal handler and no `process.exit`. The new static check covers both.
+  - An unexpected thrown value maps to exit 3 `IO_ERROR`. This is review only: no
+    case throws a value outside the table.
+  - The write goes through `failHeldCheckpoint`, and so happens under the lock. This
+    is review only.
+- A host that starts between the read-only preview and the write is refused by
+  CP-05a's lock and row re-check. That is reasoned from the code, not tested.
+- macOS was not run, and neither was uid 0, where the mode-000 case skips.
+- The fake codex crash cases prove wiring only. No real codex was run.
+
+Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-04b — Blueprint decision rules
+
+Implemented spec/contracts/codex-parity-cp-04b.md only.
+
+- New `graphs/blueprint/skills/blueprint/blueprint-decisions.mjs`. It is synchronous.
+  Its imports are `lstatSync` and `unlinkSync` from `node:fs`, `join` from `node:path`,
+  and CP-04a's `FILES`, `readRequest`, `readState`, `readRun`, `writeState`,
+  `validateState`, `redactSecrets` and `freshness`. It has no dynamic import and no
+  write call of its own. It exports:
+  - the frozen `BLUEPRINT_DECISION_CODES` (twelve codes);
+  - `applyInterviewAnswers(dir, { answers, have?, overrides? })` (SKILL.md 3.4-3.5);
+  - `applyGateAnswers(dir, { answers })` (4.2 and 5.2 `needs-human`, `G<k>` ids);
+  - `applyApprovalEdit(dir, { edit })` (6.4).
+- Each function checks in the contract's order. Caller input comes first, then the
+  CP-04a readers, then status, freshness, shape, id checks (duplicate, unknown,
+  missing) and preflight. The state is saved with `writeState`, then run3.json,
+  run2.json and meta.json are unlinked. Refusals are `Blueprint decisions: <CODE>.`
+  with only `code`, `file` (a `FILES` value) or `ids` (ids that match the id shape).
+  CP-04a errors pass through unchanged.
+- New `tests/blueprint-decisions.test.mjs` (8 cases, harness `test()`):
+  - errors have no other own fields, no `cause` and no case path in the stack;
+  - an explicit `undefined` for `have` or `overrides` takes the default, and a
+    null-prototype options object is accepted;
+  - a sparse `answers`, `overrides` or `have` array is `INVALID_INPUT` before any read,
+    with the directory unchanged;
+  - the next `D<n>` after `D999999999` and `D1000000000` is `D1000000001`;
+  - overriding an assumption whose text is not a string gives `question: ""`;
+  - an exact option label that holds a token is still redacted on disk;
+  - `G0` and `G01` are unknown ids, and a duplicate is reported before an unknown id;
+  - a challenged `D4` assumption becomes a decision, and the next id is `D5`;
+  - a design gate, then a backlog gate, then a third gate gives
+    `GATE_ROUNDS_EXHAUSTED`, and an approval edit after them leaves `gateRounds` at 2.
+- SKILL.md, blueprint-design.js, write-docs.mjs, blueprint-state.mjs, the catalog and
+  every graph are unchanged.
+
+Decisions (no human present):
+- `have` and `overrides` treat an explicit `undefined` like an absent key, so both
+  default to `[]`. CP-04a's `initState` reads options the same way. `answers: undefined`
+  counts as missing, so it is `INVALID_INPUT`.
+- A gate question's `about` is checked against the state as it was read, then looked
+  up again when that answer is applied, decision first. This makes the contract's
+  "an assumption challenged twice is a decision by the second question" hold.
+- `nextDecisionId` skips an id that is already taken, as the contract requires. The
+  contract's `^D([0-9]{1,9})$` counts at most nine digits, so `D999999999` next to
+  `D1000000000` gives `D1000000001`. A case covers this.
+- Answer lists and `have` are checked with `Array.from(...).every`. `every` skips the
+  holes of a sparse array (observed: `[, x].every(v => v !== undefined)` is `true`), so a
+  sparse list would otherwise get past the input check. It would then fail later with a
+  raw `TypeError`, or after files were read.
+- `GATE_ROUNDS_EXHAUSTED` is checked as `gateRounds >= 2`. `validateState` already
+  limits the value to 0, 1 or 2.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-04b-blueprint-decisions.test.mjs
+# 31 tests, 31 pass, 0 fail (first run after writing the module)
+node logs/evidence/cp-05b/run-focused.mjs tests/blueprint-decisions.test.mjs tests/blueprint-state.test.mjs
+# FOCUSED: 20 passed, 0 failed, 0 skipped (after the sparse-array and D-skip cases)
+node --test --test-reporter=dot acceptance/codex-parity/cp-04a-blueprint-state.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs acceptance/codex-parity/cp-03b-reference-closure.test.mjs acceptance/codex-parity/cp-01c-install-plan.test.mjs acceptance/codex-parity/cp-04b-blueprint-decisions.test.mjs
+# exit 0; rerun with --test-reporter=tap into logs/evidence/cp-04b-related-acceptance.tap:
+# tests 151, pass 151, fail 0, skipped 0
+bash scripts/validate.sh                     # VALIDATE: PASS
+node scripts/check-refs.mjs                  # check-refs: 271 references, all resolve
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+bash scripts/check-secrets.sh graphs/blueprint/skills/blueprint/blueprint-decisions.mjs tests/blueprint-decisions.test.mjs   # check-secrets: clean
+autobuild mark-passed CP-04b                 # === node (1 file): PASS
+```
+
+`mark-passed` ran before the sparse-array and D-skip edits. The TAP batch above,
+which includes the 31 cp-04b cases, was rerun after them: 151 pass, 0 fail. The two
+new-file secret scans were rerun after them too, and came back clean.
+
+These outputs are from the session transcript. Only the TAP file named above was saved
+under logs/evidence/ (gitignored).
+
+Observed limits and untested hypotheses:
+- The acceptance test was not run against the tree before the change. The module did
+  not exist, so every case would fail at import, but that was not observed.
+- Neither test file was mutation-checked against a broken module.
+- No case covers an `lstat` failure other than ENOENT or ENOTDIR (`IO_ERROR`). It
+  needs a permission fault that the CP-04a reader would hit first.
+- The gate and edit paths have no `IO_ERROR`-on-delete case. A non-regular run2 or
+  run3 is refused earlier, by the reader or as stale. The interview case and the new
+  meta.json case cover the shared `save` path.
+- macOS was not run, and neither was uid 0.
+
+Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-04d — Blueprint approve CLI
+
+Implemented spec/contracts/codex-parity-cp-04d.md only.
+
+- New `graphs/blueprint/skills/blueprint/blueprint-approve.mjs`, run as
+  `node blueprint-approve.mjs <show|approve> --args-file <abs>`. It is synchronous.
+  - Static imports: `node:` built-ins; CP-04a's `FILES`, `freshness`, `readArgsFile`,
+    `readRun`, `readState`, `redactSecrets` and `resolveStateDir`; and write-docs's
+    `main`, `designDoc`, `BACKLOG` and `KNOWLEDGE_MAP`. No dynamic import.
+  - Its one export is the frozen `BLUEPRINT_APPROVE_CODES` (eighteen codes). It runs
+    as a CLI only when `realpathSync(process.argv[1])` is this file. It sets
+    `process.exitCode` and never calls `process.exit`.
+  - Every git call is `git -C <repo>` with an argv array and no shell. stderr is never
+    kept, and stdout is piped only for `rev-parse --show-toplevel`, `symbolic-ref`,
+    `rev-parse HEAD` and `diff-tree`.
+- Both verbs run checks 1–7 in the contract's order:
+  1. the top level must equal `realpathSync(repo)`;
+  2. `resolveStateDir`;
+  3. `readState`, then `readRun` 2 and 3;
+  4. `freshness`;
+  5. run2 and run3 readiness;
+  6. the app slug;
+  7. one read of run3.json's bytes for the sha256.
+
+  CP-04a's `MISSING` and `MALFORMED` pass through. Any other CP-04a error is
+  `IO_ERROR`, except that a `resolveStateDir` refusal is `NOT_A_REPO`.
+- `show` prints the fixed report. Each value is stringified, run through
+  `redactSecrets`, has its whitespace collapsed and is trimmed. The `none`,
+  `no requirement`, `no evidence yet` and omitted-fix substitutions apply after that.
+- `approve` runs steps 1–12 with three exit phases:
+  - before `switch -c`, every failure is exit 2;
+  - steps 8–10 share one rollback;
+  - steps 11–12 never roll back.
+
+  The snapshot is filled in as it goes. A target or docs directory whose state was
+  never recorded is never touched by the rollback. Each rollback step runs in its own
+  try, and a failed step makes the result `ROLLBACK_FAILED`, exit 4. A restored file
+  that is gone is recreated with its recorded mode, through `O_NOFOLLOW`.
+- New `tests/blueprint-approve.test.mjs` (9 cases, harness `test()`):
+  - the module exports only the codes;
+  - every section prints `- None.` when empty, and a missing or non-list value counts
+    as an empty list;
+  - non-string values print as JSON, items that are not objects have empty fields, and
+    blank owner, evidence and fix values take their words;
+  - an empty shape list prints `none`, and an id-list item holding a key is redacted;
+  - a repo given through a symlink, or with a trailing slash, is accepted;
+  - `docs/blueprint` as a file and `knowledge-map.json` as a directory are
+    `TARGET_INVALID`;
+  - write-docs refusing a foreign backlog.json is `WRITE_DOCS_FAILED`, exit 3;
+  - a snapshot read failure (a mode-000 map) is `IO_ERROR`, exit 3, and the map is left
+    as it was;
+  - a target the hook deletes comes back with its bytes and mode 0600;
+  - approve from a detached HEAD succeeds.
+- write-docs.mjs, blueprint-state.mjs, SKILL.md, blueprint-design.js, the catalog and
+  every graph are unchanged.
+
+Decisions (no human present):
+- `<shapes>` is treated as an id list, so an empty one prints `none`
+  (`picked X over none`). The contract does not pin this.
+- Id lists are redacted per item, then joined.
+- A list value that is not an array is an empty list, as in write-docs's `list()`. A
+  list item that is not an object has empty fields. Notes keep the contract's own rule.
+- `symbolic-ref` output must start with `refs/heads/`. The rollback passes the short
+  branch name to `git switch`. The acceptance's rollback cases confirm that HEAD comes
+  back symbolic on `main`. Passing the full ref was not tried. Any other symbolic-ref
+  output is `GIT_FAILED`, exit 2.
+- In the rollback, a docs directory that is now absent or not empty is skipped. One
+  that is now something other than a directory is a failed step, because exit 3 would
+  otherwise claim a restored repo.
+- No timeout is set on any git call, so a hanging hook hangs the CLI. The reason is an
+  untested hypothesis: killing `git commit` midway may leave `index.lock` behind.
+- Any throw that is not one of the CLI's own refusals is `IO_ERROR`. Before the switch
+  it is exit 2. In steps 8–10 it is exit 3 after the rollback, or exit 4 if a rollback
+  step fails.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs
+# tests 29, pass 29, fail 0 (first run after writing the module)
+node logs/evidence/cp-04d/run-focused.mjs tests/blueprint-approve.test.mjs graphs/blueprint/tests/write-docs.test.mjs tests/blueprint-state.test.mjs tests/blueprint-decisions.test.mjs
+# FOCUSED: 39 passed, 0 failed, 0 skipped
+node --test --test-reporter=tap --test-reporter-destination=logs/evidence/cp-04d-related-acceptance.tap \
+  acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs acceptance/codex-parity/cp-04a-blueprint-state.test.mjs \
+  acceptance/codex-parity/cp-04b-blueprint-decisions.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs \
+  acceptance/codex-parity/cp-01c-install-plan.test.mjs acceptance/codex-parity/cp-03b-reference-closure.test.mjs
+# tests 180, pass 180, fail 0, skipped 0
+bash scripts/validate.sh                     # VALIDATE: PASS
+node scripts/check-refs.mjs                  # check-refs: 271 references, all resolve
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh graphs/blueprint/skills/blueprint/blueprint-approve.mjs tests/blueprint-approve.test.mjs   # check-secrets: clean
+autobuild mark-passed CP-04d                 # === node (1 file): PASS
+```
+
+The module was not edited after `mark-passed`.
+
+Mutation check:
+- Two mutations were made to the module, then reverted:
+  - the rollback treating unrecorded targets as absent;
+  - the restore dropping the recorded mode.
+- With both in place, the implementation tests reported 2 failures: the
+  snapshot-safety case and the mode case. The acceptance was not rerun against the
+  mutants.
+- After the revert and the commit, the same `run-focused.mjs` command gave 39 passed,
+  0 failed, 0 skipped.
+
+Saved under logs/evidence/ (gitignored): the TAP file, `cp-04d/run-focused.mjs` and
+`cp-04d/commit-msg.txt`.
+
+Observed limits and untested hypotheses:
+- The acceptance test was not run before the module existed.
+- These paths have no case:
+  - `GIT_FAILED` for a failing `diff --cached`, `rev-parse --verify`, `symbolic-ref` or
+    `diff-tree`, and for odd symbolic-ref output. Each needs a broken git.
+  - `IO_ERROR` from a run3.json byte read failing after `readRun` succeeded. That is a
+    race.
+- macOS was not run, and neither was uid 0, where two cases skip (one acceptance, one
+  implementation).
+- No lock, by contract. A run3.json replaced between the hash and write-docs's own read
+  is not detected.
+
+Full regressions, review and the branch hunt remain pending for the PR.

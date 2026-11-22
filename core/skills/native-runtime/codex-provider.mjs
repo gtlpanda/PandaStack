@@ -1,12 +1,14 @@
-// Codex leaf provider on the NR-01 wire (spec/contracts/codex-parity-cp-02b.md).
-// One runLeaf call runs one `codex exec` child through the CP-02a launcher and
-// resolves one NR-02 completion envelope. A malformed request rejects before any
-// file or process exists; once valid, every outcome resolves to an envelope.
+// Codex leaf provider on the NR-01 wire (spec/contracts/codex-parity-cp-02b.md,
+// amended by codex-parity-cp-02h.md). One runLeaf call runs one `codex exec` child
+// through the CP-02a launcher and resolves one NR-02 completion envelope. Codex is
+// handed the leaf's strict schema and writes one bare object, which the provider
+// wraps as the wire {json}. A malformed request rejects before any file or process
+// exists; once valid, every outcome resolves to an envelope.
 import { closeSync, constants, fchmodSync, fstatSync, lstatSync, mkdirSync, openSync, readSync, unlinkSync, writeSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { CODEX_EXEC_CODES, classifyCodexExec, codexExecArgs, runCodexExec } from './codex-exec.mjs'
 import { PROFILES } from './runtime.mjs'
-import { encodeOutputContract } from './schema.mjs'
+import { copyJSON, encodeOutputContract, strictOutputSchema } from './schema.mjs'
 import { canonical, exact, fail, fields, record } from './boundary.mjs'
 
 const INPUT = 'INVALID_RUNTIME_INPUT'
@@ -31,7 +33,7 @@ export const CODEX_PROVIDER = 'codex'
 
 export const CODEX_PROVIDER_CODES = Object.freeze(Object.fromEntries([
   ...Object.values(CODEX_EXEC_CODES).filter(code => code !== CODEX_EXEC_CODES.SUCCESS),
-  'INVALID_WIRE', 'PROFILE_UNSUPPORTED', 'IO_ERROR',
+  'INVALID_WIRE', 'PROFILE_UNSUPPORTED', 'IO_ERROR', 'SCHEMA_UNSUPPORTED',
 ].map(code => [code, code])))
 const CODES = CODEX_PROVIDER_CODES
 
@@ -85,31 +87,42 @@ function leafRequest(config, request) {
   // codexExecArgs owns the model and effort rules; any supported sandbox probes them.
   try { codexExecArgs({ sandbox: 'read-only', model: selection.model, reasoningEffort: selection.effort }) } catch { fail(INPUT) }
   check(PROFILES.has(r.profile))
-  // Compare the exact bytes that will be written, so the file is what was checked.
-  let wireBytes
-  try { wireBytes = JSON.stringify(r.wireSchema); check(canonical(JSON.parse(wireBytes)) === WIRE_SCHEMA) } catch { fail(INPUT) }
+  // The wire schema is the runtime contract: it is checked, never written.
+  try { check(canonical(JSON.parse(JSON.stringify(r.wireSchema))) === WIRE_SCHEMA) } catch { fail(INPUT) }
+  const schemaBytes = strictSchemaBytes(r.schema)
   check(typeof r.deadlineMs === 'number' && Number.isFinite(r.deadlineMs))
   check(isAbortSignal(r.signal))
   const { nowMs } = config
   let now
   try { now = nowMs() } catch { fail(INPUT) }
   check(typeof now === 'number' && Number.isFinite(now))
-  return { callId: r.callId, prompt: r.prompt, profile: r.profile, wireBytes,
+  return { callId: r.callId, prompt: r.prompt, profile: r.profile, schemaBytes,
     signal: r.signal, timeoutMs: Math.floor(r.deadlineMs - now - config.graceMs - SETTLE_MARGIN_MS),
     receipt: { provider: selection.provider, model: selection.model, effort: selection.effort, invocationId: r.callId } }
+}
+
+// The bytes Codex gets as --output-schema, or null when the strict subset cannot
+// express the leaf schema (a valid request that Codex cannot run). Any other
+// schema failure is a caller contract violation: the runtime encoded it first.
+function strictSchemaBytes(schema) {
+  try { return JSON.stringify(strictOutputSchema(schema)) } catch (error) {
+    if (error?.code === 'UNSUPPORTED_SCHEMA') return null
+    return fail(INPUT)
+  }
 }
 
 async function runValidLeaf(config, leaf) {
   const failed = (code, usage = null) => ({ outcome: 'failed', code, usage, receipt: { ...leaf.receipt } })
   const sandbox = sandboxForProfile(leaf.profile)
   if (sandbox === null) return failed(CODES.PROFILE_UNSUPPORTED)
+  if (leaf.schemaBytes === null) return failed(CODES.SCHEMA_UNSUPPORTED)
   if (leaf.timeoutMs < 1) return failed(CODES.TIMEOUT)
   const files = { schemaFile: join(config.runDir, `${leaf.callId}.schema.json`),
     outputFile: join(config.runDir, `${leaf.callId}.output.json`), logFile: join(config.runDir, `${leaf.callId}.log.jsonl`) }
   // From here every filesystem or process error is an envelope, never a rejection.
   let usage = null
   try {
-    prepareRunDir(config.runDir, files, leaf.wireBytes)
+    prepareRunDir(config.runDir, files, leaf.schemaBytes)
     // runCodexExec returns 130 for an already-aborted signal without truncating
     // the log, so a log left by an earlier attempt must not be classified.
     if (leaf.signal.aborted) return failed(CODES.EXIT_NONZERO)
@@ -135,13 +148,13 @@ async function runValidLeaf(config, leaf) {
 // Creates the run directory, writes a fresh private schema file and removes any
 // stale output so it can never be read as this run's. A symlink at either name is
 // removed, never followed.
-function prepareRunDir(runDir, files, wireBytes) {
+function prepareRunDir(runDir, files, schemaBytes) {
   mkdirSync(runDir, { recursive: true, mode: 0o700 })
   removeIfPresent(files.schemaFile)
   const fd = openSync(files.schemaFile, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600)
   try {
     fchmodSync(fd, 0o600)
-    const bytes = Buffer.from(wireBytes, 'utf8')
+    const bytes = Buffer.from(schemaBytes, 'utf8')
     for (let at = 0; at < bytes.length;) at += writeSync(fd, bytes, at)
   } finally { closeSync(fd) }
   removeIfPresent(files.outputFile)
@@ -151,7 +164,7 @@ function removeIfPresent(file) {
   try { unlinkSync(file) } catch (error) { if (error.code !== 'ENOENT') throw error }
 }
 
-// Reads the --output-last-message file as an NR-01 wire object. Returns {json} or
+// Reads the --output-last-message file as one bare object. Returns {json} or
 // {code}. Filesystem errors other than the classified ones propagate (IO_ERROR).
 function readWire(file) {
   let stat
@@ -170,7 +183,7 @@ function readWire(file) {
     const opened = sized(fstatSync(fd))
     if (opened) return opened
     fchmodSync(fd, 0o600)
-    return parseWire(readBounded(fd))
+    return wrapBareObject(readBounded(fd))
   } finally { closeSync(fd) }
 }
 
@@ -182,16 +195,20 @@ function readBounded(fd) {
   return length > MIB ? null : buffer.subarray(0, length)
 }
 
-// Exactly {"json": <string>}. A bare result is never wrapped and extra keys are
-// never stripped; the inner string is the runtime's to decode.
-function parseWire(bytes) {
+// One plain JSON object, wrapped as the wire string of its re-serialization. It is
+// never unwrapped or repaired: a non-finite number, nesting past 64 levels or an
+// oversize value is INVALID_WIRE. The runtime's decode judges the semantics.
+function wrapBareObject(bytes) {
   if (bytes === null) return { code: CODES.INVALID_WIRE }
-  let wire
-  try { wire = JSON.parse(UTF8.decode(bytes)) } catch { return { code: CODES.INVALID_WIRE } }
-  if (!record(wire) || Object.keys(wire).length !== 1 || !Object.hasOwn(wire, 'json') || typeof wire.json !== 'string') {
-    return { code: CODES.INVALID_WIRE }
+  let value
+  try { value = JSON.parse(UTF8.decode(bytes)) } catch { return { code: CODES.INVALID_WIRE } }
+  if (!record(value)) return { code: CODES.INVALID_WIRE }
+  let copy
+  try { copy = copyJSON(value, CODES.INVALID_WIRE) } catch (error) {
+    if (error?.code === CODES.INVALID_WIRE) return { code: CODES.INVALID_WIRE }
+    throw error
   }
-  return { json: wire.json }
+  return { json: JSON.stringify(copy) }
 }
 
 // Only Codex token counters, each a non-negative safe integer. Never a cost field.

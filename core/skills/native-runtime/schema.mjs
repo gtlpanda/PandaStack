@@ -8,9 +8,21 @@ const MAX_ERRORS = 100
 const TYPES = new Set(['object', 'array', 'string', 'number', 'integer', 'boolean', 'null'])
 const KEYWORDS = new Set(['type', 'properties', 'required', 'additionalProperties', 'items',
   'enum', 'minimum', 'maximum', 'minItems', 'maxItems', 'title', 'description', '$comment'])
+// strictOutputSchema classifies every keyword exactly once: rebuilt structure,
+// copied as is, or dropped (NR-01 decode still enforces dropped ones).
+const STRICT_STRUCTURE = ['type', 'properties', 'required', 'additionalProperties', 'items']
+const STRICT_KEPT = ['enum', 'description']
+const STRICT_DROPPED = ['minimum', 'maximum', 'minItems', 'maxItems', 'title', '$comment']
 const has = (value, key) => Object.hasOwn(value, key)
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 const reject = code => { throw Object.assign(new Error('Native output contract rejected.'), { code }) }
+{
+  const classified = [...STRICT_STRUCTURE, ...STRICT_KEPT, ...STRICT_DROPPED]
+  if (classified.length !== KEYWORDS.size || new Set(classified).size !== classified.length ||
+    classified.some(key => !KEYWORDS.has(key))) {
+    throw new Error('schema.mjs: every KEYWORDS entry needs exactly one strict class.')
+  }
+}
 
 // Inspect only data descriptors, never user property reads or serialization
 // hooks. Count the exact serialized representation as we copy, including keys,
@@ -172,6 +184,50 @@ function rejectNonfinite(value) {
       for (const child of Object.values(item)) pending.push(child)
     }
   }
+}
+
+// A frozen ordinary object or array. defineProperty keeps a key named __proto__ an
+// own property instead of setting the prototype.
+function frozenRecord(entries) {
+  const result = {}
+  for (const [key, value] of entries) {
+    Object.defineProperty(result, key, { value, enumerable: true, writable: true, configurable: true })
+  }
+  return Object.freeze(result)
+}
+
+// The single kind a strict node describes: a single type, or exactly [x, 'null'].
+function strictKind(type, root) {
+  if (typeof type === 'string') return root && type !== 'object' ? reject('UNSUPPORTED_SCHEMA') : type
+  if (root || type.length !== 2 || type[0] === 'null' || type[1] !== 'null') reject('UNSUPPORTED_SCHEMA')
+  return type[0]
+}
+
+function strictNode(node, root) {
+  const kind = strictKind(node.type, root)
+  const entries = [['type', Array.isArray(node.type) ? Object.freeze([...node.type]) : node.type]]
+  for (const key of STRICT_KEPT) {
+    if (has(node, key)) entries.push([key, Array.isArray(node[key]) ? Object.freeze([...node[key]]) : node[key]])
+  }
+  if (kind === 'object') {
+    const keys = has(node, 'properties') ? Object.keys(node.properties) : []
+    const required = has(node, 'required') ? node.required : []
+    // validateSchema made `required` unique, so equal length plus membership is set equality.
+    if (!keys.length || required.length !== keys.length || required.some(key => !has(node.properties, key)) ||
+      node.additionalProperties === true) reject('UNSUPPORTED_SCHEMA')
+    entries.push(['properties', frozenRecord(keys.map(key => [key, strictNode(node.properties[key], false)]))],
+      ['required', Object.freeze([...keys])], ['additionalProperties', false])
+  }
+  if (kind === 'array') {
+    if (!has(node, 'items')) reject('UNSUPPORTED_SCHEMA')
+    entries.push(['items', strictNode(node.items, false)])
+  }
+  return frozenRecord(entries)
+}
+
+/** The strict subset of a leaf schema that Codex `--output-schema` takes (CP-02h). */
+export function strictOutputSchema(schema) {
+  return strictNode(captureSchema(schema), true)
 }
 
 export function encodeOutputContract(schema) {

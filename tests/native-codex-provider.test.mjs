@@ -1,8 +1,9 @@
-// CP-02b implementation edges the frozen acceptance does not pin: symlinked and
-// stale files in the run directory, the already-aborted signal, the IO_ERROR
-// catch-all, clock and request near-misses, the usage bound and the deadline
-// clamp. The child is a stub node script with a minimal explicit environment:
-// wiring proof, not runtime certification.
+// CP-02b/CP-02h implementation edges the frozen acceptance does not pin: symlinked
+// and stale files in the run directory, the already-aborted signal, the IO_ERROR
+// catch-all, clock and request near-misses, the usage bound, the deadline clamp,
+// the strict schema file and the bare-object reader. The child is a stub node
+// script with a minimal explicit environment: wiring proof, not runtime
+// certification.
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
@@ -16,7 +17,9 @@ const coded = error => error.code === 'INVALID_RUNTIME_INPUT' && error.message =
 const WORK = realpathSync(mkdtempSync(join(tmpdir(), 'native-codex-provider-')))
 const STUB = join(WORK, 'codex-stub')
 const ROOT_USER = typeof process.getuid === 'function' && process.getuid() === 0
-const wireText = value => JSON.stringify({ json: JSON.stringify(value) })
+// Codex writes one bare object (CP-02h); the provider wraps it as the wire.
+const wireText = value => JSON.stringify(value)
+const LEAF_SCHEMA = Object.freeze({ type: 'object', properties: { ok: { type: 'integer', minimum: 0 } }, required: ['ok'] })
 
 // Each spawn appends one line to calls.jsonl and runs the step at that index:
 // `output` goes to --output-last-message, `events` to stdout, `exit` is the code.
@@ -56,7 +59,7 @@ async function request(patch = {}) {
     callId: 'nr-' + createHash('sha256').update('native-codex-provider').digest('hex'), workflowId: 'harness-repair',
     workflowPath: ['harness-repair'], agentType: 'checker', label: 'check', phase: 'Check', requestedModel: 'haiku',
     requestedEffort: 'high', invocationId: 'inv', prompt: 'PROMPT', selection: { provider: 'codex', model: 'gpt-test', effort: 'high' },
-    profile: 'build-workspace', schema: { type: 'object' }, wireSchema: structuredClone(encodeOutputContract({ type: 'object' }).wireSchema),
+    profile: 'build-workspace', schema: structuredClone(LEAF_SCHEMA), wireSchema: structuredClone(encodeOutputContract({ type: 'object' }).wireSchema),
     deadlineMs: Date.now() + 30_000, signal: new AbortController().signal, ...patch,
   }
 }
@@ -87,7 +90,34 @@ try {
     writeFileSync(fileOf(c, req, 'schema.json'), 'stale', { mode: 0o644 })
     await (await provider(c, [{ output: wireText({ ok: 1 }) }])).runLeaf(req)
     assert.equal(statSync(fileOf(c, req, 'schema.json')).mode & 0o777, 0o600)
-    assert.equal(readFileSync(fileOf(c, req, 'schema.json'), 'utf8'), JSON.stringify(req.wireSchema))
+    const { strictOutputSchema } = await schemaApi()
+    assert.equal(readFileSync(fileOf(c, req, 'schema.json'), 'utf8'), JSON.stringify(strictOutputSchema(req.schema)))
+    assert.equal(readFileSync(fileOf(c, req, 'schema.json'), 'utf8'),
+      '{"type":"object","properties":{"ok":{"type":"integer"}},"required":["ok"],"additionalProperties":false}')
+  })
+
+  await test('SCHEMA_UNSUPPORTED leaves an existing run directory untouched: no spawn, stale files kept', async () => {
+    const c = makeCase()
+    const req = await request({ schema: { type: 'object' } })
+    mkdirSync(c.runDir)
+    writeFileSync(fileOf(c, req, 'schema.json'), 'stale-schema')
+    writeFileSync(fileOf(c, req, 'output.json'), wireText({ ok: 1 }))
+    const envelope = await (await provider(c, [{ output: wireText({ ok: 1 }) }])).runLeaf(req)
+    assertFailed(envelope, 'SCHEMA_UNSUPPORTED')
+    assert.equal(envelope.usage, null)
+    assert.equal(spawns(c), 0)
+    assert.equal(readFileSync(fileOf(c, req, 'schema.json'), 'utf8'), 'stale-schema')
+    assert.equal(readFileSync(fileOf(c, req, 'output.json'), 'utf8'), wireText({ ok: 1 }))
+  })
+
+  await test('INVALID_SCHEMA wins over an unsupported shape: the request is rejected, not settled', async () => {
+    // Optional property (unsupported) and minimum > maximum (invalid) in one schema.
+    const schema = { type: 'object', properties: { a: { type: 'number', minimum: 2, maximum: 1 }, b: { type: 'string' } }, required: ['a'] }
+    const { strictOutputSchema } = await schemaApi()
+    assert.throws(() => strictOutputSchema(schema), error => error.code === 'INVALID_SCHEMA')
+    const c = makeCase()
+    await assert.rejects((await provider(c, [])).runLeaf(await request({ schema })), coded)
+    assert.equal(existsSync(c.runDir), false)
   })
 
   await test('an already-aborted signal never classifies a stale log: EXIT_NONZERO, no usage, no spawn', async () => {
@@ -128,11 +158,43 @@ try {
     assert.deepEqual(envelope.usage, { output_tokens: 3 })
   })
 
-  await test('INVALID_WIRE: a UTF-8 BOM and a __proto__ key are not accepted as the wire', async () => {
-    for (const output of ['﻿' + wireText({ ok: 1 }), '{"__proto__":{"json":"x"}}', '{"json":"x","__proto__":1}']) {
+  await test('INVALID_WIRE: a UTF-8 BOM before the object is not stripped', async () => {
+    const c = makeCase()
+    assertFailed(await (await provider(c, [{ output: '﻿' + wireText({ ok: 1 }) }])).runLeaf(await request()), 'INVALID_WIRE')
+  })
+
+  await test('a __proto__ key in the bare object stays an own key of the wire string', async () => {
+    for (const output of ['{"__proto__":{"json":"x"}}', '{"json":"x","__proto__":1}']) {
       const c = makeCase()
-      assertFailed(await (await provider(c, [{ output }])).runLeaf(await request()), 'INVALID_WIRE')
+      const envelope = await (await provider(c, [{ output }])).runLeaf(await request())
+      assert.equal(envelope.outcome, 'returned')
+      assert.equal(envelope.wire.json, output)
+      assert.equal(Object.getPrototypeOf(envelope.wire), Object.prototype)
     }
+  })
+
+  await test('duplicate keys follow JSON.parse (last wins) and the wire is the re-serialized object', async () => {
+    const c = makeCase()
+    const envelope = await (await provider(c, [{ output: '{ "ok" : 1, "ok": 2 }' }])).runLeaf(await request())
+    assert.equal(envelope.outcome, 'returned')
+    assert.equal(envelope.wire.json, '{"ok":2}')
+  })
+
+  await test('strictOutputSchema keeps a nested null type and a null enum entry, sharing no object with the input', async () => {
+    const { strictOutputSchema } = await schemaApi()
+    const input = { type: 'object', properties: { n: { type: 'null' }, e: { type: ['string', 'null'], enum: ['a', null] },
+      l: { type: 'array', items: { type: 'object', properties: { x: { type: 'boolean' } }, required: ['x'], additionalProperties: false } } },
+    required: ['e', 'l', 'n'] }
+    const out = strictOutputSchema(input)
+    assert.deepEqual(JSON.parse(JSON.stringify(out)), { type: 'object', properties: { n: { type: 'null' }, e: { type: ['string', 'null'], enum: ['a', null] },
+      l: { type: 'array', items: { type: 'object', properties: { x: { type: 'boolean' } }, required: ['x'], additionalProperties: false } } },
+    required: ['n', 'e', 'l'], additionalProperties: false })
+    const inputs = new Set()
+    const collect = (value, into) => { if (value && typeof value === 'object') { into.add(value); Object.values(value).forEach(v => collect(v, into)) } }
+    collect(input, inputs)
+    const outputs = new Set()
+    collect(out, outputs)
+    for (const value of outputs) assert.equal(inputs.has(value), false, 'shared object')
   })
 
   await test('usage keeps MAX_SAFE_INTEGER and zero; drops MAX_SAFE_INTEGER + 1 and non-record usage', async () => {

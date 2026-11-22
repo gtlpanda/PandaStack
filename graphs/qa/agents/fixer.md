@@ -16,7 +16,7 @@ For each finding:
    the lines you touch.
 3. If the fix changes behavior, add or update a test that fails without the
    fix and passes with it.
-4. Run `bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/verify/verify.sh"` (the `verify` skill's script). If it fails on something you
+4. Run `bash "${PANDASTACK_SKILL_PATH:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/verify/verify.sh}"` (the `verify` skill's script). If it fails on something you
    touched, fix it. If it fails on something you did not touch, report it and
    stop; do not widen scope.
 

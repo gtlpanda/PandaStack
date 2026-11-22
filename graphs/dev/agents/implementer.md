@@ -45,7 +45,7 @@ the plan, the component, and a scout's brief of the code around it.
    placeholder assertion, a skipped test, or a TODO for later is not done.
 5. **Stay in scope.** Change only what the component needs. Anything else you
    notice goes in `unchecked`, not in the diff.
-6. **Verify.** Run `bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/verify/verify.sh"`.
+6. **Verify.** Run `bash "${PANDASTACK_SKILL_PATH:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/verify/verify.sh}"`.
    The whole suite must pass, not just your tests. If something you did not
    touch fails, report it and stop; do not widen scope.
 

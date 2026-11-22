@@ -241,7 +241,7 @@
       ],
       "test": "acceptance/codex-parity/cp-05a-checkpoint-operator.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-02h",
@@ -258,7 +258,7 @@
       ],
       "test": "acceptance/codex-parity/cp-02h-strict-schema.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-03d",
@@ -275,7 +275,7 @@
       ],
       "test": "acceptance/codex-parity/cp-03d-skill-paths.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-04a",
@@ -290,7 +290,7 @@
       ],
       "test": "acceptance/codex-parity/cp-04a-blueprint-state.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-05c",
@@ -305,7 +305,7 @@
       ],
       "test": "acceptance/codex-parity/cp-05c-qa-ledger.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-05b",
@@ -323,7 +323,7 @@
       ],
       "test": "acceptance/codex-parity/cp-05b-graph-reconcile.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-04b",
@@ -340,7 +340,7 @@
       ],
       "test": "acceptance/codex-parity/cp-04b-blueprint-decisions.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-04d",
@@ -357,7 +357,7 @@
       ],
       "test": "acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     }
   ]
 }
