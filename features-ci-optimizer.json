@@ -144,7 +144,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-09-triggers.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-10",

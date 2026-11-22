@@ -42,6 +42,7 @@ const HELP = `autobuild — autonomous, test-gated build loop for Claude Code or
   autobuild ci validate [--tier fast|full] [--base REF] [--fail-fast] [--json]   fast tier: gate steps the change since the merge-base touches (not merge validation)
   autobuild ci baseline [--capture] [--fail-on-regression] [--json]   capture a CI baseline, or compare recent runs with it
   autobuild ci compare --before FILE --after FILE [--json]   wall deltas between two baselines; exits 1 when a check, test step or gate step was removed
+  autobuild ci triggers [--explicit] [--json]   offline lifecycle triggers (onboarding, CI or config change, regression, repeated failures); writes nothing
 
 Exit codes of \`run\`: 0 verified completion or PR-first handoff, 2 no progress, 3 blocked, 4 frozen files changed, 5 preflight,
 6 total budget, 7 max iterations, 8 usage limit resets too far away, 9 billing, 10 auth,
@@ -125,6 +126,9 @@ export async function main(argv = process.argv.slice(2)) {
       const next = nextFeature(doc, blockers);
       console.log(`${countPassing(doc)}/${doc.features.length} features passing`);
       console.log(`delivery: ${config.deliveryMode}${config.deliveryMode === "pr-first" ? " (full PR checks and review pending; not merge-ready)" : ""}`);
+      // Loaded on demand, like `autobuild ci`: other commands never load the ci-optimizer.
+      const { statusLine } = await import("./ci/triggers.mjs");
+      console.log(await statusLine(config));
       console.log(`next: ${next ? `${next.id} — ${next.title}` : "none"}`);
       const review = huntStatus(config);
       console.log(`review coverage: ${review.hunted ? review.disposition : review.docsOnly ? "docs only" : "pending"}${review.dirty ? " (uncommitted changes are not reviewed)" : ""}`);

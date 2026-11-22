@@ -171,6 +171,22 @@ export async function runLoop(config, options = {}) {
   });
 }
 
+/**
+ * The ci-optimizer's once-per-run check (spec/contracts/ci-optimizer-co-09.md): offline, one log
+ * line, and never part of an exit decision. ciStartupCheck never throws; the catch covers only a
+ * module that fails to load, which must not stop the run either.
+ */
+async function ciOptimizerStart(config, log) {
+  let ciStartupCheck;
+  try {
+    ({ ciStartupCheck } = await import("./ci/triggers.mjs"));
+  } catch (error) {
+    log(`ci-optimizer: skipped (${String(error?.message ?? error).replace(/\s+/g, " ").trim()})`);
+    return;
+  }
+  await ciStartupCheck(config, log);
+}
+
 async function runLoopWork(config, options, decisionTrace) {
   const runId = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
   const logsDir = path.join(config.root, config.logsDir);
@@ -220,6 +236,7 @@ async function runLoopWork(config, options, decisionTrace) {
     if (config.deliveryMode === "pr-first") log("PR-FIRST: focused acceptance and commit checks run locally; full regressions, broad review and hunt are deferred to the PR. No merge or review clearance is granted.");
     if (config.backend === "codex") log(`Codex: ${config.model}; subagents ${config.subagentModel}; probes ${config.probeModel}; ${config.codex.sessionTimeoutMinutes} min/session. Dollar/turn caps and Claude tool hooks do not apply; ${config.deliveryMode === "pr-first" ? "focused commit" : "full"} gates run outside the session.`);
     else log(`loop ${runId}: up to ${limits.maxIterations} iterations; ${limits.maxTurns} turns and $${limits.maxBudgetUsd} (estimated) per session; review every ${limits.reviewEvery} features (${limits.reviewMaxTurns} turns, $${limits.reviewBudgetUsd}); model ${config.model} (subagents ${config.subagentModel}${config.subagentModelForce === false ? " by default" : ""})`);
+    await ciOptimizerStart(config, log);
 
     // Per-feature gates may skip steps whose `paths` the change does not touch. Every
     // fullGateEvery-th feature, the last pending feature and the first one after a start get the

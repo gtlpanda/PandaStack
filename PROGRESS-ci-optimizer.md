@@ -549,3 +549,82 @@ Focused validation:
       345/345 pass, 0 fail.
 
 Still pending for the PR: the full regressions, review and the bug hunt.
+
+## CO-09 — Lifecycle triggers, loop start and status
+
+What changed:
+- New `lib/ci/triggers.mjs` with these exports:
+  - `evaluateTriggers` (pure).
+  - `currentTriggers(root, { policy, env, explicit })`, the one read-only reader shared by the
+    loop, status and the CLI. It reads the stored profile, history and baseline, and computes
+    the digest with `inputsDigest`. It never calls `loadProfile`, so it writes nothing.
+  - `ciStartupCheck`, `statusLine` and `formatAge`.
+- The regression comes from `detectRegression` (CO-08), and only when the stored baseline
+  passes `isBaselineDocument`.
+- The 5-attempt window reuses `history.mjs`'s `newestFirst`.
+- `ciStartupCheck` calls `loadProfile(root, { refresh: true })` only when `onboarding` or
+  `ci-config-changed` fired. It reports the triggers it evaluated before that refresh.
+- Wiring:
+  - `loop.mjs` calls `ciStartupCheck` once per run, after the preflight line and the loop
+    header and before `iteration 1:`. Its result is ignored.
+  - `cli.mjs` `status` prints `statusLine` directly after `delivery:`.
+  - `command.mjs` adds `autobuild ci triggers [--explicit] [--json]`. `cli.mjs` gains a help
+    line.
+  - Both call sites load `ci/triggers.mjs` lazily, like the existing `autobuild ci` dispatch.
+    Other commands therefore never load the ci-optimizer.
+
+Decisions (unattended, recorded here):
+- If several workflows qualify for `repeated-failures`, there is still one trigger. Its detail
+  joins the per-workflow phrases with `", "`, in `byText` name order.
+- A null workflow name (allowed by imports) prints as `(unnamed)`, in both
+  `repeated-failures` and `runtime-regression`.
+- Attempts with a null `startedAt` sort last, as `newestFirst` already does. A job-less
+  attempt counts only by its own conclusion.
+- `runtime-regression` needs `regressed === true` exactly. Workflow names keep the
+  regression's order.
+- Error messages are flattened to one line. The same text is the log line and `skipped`.
+- A clock before `generatedAt` reads `0m`. A stored profile whose `generatedAt` does not
+  parse gives `ci-optimizer: unavailable (the stored profile has no valid generatedAt)`.
+- `ci triggers` evaluates even when `ciOptimizer.enabled` is false. The contract gates only
+  the loop check and the status line on `enabled`, and an explicit query should still answer.
+- `loop.mjs` wraps only the dynamic import in a `catch`, which logs `ci-optimizer: skipped
+  (...)`. `ciStartupCheck` itself never throws.
+- Side effect: with ci-optimizer enabled by default, `autobuild run` now writes a
+  `profile.json` under the ci state home for every project it runs on, fixture projects
+  included. Loop tests that set no `AUTOBUILD_STATE_HOME` write there, as the gate cache
+  already does.
+
+Focused validation:
+- `node --test acceptance/ci-optimizer/co-09-triggers.test.mjs`: 21/21 pass (spec log in
+  `logs/evidence/co-09-acceptance.log`, gitignored).
+- `node --test graphs/autobuild/tool/test/ci-triggers.test.mjs`: 10/10 pass. These are new
+  implementation tests, offline, with private `AUTOBUILD_STATE_HOME` directories. They cover:
+  - a cancelled attempt in the window;
+  - a null `startedAt`;
+  - an unnamed workflow;
+  - multi-workflow detail;
+  - an unsorted input array;
+  - `regressed` truthiness;
+  - age boundaries, including negative ages;
+  - a multi-line error and an invalid policy;
+  - reuse not rewriting the profile;
+  - an unparsable `generatedAt`;
+  - a non-baseline file;
+  - a linked state directory (status and CLI exit 3);
+  - no `autobuild.json`, outside git, and an unknown flag.
+- Tripwires:
+  - Shared `loop.mjs`, `cli.mjs` and `command.mjs`: `loop*.test.mjs`, `pr-first-loop`,
+    `status-shard-skip` and `entrypoint`, 62/62 pass (`logs/evidence/co-09-tripwires.log`).
+  - All 10 `ci-*.test.mjs` plus CO-01..09 acceptance: 321/321 pass
+    (`logs/evidence/co-09-ci-tripwires.log`).
+  - `tests/decision-launch.test.mjs`: 20/20 subtests pass.
+  - These ran through `logs/evidence/co-09-run-clean.mjs`, which removes the outer
+    session's `AUTOBUILD_DELIVERY_MODE=pr-first` and sets a private `AUTOBUILD_STATE_HOME`.
+    The first loop run inherited `pr-first` from this session's environment and failed
+    exit-code assertions (for example `1 !== 6`, with `PR-FIRST:` lines in the log). The
+    same code with the variable removed passed all 62. So the variable caused those
+    failures, not this change.
+- `bash scripts/check-secrets.sh` (tracked files), and the same script run on
+  `lib/ci/triggers.mjs` and `test/ci-triggers.test.mjs`: clean.
+
+Still pending for the PR: the full regressions, review and the bug hunt.

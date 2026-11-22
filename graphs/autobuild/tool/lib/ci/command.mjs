@@ -18,6 +18,7 @@ import { computeMetrics, gateMetrics, noHistoryMetrics } from "./metrics.mjs";
 import { wholeNumberOf } from "./patterns.mjs";
 import { ciPolicy } from "./policy.mjs";
 import { CiError, readState, STATE_SCHEMA_VERSION, writeState } from "./state.mjs";
+import { currentTriggers } from "./triggers.mjs";
 import { changedFiles, planValidation, recordValidation, resolveBase, TIERS, treeState } from "./validate.mjs";
 import { gateStepLines, runGate } from "../gate.mjs";
 
@@ -404,6 +405,17 @@ async function compare({ cwd, values, json }) {
   return { code, lines: compareLines(result) };
 }
 
+// ---------- ci triggers (spec/contracts/ci-optimizer-co-09.md) ----------
+
+/** Evaluates the lifecycle triggers offline; writes nothing and exits 0 whether or not one fires. */
+async function triggers({ root, flags, env, json }) {
+  const policy = ciPolicy(projectConfig(root, env));
+  const { fire, triggers: fired, currentDigest } = await currentTriggers(root, { policy, env, explicit: flags.has("--explicit") });
+  if (json) return { code: 0, json: { fire, triggers: fired, currentDigest } };
+  if (!fire) return { code: 0, lines: ["ci-optimizer: no trigger"] };
+  return { code: 0, lines: [`ci-optimizer: evaluate (${fired.map((t) => `${t.id}: ${t.detail}`).join("; ")})`] };
+}
+
 // `flags` are booleans; each of `values` takes the next argument.
 const SUBCOMMANDS = {
   discover: { flags: ["--refresh", "--json"], values: [], run: discover },
@@ -414,6 +426,7 @@ const SUBCOMMANDS = {
   validate: { flags: ["--fail-fast", "--json"], values: ["--tier", "--base"], run: validate },
   baseline: { flags: ["--capture", "--fail-on-regression", "--json"], values: [], run: baseline },
   compare: { flags: ["--json"], values: ["--before", "--after"], run: compare },
+  triggers: { flags: ["--explicit", "--json"], values: [], run: triggers },
 };
 const USAGE = `usage: autobuild ci <${Object.keys(SUBCOMMANDS).join("|")}> [flags] [--json]`;
 
