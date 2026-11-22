@@ -1227,3 +1227,88 @@ Observed limits and untested hypotheses:
 - Linux was not run.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-05a — Checkpoint store operator API
+
+Implements only spec/contracts/codex-parity-cp-05a.md in
+`core/skills/native-runtime/checkpoint-store.mjs`: new named exports
+`checkpointDirOf`, `inspectCheckpoints`, `failHeldCheckpoint` and
+`breakCheckpointLock`. `createFileCheckpointStore` and its frozen four-method store
+are unchanged in behavior. runtime.mjs, graph-host.mjs and every CLI are untouched.
+The fake provider in the runtime case is wiring proof, not runtime certification.
+
+Edit:
+- The row read (`readRow`), the atomic row write (`writeRow`) and the nonce-checked
+  lock release moved out of the factory closure into module-level functions that
+  take `dir`. The factory and the operator functions call the same ones; nothing was
+  copied. The release is split into `unlinkOwnLock` (compare whole bytes, unlink)
+  plus a directory fsync. The factory's `releaseOwnLock` still marks the store
+  released as soon as the lock is gone or changed, as it did before.
+- The factory's option check now goes through the shared `optionsInput` and
+  `absolutePathInput` helpers. It accepts and refuses the same inputs as before.
+- New: read-only lock inspection (`O_NOFOLLOW | O_NONBLOCK`, regular-file check),
+  token (first 16 hex characters of the SHA-256 of the raw bytes), diagnostic pid,
+  row summaries with only the pinned binding fields, `failHeldCheckpoint` under the
+  store's own `takeLock`/release, and `breakCheckpointLock` with the step-6 re-read.
+  Four new error codes: NOT_HELD, CONFIRM_MISMATCH, OWNER_UNKNOWN and OWNER_ALIVE.
+
+Decisions (no human present):
+- Re-read in `breakCheckpointLock` step 6: a lock that has become unreadable is
+  CONFIRM_MISMATCH, because its bytes can no longer be shown to equal the confirmed
+  ones. The contract names only gone (NOT_FOUND) and different bytes for this step.
+- `failHeldCheckpoint`: if the lock release fails after a refusal, the call rejects
+  IO_ERROR rather than the refusal code, because a `.lock` may then be left behind.
+  The contract specifies only the case after success.
+- An `open()` failure on `.lock` counts as "exists but unreadable" ({pid: null,
+  token: null} / OWNER_UNKNOWN) only for EACCES, EPERM, ELOOP, EMLINK, EFTYPE, EISDIR
+  and ENXIO. Any other errno is IO_ERROR. ENOENT and ENOTDIR mean the lock is absent.
+- A `breakCheckpointLock` unlink that hits ENOENT after the re-read is NOT_FOUND:
+  this call did not remove the lock.
+
+New implementation test `tests/native-checkpoint-operator.test.mjs` (workflow
+harness, 12 cases), covering edges the frozen test leaves open:
+- a symlinked `.lock`, one with mode 000 and a FIFO `.lock` all read as unreadable
+  (inspect gives null pid and token; break is OWNER_UNKNOWN even with the target's
+  token; fail is OWNER_BUSY), and the FIFO case returns without waiting for a writer;
+- the token is checked before the pid (a live pid with a wrong token is
+  CONFIRM_MISMATCH), and pid 1 and pid 2^40 are OWNER_ALIVE;
+- every wrongly typed binding field is null, a selection is cut to
+  provider/model/effort, and no unpinned binding, receipt or usage field appears;
+- look-alike names are strays, and a symlinked `dir` is followed by inspect and fail;
+- a `dir` that is a file is NOT_FOUND for inspect, fail and break;
+- a symlinked row, a directory row or a mode-000 row fails inspect with IO_ERROR;
+- a non-conformant failed completion is stored as given and replayed exactly;
+- a refusal after the lock is taken leaves no `.lock`;
+- proxy, getter and inherited options are refused without running a getter;
+- the four new codes carry the fixed message, with no path in message or stack.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-05a-checkpoint-operator.test.mjs
+# pre-change: fails (TypeError: inspectCheckpoints is not a function)
+# post-change: 12 tests, 12 pass, 0 fail
+node --test acceptance/codex-parity/cp-05a-checkpoint-operator.test.mjs acceptance/codex-parity/cp-02d-checkpoint-store.test.mjs acceptance/codex-parity/cp-02e-graph-host.test.mjs
+# 64 tests, 64 pass, 0 fail
+node logs/evidence/cp-05a/run-focused.mjs tests/native-checkpoint-operator.test.mjs tests/native-checkpoint-store.test.mjs tests/native-checkpoint-signals.test.mjs
+# FOCUSED: 28 passed, 0 failed, 0 skipped
+bash scripts/validate.sh                    # VALIDATE: PASS
+node scripts/check-refs.mjs                 # check-refs: 271 references, all resolve
+git diff --check                            # no output
+bash scripts/check-secrets.sh               # check-secrets: clean
+bash scripts/check-secrets.sh --worktree    # check-secrets: clean
+bash scripts/check-secrets.sh tests/native-checkpoint-operator.test.mjs   # check-secrets: clean
+```
+
+Observed limits and untested hypotheses:
+- Two things are enforced by review, not by a test: the step-6 re-read in
+  `breakCheckpointLock`, and that `failHeldCheckpoint` takes the lock rather than
+  only checking for one. The residual race between the re-read and the unlink is the
+  window the contract accepts.
+- Only Linux errno behavior was exercised. EMLINK and EFTYPE are in the unreadable
+  set for systems that report them on an `O_NOFOLLOW` symlink. That is an untested
+  hypothesis.
+- macOS was not run. The new test was not run against a store with the operator API
+  removed.
+
+Full regressions, review and the branch hunt remain pending for the PR.

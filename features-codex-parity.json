@@ -241,7 +241,7 @@
       ],
       "test": "acceptance/codex-parity/cp-05a-checkpoint-operator.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-02h",
