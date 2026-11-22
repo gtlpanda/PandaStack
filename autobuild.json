@@ -404,7 +404,13 @@
     "spec/contracts/codex-parity-cp-04b.md",
     "acceptance/codex-parity/cp-04b-blueprint-decisions.test.mjs",
     "spec/contracts/codex-parity-cp-04d.md",
-    "acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs"
+    "acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs",
+    "spec/contracts/codex-parity-cp-02g.md",
+    "acceptance/codex-parity/cp-02g-prompt-too-large.test.mjs",
+    "spec/contracts/codex-parity-cp-04c.md",
+    "acceptance/codex-parity/cp-04c-blueprint-native.test.mjs",
+    "spec/contracts/codex-parity-cp-05d.md",
+    "acceptance/codex-parity/cp-05d-qa-loop.test.mjs"
   ],
   "writable": [
     "PROGRESS.md",
