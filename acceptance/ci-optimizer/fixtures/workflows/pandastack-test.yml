@@ -1,0 +1,66 @@
+# Runs the full configured gate (scripts/test.sh's suites and the acceptance steps) on each PR
+# and main, as parallel shards: `autobuild check --phase full --shard i/n`, one job per shard,
+# whose union is the whole gate. Branch protection on main requires the "test" job, which
+# passes only when every shard passed.
+name: test
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+# A newer push cancels a superseded PR run; runs on main always finish, so every
+# merge commit keeps its own CI result.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+jobs:
+  shard:
+    name: gate shard ${{ matrix.shard }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      # Every shard reports, even after one fails. The shard count is the matrix's length.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Tools the checks need
+        run: |
+          missing=()
+          for t in shellcheck jq ip python3 unshare setpriv timeout; do command -v "$t" >/dev/null || missing+=("$t"); done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "installing for: ${missing[*]}"
+            sudo apt-get update -q && sudo apt-get install -yq shellcheck jq iproute2 python3 util-linux coreutils
+          fi
+          node --version; git --version; shellcheck --version | sed -n 2p
+      - name: Required non-root isolation
+        run: |
+          node --input-type=module -e '
+            import { isolation } from "./graphs/hunt/skills/bughunt/evidence.mjs";
+            const observed = isolation();
+            for (const name of ["pidns", "network", "loopback", "timeout"]) {
+              if (observed[name] !== true) throw new Error("Required isolation unavailable: " + name);
+            }
+            console.log("Required non-root isolation: PASS");
+          '
+      - name: Full PR gate, one shard (regressions and passing acceptance)
+        run: node graphs/autobuild/tool/lib/cli.mjs check --phase full --shard "${{ matrix.shard }}/${{ strategy.job-total }}"
+  # The required check. It runs even when a shard failed or was cancelled, and passes only when
+  # every shard succeeded; a skipped, failed or cancelled shard fails it.
+  test:
+    needs: shard
+    if: always()
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Every gate shard passed
+        env:
+          SHARDS: ${{ needs.shard.result }}
+        run: |
+          if [ "$SHARDS" != success ]; then echo "gate shards: $SHARDS"; exit 1; fi
+          echo "all gate shards passed"

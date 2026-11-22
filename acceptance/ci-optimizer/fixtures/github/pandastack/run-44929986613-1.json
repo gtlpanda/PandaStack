@@ -1,0 +1,15 @@
+{
+ "id": 44929986613,
+ "name": "test",
+ "path": ".github/workflows/test.yml",
+ "event": "pull_request",
+ "status": "completed",
+ "conclusion": "failure",
+ "run_attempt": 1,
+ "head_sha": "45d049739558782bcba846280b120a8b399d2c31",
+ "head_branch": "codex-parity/wave2-tier2",
+ "created_at": "2026-11-21T17:25:43Z",
+ "run_started_at": "2026-11-21T17:25:43Z",
+ "updated_at": "2026-11-21T17:40:06Z",
+ "workflow_id": 410509981
+}

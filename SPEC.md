@@ -1,14 +1,14 @@
-# Active priority: Codex parity
+# Active priority: ci-optimizer
 
-Selected feature list: features-codex-parity.json (Codex parity). On 2026-11-19 the
-user required full Codex parity, reversing D122 (D125): every offering must run
-natively on the Codex CLI with the same stages, gates, recovery and outputs as on
-Claude Code. Phase 2 is complete (D124) and Phase 3 is not launched. The contract is
-spec/contracts/codex-parity-priority.md; wave 1 (CP-01, CP-02, CP-03) is built and wave 2 (CP-04, CP-05; D126) is approved
-and its features are frozen one at a time. Fake-codex tests are wiring proof, never
-runtime certification. All execution restrictions above and below remain binding.
-No provider fallback, target application changes, live provider calls in builder
-sessions or previously blocked reproduction is authorized.
+Selected feature list: features-ci-optimizer.json (ci-optimizer, D127). Codex parity wave 2
+is closed (26/26, D126); the next parity waves are not launched. On 2026-11-22 the user
+approved a harness-level CI optimization capability, built in the autobuild tool as
+`autobuild ci`. The contract is spec/contracts/ci-optimizer-priority.md (CO-01..CO-11).
+Builder sessions make no network calls: CI history is read only through a fake gh in
+tests. verify.sh, every SKILL.md and the offering catalog are out of scope. All execution
+restrictions above and below remain binding. No provider fallback, target application
+changes, live provider calls in builder sessions or previously blocked reproduction is
+authorized.
 
 # PandaStack Phase 2: shared decision queue and answer routing
 

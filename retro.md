@@ -4150,3 +4150,35 @@ Phase 2 acceptance: 97/97.
   not a Codex-path one; the Claude path is untested for it.
 - Not established: a Codex agent following the section unaided; a person answering or approving;
   dev's production row (still unavailable until CP-06); any certification.
+
+## 76. ci-optimizer frozen: CO-01..CO-11 (2026-11-22)
+
+D127: the user's harness-level CI optimization brief becomes its own priority with a $75
+estimated cap for the autobuild run. Plan review (SMALL) chose `autobuild ci` in the autobuild
+tool with per-machine state (1A), a fast tier built on step `paths` that escalates to the full
+gate (2A), offline real-shaped proof (3A), and `shardWeight` recalibration as the only
+automatic change (4A). The skill offering, session discovery and a verify fast path wait for a
+hash-pin amendment PR.
+- Contracts: spec/contracts/ci-optimizer-priority.md plus co-01..co-11. 11 frozen acceptance
+  files under acceptance/ci-optimizer/, 243 tests, written from the contracts by four parallel
+  authors. Fixtures: 43 real GitHub Actions responses from PandaStack's own CI (projected to
+  the fields read, no actor or author fields, repo renamed example/pandastack) covering the
+  16-minute to 3-minute speed-up, a failure-then-rerun flake and a cancelled run; a
+  Python/pytest + GitLab repo; a deliberately slow Node workflow.
+- Proof before freezing: a separate, local-only reference implementation (never pushed) built
+  from the same contracts passed 239/242 on its first run. The 3 failures were test defects (a
+  human line missing the literal `github`, and a "wrote nothing" check that counted the
+  pre-existing gate cache), fixed. The reference's 35 ambiguity notes and the authors' notes
+  became contract clarifications. One design flaw was fixed: CO-08 keyed test steps by position,
+  so inserting a cache step that CO-06 itself proposes would have read as a removed test; steps
+  are now keyed by identity. Final: 243/243 on the reference, autobuild's suite 262/262 on it.
+- Coverage kept: moving featuresFile off codex-parity would have dropped its 26 acceptance
+  files from the gate (CI runs only the gate), and the security-audit and native-runtime suites
+  were already outside it. All three are now gate steps (693, 124 and 51 tests, passing on
+  main). SPEC.md and AGENTS.md name the new feature list (tests/agents-active-priority caught
+  the mismatch).
+- The freeze's own hunt: a null or zero baseline median in CO-08 (closed by a rule and a frozen
+  case); F1, `bughuntBase` still at run B's base, which would have made the final hunt re-review
+  15 merged parity commits on this run's budget (now cd86609, the main commit this priority
+  branches from); F2, CO-10's "Applied automatically" heading for a finding the report never
+  applies (now "Auto-applicable (low risk, run `autobuild ci apply`)").
