@@ -195,8 +195,9 @@ crash"), exactly `node <codeRoot>/core/skills/native-runtime/graph-reconcile.mjs
    - **verify**: `bash <installationRoot>/core/skills/verify/verify.sh` in `<toplevel>`,
      stdin ignored, stdout captured (up to 64 MiB), killed with SIGKILL after
      `timeoutMs`. It is `'PASS'` only when it exits 0 and the last non-empty line of
-     stdout, trimmed, is exactly `VERIFY: PASS`. Anything else, a spawn failure or a
-     timeout included, is `'FAIL'`. `lastVerify` (the checker's transcription) is
+     stdout, trimmed, is exactly `VERIFY: PASS`. A line is empty when nothing is left
+     after its trailing whitespace is removed. Anything else is `'FAIL'`: a spawn
+     failure, a timeout, or stdout past 64 MiB (verify is then killed with SIGKILL). `lastVerify` (the checker's transcription) is
      never used for this.
    - **touched**: `git status --porcelain=v1 -z --untracked-files=all` in `<toplevel>`
      (the machine form of `git status --short`). `changed` is the set of every path it
