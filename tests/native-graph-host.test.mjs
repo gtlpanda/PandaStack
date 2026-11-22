@@ -57,6 +57,10 @@ function makeRoot(body) {
   const catalog = JSON.parse(readFileSync(join(root, CATALOG), 'utf8'))
   catalog.offerings.find(o => o.id === 'dev').providers.codex = { implementation: 'partial', transportId: 'codex-autobuild',
     limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] }
+  // The refusal cases use blueprint as a codex-unavailable offering; CP-04e flips the
+  // candidate's row, so the fixture sets it (amended at the tier-4 freeze, W2-10).
+  catalog.offerings.find(o => o.id === 'blueprint').providers.codex = { implementation: 'unavailable', transportId: null,
+    limitations: ['NATIVE_UNVERIFIED', 'NO_PROVIDER_TRANSPORT', 'REQUIREMENTS_INCOMPLETE'] }
   if (body !== undefined) {
     const bytes = `export const meta = {\n  name: 'harness-repair',\n}\n${body}\n`
     writeFileSync(join(root, WORKFLOW), bytes)

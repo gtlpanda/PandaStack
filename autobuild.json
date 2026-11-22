@@ -410,7 +410,11 @@
     "spec/contracts/codex-parity-cp-04c.md",
     "acceptance/codex-parity/cp-04c-blueprint-native.test.mjs",
     "spec/contracts/codex-parity-cp-05d.md",
-    "acceptance/codex-parity/cp-05d-qa-loop.test.mjs"
+    "acceptance/codex-parity/cp-05d-qa-loop.test.mjs",
+    "spec/contracts/codex-parity-cp-04e.md",
+    "acceptance/codex-parity/cp-04e-blueprint-codex.test.mjs",
+    "spec/contracts/codex-parity-cp-05e.md",
+    "acceptance/codex-parity/cp-05e-qa-gate.test.mjs"
   ],
   "writable": [
     "PROGRESS.md",

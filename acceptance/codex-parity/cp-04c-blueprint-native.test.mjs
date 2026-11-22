@@ -4,7 +4,9 @@
 // child process; its stages go through the real CP-02e graph host and the real CP-02b
 // provider around the frozen fake codex acceptance/codex-parity/cp-02f-fake-codex.cjs.
 // The installation root is an owned fixture copied from the candidate tree with only
-// blueprint's codex row flipped to partial (case 7 uses the candidate root itself).
+// blueprint's codex row flipped to partial. Case 7 and its prerequisite use a second
+// fixture root whose blueprint row is codex `unavailable` (amended at the CP-04e freeze,
+// W2-10: they used the candidate root, whose row CP-04e flips).
 //
 // Every case owns a fixture git repository (its path holds a space) and a bin/ that is
 // the whole PATH of the CLI and of every leaf: a `node` shim, a recording `git` wrapper
@@ -73,7 +75,27 @@ const PARTIAL = Object.freeze({ implementation: 'partial', transportId: 'codex-a
   limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] })
 const ROLES = ['extractor', 'questioner', 'architect', 'slicer', 'advisor']
 
-let WORK, REAL_GIT, REAL_BASH, FIXTURE_ROOT, PREFIXES, STATE_LIB, DECISIONS_LIB
+// The candidate's row before CP-04e, set explicitly on the refusal root.
+const UNAVAILABLE = Object.freeze({ implementation: 'unavailable', transportId: null,
+  limitations: ['NATIVE_UNVERIFIED', 'NO_PROVIDER_TRANSPORT', 'REQUIREMENTS_INCOMPLETE'] })
+// CP-04e's row, pinned by acceptance/codex-parity/cp-04e-blueprint-codex.test.mjs.
+const CP04E_BLUEPRINT_CODEX = Object.freeze({ implementation: 'partial', transportId: 'codex-graph-host',
+  limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] })
+
+let WORK, REAL_GIT, REAL_BASH, FIXTURE_ROOT, UNAVAILABLE_ROOT, PREFIXES, STATE_LIB, DECISIONS_LIB
+// A fixture root identical to root() except that blueprint's codex row is unavailable.
+function unavailableRoot() {
+  if (UNAVAILABLE_ROOT) return UNAVAILABLE_ROOT
+  const dir = realpathSync(mkdtempSync(join(WORK, 'unavailable-root-')))
+  copyTree(dir)
+  const catalog = readJson(join(dir, CATALOG))
+  const row = catalog.offerings.find(o => o.id === 'blueprint')
+  assert.ok(row?.providers?.codex, 'the candidate catalog is v2 with provider rows (CP-01b)')
+  row.providers.codex = structuredClone(UNAVAILABLE)
+  writeFileSync(join(dir, CATALOG), JSON.stringify(catalog, null, 2) + '\n')
+  UNAVAILABLE_ROOT = dir
+  return dir
+}
 // Built on first use, so a candidate without the v2 catalog or role loader fails each case on its own.
 async function root() {
   if (FIXTURE_ROOT) return FIXTURE_ROOT
@@ -349,7 +371,7 @@ function assertStageReport(r, stage, status, file, redacted = false) {
 // Nothing but stateDir (and the report's own fields) may carry a path, and none of `secrets` may appear.
 function assertNoLeak(c, r, secrets = []) {
   const text = (r.stdout + r.stderr).split(c.stateDir).join('<stateDir>')
-  for (const bad of [MARKER, c.dir, c.repo, FIXTURE_ROOT, c.codex, r.argsPath, ...secrets].filter(Boolean)) {
+  for (const bad of [MARKER, c.dir, c.repo, FIXTURE_ROOT, UNAVAILABLE_ROOT, c.codex, r.argsPath, ...secrets].filter(Boolean)) {
     assert.ok(!text.includes(bad), `the output does not carry ${bad.slice(0, 40)}`)
   }
 }
@@ -762,10 +784,10 @@ describe('fixture prerequisites (the host, the fake and CP-04a/b/d run the scrip
     assert.throws(() => assertEveryCase(c), /marker/)
   })
 
-  test('the production catalog makes the host refuse OFFERING_UNSUPPORTED before any run directory exists', async () => {
+  test('a codex-unavailable blueprint row makes the host refuse OFFERING_UNSUPPORTED before any run directory exists', async () => {
     const c = await makeCase()
     seed(c, { state: STATE() })
-    const r = await hostStage(c, 'design', designArgsFor(c), HAPPY, ROOT)
+    const r = await hostStage(c, 'design', designArgsFor(c), HAPPY, unavailableRoot())
     assert.equal(r.stdout, '')
     assert.equal(r.stderr, JSON.stringify({ error: 'OFFERING_UNSUPPORTED' }) + '\n')
     assert.equal(r.code, 2)
@@ -776,13 +798,14 @@ describe('fixture prerequisites (the host, the fake and CP-04a/b/d run the scrip
 
 // =====================================================================
 describe('1. catalog and imports', () => {
-  test('blueprint declares the native-runtime edge, the drift guard is clean, and the codex row is still unavailable', async () => {
+  test('blueprint declares the native-runtime edge, the drift guard is clean, and the codex row is unavailable or exactly CP-04e\'s', async () => {
     const catalog = readJson(resolve(ROOT, CATALOG))
     const blueprint = catalog.offerings.find(o => o.id === 'blueprint')
     assert.deepEqual(blueprint.dependencies, ['backlog', 'default-stack', 'knowledge-map', 'native-runtime'])
     const { checkCatalogDrift } = await loadModule('core/skills/native-runtime/catalog.mjs')
     assert.deepEqual(checkCatalogDrift({ installationRoot: ROOT }), { ok: true, problems: [] })
-    assert.equal(blueprint.providers.codex.implementation, 'unavailable')
+    assert.ok([JSON.stringify(UNAVAILABLE), JSON.stringify(CP04E_BLUEPRINT_CODEX)].includes(JSON.stringify(blueprint.providers.codex)),
+      'blueprint\'s codex row is unavailable (before CP-04e) or exactly CP-04e\'s')
   })
 
   test('blueprint-native.mjs imports node: built-ins and the pinned names only, statically, with no dynamic import()', () => {
@@ -1201,11 +1224,11 @@ describe('6. a leaf refusal', () => {
 })
 
 // =====================================================================
-describe('7. the production catalog', () => {
-  test('with installationRoot at the candidate root every stage exits 2 OFFERING_UNSUPPORTED: no spawn, no run directory, no run file', async () => {
+describe('7. a codex-unavailable blueprint row', () => {
+  test('with installationRoot at a root whose blueprint row is codex unavailable every stage exits 2 OFFERING_UNSUPPORTED: no spawn, no run directory, no run file', async () => {
     const c = await makeCase()
-    const production = { ...hostKeys(c), installationRoot: ROOT }
-    assert.equal(readJson(resolve(ROOT, CATALOG)).offerings.find(o => o.id === 'blueprint').providers.codex.implementation, 'unavailable')
+    const production = { ...hostKeys(c), installationRoot: unavailableRoot() }
+    assert.equal(readJson(join(unavailableRoot(), CATALOG)).offerings.find(o => o.id === 'blueprint').providers.codex.implementation, 'unavailable')
     // interview needs a request and no state; design a state; backlog a fresh design-ready run2.
     const steps = [
       ['interview', () => seed(c)],

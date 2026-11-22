@@ -24,7 +24,8 @@ acceptance test. It is frozen with it and the builder never edits it.
 
 ## The catalog change
 
-`dev`'s `proofRefs` becomes `["cp-02f-host-wiring"]` (it is `[]` today). No other
+`dev`'s `proofRefs` becomes `["cp-02f-host-wiring"]` (it is `[]` today; CP-05e later
+appends `cp-05e-qa-gate`, and the frozen test checks inclusion, not equality). No other
 byte of the catalog changes. In particular `dev`'s codex row stays
 `{implementation: 'unavailable', transportId: null}` with its current limitations,
 and no other row gets this reference.

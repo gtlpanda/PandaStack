@@ -8,6 +8,12 @@ takes its targets, its `dest_of` mapping and its backup allow-check from that li
 instead of a fixed pair. The installed set does not change: today the plan is exactly
 autobuild and bughunt.
 
+Amended at the tier-4 freeze (CP-04e, W2-10): CP-04e makes blueprint Codex install-eligible. The
+candidate-root case accepts exactly the two-line plan or CP-04e's three-line plan, every
+fixture root sets blueprint's codex row `unavailable` itself, and tests/install-codex.test.mjs
+is amended the same way (its sha256 in this test follows). CP-04e's test pins the
+three-line plan.
+
 It does not change the catalog, the validator, the accessors, the drift guard,
 preflight (CP-01d) or any SKILL.md (CP-03a). It certifies nothing.
 

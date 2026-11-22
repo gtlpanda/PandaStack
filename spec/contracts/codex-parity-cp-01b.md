@@ -42,6 +42,12 @@ Top level:
 | `codex-autobuild` | codex | `graphs/autobuild/tool/lib/codex.mjs` |
 | `codex-bughunt` | codex | `graphs/hunt/skills/bughunt/native-runner.mjs` |
 
+Amended at the tier-4 freeze (CP-04e, W2-10): CP-04e appends a fourth row, `codex-graph-host`
+(spec/contracts/codex-parity-cp-04e.md). The frozen test accepts exactly these three
+rows or these three plus that one, and pins blueprint's codex row, its derived values
+and the "partial only for autobuild and bughunt" case the same way: today's state, or
+exactly CP-04e's.
+
 Workflows: same rows and order. Each row keeps `source`, `roles` and
 `nativeReadiness`, and adds `sha256`, the sha256 of the file's bytes on disk.
 
@@ -222,4 +228,4 @@ NO_PROVIDER_TRANSPORT for codex `unavailable`; NO_NATIVE_ENTRY and PROFILE_UNSUP
 for security-audit), extra declared dependencies, and the order of `dependencies`.
 A later feature that flips a codex row to `partial` (for example a CP-02f row update)
 must have the host amend the "codex is partial only for autobuild and bughunt" case
-when it is frozen.
+when it is frozen. CP-04e is the first (see the note under `transports`).

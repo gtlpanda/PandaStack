@@ -31,6 +31,14 @@ const TRANSPORTS = [
   { id: 'codex-bughunt', provider: 'codex', entry: 'graphs/hunt/skills/bughunt/native-runner.mjs' },
 ]
 const CODEX_PARTIAL = { autobuild: 'codex-autobuild', bughunt: 'codex-bughunt' }
+// Amended at the CP-04e freeze (W2-10). CP-04e flips blueprint's codex row and adds one
+// shared transport. These pins accept exactly two states: today's, or exactly CP-04e's.
+// acceptance/codex-parity/cp-04e-blueprint-codex.test.mjs pins the CP-04e state itself.
+const CP04E_TRANSPORT = { id: 'codex-graph-host', provider: 'codex', entry: 'core/skills/native-runtime/graph-host.mjs' }
+const CP04E_BLUEPRINT_CODEX = { implementation: 'partial', transportId: 'codex-graph-host',
+  limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] }
+const cp04eFlipped = row => row.id === 'blueprint' &&
+  JSON.stringify(row.providers.codex) === JSON.stringify(CP04E_BLUEPRINT_CODEX)
 const SHARED_FIELDS = ['id', 'kind', 'source', 'entrySkill', 'installTargets', 'nativeReadiness',
   'evidenceOwners', 'requiredRuntimes', 'aliases', 'requirementsComplete']
 
@@ -124,8 +132,9 @@ test('same inventory and derived values as the v1 snapshot', async () => {
     for (const field of SHARED_FIELDS) assert.deepEqual(row[field], old[field], `${row.id} ${field}`)
     assert.ok(!Object.hasOwn(row, 'codexInstallEligible') && !Object.hasOwn(row, 'nativeImplementation'), `${row.id} has no v1-only field`)
     assert.ok(old.dependencies.every(d => row.dependencies.includes(d)), `${row.id} keeps its v1 dependencies`)
-    assert.equal(api.installEligible(row, 'codex'), old.codexInstallEligible, `${row.id} codex eligibility`)
     assert.equal(api.installEligible(row, 'claude'), true, `${row.id} claude eligibility`)
+    if (cp04eFlipped(row)) return // CP-04e's own test pins the flipped row's derived values
+    assert.equal(api.installEligible(row, 'codex'), old.codexInstallEligible, `${row.id} codex eligibility`)
     assert.equal(api.nativeImplementationOf(row), old.nativeImplementation, `${row.id} nativeImplementation`)
   })
 })
@@ -139,7 +148,8 @@ test('entry and workflow hashes equal the bytes on disk, and every transport ent
   for (const workflow of catalog.workflows) {
     assert.equal(workflow.sha256, sha(readFileSync(resolve(ROOT, workflow.source))), workflow.source)
   }
-  assert.deepEqual(catalog.transports, TRANSPORTS)
+  assert.ok([JSON.stringify(TRANSPORTS), JSON.stringify([...TRANSPORTS, CP04E_TRANSPORT])]
+    .includes(JSON.stringify(catalog.transports)), 'transports are the three rows, or those plus CP-04e\'s')
   for (const transport of catalog.transports) {
     assert.ok(lstatSync(resolve(ROOT, transport.entry)).isFile(), `${transport.id} entry is a regular file`)
   }
@@ -161,7 +171,7 @@ test('declared dependencies are a superset of the derived edges', async () => {
   assert.deepEqual(missing, [], 'undeclared derived edges')
 })
 
-test('no supported anywhere; codex is partial only for autobuild and bughunt', () => {
+test('no supported anywhere; codex is partial only for autobuild and bughunt (and blueprint once CP-04e flips it)', () => {
   const catalog = production()
   assert.equal(catalog.schemaVersion, 2)
   for (const offering of catalog.offerings) {
@@ -174,7 +184,9 @@ test('no supported anywhere; codex is partial only for autobuild and bughunt', (
     }
     assert.deepEqual([claude.implementation, claude.transportId], ['partial', 'claude-code'], `${offering.id} claude`)
     assert.ok(codex.limitations.includes('NATIVE_UNVERIFIED'), `${offering.id} codex NATIVE_UNVERIFIED`)
-    if (Object.hasOwn(CODEX_PARTIAL, offering.id)) {
+    if (cp04eFlipped(offering)) {
+      // CP-04e's state: exactly CP04E_BLUEPRINT_CODEX (checked by cp04eFlipped), pinned by its own test.
+    } else if (Object.hasOwn(CODEX_PARTIAL, offering.id)) {
       assert.deepEqual([codex.implementation, codex.transportId], ['partial', CODEX_PARTIAL[offering.id]], `${offering.id} codex`)
       assert.ok(codex.limitations.includes('LIVE_PROOF_MISSING'), `${offering.id} codex LIVE_PROOF_MISSING`)
     } else {

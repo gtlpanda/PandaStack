@@ -531,8 +531,13 @@ test('on the candidate root only the codex-partial offerings can be ready (wirin
       if (result.status === 'ready') ready.push(row.id)
       else assert.deepEqual(checks(result).implementation, ['fail', 'PROVIDER_UNAVAILABLE'], row.id)
     }
-    assert.deepEqual(ready.sort(), ['autobuild', 'bughunt'])
-    assert.deepEqual(calls.map(call => call.offeringId).sort(), ['autobuild', 'bughunt'])
+    // Amended at the CP-04e freeze (W2-10): blueprint joins once CP-04e flips its codex row.
+    const partial = row => row.providers.codex.implementation === 'partial'
+    const expected = catalog.offerings.find(o => o.id === 'blueprint').providers.codex.implementation === 'partial'
+      ? ['autobuild', 'blueprint', 'bughunt'] : ['autobuild', 'bughunt']
+    assert.deepEqual(catalog.offerings.filter(partial).map(o => o.id).sort(), expected, 'no other codex row is partial')
+    assert.deepEqual(ready.sort(), expected)
+    assert.deepEqual(calls.map(call => call.offeringId).sort(), expected)
   })
 })
 

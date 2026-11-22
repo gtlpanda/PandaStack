@@ -8,7 +8,7 @@
 // <FAKE_CODEX_DIR>/script.json is
 //   { "roles": [{ "role": <name>, "prefix": <assembled role instructions + "\n\n"> }],
 //     "replies": { <name>: <reply> | [<reply>, ...] } }
-//   <reply> = { "json": <string> } | { "refuse": true }
+//   <reply> = { "json": <string>, "writes"?: { <relative path>: <utf8 content> } } | { "refuse": true }
 // The role of a spawn is the one whose prefix starts its stdin (the longest match).
 // An array reply gives one entry per spawn of that role, in order; its last repeats.
 // Every spawn appends one JSON line to <FAKE_CODEX_DIR>/calls.jsonl, including the
@@ -18,6 +18,10 @@
 // - { "json": s }: writes {"json": s} to --output-last-message when handed the NR-01
 //   wire schema, and s itself (the bare object) for any other schema (CP-02h); then
 //   prints turn.completed, exit 0.
+// - "writes" (amended additively at the tier-4 freeze for CP-05e, W2-9): before the
+//   reply, each entry is written under the spawn's cwd, creating parent directories. A
+//   path that is not relative, uses a backslash, or has an empty, "." or ".." segment
+//   makes the fake write nothing and exit 3. A reply without "writes" is unchanged.
 'use strict'
 const fs = require('node:fs')
 const path = require('node:path')
@@ -47,6 +51,18 @@ process.stdin.on('end', () => {
     sandbox: flag('--sandbox'), model: flag('--model'), schema,
   }) + '\n')
   if (reply === null) { process.exitCode = 3; return }
+  if (reply.writes !== undefined) {
+    if (reply.writes === null || typeof reply.writes !== 'object' || Array.isArray(reply.writes)) { process.exitCode = 3; return }
+    const entries = Object.entries(reply.writes)
+    const safe = rel => typeof rel === 'string' && rel.length > 0 && !rel.startsWith('/') && !rel.includes('\\') &&
+      rel.split('/').every(part => part !== '' && part !== '.' && part !== '..')
+    if (!entries.every(([rel, text]) => safe(rel) && typeof text === 'string')) { process.exitCode = 3; return }
+    for (const [rel, text] of entries) {
+      const target = path.join(process.cwd(), ...rel.split('/'))
+      fs.mkdirSync(path.dirname(target), { recursive: true })
+      fs.writeFileSync(target, text)
+    }
+  }
   if (reply.refuse === true) {
     process.stdout.write(JSON.stringify({ type: 'turn.failed',
       error: { message: 'This content was flagged for possible cybersecurity risk. (fake codex fixture)' } }) + '\n')

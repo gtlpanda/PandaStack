@@ -31,10 +31,20 @@ const PRODUCTION_PLAN = [
   { dest: 'skills/autobuild', src: 'graphs/autobuild/skills/autobuild' },
   { dest: 'skills/bughunt', src: 'graphs/hunt/skills/bughunt' },
 ]
+// Amended at the CP-04e freeze (W2-10): CP-04e makes blueprint Codex install-eligible.
+// The candidate-root case accepts exactly today's plan or CP-04e's (pinned by its own
+// test), and every fixture root sets blueprint's codex row unavailable itself.
+const CP04E_LINES = 'skills/autobuild\tgraphs/autobuild/skills/autobuild\n' +
+  'skills/blueprint\tgraphs/blueprint/skills/blueprint\nskills/bughunt\tgraphs/hunt/skills/bughunt\n'
+const CP04E_PLAN = [
+  { dest: 'skills/autobuild', src: 'graphs/autobuild/skills/autobuild' },
+  { dest: 'skills/blueprint', src: 'graphs/blueprint/skills/blueprint' },
+  { dest: 'skills/bughunt', src: 'graphs/hunt/skills/bughunt' },
+]
 const THIRD_SRC = 'graphs/fixture/skills/third'
 const THREE_LINES = PRODUCTION_LINES + `skills/third\t${THIRD_SRC}\n`
 // The frozen tests/install-codex.test.mjs, byte for byte.
-const INSTALL_CODEX_SHA256 = '28a96070b271609b0b6af4efe28d0e9a07ebd724a20e1eb21b7c4cb29025f163'
+const INSTALL_CODEX_SHA256 = '372fd1c647d89fe09cb6840ef6aab78d74cb3fda134d3d668cb9fa5f4a6cb6d9'
 const INSTALL_CODEX_CASES = 7
 
 // ---------------------------------------------------------------- fixtures
@@ -45,8 +55,10 @@ function owned(t, prefix = 'cp01c-') {
   return dir
 }
 
-const production = () => JSON.parse(readFileSync(join(ROOT, 'spec/offering-capabilities.json'), 'utf8'))
+const candidate = () => JSON.parse(readFileSync(join(ROOT, 'spec/offering-capabilities.json'), 'utf8'))
 const row = (catalog, id) => catalog.offerings.find(o => o.id === id)
+// The fixture base: the candidate catalog with blueprint's codex row as it is before CP-04e.
+const production = () => { const catalog = candidate(); codexUnavailable(row(catalog, 'blueprint')); return catalog }
 
 // Works for either catalog version: the accessor decides, so the test must not care.
 function codexUnavailable(offering) {
@@ -137,14 +149,16 @@ function snapshot(dir) {
 
 // ---------------------------------------------------------------- cases
 
-test('install-plan prints exactly the two current dest<TAB>src lines for the candidate root', async () => {
-  planOk(plan(ROOT), PRODUCTION_LINES)
-  planOk(plan(ROOT, ['--backend', 'codex', '--installation-root', ROOT]), PRODUCTION_LINES)
+test('install-plan prints exactly the two current dest<TAB>src lines for the candidate root (three once CP-04e flips blueprint)', async () => {
+  const flipped = row(candidate(), 'blueprint').providers?.codex?.implementation === 'partial'
+  const lines = flipped ? CP04E_LINES : PRODUCTION_LINES
+  planOk(plan(ROOT), lines)
+  planOk(plan(ROOT, ['--backend', 'codex', '--installation-root', ROOT]), lines)
 
   const { installPlan } = await loadPlan()
   assert.equal(typeof installPlan, 'function', 'install-plan.mjs exports installPlan')
   const result = installPlan({ installationRoot: ROOT, backend: 'codex' })
-  assert.deepEqual(result, PRODUCTION_PLAN)
+  assert.deepEqual(result, flipped ? CP04E_PLAN : PRODUCTION_PLAN)
   for (const entry of result) assert.deepEqual(Object.keys(entry), ['dest', 'src'])
   assert.deepEqual(installPlan({ installationRoot: ROOT, backend: 'codex' }), result, 'same result on every call')
 

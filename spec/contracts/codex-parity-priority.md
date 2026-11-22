@@ -286,6 +286,14 @@ directly. CP-04e flips blueprint's codex row, so its freeze amends the frozen
 "partial only for autobuild and bughunt" and two-line install cases (CP-01b, CP-01c,
 CP-01d, CP-03b) in the same commit.
 
+Tier-4 freeze record: CP-04e's row uses one new shared transport, `codex-graph-host`
+(entry core/skills/native-runtime/graph-host.mjs), which later host-run offerings reuse,
+so a later flip adds no transport. The freeze retired each changed pin to "today's state,
+or exactly CP-04e's/CP-05e's" (CP-01b, CP-01c with tests/install-codex.test.mjs, CP-01d,
+CP-03b), and the CP-02e and CP-04c refusal cases now set blueprint `unavailable` on their
+own fixture roots. Under W2-9 the fake codex gained an optional `writes` reply field, so
+CP-05e's scripted fixer can change the tree.
+
 ### Live steps around wave 2
 
 Each runs outside builder sessions, under the user's 2026-11-20 authorization, and is
