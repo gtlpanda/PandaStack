@@ -1972,3 +1972,82 @@ Observed limits and untested hypotheses:
   is not detected.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-02g — The host settles an oversize leaf prompt as PROMPT_TOO_LARGE
+
+Implemented spec/contracts/codex-parity-cp-02g.md only. Two changes to
+`core/skills/native-runtime/graph-host.mjs`, nothing else in core:
+
+- `wrapProvider`'s `runLeaf` keeps CP-02e's order: the role lookup first (an unknown
+  role still throws `INVALID_SELECTION`), then `prompt = instructions + "\n\n" +
+  request.prompt`. When `Buffer.byteLength(prompt, 'utf8') > 1048576` it returns
+  `failedCompletion({selection: request.selection, code: 'PROMPT_TOO_LARGE',
+  invocationId: 'host:' + request.callId})` and never calls the caller's provider.
+  Otherwise it passes `prompt` through unchanged, so exactly 1048576 bytes is
+  forwarded. The limit is a named constant (`MAX_LEAF_PROMPT_BYTES`).
+- The store opens at `checkpointDirOf(input.runDir)`, so the host has no
+  `'checkpoints'` literal of its own. The path is unchanged.
+- New imports: `checkpointDirOf` from `./checkpoint-store.mjs` (CP-05a) and
+  `failedCompletion` from `./completion.mjs` (CP-05b). `failHeldCheckpoint` is not
+  imported. The runtime, provider (its own 1 MiB check included), store, completion,
+  catalog, role files and workflows are unchanged.
+- New `tests/native-graph-host-prompt-size.test.mjs` (5 cases, harness `test()`). It
+  uses a fixture harness-repair template, re-pinned in a fixture catalog, that runs one
+  checker leaf per `args.sizes` entry. The overhead is measured from
+  `assembleRoleInstructions`, and the first case proves the measurement:
+  - at the limit, the provider gets a combined prompt of exactly 1048576 bytes with the
+    workflow prompt whole;
+  - a provider with no size check of its own is still never called over the limit, and
+    the row is the exact failed envelope;
+  - the workflow goes on after a PROMPT_TOO_LARGE leaf, so the next leaf dispatches and
+    returns, and no row is held;
+  - a workflow prompt over the runtime's own limit still stops the run in the runtime
+    first (exit 3 `INVALID_RUNTIME_INPUT`, no row, no call, no result.json);
+  - a later invocation in the same run directory dispatches normally.
+
+Decisions (no human present):
+- That fourth case first expected the runtime's refusal to come back as an ordinary
+  leaf error. The run showed exit 3 `INVALID_RUNTIME_INPUT`: `runtime.mjs` stops the
+  scope before reserve. The test now pins what was observed. runtime.mjs is untouched.
+- The contract mandates `checkpointDirOf`, and its `absolutePathInput` accepts any
+  absolute string with no NUL. The host's own run-directory check is stricter, so every
+  admitted run directory passes. Checked by reading the code; no case tests it.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-02g-prompt-too-large.test.mjs
+# tests 7, pass 7, fail 0 (first run after the change)
+node logs/evidence/cp-02g/run-focused.mjs tests/native-graph-host-prompt-size.test.mjs tests/native-graph-host.test.mjs tests/blueprint-state.test.mjs
+# FOCUSED: 31 passed, 0 failed, 0 skipped (harness summary())
+node --test acceptance/codex-parity/cp-02g-prompt-too-large.test.mjs acceptance/codex-parity/cp-02e-graph-host.test.mjs \
+  acceptance/codex-parity/cp-02f-native-graphs.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs \
+  acceptance/codex-parity/cp-05a-checkpoint-operator.test.mjs acceptance/codex-parity/cp-05b-graph-reconcile.test.mjs
+# tests 94, pass 94, fail 0
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+bash scripts/check-secrets.sh tests/native-graph-host-prompt-size.test.mjs   # check-secrets: clean
+autobuild mark-passed CP-02g                 # === node (1 file): PASS
+```
+
+Also run: cp-04e acceptance (`passes: false`, not built). Tests 5, pass 0, fail 5, all
+in its own scope:
+1. blueprint's catalog row;
+2. the install link;
+3. inspectOffering readiness;
+4. the SKILL.md `## Codex runner` section;
+5. the end-to-end case, which stops at the same install-link assertion.
+
+cp-04c (also `passes: false`) was not run.
+
+Saved under logs/evidence/ (gitignored): `cp-02g/run-focused.mjs`.
+
+Observed limits and untested hypotheses:
+- The acceptance test was not run before the change. The contract's claim that all 7
+  cases fail at the freeze was not re-observed in this session.
+- No mutation check was run.
+- Neither the role-lookup-before-size order nor the unchanged provider check has a
+  case. Both are enforced by review, as the contract says.
+- macOS was not run.
+
+Full regressions, review and the branch hunt remain pending for the PR.
