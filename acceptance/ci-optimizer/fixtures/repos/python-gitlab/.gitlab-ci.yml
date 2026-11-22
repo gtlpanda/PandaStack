@@ -1,0 +1,42 @@
+stages:
+  - lint
+  - test
+  - deploy
+
+.base:
+  image: python:3.12
+  before_script:
+    - pip install -r requirements.txt
+
+lint:
+  stage: lint
+  image: python:3.12
+  script:
+    - ruff check .
+
+unit:
+  stage: test
+  image: python:3.12
+  parallel: 3
+  cache:
+    key: pip
+    paths:
+      - .cache/pip
+  script:
+    - pytest -q
+
+integration:
+  stage: test
+  image: python:3.12
+  needs: [unit]
+  parallel:
+    matrix:
+      - PY: ["3.11", "3.12"]
+        DB: ["pg"]
+  script:
+    - pytest -q tests
+
+deploy:
+  stage: deploy
+  script:
+    - echo deploy

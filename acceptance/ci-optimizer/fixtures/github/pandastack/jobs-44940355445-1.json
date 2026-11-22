@@ -1,0 +1,93 @@
+{
+ "total_count": 1,
+ "jobs": [
+  {
+   "id": 136955976656,
+   "run_id": 44940355445,
+   "run_attempt": 1,
+   "name": "test",
+   "status": "completed",
+   "conclusion": "success",
+   "created_at": "2026-11-21T19:19:57Z",
+   "started_at": "2026-11-21T19:20:00Z",
+   "completed_at": "2026-11-21T19:36:50Z",
+   "labels": [
+    "ubuntu-22.04"
+   ],
+   "steps": [
+    {
+     "name": "Set up job",
+     "number": 1,
+     "status": "completed",
+     "conclusion": "success",
+     "started_at": "2026-11-21T19:20:00Z",
+     "completed_at": "2026-11-21T19:20:01Z"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "number": 2,
+     "status": "completed",
+     "conclusion": "success",
+     "started_at": "2026-11-21T19:20:01Z",
+     "completed_at": "2026-11-21T19:20:02Z"
+    },
+    {
+     "name": "Run actions/setup-node@v4",
+     "number": 3,
+     "status": "completed",
+     "conclusion": "success",
+     "started_at": "2026-11-21T19:20:02Z",
+     "completed_at": "2026-11-21T19:20:03Z"
+    },
+    {
+     "name": "Tools the checks need",
+     "number": 4,
+     "status": "completed",
+     "conclusion": "success",
+     "started_at": "2026-11-21T19:20:03Z",
+     "completed_at": "2026-11-21T19:20:03Z"
+    },
+    {
+     "name": "Required non-root isolation",
+     "number": 5,
+     "status": "completed",
+     "conclusion": "success",
+     "started_at": "2026-11-21T19:20:03Z",
+     "completed_at": "2026-11-21T19:20:03Z"
+    },
+    {
+     "name": "Full PR gate (regressions and passing acceptance)",
+     "number": 6,
+     "status": "completed",
+     "conclusion": "success",
+     "started_at": "2026-11-21T19:20:03Z",
+     "completed_at": "2026-11-21T19:36:48Z"
+    },
+    {
+     "name": "Post Run actions/setup-node@v4",
+     "number": 11,
+     "status": "completed",
+     "conclusion": "success",
+     "started_at": "2026-11-21T19:36:48Z",
+     "completed_at": "2026-11-21T19:36:48Z"
+    },
+    {
+     "name": "Post Run actions/checkout@v4",
+     "number": 12,
+     "status": "completed",
+     "conclusion": "success",
+     "started_at": "2026-11-21T19:36:48Z",
+     "completed_at": "2026-11-21T19:36:48Z"
+    },
+    {
+     "name": "Complete job",
+     "number": 13,
+     "status": "completed",
+     "conclusion": "success",
+     "started_at": "2026-11-21T19:36:49Z",
+     "completed_at": "2026-11-21T19:36:49Z"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,185 @@
+{
+  "features": [
+    {
+      "id": "CO-01",
+      "title": "Repository discovery and the persisted CI profile",
+      "description": "Implement only spec/contracts/ci-optimizer-co-01.md under the common rules of spec/contracts/ci-optimizer-priority.md (D127). New code in graphs/autobuild/tool/lib/ci/; reuse existing modules, never copy them. No network; no edit to verify.sh, any SKILL.md, the offering catalog or any frozen file. Adds lib/ci/state.mjs, policy.mjs, discover.mjs, the ciOptimizer config key, and `autobuild ci discover`.",
+      "contract": "spec/contracts/ci-optimizer-co-01.md",
+      "dependencies": [],
+      "acceptance": [
+        "Languages, build tools and test frameworks are detected from manifests at the root and immediate child directories, with evidence paths; unknowns are listed, never guessed.",
+        "GitHub workflows are modeled (triggers, concurrency, jobs, needs, matrix size, runners, step kinds, caches); a workflow that fails to parse is reported unparsed without failing discovery.",
+        "The profile is stored per machine in the state directory (0700/0600, symlinks refused) and reused until the inputs digest of CI files, manifests and autobuild.json changes."
+      ],
+      "test": "acceptance/ci-optimizer/co-01-discover.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CO-02",
+      "title": "GitLab CI reader",
+      "description": "Implement only spec/contracts/ci-optimizer-co-02.md under the common rules of spec/contracts/ci-optimizer-priority.md (D127). New code in graphs/autobuild/tool/lib/ci/; reuse existing modules, never copy them. No network; no edit to verify.sh, any SKILL.md, the offering catalog or any frozen file. Adds lib/ci/gitlab.mjs and fills ci.pipelines.",
+      "contract": "spec/contracts/ci-optimizer-co-02.md",
+      "dependencies": [
+        "CO-01"
+      ],
+      "acceptance": [
+        "A .gitlab-ci.yml is modeled as stages and jobs (stage, needs, parallel including matrix size, cache, image, script, test), with hidden and reserved keys left out.",
+        "A file the YAML subset parser refuses is reported unparsed and the rest of the profile is still produced."
+      ],
+      "test": "acceptance/ci-optimizer/co-02-gitlab.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CO-03",
+      "title": "CI history through a gh port",
+      "description": "Implement only spec/contracts/ci-optimizer-co-03.md under the common rules of spec/contracts/ci-optimizer-priority.md (D127). New code in graphs/autobuild/tool/lib/ci/; reuse existing modules, never copy them. No network; no edit to verify.sh, any SKILL.md, the offering catalog or any frozen file. Adds lib/ci/history.mjs and `autobuild ci history`.",
+      "contract": "spec/contracts/ci-optimizer-co-03.md",
+      "dependencies": [
+        "CO-01"
+      ],
+      "acceptance": [
+        "History is fetched only with --from-gh, through exact gh api argument vectors, including earlier attempts of rerun runs; any gh failure changes nothing.",
+        "Attempts are normalized, deduplicated by run and attempt, sorted and capped; other providers can be imported in the normalized format with strict validation."
+      ],
+      "test": "acceptance/ci-optimizer/co-03-history.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CO-04",
+      "title": "CI metrics",
+      "description": "Implement only spec/contracts/ci-optimizer-co-04.md under the common rules of spec/contracts/ci-optimizer-priority.md (D127). New code in graphs/autobuild/tool/lib/ci/; reuse existing modules, never copy them. No network; no edit to verify.sh, any SKILL.md, the offering catalog or any frozen file. Adds lib/ci/metrics.mjs and `autobuild ci metrics`.",
+      "contract": "spec/contracts/ci-optimizer-co-04.md",
+      "dependencies": [
+        "CO-03"
+      ],
+      "acceptance": [
+        "Per attempt: wall, queue, setup, critical path (jobs and seconds), parallel efficiency and runner minutes, from recorded timestamps.",
+        "Per workflow: p50/p90 figures, per-step durations, cost only with configured rates, and reliability with flaky reruns; cache hit rate and runner utilization are listed as unknown.",
+        "Local gate metrics (runs, wall, cache hit rate, step durations) come from gate-timings.jsonl."
+      ],
+      "test": "acceptance/ci-optimizer/co-04-metrics.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CO-05",
+      "title": "Shard-weight planner and ci apply",
+      "description": "Implement only spec/contracts/ci-optimizer-co-05.md under the common rules of spec/contracts/ci-optimizer-priority.md (D127). New code in graphs/autobuild/tool/lib/ci/; reuse existing modules, never copy them. No network; no edit to verify.sh, any SKILL.md, the offering catalog or any frozen file. Adds lib/ci/apply.mjs and `autobuild ci apply`.",
+      "contract": "spec/contracts/ci-optimizer-co-05.md",
+      "dependencies": [
+        "CO-04"
+      ],
+      "acceptance": [
+        "The planner simulates placement with the real shardPlan and measured durations, before and after recalibrating shardWeight.",
+        "apply writes only changed shardWeight values, only when the computed slowest shard gets strictly faster and autobuild.json is clean; it prints a revert command."
+      ],
+      "test": "acceptance/ci-optimizer/co-05-apply.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CO-06",
+      "title": "Analysis rules",
+      "description": "Implement only spec/contracts/ci-optimizer-co-06.md under the common rules of spec/contracts/ci-optimizer-priority.md (D127). New code in graphs/autobuild/tool/lib/ci/; reuse existing modules, never copy them. No network; no edit to verify.sh, any SKILL.md, the offering catalog or any frozen file. Adds lib/ci/analyze.mjs and `autobuild ci analyze`.",
+      "contract": "spec/contracts/ci-optimizer-co-06.md",
+      "dependencies": [
+        "CO-02",
+        "CO-04",
+        "CO-05"
+      ],
+      "acceptance": [
+        "Each rule fires only on its stated evidence, with risk, action, target, job and an estimated saving only when measured; only gate-shard-weights may be applied, everything else is proposed.",
+        "PandaStack's own CI yields only the flaky-reruns finding; the slow fixture yields every workflow rule it is built to trigger."
+      ],
+      "test": "acceptance/ci-optimizer/co-06-analyze.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CO-07",
+      "title": "Fast validation tier",
+      "description": "Implement only spec/contracts/ci-optimizer-co-07.md under the common rules of spec/contracts/ci-optimizer-priority.md (D127). New code in graphs/autobuild/tool/lib/ci/; reuse existing modules, never copy them. No network; no edit to verify.sh, any SKILL.md, the offering catalog or any frozen file. Adds lib/ci/validate.mjs, runGate's affectedBase option and `autobuild ci validate`.",
+      "contract": "spec/contracts/ci-optimizer-co-07.md",
+      "dependencies": [
+        "CO-01"
+      ],
+      "acceptance": [
+        "The fast tier runs the gate steps whose paths match the change since the merge-base plus steps without paths, labeled as not merge validation.",
+        "It escalates to the full gate on unmapped, CI, manifest, lockfile or autobuild.json changes, no paths declared, or no base; existing runGate callers behave exactly as before."
+      ],
+      "test": "acceptance/ci-optimizer/co-07-validate.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CO-08",
+      "title": "Baseline, compare and regression",
+      "description": "Implement only spec/contracts/ci-optimizer-co-08.md under the common rules of spec/contracts/ci-optimizer-priority.md (D127). New code in graphs/autobuild/tool/lib/ci/; reuse existing modules, never copy them. No network; no edit to verify.sh, any SKILL.md, the offering catalog or any frozen file. Adds lib/ci/baseline.mjs, `autobuild ci baseline` and `autobuild ci compare`.",
+      "contract": "spec/contracts/ci-optimizer-co-08.md",
+      "dependencies": [
+        "CO-04"
+      ],
+      "acceptance": [
+        "A baseline captures workflow, step and gate medians plus the checks, test steps and gate steps in force.",
+        "Regression detection compares recent runs with the baseline against the regression threshold and the target, with insufficient data reported as such; compare fails when any check, test step or gate step was removed."
+      ],
+      "test": "acceptance/ci-optimizer/co-08-baseline.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CO-09",
+      "title": "Lifecycle triggers, loop start and status",
+      "description": "Implement only spec/contracts/ci-optimizer-co-09.md under the common rules of spec/contracts/ci-optimizer-priority.md (D127). New code in graphs/autobuild/tool/lib/ci/; reuse existing modules, never copy them. No network; no edit to verify.sh, any SKILL.md, the offering catalog or any frozen file. Adds lib/ci/triggers.mjs, the loop-start hook, the status line and `autobuild ci triggers`.",
+      "contract": "spec/contracts/ci-optimizer-co-09.md",
+      "dependencies": [
+        "CO-08"
+      ],
+      "acceptance": [
+        "Onboarding, CI-config change, runtime regression, repeated failures and explicit requests are evaluated offline in a fixed order.",
+        "autobuild run refreshes the profile at start when onboarding or a config change fires, logs one line, and never changes the run outcome; autobuild status shows the profile age and triggers."
+      ],
+      "test": "acceptance/ci-optimizer/co-09-triggers.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CO-10",
+      "title": "Per-repository report",
+      "description": "Implement only spec/contracts/ci-optimizer-co-10.md under the common rules of spec/contracts/ci-optimizer-priority.md (D127). New code in graphs/autobuild/tool/lib/ci/; reuse existing modules, never copy them. No network; no edit to verify.sh, any SKILL.md, the offering catalog or any frozen file. Adds lib/ci/report.mjs and `autobuild ci report`.",
+      "contract": "spec/contracts/ci-optimizer-co-10.md",
+      "dependencies": [
+        "CO-06",
+        "CO-08",
+        "CO-09"
+      ],
+      "acceptance": [
+        "The Markdown report has fixed sections, a measurements table, findings split into applied and proposed, and every unknown explained; the JSON report carries the same data.",
+        "--out refuses paths inside .git, symlinks and directories; the report never prints environment values."
+      ],
+      "test": "acceptance/ci-optimizer/co-10-report.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CO-11",
+      "title": "Validation status for HEAD",
+      "description": "Implement only spec/contracts/ci-optimizer-co-11.md under the common rules of spec/contracts/ci-optimizer-priority.md (D127). New code in graphs/autobuild/tool/lib/ci/; reuse existing modules, never copy them. No network; no edit to verify.sh, any SKILL.md, the offering catalog or any frozen file. Adds lib/ci/status.mjs and `autobuild ci status`.",
+      "contract": "spec/contracts/ci-optimizer-co-11.md",
+      "dependencies": [
+        "CO-03",
+        "CO-07"
+      ],
+      "acceptance": [
+        "Local fast and full results are current only for the same clean HEAD, and stale ones say why; the CI result for HEAD comes from stored history.",
+        "Advice follows the fixed rule order and never claims merge readiness; the command is read-only and offline."
+      ],
+      "test": "acceptance/ci-optimizer/co-11-status.test.mjs",
+      "testKind": "node",
+      "passes": false
+    }
+  ]
+}

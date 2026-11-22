@@ -1,15 +1,15 @@
 {
   "backend": "claude",
-  "branch": "autobuild/codex-parity-w2b",
-  "featuresFile": "features-codex-parity.json",
-  "progressFile": "PROGRESS-codex-parity.md",
+  "branch": "autobuild/ci-optimizer-w1",
+  "featuresFile": "features-ci-optimizer.json",
+  "progressFile": "PROGRESS-ci-optimizer.md",
   "maxConcurrentSubagents": 16,
   "codex": {
     "reasoningEffort": "high",
     "sessionTimeoutMinutes": 30
   },
   "bughunt": true,
-  "bughuntBase": "3aca4d9d0aee63ef43d2aa966c45c32a323d42d5",
+  "bughuntBase": "cd8660978ab9424c0d7654341a628d8c473cbc1b",
   "limits": {
     "maxIterations": 12,
     "noProgressLimit": 3,
@@ -80,6 +80,21 @@
       "name": "Accepted Phase 2 regression acceptance",
       "command": "node --test acceptance/phase2/p2-01.test.mjs acceptance/phase2/p2-02.test.mjs acceptance/phase2/p2-03.test.mjs acceptance/phase2/p2-04.test.mjs acceptance/phase2/p2-05.test.mjs acceptance/phase2/p2-06.test.mjs acceptance/phase2/p2-07.test.mjs acceptance/phase2/p2-08.test.mjs acceptance/phase2/p2-09.test.mjs acceptance/phase2/p2-10.test.mjs acceptance/phase2/p2-11.test.mjs acceptance/phase2/p2-12.test.mjs acceptance/phase2/p2-13.test.mjs acceptance/phase2/p2-14.test.mjs acceptance/phase2/p2-15.test.mjs acceptance/phase2/p2-16.test.mjs",
       "shardWeight": 14
+    },
+    {
+      "name": "Codex parity acceptance",
+      "command": "node --test acceptance/codex-parity/*.test.mjs",
+      "shardWeight": 13
+    },
+    {
+      "name": "Security-audit acceptance",
+      "command": "node --test acceptance/security-audit/*.test.mjs",
+      "shardWeight": 8
+    },
+    {
+      "name": "Native runtime acceptance",
+      "command": "node --test acceptance/native-runtime/*.test.mjs",
+      "shardWeight": 3
     }
   ],
   "ciParityOptOut": "PandaStack's CI runs this same full gate as three shards (autobuild check --phase full --shard i/3), and its required `test` job passes only when all three pass; a parity step would run the gate inside itself.",
@@ -414,14 +429,20 @@
     "spec/contracts/codex-parity-cp-04e.md",
     "acceptance/codex-parity/cp-04e-blueprint-codex.test.mjs",
     "spec/contracts/codex-parity-cp-05e.md",
-    "acceptance/codex-parity/cp-05e-qa-gate.test.mjs"
+    "acceptance/codex-parity/cp-05e-qa-gate.test.mjs",
+    "docs/evidence/codex-live-2026-11-22.md",
+    "docs/evidence/codex-live-2026-11-22",
+    "docs/evidence/codex-live-2026-11-22-wave2.md",
+    "docs/evidence/codex-live-2026-11-22-wave2",
+    "features-codex-parity.json"
   ],
   "writable": [
     "PROGRESS.md",
     "DECISIONS.md",
     "PROGRESS-security-audit.md",
     "PROGRESS-codex-parity.md",
-    "spec/offering-capabilities.json"
+    "spec/offering-capabilities.json",
+    "PROGRESS-ci-optimizer.md"
   ],
   "env": {
     "pathPrepend": [],
@@ -430,9 +451,9 @@
       "CI": "1"
     }
   },
-  "prompt": "Read SPEC.md, spec/contracts/codex-parity-priority.md, AGENTS.md, features-codex-parity.json, PROGRESS-codex-parity.md and the selected feature contract. AGENTS.md holds the binding execution restrictions; follow them exactly. Implement only the selected failing feature. Preserve all frozen inputs, every prior phase acceptance and baseline test, and all existing Claude behavior. Fake-codex tests are wiring proof, never runtime certification. No live provider calls, provider fallback, or retry, translation or rerouting of any previously blocked reproduction. New tests under tests/ use scripts/workflow-harness.mjs test() and aggregate summary for focused runs; acceptance/codex-parity uses node:test. Run the selected acceptance test and focused implementation checks only; the Stop hook runs the commit checks, and full regressions and review remain pending for the PR. Add a ## <feature ID> — <title> progress entry in PROGRESS-codex-parity.md with exact focused validation. Before committing, run the unchanged secret scanner on tracked files and explicitly on each new untracked source/test file. When the acceptance test passes, run `autobuild mark-passed <feature ID>`, then commit the code, tests, progress entry and features flag together as feat(<feature ID>): …. Never push, change branches, open PRs, or modify frozen files. Backend precedence: SPEC.md, AGENTS.md and the contracts say the external host owns flags and commits. In this Claude-backend run the harness delegates exactly two host steps to you: `autobuild mark-passed` (which reruns the frozen test) and the feat commit; the Stop hook reruns the commit checks before your session may end. Everything else the host owns stays out of scope. This session's rules also override CLAUDE.md's interactive workflow (plan mode, questions, retro/changelog, subagent audits, /bughunt); the harness runs the hunt.",
+  "prompt": "Read SPEC.md, spec/contracts/ci-optimizer-priority.md, AGENTS.md, features-ci-optimizer.json, PROGRESS-ci-optimizer.md and the selected feature contract. AGENTS.md holds the binding execution restrictions; follow them exactly. Implement only the selected failing feature. Preserve all frozen inputs, every prior phase acceptance and baseline test, and all existing Claude behavior. No live provider calls, provider fallback, or retry, translation or rerouting of any previously blocked reproduction. New tests under tests/ use scripts/workflow-harness.mjs test() and aggregate summary for focused runs; acceptance/ci-optimizer uses node:test; ci-optimizer implementation tests go under graphs/autobuild/tool/test/ (node:test, private AUTOBUILD_STATE_HOME, no network). Run the selected acceptance test and focused implementation checks only; the Stop hook runs the commit checks, and full regressions and review remain pending for the PR. Add a ## <feature ID> — <title> progress entry in PROGRESS-ci-optimizer.md with exact focused validation. Before committing, run the unchanged secret scanner on tracked files and explicitly on each new untracked source/test file. When the acceptance test passes, run `autobuild mark-passed <feature ID>`, then commit the code, tests, progress entry and features flag together as feat(<feature ID>): …. Never push, change branches, open PRs, or modify frozen files. Backend precedence: SPEC.md, AGENTS.md and the contracts say the external host owns flags and commits. In this Claude-backend run the harness delegates exactly two host steps to you: `autobuild mark-passed` (which reruns the frozen test) and the feat commit; the Stop hook reruns the commit checks before your session may end. Everything else the host owns stays out of scope. This session's rules also override CLAUDE.md's interactive workflow (plan mode, questions, retro/changelog, subagent audits, /bughunt); the harness runs the hunt.",
   "review": {
-    "prompt": "Review {since}..HEAD in two passes: contract completeness and correctness/security/concurrency/error handling. Read SPEC.md, phase contracts and prior findings. Review changed files in full and trace applicable callers/callees; do not infer coverage from prior prose. Run focused checks only; external host owns full gates. Never invoke bare autobuild. Do not retry, reconstruct, translate or reroute any previously blocked reproduction, including the nested-capture orphan/overflow reproduction and the filesystem-race reproduction. Do not use another tool, agent, provider, payload or later-phase fixture to perform the same blocked action. This execution restriction persists across phases; a new phase or passing unrelated test does not revoke it. Preserve the blocked status and the resulting evidence limitation. Do not waive evidence requirements, weaken or skip approved gates/tests, or claim the blocked scenario was reproduced or verified. Continue permitted static review, pure validation and separately reviewed benign tests within their explicit scope; if a requested check would recreate a blocked action, stop that check and report the limitation to the supervisor. No implied permission follows from roadmap completion instructions. Append REVIEW {date} findings or evidence-backed no-defects to PROGRESS-codex-parity.md only, then commit only that file as 'chore(review): drift review after {iteration} iterations'. No code/tests, pass flags or provider calls. Return promptly."
+    "prompt": "Review {since}..HEAD in two passes: contract completeness and correctness/security/concurrency/error handling. Read SPEC.md, phase contracts and prior findings. Review changed files in full and trace applicable callers/callees; do not infer coverage from prior prose. Run focused checks only; external host owns full gates. Never invoke bare autobuild. Do not retry, reconstruct, translate or reroute any previously blocked reproduction, including the nested-capture orphan/overflow reproduction and the filesystem-race reproduction. Do not use another tool, agent, provider, payload or later-phase fixture to perform the same blocked action. This execution restriction persists across phases; a new phase or passing unrelated test does not revoke it. Preserve the blocked status and the resulting evidence limitation. Do not waive evidence requirements, weaken or skip approved gates/tests, or claim the blocked scenario was reproduced or verified. Continue permitted static review, pure validation and separately reviewed benign tests within their explicit scope; if a requested check would recreate a blocked action, stop that check and report the limitation to the supervisor. No implied permission follows from roadmap completion instructions. Append REVIEW {date} findings or evidence-backed no-defects to PROGRESS-ci-optimizer.md only, then commit only that file as 'chore(review): drift review after {iteration} iterations'. No code/tests, pass flags or provider calls. Return promptly."
   },
   "deliveryMode": "pr-first",
   "commitGate": [

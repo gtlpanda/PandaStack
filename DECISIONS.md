@@ -903,3 +903,19 @@ Final review found path trim changed meaningful bytes and broad not-a-repository
   decisions W2-1..W2-10. No QA or loop catalog offering is added in wave 2;
   blueprint becomes codex partial at CP-04e. A freeze never leaves a passing
   frozen test red on main (W2-10).
+- D127 (ci-optimizer priority, 2026-11-22): After Codex parity wave 2 closed, the
+  user approved the harness-level CI optimization capability as its own priority
+  with a separate $75 estimated cap for its autobuild run (11 features plus the
+  final hunt). Plan review (SMALL): the engine is `autobuild ci` in the autobuild
+  tool with per-machine data in the state home and policy in an optional
+  `ciOptimizer` key (1A); the fast tier reuses step `paths` and escalates to the
+  full gate on unmapped, CI, manifest, lockfile or autobuild.json changes (2A);
+  frozen tests run offline on recorded real GitHub API responses and a
+  Python/GitLab fixture, with the live demo after merge (3A); the only automatic
+  change is recalibrating `shardWeight` when the computed slowest shard improves,
+  everything else is proposed (4A). Deferred to a later hash-pin amendment PR: the
+  ci-optimizer skill offering, discovery by new sessions and a verify fast path.
+  CI cache hit rate and runner utilization are reported as unknown. Contract:
+  spec/contracts/ci-optimizer-priority.md (CO-01..CO-11). The freeze also adds
+  the codex-parity, security-audit and native-runtime acceptance suites as gate
+  steps, so moving featuresFile drops no coverage.
