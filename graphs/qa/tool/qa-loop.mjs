@@ -36,6 +36,7 @@ const VERIFY_REL = 'core/skills/verify/verify.sh'
 const WORKFLOW_ID = 'harness-repair'
 const OFFERING_ID = 'dev'
 const INFLIGHT_NAME = 'native-inflight.json'
+const LOCK_NAME = 'native-loop.lock'
 const RUNS_DIR_NAME = 'native-runs'
 const RESULT_NAME = 'result.json'
 
@@ -55,10 +56,13 @@ const VERIFY_TAIL_LINES = 20
 const ARGS_KEYS = ['schemaVersion', 'repo', 'installationRoot', 'codexBin', 'env', 'timeoutMs']
 const OPTIONAL_ARGS_KEYS = ['base', 'maxFixRounds']
 const INFLIGHT_KEYS = ['schemaVersion', 'invocationId', 'runDir']
+const LOCK_KEYS = ['schemaVersion', 'pid', 'token']
+const LOCK_ATTEMPTS = 3
 const RESULT_KEYS = ['schemaVersion', 'workflowId', 'offeringId', 'invocationId', 'status', 'result']
 const GRAPH_STATUSES = ['done', 'escalate']
 
 const INVOCATION_ID = /^qa-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}$/
+const LOCK_TOKEN = /^[0-9a-f]{16}$/
 const CONTROL = /[\x00-\x1f\x7f-\x9f]/
 const ERROR_CODE = /^[A-Z][A-Z0-9_]{0,63}$/
 
@@ -173,6 +177,20 @@ function removeFile(path) {
   }
 }
 
+// Publishes `bytes` at `final` atomically and exclusively: temp file, link, remove the
+// temp. So the file is never visible empty or half written. Returns false when `final`
+// already exists (EEXIST); any other failure is IO_ERROR.
+function linkExclusive(final, bytes) {
+  const temp = tempPathFor(final)
+  try { writeTempFile(temp, bytes) } catch { fail(3, 'IO_ERROR') }
+  let linkError = null
+  try { linkSync(temp, final) } catch (error) { linkError = error }
+  try { unlinkSync(temp) } catch { fail(3, 'IO_ERROR') }
+  if (linkError?.code === 'EEXIST') return false
+  if (linkError !== null) fail(3, 'IO_ERROR')
+  return true
+}
+
 // A child process, never inheriting qa-loop's stdio. stdout is captured; stderr is
 // captured only when asked, otherwise discarded.
 function runChild(command, argv, { cwd, timeoutMs, maxBuffer, captureStderr = false }) {
@@ -253,6 +271,100 @@ function loadLedger(ledgerFile) {
   try { return readLedger(ledgerFile) } catch (error) { return ledgerFailure(error) }
 }
 
+// ---------------------------------------------------------------- step 2a: loop lock
+//
+// One iteration at a time per repository (bughunt F1). A live owner is refused; a dead
+// owner's lock is taken over, because qa-loop installs no signal handler and a killed
+// iteration must not block the next one. The lock guards only this file's bookkeeping
+// (ledger read to inflight removal); a held leaf stays held by the checkpoint store.
+
+// The lock file's bytes, or undefined when there is none. Anything that is not a
+// regular file of at most MAX_INFLIGHT_BYTES is IO_ERROR: an operator looks at it.
+function readLockBytes(lockFile) {
+  let stat
+  try { stat = lstatOrUndefined(lockFile) } catch { fail(3, 'IO_ERROR') }
+  if (stat === undefined) return undefined
+  if (!stat.isFile()) fail(3, 'IO_ERROR')
+  let fd, bytes
+  try {
+    fd = openSync(lockFile, READ_FLAGS)
+    bytes = readBounded(fd, MAX_INFLIGHT_BYTES)
+  } catch (error) {
+    // Removed between the lstat and the open: there is no lock any more.
+    if (error?.code === 'ENOENT') return undefined
+    fail(3, 'IO_ERROR')
+  } finally {
+    if (fd !== undefined) { try { closeSync(fd) } catch { /* the read already settled the outcome */ } }
+  }
+  if (bytes === null) fail(3, 'IO_ERROR')
+  return bytes
+}
+
+// The owner's pid when the lock's bytes are valid and that process is alive (kill 0
+// succeeds, or EPERM: it exists but belongs to someone else); otherwise null (stale).
+function liveLockOwner(bytes) {
+  const value = parseJsonBytes(bytes)
+  const valid = isPlainObject(value) && hasExactKeys(value, LOCK_KEYS) && value.schemaVersion === 1 &&
+    Number.isSafeInteger(value.pid) && value.pid > 0 && typeof value.token === 'string' && LOCK_TOKEN.test(value.token)
+  if (!valid) return null
+  try {
+    process.kill(value.pid, 0)
+    return value.pid
+  } catch (error) {
+    return error?.code === 'EPERM' ? value.pid : null
+  }
+}
+
+function loopBusy(pid) {
+  const refusal = new LoopError(4, 'OWNER_BUSY')
+  refusal.invocationId = null
+  refusal.hint = `another qa-loop iteration (pid ${pid}) is running in this repository; run it again after that one exits`
+  throw refusal
+}
+
+// Takes a stale lock out of the way: rename it aside, and remove it only when the moved
+// bytes are the ones judged stale. If another process took the lock over in between,
+// its lock is linked back; a third process holding the name by then is IO_ERROR, and
+// the moved file stays for an operator.
+function setStaleLockAside(lockFile, staleBytes) {
+  const aside = `${lockFile}.stale-${process.pid}-${randomBytes(4).toString('hex')}`
+  try { renameSync(lockFile, aside) } catch (error) {
+    if (error?.code === 'ENOENT') return
+    fail(3, 'IO_ERROR')
+  }
+  const moved = readLockBytes(aside)
+  if (moved !== undefined && moved.equals(staleBytes)) {
+    removeFile(aside)
+    return
+  }
+  try { linkSync(aside, lockFile) } catch { fail(3, 'IO_ERROR') }
+  removeFile(aside)
+}
+
+// Step 2a. Returns this process's lock bytes, for the release.
+function acquireLoopLock(lockFile) {
+  const mine = Buffer.from(JSON.stringify({ schemaVersion: 1, pid: process.pid, token: randomBytes(8).toString('hex') }) + '\n', 'utf8')
+  for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt++) {
+    if (linkExclusive(lockFile, mine)) return mine
+    const seen = readLockBytes(lockFile)
+    if (seen === undefined) continue
+    const owner = liveLockOwner(seen)
+    if (owner !== null) loopBusy(owner)
+    setStaleLockAside(lockFile, seen)
+  }
+  return fail(3, 'IO_ERROR')
+}
+
+// Removes the lock only while it still holds this process's bytes. Best effort: a
+// failure here must not replace the iteration's own outcome, and a lock left behind
+// names this (soon dead) pid, so the next iteration takes it over.
+function releaseLoopLock(lockFile, mine) {
+  try {
+    const seen = readLockBytes(lockFile)
+    if (seen !== undefined && seen.equals(mine)) unlinkSync(lockFile)
+  } catch { /* see above */ }
+}
+
 // ---------------------------------------------------------------- step 5: invocation
 
 function mintInvocationId() {
@@ -295,13 +407,7 @@ function publishInflight(paths) {
   ensurePrivateDirectory(paths.runsDir)
   const invocationId = mintInvocationId()
   const runDir = runDirOf(paths, invocationId)
-  const temp = tempPathFor(paths.inflight)
-  try { writeTempFile(temp, inflightBytes(invocationId, runDir)) } catch { fail(3, 'IO_ERROR') }
-  let linkError = null
-  try { linkSync(temp, paths.inflight) } catch (error) { linkError = error }
-  try { unlinkSync(temp) } catch { fail(3, 'IO_ERROR') }
-  if (linkError?.code === 'EEXIST') return undefined
-  if (linkError !== null) fail(3, 'IO_ERROR')
+  if (!linkExclusive(paths.inflight, inflightBytes(invocationId, runDir))) return undefined
   return { invocationId, runDir }
 }
 
@@ -525,7 +631,18 @@ function iterate(argv) {
   const input = loopInput(readArgsFile(argsFilePath(argv)))
   const { toplevel, ledgerDir } = locateRepository(input)
   const paths = { ledgerDir, ledgerFile: join(ledgerDir, LEDGER_FILE_NAME), inflight: join(ledgerDir, INFLIGHT_NAME),
-    runsDir: join(ledgerDir, RUNS_DIR_NAME) }
+    runsDir: join(ledgerDir, RUNS_DIR_NAME), lock: join(ledgerDir, LOCK_NAME) }
+  ensurePrivateDirectory(paths.ledgerDir)
+  const mine = acquireLoopLock(paths.lock)
+  try {
+    return iterateLocked(input, toplevel, paths)
+  } finally {
+    releaseLoopLock(paths.lock, mine)
+  }
+}
+
+// Steps 3 to 8, under the loop lock: the ledger is read only after the lock is held.
+function iterateLocked(input, toplevel, paths) {
   const { ledger, warning } = loadLedger(paths.ledgerFile)
   const args = workflowArgs(ledger, { repo: toplevel, ...input.options })
   const invocation = claimInvocation(paths)

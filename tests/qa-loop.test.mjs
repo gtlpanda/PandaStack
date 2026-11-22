@@ -18,7 +18,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import {
-  cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync,
+  chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -224,12 +224,25 @@ try {
     assert.equal(existsSync(c.inflight), false)
   })
 
-  await test('a ledger read failure is exit 3 LEDGER_IO_ERROR before any write or host run', () => {
+  await test('a file where the ledger directory goes is exit 3 IO_ERROR at the loop lock (step 2a), before any write or host run', () => {
     const c = makeCase()
     writeFileSync(c.ledgerDir, 'a file where the ledger directory goes\n')
-    assertError(loop(c, donePlan()), 3, 'LEDGER_IO_ERROR')
+    assertError(loop(c, donePlan()), 3, 'IO_ERROR')
     assert.deepEqual(hostCalls(c), [])
     assert.equal(readFileSync(c.ledgerDir, 'utf8'), 'a file where the ledger directory goes\n')
+  })
+
+  await test('a ledger read failure is exit 3 LEDGER_IO_ERROR before any write or host run, and the loop lock is released', () => {
+    const c = makeCase()
+    // An unreadable ledger file: its open fails with EACCES (qa-ledger.mjs readLedgerBytes).
+    mkdirSync(c.ledgerDir, { recursive: true, mode: 0o700 })
+    writeFileSync(join(c.ledgerDir, 'ledger.json'), '{}\n', { mode: 0o000 })
+    chmodSync(join(c.ledgerDir, 'ledger.json'), 0o000)
+    if (process.getuid?.() === 0) return // root reads it anyway; the case needs a non-root user
+    assertError(loop(c, donePlan()), 3, 'LEDGER_IO_ERROR')
+    assert.deepEqual(hostCalls(c), [])
+    assert.equal(existsSync(c.inflight), false)
+    assert.equal(existsSync(join(c.ledgerDir, 'native-loop.lock')), false)
   })
 
   await test('a native-runs symlink is exit 3 IO_ERROR: no inflight file, nothing written through it, no host run', () => {
