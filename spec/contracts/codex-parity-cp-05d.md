@@ -143,8 +143,10 @@ row flipped to partial). CP-06's freeze amends the refusal case.
      is 16 lowercase hex characters from 8 random bytes. It is published atomically and
      exclusively, as the inflight file is (temp file, `link`, temp removed), so it is
      never visible empty or half written.
-   - On `EEXIST` the existing lock is read (`lstat`: a regular file of at most 4096
-     bytes). Its owner is **alive** when its bytes are valid (exactly those keys,
+   - On `EEXIST` the existing lock is read. A lock path that is not a regular file of at
+     most 4096 bytes (`lstat`; a symlink is not followed) is exit 3 `IO_ERROR`, for an
+     operator to look at; a lock removed before it is read starts the attempt again. Its
+     owner is **alive** when its bytes are valid (exactly those keys,
      `schemaVersion` 1, `pid` a positive safe integer, `token` matching
      `^[0-9a-f]{16}$`) and `process.kill(pid, 0)` succeeds or fails with `EPERM`. Then
      the iteration is refused: exit 4 `OWNER_BUSY` with `invocationId: null` and the
