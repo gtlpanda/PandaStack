@@ -357,7 +357,7 @@
       ],
       "test": "acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     }
   ]
 }

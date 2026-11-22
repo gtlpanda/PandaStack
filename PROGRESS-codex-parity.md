@@ -1849,3 +1849,126 @@ Observed limits and untested hypotheses:
 - macOS was not run, and neither was uid 0.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-04d — Blueprint approve CLI
+
+Implemented spec/contracts/codex-parity-cp-04d.md only.
+
+- New `graphs/blueprint/skills/blueprint/blueprint-approve.mjs`, run as
+  `node blueprint-approve.mjs <show|approve> --args-file <abs>`. It is synchronous.
+  - Static imports: `node:` built-ins; CP-04a's `FILES`, `freshness`, `readArgsFile`,
+    `readRun`, `readState`, `redactSecrets` and `resolveStateDir`; and write-docs's
+    `main`, `designDoc`, `BACKLOG` and `KNOWLEDGE_MAP`. No dynamic import.
+  - Its one export is the frozen `BLUEPRINT_APPROVE_CODES` (eighteen codes). It runs
+    as a CLI only when `realpathSync(process.argv[1])` is this file. It sets
+    `process.exitCode` and never calls `process.exit`.
+  - Every git call is `git -C <repo>` with an argv array and no shell. stderr is never
+    kept, and stdout is piped only for `rev-parse --show-toplevel`, `symbolic-ref`,
+    `rev-parse HEAD` and `diff-tree`.
+- Both verbs run checks 1–7 in the contract's order:
+  1. the top level must equal `realpathSync(repo)`;
+  2. `resolveStateDir`;
+  3. `readState`, then `readRun` 2 and 3;
+  4. `freshness`;
+  5. run2 and run3 readiness;
+  6. the app slug;
+  7. one read of run3.json's bytes for the sha256.
+
+  CP-04a's `MISSING` and `MALFORMED` pass through. Any other CP-04a error is
+  `IO_ERROR`, except that a `resolveStateDir` refusal is `NOT_A_REPO`.
+- `show` prints the fixed report. Each value is stringified, run through
+  `redactSecrets`, has its whitespace collapsed and is trimmed. The `none`,
+  `no requirement`, `no evidence yet` and omitted-fix substitutions apply after that.
+- `approve` runs steps 1–12 with three exit phases:
+  - before `switch -c`, every failure is exit 2;
+  - steps 8–10 share one rollback;
+  - steps 11–12 never roll back.
+
+  The snapshot is filled in as it goes. A target or docs directory whose state was
+  never recorded is never touched by the rollback. Each rollback step runs in its own
+  try, and a failed step makes the result `ROLLBACK_FAILED`, exit 4. A restored file
+  that is gone is recreated with its recorded mode, through `O_NOFOLLOW`.
+- New `tests/blueprint-approve.test.mjs` (9 cases, harness `test()`):
+  - the module exports only the codes;
+  - every section prints `- None.` when empty, and a missing or non-list value counts
+    as an empty list;
+  - non-string values print as JSON, items that are not objects have empty fields, and
+    blank owner, evidence and fix values take their words;
+  - an empty shape list prints `none`, and an id-list item holding a key is redacted;
+  - a repo given through a symlink, or with a trailing slash, is accepted;
+  - `docs/blueprint` as a file and `knowledge-map.json` as a directory are
+    `TARGET_INVALID`;
+  - write-docs refusing a foreign backlog.json is `WRITE_DOCS_FAILED`, exit 3;
+  - a snapshot read failure (a mode-000 map) is `IO_ERROR`, exit 3, and the map is left
+    as it was;
+  - a target the hook deletes comes back with its bytes and mode 0600;
+  - approve from a detached HEAD succeeds.
+- write-docs.mjs, blueprint-state.mjs, SKILL.md, blueprint-design.js, the catalog and
+  every graph are unchanged.
+
+Decisions (no human present):
+- `<shapes>` is treated as an id list, so an empty one prints `none`
+  (`picked X over none`). The contract does not pin this.
+- Id lists are redacted per item, then joined.
+- A list value that is not an array is an empty list, as in write-docs's `list()`. A
+  list item that is not an object has empty fields. Notes keep the contract's own rule.
+- `symbolic-ref` output must start with `refs/heads/`. The rollback passes the short
+  branch name to `git switch`. The acceptance's rollback cases confirm that HEAD comes
+  back symbolic on `main`. Passing the full ref was not tried. Any other symbolic-ref
+  output is `GIT_FAILED`, exit 2.
+- In the rollback, a docs directory that is now absent or not empty is skipped. One
+  that is now something other than a directory is a failed step, because exit 3 would
+  otherwise claim a restored repo.
+- No timeout is set on any git call, so a hanging hook hangs the CLI. The reason is an
+  untested hypothesis: killing `git commit` midway may leave `index.lock` behind.
+- Any throw that is not one of the CLI's own refusals is `IO_ERROR`. Before the switch
+  it is exit 2. In steps 8–10 it is exit 3 after the rollback, or exit 4 if a rollback
+  step fails.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs
+# tests 29, pass 29, fail 0 (first run after writing the module)
+node logs/evidence/cp-04d/run-focused.mjs tests/blueprint-approve.test.mjs graphs/blueprint/tests/write-docs.test.mjs tests/blueprint-state.test.mjs tests/blueprint-decisions.test.mjs
+# FOCUSED: 39 passed, 0 failed, 0 skipped
+node --test --test-reporter=tap --test-reporter-destination=logs/evidence/cp-04d-related-acceptance.tap \
+  acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs acceptance/codex-parity/cp-04a-blueprint-state.test.mjs \
+  acceptance/codex-parity/cp-04b-blueprint-decisions.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs \
+  acceptance/codex-parity/cp-01c-install-plan.test.mjs acceptance/codex-parity/cp-03b-reference-closure.test.mjs
+# tests 180, pass 180, fail 0, skipped 0
+bash scripts/validate.sh                     # VALIDATE: PASS
+node scripts/check-refs.mjs                  # check-refs: 271 references, all resolve
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh graphs/blueprint/skills/blueprint/blueprint-approve.mjs tests/blueprint-approve.test.mjs   # check-secrets: clean
+autobuild mark-passed CP-04d                 # === node (1 file): PASS
+```
+
+The module was not edited after `mark-passed`.
+
+Mutation check:
+- Two mutations were made to the module, then reverted:
+  - the rollback treating unrecorded targets as absent;
+  - the restore dropping the recorded mode.
+- With both in place, the implementation tests reported 2 failures: the
+  snapshot-safety case and the mode case. The acceptance was not rerun against the
+  mutants.
+- After the revert and the commit, the same `run-focused.mjs` command gave 39 passed,
+  0 failed, 0 skipped.
+
+Saved under logs/evidence/ (gitignored): the TAP file, `cp-04d/run-focused.mjs` and
+`cp-04d/commit-msg.txt`.
+
+Observed limits and untested hypotheses:
+- The acceptance test was not run before the module existed.
+- These paths have no case:
+  - `GIT_FAILED` for a failing `diff --cached`, `rev-parse --verify`, `symbolic-ref` or
+    `diff-tree`, and for odd symbolic-ref output. Each needs a broken git.
+  - `IO_ERROR` from a run3.json byte read failing after `readRun` succeeded. That is a
+    race.
+- macOS was not run, and neither was uid 0, where two cases skip (one acceptance, one
+  implementation).
+- No lock, by contract. A run3.json replaced between the hash and write-docs's own read
+  is not detected.
+
+Full regressions, review and the branch hunt remain pending for the PR.
