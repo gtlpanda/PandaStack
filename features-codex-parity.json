@@ -358,6 +358,66 @@
       "test": "acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs",
       "testKind": "node",
       "passes": true
+    },
+    {
+      "id": "CP-02g",
+      "title": "The host settles an oversize leaf prompt as PROMPT_TOO_LARGE",
+      "description": "Implement only spec/contracts/codex-parity-cp-02g.md: amend core/skills/native-runtime/graph-host.mjs so the wrapped provider returns failedCompletion({selection, code: 'PROMPT_TOO_LARGE', invocationId: 'host:' + callId}) without calling the provider when role instructions + \"\\n\\n\" + the workflow prompt exceed 1048576 UTF-8 bytes, and opens its store at checkpointDirOf(runDir). W2-2. No runtime, provider, store, completion, catalog or workflow edit; the provider keeps its own check.",
+      "contract": "spec/contracts/codex-parity-cp-02g.md",
+      "dependencies": [
+        "CP-05a",
+        "CP-05b"
+      ],
+      "acceptance": [
+        "A combined checker prompt one byte over 1 MiB (or an oversize role file) settles one failed PROMPT_TOO_LARGE row with zero provider calls; harness-repair escalates, exit 0, nothing held, no prompt text or code in result.json or output.",
+        "Exactly 1048576 combined UTF-8 bytes pass through unchanged; size is counted in UTF-8 bytes of the whole combined prompt, never UTF-16 units or the workflow prompt alone.",
+        "A rerun with the same invocation id replays with zero calls and byte-identical rows and result.json; the CLI settles the same way with no codex spawn; graph-host imports checkpointDirOf and failedCompletion and copies neither."
+      ],
+      "test": "acceptance/codex-parity/cp-02g-prompt-too-large.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CP-04c",
+      "title": "Blueprint stage CLI on the native runtime",
+      "description": "Implement only spec/contracts/codex-parity-cp-04c.md: graphs/blueprint/skills/blueprint/blueprint-native.mjs (verbs start, interview, answer, design, gate, backlog, edit) over CP-04a and CP-04b, running each blueprint-design stage through runGraphHost with a createCodexProvider provider, and add native-runtime to blueprint's catalog dependencies. W2-6. Blueprint's codex row stays unavailable (CP-04e). No SKILL.md, workflow, role, write-docs or host edit; no git write.",
+      "contract": "spec/contracts/codex-parity-cp-04c.md",
+      "dependencies": [
+        "CP-04a",
+        "CP-04b",
+        "CP-02e",
+        "CP-02b",
+        "CP-02h"
+      ],
+      "acceptance": [
+        "blueprint's dependencies gain native-runtime with checkCatalogDrift clean and the codex row still unavailable; the module statically imports runGraphHost and createCodexProvider and nothing else from core.",
+        "On a fixture root with blueprint codex partial, start, interview, answer, design and backlog each exit 0 with the exact report, read-only spawns in the repo top level with the exact leaf env, exact per-stage workflow args, redacted run files with meta.json basis, and CP-04d show then succeeds.",
+        "Refusals (bad input, not a repo, STATE_EXISTS, MISSING, STALE, NOT_DESIGN_READY, UNKNOWN_ID with ids, GATE_ROUNDS_EXHAUSTED, production-catalog OFFERING_UNSUPPORTED) spawn nothing and write no run file; the repository is never changed and no marker leaks."
+      ],
+      "test": "acceptance/codex-parity/cp-04c-blueprint-native.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CP-05d",
+      "title": "One native QA loop iteration (no commit)",
+      "description": "Implement only spec/contracts/codex-parity-cp-05d.md: graphs/qa/tool/qa-loop.mjs, loop.md step 3 for one iteration: read the CP-05c ledger, run harness-repair through the CP-02e host CLI (offering dev) with an inflight file for resume, record the result, and on done run verify and the touched check, downgrading to escalate on a mismatch. W2-8: never commit, push or merge. No catalog, workflow, role, loop.md, host or ledger-module edit.",
+      "contract": "spec/contracts/codex-parity-cp-05d.md",
+      "dependencies": [
+        "CP-05b",
+        "CP-05c",
+        "CP-02e",
+        "CP-02h",
+        "CP-03d"
+      ],
+      "acceptance": [
+        "A clean iteration exits 0 done after checker, reviewer and qa-auditor with the exact host args file, ledger run and loopChecks; ledger stuckSigs, base and maxFixRounds are forwarded; bad input is exit 1 with nothing touched.",
+        "A failing verify.sh or a touched mismatch downgrades done to escalate (VERIFY_FAILED, TOUCHED_MISMATCH); a stuck signature is recorded and forwarded; a provider refusal escalates with no retry.",
+        "After a crash the rerun resumes the same invocation: exit 4 OWNER_BUSY then CHECKPOINT_UNCERTAIN with the reconcile hint and the ledger unchanged, then exit 0 escalate after graph-reconcile fail; the production catalog is OFFERING_UNSUPPORTED; HEAD, refs and the index never change."
+      ],
+      "test": "acceptance/codex-parity/cp-05d-qa-loop.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
