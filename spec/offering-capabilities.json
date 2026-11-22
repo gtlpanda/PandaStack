@@ -1618,7 +1618,8 @@
       },
       "permissionProfile": null,
       "proofRefs": [
-        "cp-02f-host-wiring"
+        "cp-02f-host-wiring",
+        "cp-05e-qa-gate"
       ]
     },
     {

@@ -2355,3 +2355,69 @@ Observed limits and untested hypotheses:
 - No mutation check was run on the new test.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-05e — Native QA gate proof on the fake codex
+
+Implemented spec/contracts/codex-parity-cp-05e.md only:
+
+- `spec/offering-capabilities.json`, exactly one change: `dev`'s `proofRefs` becomes
+  `["cp-02f-host-wiring", "cp-05e-qa-gate"]` (one hunk, +2/−1 lines). `dev`'s
+  codex row stays `unavailable`. No module, workflow, role file, SKILL.md, loop.md,
+  install.sh or frozen file changed.
+- The proof itself is the existing CP-05d qa-loop, the CP-02e host, the CP-02h strict
+  schema and the CP-03d role loader, as built. Frozen cases 1 to 3 already passed
+  before the catalog edit, as the contract predicts.
+- New `tests/qa-gate-proof-ref.test.mjs` (4 cases, harness `test()`). It covers what
+  frozen case 4 does not pin:
+  - the id is a catalog identifier, appended after `cp-02f-host-wiring` with no
+    duplicate;
+  - the id appears in the contract and in its frozen test (the contract's review item);
+  - `dev` alone owns `graphs/qa/` evidence and no `qa` offering exists, which is why
+    `dev` carries the reference;
+  - the reference is never evidence. Dropping it from `dev`, or adding it to every row,
+    changes no install-eligibility, provider-implementation or native-implementation
+    answer, and the catalog validates either way.
+
+Decisions (no human present):
+- No new fixture or fake-codex test was added. The frozen acceptance already runs the
+  real failing test, the scripted fixer and both gate outcomes. A builder copy would
+  duplicate it without adding coverage.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-05e-qa-gate.test.mjs
+# before the change: tests 4, pass 3, fail 1 (case 4: dev proofRefs were [cp-02f-host-wiring])
+# after the change:  tests 4, pass 4, fail 0
+node tests/qa-gate-proof-ref.test.mjs        # 4 ok
+node tests/host-wiring-proof-ref.test.mjs    # 5 ok (the amended W2-10 pin accepts the new pair)
+node --test acceptance/codex-parity/cp-02f-native-graphs.test.mjs
+# tests 7, pass 7, fail 0
+node --test acceptance/codex-parity/cp-01a-catalog-v2.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs \
+  acceptance/codex-parity/cp-01d-inspect-offering.test.mjs
+# tests 56, pass 56, fail 0
+node --test acceptance/codex-parity/cp-01c-install-plan.test.mjs acceptance/codex-parity/cp-03b-reference-closure.test.mjs \
+  acceptance/codex-parity/cp-04e-blueprint-codex.test.mjs
+# tests 21, pass 21, fail 0 (the tier-4 "today's state, or exactly CP-04e's/CP-05e's" pins)
+node tests/install-codex.test.mjs            # 7 ok
+node logs/evidence/cp-05e/run-focused.mjs tests/qa-gate-proof-ref.test.mjs tests/host-wiring-proof-ref.test.mjs \
+  tests/native-catalog-v2.test.mjs tests/native-catalog-drift.test.mjs tests/inspect-offering.test.mjs \
+  tests/qa-loop.test.mjs tests/check-refs.test.mjs
+# FOCUSED: 47 passed, 0 failed, 0 skipped (harness summary())
+node scripts/check-refs.mjs                  # check-refs: 271 references, all resolve
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+bash scripts/check-secrets.sh tests/qa-gate-proof-ref.test.mjs   # check-secrets: clean
+git diff --check HEAD~1 HEAD                 # clean (the whole feat commit)
+```
+
+Saved under logs/evidence/ (gitignored): `cp-05e/run-focused.mjs`.
+
+Observed limits and untested hypotheses:
+- Every leaf is the frozen fake codex, and verify.sh is the fixture's inert script.
+  This is fake-codex wiring proof, not runtime certification. The repository's real
+  verify.sh and its capture machinery were not run (AGENTS.md). The live harness-repair
+  loop on a fixture repo is a separate step after wave 2 merges.
+- macOS was not run. No mutation check was run on the new test.
+
+Full regressions, review and the branch hunt remain pending for the PR.

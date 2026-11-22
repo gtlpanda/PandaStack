@@ -456,7 +456,7 @@
       ],
       "test": "acceptance/codex-parity/cp-05e-qa-gate.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     }
   ]
 }
