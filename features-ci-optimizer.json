@@ -45,7 +45,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-03-history.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-04",

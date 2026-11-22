@@ -4,11 +4,13 @@
 // stdout as {"error","message"}). Exit 0 success, 1 a failed check, 2 usage, 3 state or I/O.
 
 import { spawnSync } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { findProjectRoot } from "../config.mjs";
 import { SAFE_GIT } from "../proc.mjs";
 import { loadProfile, projectConfig } from "./discover.mjs";
+import { attemptKey, fetchGithubHistory, githubRepo, importedAttempts, isGithubRepo, mergeHistory, readHistory, writeHistory } from "./history.mjs";
+import { ciPolicy } from "./policy.mjs";
 import { CiError } from "./state.mjs";
 
 const NOT_A_GIT_REPOSITORY = "NOT_A_GIT_REPOSITORY";
@@ -30,8 +32,90 @@ async function discover({ root, flags, env, json }) {
   };
 }
 
+// ---------- ci history (spec/contracts/ci-optimizer-co-03.md) ----------
+
+/** The --limit value, or the policy's historyLimit; a whole number from 1 to 100. */
+function historyLimit(values, policy) {
+  if (!values.has("--limit")) return policy.historyLimit;
+  const text = values.get("--limit");
+  const limit = /^[0-9]+$/.test(text) ? Number(text) : Number.NaN;
+  if (!(limit >= 1 && limit <= 100)) throw usageError(`--limit must be a whole number from 1 to 100, got ${JSON.stringify(text)}`);
+  return limit;
+}
+
+/** The --repo value (owner/name), else the origin remote's GitHub repository, else REPO_UNKNOWN (exit 2). */
+function historyRepo(values, root, env) {
+  if (values.has("--repo")) {
+    const repo = values.get("--repo");
+    if (!isGithubRepo(repo)) throw usageError(`--repo must be owner/name, got ${JSON.stringify(repo)}`);
+    return repo;
+  }
+  const repo = githubRepo(root, env);
+  if (!repo) throw new CiError("REPO_UNKNOWN", "no --repo given and the origin remote is not a GitHub repository", 2);
+  return repo;
+}
+
+/** The attempts of an import file (as given, resolved against cwd); unreadable or invalid is IMPORT_INVALID (exit 2). */
+function readImport(given, cwd) {
+  let text;
+  try {
+    text = readFileSync(path.resolve(cwd, given), "utf8");
+  } catch (error) {
+    throw new CiError("IMPORT_INVALID", `cannot read ${given}: ${error.code ?? error.message}`, 2);
+  }
+  let doc;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    // The parser's message quotes the file's text; the error names only the file.
+    throw new CiError("IMPORT_INVALID", `${given} is not valid JSON`, 2);
+  }
+  return importedAttempts(doc);
+}
+
+/** Merges `incoming` into the stored history, writes it, and reports the totals. */
+function storeHistory({ root, env, json }, existing, incoming, source, label) {
+  const before = existing?.attempts ?? [];
+  const known = new Set(before.map(attemptKey));
+  const attempts = mergeHistory(before, incoming);
+  // New means stored now and absent before: a record the cap dropped is not counted.
+  const added = attempts.filter((attempt) => !known.has(attemptKey(attempt))).length;
+  writeHistory(root, { source, attempts }, env);
+  if (json) return { code: 0, json: { total: attempts.length, new: added, source, attempts } };
+  return { code: 0, lines: [`history: ${attempts.length} attempts (${added} new) from ${label}`] };
+}
+
+async function history(context) {
+  const { root, cwd, flags, values, env, json } = context;
+  const fromGh = flags.has("--from-gh");
+  if (fromGh && values.has("--import")) throw usageError("--from-gh and --import cannot be combined");
+  if (!fromGh && (values.has("--repo") || values.has("--limit"))) throw usageError("--repo and --limit need --from-gh");
+
+  if (fromGh) {
+    const policy = ciPolicy(projectConfig(root, env));
+    const limit = historyLimit(values, policy);
+    const repo = historyRepo(values, root, env);
+    const existing = readHistory(root, env);   // a refused state dir fails here, before any gh call
+    const incoming = fetchGithubHistory({ repo, ghBin: env.AUTOBUILD_GH_BIN || policy.ghBin, limit, env });
+    return storeHistory(context, existing, incoming, { provider: "github", repo }, `github ${repo}`);
+  }
+  if (values.has("--import")) {
+    const given = values.get("--import");
+    const incoming = readImport(given, cwd);
+    const existing = readHistory(root, env);
+    return storeHistory(context, existing, incoming, { provider: "import", file: path.basename(given) }, `import ${given}`);
+  }
+
+  const stored = readHistory(root, env);
+  const attempts = stored?.attempts ?? [];
+  if (json) return { code: 0, json: { total: attempts.length, new: 0, source: stored?.source ?? null, attempts } };
+  return { code: 0, lines: [stored ? `history: ${attempts.length} attempts stored` : "history: none"] };
+}
+
+// `flags` are booleans; each of `values` takes the next argument.
 const SUBCOMMANDS = {
-  discover: { flags: ["--refresh", "--json"], run: discover },
+  discover: { flags: ["--refresh", "--json"], values: [], run: discover },
+  history: { flags: ["--from-gh", "--json"], values: ["--repo", "--limit", "--import"], run: history },
 };
 const USAGE = `usage: autobuild ci <${Object.keys(SUBCOMMANDS).join("|")}> [flags] [--json]`;
 
@@ -57,9 +141,24 @@ function parse(args) {
   const [sub, ...rest] = args;
   if (sub === undefined || !Object.hasOwn(SUBCOMMANDS, sub)) throw usageError(sub === undefined ? USAGE : `unknown subcommand ${sub}; ${USAGE}`);
   const command = SUBCOMMANDS[sub];
-  const unknown = rest.find((arg) => !command.flags.includes(arg));
-  if (unknown !== undefined) throw usageError(`${unknown.startsWith("-") ? "unknown flag" : "unexpected argument"} ${unknown} for ci ${sub} (flags: ${command.flags.join(" ")})`);
-  return { command, flags: new Set(rest) };
+  const flags = new Set();
+  const values = new Map();
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i];
+    if (command.values.includes(arg)) {
+      const value = rest[i + 1];
+      if (value === undefined || value.startsWith("--")) throw usageError(`${arg} needs a value for ci ${sub}`);
+      if (values.has(arg)) throw usageError(`${arg} given more than once for ci ${sub}`);
+      values.set(arg, value);
+      i++;
+    } else if (command.flags.includes(arg)) {
+      flags.add(arg);
+    } else {
+      const known = [...command.flags, ...command.values.map((name) => `${name} <value>`)].join(" ");
+      throw usageError(`${arg.startsWith("-") ? "unknown flag" : "unexpected argument"} ${arg} for ci ${sub} (flags: ${known})`);
+    }
+  }
+  return { command, flags, values };
 }
 
 function report(error, json, out, err) {
@@ -75,9 +174,9 @@ function report(error, json, out, err) {
 export async function ciMain(args, { cwd = process.cwd(), env = process.env, out = process.stdout, err = process.stderr } = {}) {
   const json = args.includes("--json");
   try {
-    const { command, flags } = parse(args);
+    const { command, flags, values } = parse(args);
     const root = ciRoot(cwd, env);
-    const result = await command.run({ root, flags, env, json });
+    const result = await command.run({ root, cwd, flags, values, env, json });
     out.write(json ? `${JSON.stringify(result.json)}\n` : `${result.lines.join("\n")}\n`);
     return result.code;
   } catch (error) {

@@ -101,3 +101,75 @@ Focused validation (all exit 0; logs under `logs/evidence/`, gitignored):
 - `autobuild mark-passed CO-02`: PASS.
 
 Still pending for the PR: the full regressions, review and the bug hunt.
+
+## CO-03 — CI history through a gh port
+
+Built (Claude backend, iteration 3):
+- `graphs/autobuild/tool/lib/ci/history.mjs` exports the contract's functions: `githubRepo`,
+  `fetchGithubHistory`, `normalizeAttempt`, `mergeHistory`, `readHistory` and `writeHistory`.
+  It also exports `isGithubRepo`, `importedAttempts`, `attemptKey` and `HISTORY_CAP`, which
+  the command uses. The store goes through `state.mjs`'s `readState`/`writeState`.
+- `lib/ci/command.mjs` adds `autobuild ci history`. The parser now accepts flags that take a
+  value (`values` on each subcommand). `discover` declares none, so its parsing is unchanged.
+  `ciMain` passes `cwd` to the subcommand, so `--import FILE` resolves against the caller's
+  directory.
+- `lib/cli.mjs` gains one help line.
+
+Decisions (unattended, recorded here):
+- `owner/name` is checked by an anchored regex, for `--repo` (`USAGE`, exit 2) and in
+  `githubRepo`, because it is interpolated into the `gh api` path. `--repo a/b/../../orgs`
+  never reaches gh. Remotes that `githubRepo` rejects:
+  - a trailing slash or an extra path segment;
+  - `http://`, `ssh://` or a `user@` HTTPS remote;
+  - whitespace around the URL;
+  - a name of `.` or `..`.
+- Things that are `GH_FAILED` (exit 3):
+  - a gh that cannot be spawned (ENOENT), is killed by a signal or times out;
+  - a gh whose output overflows the buffer;
+  - valid JSON of the wrong shape: no `workflow_runs` or `jobs` list, or a run without an
+    integer `id` and `run_attempt` of at least 1.
+
+  The message is `gh <JSON argument vector> failed: exit status N`. gh's last stderr line is
+  added with control characters removed and cut to 200 characters. Each call has
+  `maxBuffer` 256 MiB and a 5-minute timeout. Real responses are unprojected, and the 1 MiB
+  default would fail on large pages.
+- An earlier attempt is stored under the attempt number requested in the call, even when the
+  response's `run_attempt` disagrees.
+- The stored history is read before the fetch, so a refused state directory fails before any
+  gh call. The whole fetch completes in memory before the merge and write.
+- `new` counts the records stored by this run whose key was absent before. A record the
+  200 cap drops is not counted.
+- Every successful fetch or import rewrites `history.json`, so `source` names the last source
+  even when nothing is new.
+- Import:
+  - An unreadable file, a non-JSON file, or a document without an `attempts` list is
+    `IMPORT_INVALID` (exit 2). The JSON parser's message quotes the file text, so it is not
+    echoed.
+  - Every key is checked, in the job and step records too: run and job scalars are string or
+    null, `labels` is a list of strings, and a step `number` is an integer or null.
+  - Unknown keys are dropped rather than stored.
+  - A cross-provider `runId#attempt` collision replaces the record, which is the contract's
+    literal rule.
+- A stored `history.json` whose attempts fail the same validation is treated as absent and
+  replaced on the next write, the same treatment the common rules give junk.
+- With no source flag, `history: none` means no stored document. `--json` then gives
+  `source: null`.
+- `--limit` accepts digits only (`040` is 40; `1e2`, `" 5"` and `2.5` are `USAGE`). Other
+  `USAGE` errors:
+  - a flag value that is missing or starts with `--`;
+  - a value flag given twice;
+  - `--from-gh` together with `--import`;
+  - `--repo` or `--limit` without `--from-gh`.
+
+Focused validation (all exit 0):
+- `node --test acceptance/ci-optimizer/co-03-history.test.mjs`: 27/27 pass.
+- `node --test graphs/autobuild/tool/test/ci-history.test.mjs acceptance/ci-optimizer/co-03-history.test.mjs`:
+  43/43 pass. `ci-history.test.mjs` holds 16 new implementation tests.
+- `node --test graphs/autobuild/tool/test/ci-discover.test.mjs acceptance/ci-optimizer/co-01-discover.test.mjs acceptance/ci-optimizer/co-02-gitlab.test.mjs graphs/autobuild/tool/test/ci-gitlab.test.mjs graphs/autobuild/tool/test/entrypoint.test.mjs`:
+  75/75 pass. These are tripwires for the `command.mjs` parser change and the `cli.mjs` help
+  line.
+- `bash scripts/check-secrets.sh` (tracked) and the same script run on the two new files:
+  clean.
+- `autobuild mark-passed CO-03`: PASS.
+
+Still pending for the PR: the full regressions, review and the bug hunt.
