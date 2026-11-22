@@ -1312,3 +1312,93 @@ Observed limits and untested hypotheses:
   removed.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-02h — Codex gets the strict leaf schema
+
+Contract: spec/contracts/codex-parity-cp-02h.md (W2-3). Wiring proof against a stub
+executable and in-memory providers, not runtime certification. Nothing here shows
+that a real Codex enforces the strict schema; the live strict-schema probe is a
+separate, authorized step.
+
+What changed:
+- `core/skills/native-runtime/schema.mjs` gains `strictOutputSchema(schema)`. It
+  validates through the same `captureSchema` as `encodeOutputContract`, so
+  `INVALID_SCHEMA` and `UNSUPPORTED_SCHEMA` come back unchanged. It then rebuilds
+  every node into frozen ordinary objects and arrays. `type` must be a single type
+  or exactly `[x, 'null']`, and the root must be the single type `'object'`. The
+  rebuilt node keeps `description` and `enum`, and object nodes get every property
+  in `required` (property order) plus `additionalProperties: false`. The six range
+  and annotation keywords are dropped. Optional properties, a stray `required` key,
+  missing or empty `properties`, `additionalProperties: true` and an array with no
+  `items` are `UNSUPPORTED_SCHEMA`. The three keyword classes are checked against
+  `KEYWORDS` at import. `__proto__` stays an own property (defineProperty). Nothing
+  else in the module changed.
+- `core/skills/native-runtime/codex-provider.mjs`:
+  - `CODEX_PROVIDER_CODES` gains `SCHEMA_UNSUPPORTED` (12 codes). The four exports
+    are unchanged.
+  - `wireSchema` is still checked against NR-01 but no longer written.
+  - The request computes the strict schema bytes while it is validated. An
+    unsupported schema settles `failed` `SCHEMA_UNSUPPORTED`, after
+    `PROFILE_UNSUPPORTED` and before `TIMEOUT`, with no file, directory or spawn.
+    Any other schema failure rejects `INVALID_RUNTIME_INPUT`.
+  - `<callId>.schema.json` holds `JSON.stringify(strictOutputSchema(request.schema))`.
+  - The output file is read as before, then parsed as one bare plain object through
+    `copyJSON(…, 'INVALID_WIRE')` and wrapped as `{json: JSON.stringify(object)}`. It
+    is never unwrapped.
+- `tests/native-codex-provider.test.mjs` moves to bare-object outputs and a
+  strict-expressible default schema. The stale-schema case now expects the strict
+  bytes. New cases:
+  - SCHEMA_UNSUPPORTED leaves an existing run directory's stale files untouched;
+  - INVALID_SCHEMA wins over an unsupported shape (it rejects rather than settles);
+  - a BOM is still INVALID_WIRE;
+  - `__proto__` keys stay own keys of the wire string;
+  - duplicate keys follow JSON.parse (last wins);
+  - a nested `type: 'null'` and a null enum entry are kept, and the result shares
+    no object with its input.
+
+Decisions made without a human (autonomous run):
+- A schema that validation itself classes `UNSUPPORTED_SCHEMA`, such as one with a
+  foreign keyword, settles `SCHEMA_UNSUPPORTED` like the strict-only shapes. The
+  contract keys the settle on the code, and the runtime's `encodeOutputContract`
+  would already have refused such a schema.
+- The old implementation case "a BOM and a `__proto__` key are INVALID_WIRE" was
+  split. A BOM is still INVALID_WIRE. Objects with a `__proto__` key are now
+  `returned`, under the contract's "any bare object, never unwrapped" rule.
+- A `copyJSON` error with a code other than INVALID_WIRE is rethrown into the
+  existing IO_ERROR catch-all instead of being reported as INVALID_WIRE. No test
+  reaches that path.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-02h-strict-schema.test.mjs
+# 69 tests, 69 pass, 0 fail
+node --test acceptance/codex-parity/cp-02b-codex-leaf.test.mjs acceptance/codex-parity/cp-02c-codex-selection.test.mjs acceptance/codex-parity/cp-02e-graph-host.test.mjs acceptance/codex-parity/cp-02f-native-graphs.test.mjs
+# 146 tests, 146 pass, 0 fail
+node --test acceptance/native-runtime/nr-01-schema.test.mjs
+# 15 tests, 15 pass, 0 fail
+node logs/evidence/cp-05a/run-focused.mjs tests/native-codex-provider.test.mjs tests/native-codex-selection.test.mjs tests/native-graph-host.test.mjs tests/native-runtime-schema.test.mjs
+# FOCUSED: 49 passed, 0 failed, 0 skipped (provider test: 19 cases)
+bash scripts/validate.sh                     # VALIDATE: PASS
+node scripts/check-refs.mjs                  # check-refs: 271 references, all resolve
+git diff --check                             # no output
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+```
+
+No new untracked source or test file was added, so there was no per-file secret scan.
+The session's permission mode refused shell redirection into files, so no logs were
+saved under logs/evidence/cp-02h/. The outputs above are from the session transcript.
+
+Observed limits and untested hypotheses:
+- The acceptance test was not run against the pre-change tree in this session.
+- acceptance/codex-parity/cp-05b-graph-reconcile.test.mjs was run once alongside
+  these and failed 17 cases with `Cannot find module …/graph-reconcile.mjs`. CP-05b
+  is `passes: false` and that module does not exist on this branch. It was not run
+  on HEAD before this change, so this entry makes no claim about it beyond that
+  observation.
+- Whether Codex enforces `--output-schema`, follows `description` or rejects an extra
+  key is unverified (contract "Not in scope").
+- macOS was not run.
+
+Full regressions, review and the branch hunt remain pending for the PR.

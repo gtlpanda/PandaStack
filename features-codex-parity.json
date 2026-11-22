@@ -258,7 +258,7 @@
       ],
       "test": "acceptance/codex-parity/cp-02h-strict-schema.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-03d",
