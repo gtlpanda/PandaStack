@@ -69,7 +69,8 @@ before `## When to ask` (the bughunt SKILL.md has the same section). It says:
    - `SKILL_DIR`: the real directory holding SKILL.md (the symlink resolved);
    - `ROOT`: the installation root, four levels above `SKILL_DIR`;
    - `CODEX`: the absolute path of `codex` on `PATH`.
-   It reads no `HOME`, `CLAUDE_CONFIG_DIR` or `.claude` path.
+   It reads no `HOME`, `CLAUDE_CONFIG_DIR` or `.claude` path, and it runs only shell
+   builtins plus `dirname`, `readlink` and `realpath`.
 3. **The commands.** A fenced `bash` block holding both command forms:
    `node "$SKILL_DIR/blueprint-native.mjs" <verb> --args-file <file>` and
    `node "$SKILL_DIR/blueprint-approve.mjs" <show|approve> --args-file <file>`.
@@ -115,7 +116,8 @@ catalog, unmodified. The fake is the frozen acceptance/codex-parity/cp-02f-fake-
 Cases:
 1. **Catalog.** Blueprint's codex row, the four transports and blueprint's
    `entrySha256` are exactly as above. Its claude row, dependencies and proofRefs are
-   unchanged. Codex `partial` rows are exactly autobuild, blueprint and bughunt.
+   as CP-04c left them (`dependencies` are the four ids CP-04c declares). Codex `partial`
+   rows are exactly autobuild, blueprint and bughunt.
    `installEligible(blueprint, 'codex')` is true, `nativeImplementationOf` is
    `present-limited`, and `checkCatalogDrift` reports no problem.
 2. **Install.** install-plan prints exactly three lines: autobuild, blueprint, bughunt.
@@ -132,7 +134,9 @@ Cases:
    root's realpath and `CODEX` equal to the stub's path.
 5. **The whole path on the production catalog.** Through the installed symlink
    (`<skills>/blueprint/blueprint-native.mjs` and `blueprint-approve.mjs`), with
-   `installationRoot` and `codexBin` from case 4: `start` -> `interview` (`needs-human`)
+   `installationRoot` the candidate root's realpath and `codexBin` the fake codex installed
+   as `<bin>/codex`; at the end, the section's first `bash` block run with that `bin/` on
+   `PATH` prints exactly those two values as `ROOT` and `CODEX`. `start` -> `interview` (`needs-human`)
    -> `answer` -> `design` (`design-ready`) -> `backlog` (`backlog-ready`) -> `show` ->
    `approve` with the hash `show` printed. Each step exits 0.
    - `approve` creates `integration/<app>` with one commit holding exactly the paths it
@@ -141,15 +145,18 @@ Cases:
      args file's `env` (`HOME`, `PATH`, `FAKE_CODEX_DIR`), and an `--output-schema` file
      that is not the NR-01 wire schema but the leaf's strict schema (CP-02h: an object
      schema with `additionalProperties: false`).
-   - The advisor's stdin names `<ROOT>/core/skills/backlog/SKILL.md` (CP-03d). No leaf's
-     stdin contains `.claude` or `CLAUDE_CONFIG_DIR`.
+   - The advisor's stdin names `<ROOT>/core/skills/backlog/SKILL.md` (CP-03d). With every
+     occurrence of `<ROOT>` removed (a checkout may itself sit under a `.claude`
+     directory), no leaf's stdin contains `.claude` or `CLAUDE_CONFIG_DIR`.
    - The owned `HOME` holds no `.claude` afterwards.
 
 At this freeze (main plus the tier-1 to tier-3 freezes, CP-04c and CP-04d unbuilt) every
 case fails. Against a tree with every other wave-2 feature built and not this one: case 1
 fails on the codex row, case 2 on the two-line plan, case 3 on `PROVIDER_UNAVAILABLE`,
-case 4 on the missing section, and case 5 at `interview` with exit 2
-`OFFERING_UNSUPPORTED`.
+case 4 on the missing section, and case 5 at its install step: `install.sh --codex` links
+no `blueprint` while the row is `unavailable`, so nothing can run through the installed
+symlink. (With a hand-made link, the same tree stops at `interview` with exit 2
+`OFFERING_UNSUPPORTED`; the test author checked this in a throwaway copy.)
 
 Enforced by review, not by a case: that sections 1 to 8 are byte-identical (the
 `entrySha256` pin covers the whole file, not which part changed); the prose of items 1, 5,

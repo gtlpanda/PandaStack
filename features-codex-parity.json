@@ -418,6 +418,45 @@
       "test": "acceptance/codex-parity/cp-05d-qa-loop.test.mjs",
       "testKind": "node",
       "passes": false
+    },
+    {
+      "id": "CP-04e",
+      "title": "Blueprint on Codex: runner section, catalog flip, end-to-end proof",
+      "description": "Implement only spec/contracts/codex-parity-cp-04e.md: add the `## Codex runner` section to graphs/blueprint/skills/blueprint/SKILL.md (roots SKILL_DIR/ROOT/CODEX, both CLI command forms, all nine verbs with their args keys, leaf env, outputs, approval, held leaves; no Claude-only path), flip blueprint's codex row to partial on the new shared codex-graph-host transport, and update blueprint's entrySha256. W2-6. No module, workflow, role, install.sh or install-plan edit; no other catalog byte.",
+      "contract": "spec/contracts/codex-parity-cp-04e.md",
+      "dependencies": [
+        "CP-04c",
+        "CP-04d",
+        "CP-03d",
+        "CP-02h"
+      ],
+      "acceptance": [
+        "Blueprint's codex row is exactly partial on codex-graph-host with LIVE_PROOF_MISSING, NATIVE_UNVERIFIED, REQUIREMENTS_INCOMPLETE; transports gain exactly that fourth row; entrySha256 matches; codex partial rows are exactly autobuild, blueprint and bughunt; the drift guard is clean.",
+        "install-plan prints the three lines and install.sh --codex links skills/blueprint in a clean HOME and unlinks it on --uninstall; inspectOffering is ready only with an injected probe.",
+        "The runner section names every verb and key, holds no Claude-only path, and its first bash block resolves SKILL_DIR, ROOT and CODEX through the installed symlink; start through approve runs through the installed CLIs on the production catalog with strict schemas, resolved skill paths, read-only leaves and no .claude."
+      ],
+      "test": "acceptance/codex-parity/cp-04e-blueprint-codex.test.mjs",
+      "testKind": "node",
+      "passes": false
+    },
+    {
+      "id": "CP-05e",
+      "title": "Native QA gate proof on the fake codex",
+      "description": "Implement only spec/contracts/codex-parity-cp-05e.md: append cp-05e-qa-gate to dev's proofRefs (dev's codex row stays unavailable). The proof is the existing qa-loop (CP-05d), host, strict schema and role loader. No module, workflow, role, SKILL.md or loop.md edit; no other catalog byte.",
+      "contract": "spec/contracts/codex-parity-cp-05e.md",
+      "dependencies": [
+        "CP-05d",
+        "CP-02h",
+        "CP-03d"
+      ],
+      "acceptance": [
+        "Against a real failing test, a fixer that fixes it gives done with verify PASS and touched MATCH after checker, fixer, checker, reviewer, qa-auditor, with no commit.",
+        "A fixer whose fix still fails the real test is recorded as escalate VERIFY_FAILED, downgraded from the graph's done.",
+        "Every leaf gets the strict schema, the checker and fixer run the resolved verify path, no stdin names .claude, the leaf env is exactly FAKE_CODEX_DIR and PATH; dev's proofRefs are exactly cp-02f-host-wiring and cp-05e-qa-gate."
+      ],
+      "test": "acceptance/codex-parity/cp-05e-qa-gate.test.mjs",
+      "testKind": "node",
+      "passes": false
     }
   ]
 }
