@@ -27,9 +27,18 @@ const TIMED_OUT = 124;  // timeout(1): the step ran past STEP_TIMEOUT_S
 // Stays in the gate's foreground process group, so a terminal Ctrl-C reaches it,
 // and stops timeout(1)'s group (which the terminal's signal does not reach).
 const WRAPPER = 'limit=$1; shift; pid=; trap \'[ -n "$pid" ] && kill -TERM -- "-$pid" 2>/dev/null; [ -n "$pid" ] && wait "$pid"; exit 130\' INT TERM; timeout -k 30 "$limit" "$@" & pid=$!; wait "$pid"';
-// CI configuration files whose presence makes ciParity (or an opt-out) required.
-const CI_FILES = [".gitlab-ci.yml", ".circleci/config.yml", "azure-pipelines.yml", "bitbucket-pipelines.yml",
-  "Jenkinsfile", ".buildkite/pipeline.yml", ".travis.yml", ".drone.yml", ".woodpecker.yml"];
+// CI configuration files whose presence makes ciParity (or an opt-out) required, besides
+// GitHub workflows, with the provider each belongs to (the ci-optimizer reports the id).
+export const GITHUB_PROVIDER = "github";
+export const CI_FILE_PROVIDERS = Object.freeze({
+  ".gitlab-ci.yml": "gitlab", ".circleci/config.yml": "circleci", "azure-pipelines.yml": "azure",
+  "bitbucket-pipelines.yml": "bitbucket", "Jenkinsfile": "jenkins", ".buildkite/pipeline.yml": "buildkite",
+  ".travis.yml": "travis", ".drone.yml": "drone", ".woodpecker.yml": "woodpecker",
+});
+const CI_FILES = Object.keys(CI_FILE_PROVIDERS);
+
+/** The CI provider id of a file `ciFiles` returns. */
+export const ciProviderOf = (file) => (file.startsWith(`${WORKFLOW_DIR}/`) ? GITHUB_PROVIDER : CI_FILE_PROVIDERS[file] ?? null);
 // Options that leave tests out, and options that pick which suite runs, across
 // common runners (vitest, jest, pytest, mocha, go test). ciParity can replace either list.
 export const EXCLUDE_FLAGS = ["--exclude", "--ignore", "--ignore-glob", "--testPathIgnorePatterns", "--deselect", "--skip", "-skip"];
@@ -50,7 +59,8 @@ export function ciFiles(root) {
 
 // ---------- GitHub Actions ----------
 
-function readWorkflow(root, file) {
+/** A workflow file parsed, with a `jobs` mapping; throws a WorkflowYamlError or "<file> has no jobs". */
+export function readWorkflow(root, file) {
   const doc = parseWorkflowYaml(readFileSync(path.join(root, file), "utf8"));
   if (!doc || typeof doc.jobs !== "object" || Array.isArray(doc.jobs) || !doc.jobs) throw new Error(`${file} has no jobs`);
   return doc;

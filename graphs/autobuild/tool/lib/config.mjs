@@ -159,6 +159,7 @@ export function resolveManagedConfig({ project: raw = {}, env = {}, overrides = 
   if (config.decisions !== undefined) config.decisions = validateDecisionConfig(config.decisions);
   validateCiParityConfig(config);
   validateGateSchedule(config);
+  if (raw.ciOptimizer !== undefined) validateCiOptimizer(raw.ciOptimizer);
   if (env.EXPECTED_BRANCH) config.branch = env.EXPECTED_BRANCH;
   config.env.pathPrepend = (config.env.pathPrepend ?? []).map(expandHome);
   config.env.ldLibraryPath = (config.env.ldLibraryPath ?? []).map(expandHome);
@@ -260,6 +261,56 @@ function validateGateSchedule(config) {
   for (const [kind, runner] of Object.entries(config.runners ?? {})) validateScheduleFields(runner, `runners.${kind}`);
   validateScheduleFields(config.browser, "browser");
   validateScheduleFields(config.ciParity, "ciParity");
+}
+
+// ci-optimizer policy (`autobuild ci`, lib/ci/policy.mjs merges it over these defaults). Kept
+// inline: config.mjs is copied into scratch installations with a fixed import list.
+export const CI_OPTIMIZER_DEFAULTS = Object.freeze({
+  enabled: true,
+  targets: Object.freeze({ fastSeconds: 240, fullSeconds: 600 }),
+  regressionPercent: 25,
+  recentRuns: 5,
+  baselineRuns: 10,
+  historyLimit: 30,
+  ratesPerMinute: Object.freeze({}),
+  ghBin: "gh",
+});
+
+const plainObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+function refuseUnknownKeys(value, known, where) {
+  const unknown = Object.keys(value).filter((key) => !known.includes(key));
+  if (unknown.length) throw new Error(`${where} has unknown keys: ${unknown.join(", ")}`);
+}
+
+/** Throws an error naming the key for any invalid `ciOptimizer` value; unknown keys are refused. */
+export function validateCiOptimizer(value) {
+  if (!plainObject(value)) throw new Error("ciOptimizer must be an object");
+  refuseUnknownKeys(value, Object.keys(CI_OPTIMIZER_DEFAULTS), "ciOptimizer");
+  if (value.enabled !== undefined && typeof value.enabled !== "boolean") throw new Error("ciOptimizer.enabled must be true or false");
+  if (value.targets !== undefined) {
+    if (!plainObject(value.targets)) throw new Error("ciOptimizer.targets must be an object");
+    refuseUnknownKeys(value.targets, Object.keys(CI_OPTIMIZER_DEFAULTS.targets), "ciOptimizer.targets");
+    for (const key of Object.keys(value.targets)) {
+      if (!wholeNumber(value.targets[key], 1)) throw new Error(`ciOptimizer.targets.${key} must be a whole number of at least 1`);
+    }
+  }
+  if (value.regressionPercent !== undefined && !(Number.isFinite(value.regressionPercent) && value.regressionPercent > 0)) {
+    throw new Error("ciOptimizer.regressionPercent must be a number greater than 0");
+  }
+  for (const key of ["recentRuns", "baselineRuns"]) {
+    if (value[key] !== undefined && !wholeNumber(value[key], 1)) throw new Error(`ciOptimizer.${key} must be a whole number of at least 1`);
+  }
+  if (value.historyLimit !== undefined && !(wholeNumber(value.historyLimit, 1) && value.historyLimit <= 100)) {
+    throw new Error("ciOptimizer.historyLimit must be a whole number from 1 to 100");
+  }
+  if (value.ratesPerMinute !== undefined && (!plainObject(value.ratesPerMinute)
+    || Object.entries(value.ratesPerMinute).some(([label, rate]) => !text(label) || !Number.isFinite(rate) || rate < 0))) {
+    throw new Error("ciOptimizer.ratesPerMinute must map runner labels to numbers of at least 0");
+  }
+  if (value.ghBin !== undefined && (!text(value.ghBin) || /[\x00-\x1f\x7f]/.test(value.ghBin))) {
+    throw new Error("ciOptimizer.ghBin must be a non-empty string without control characters");
+  }
 }
 
 // Run evidence settings: where it goes (dir) and what the commit guard refuses

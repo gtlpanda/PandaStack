@@ -13,7 +13,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-01-discover.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-02",
