@@ -3977,6 +3977,13 @@ Phase 2 acceptance: 97/97.
   processes, which is not guaranteed to agree, so it now uses Date.now() (cause not isolated;
   untested hypothesis). After these fixes: three
   runs of the suite, 2091 passed, 0 failed each (76-78s).
+- The fourth hunt (head 23ff5d0) found no bug (manual_review: logic and regression partly
+  covered). Its concurrency lens noted that the new "exits in time" test gave its child only
+  1000 ms, which a loaded 4-vCPU runner might not meet. It now uses 3000 ms, still inside the
+  5 s pipe grace, so a timer left armed would still fire. The three-level tree fixture now
+  passes its test only once the whole tree is up, and its timeout is 6000 ms, so the timeout
+  cannot fire before the tree exists. Both still fail against the bugs they guard. A run
+  pinned to 4 cores (taskset -c 0-3): 2092 passed, 0 failed, 154s.
 
 ## 68. `autobuild check --shard i/n`: the full gate as n parallel parts (2026-11-21)
 
