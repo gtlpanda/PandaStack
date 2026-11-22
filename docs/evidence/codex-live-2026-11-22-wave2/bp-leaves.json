@@ -1,0 +1,80 @@
+{
+  "bp-backlog-20261122T183248Z-75e9ec12": [
+    {
+      "phase": "Backlog",
+      "occurrence": 1,
+      "role": "slicer",
+      "profile": "source-review",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "state": "returned"
+    },
+    {
+      "phase": "Backlog",
+      "occurrence": 1,
+      "role": "slicer",
+      "profile": "source-review",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "state": "returned"
+    },
+    {
+      "phase": "Gate",
+      "occurrence": 1,
+      "role": "advisor",
+      "profile": "source-review",
+      "model": "gpt-6-astra",
+      "effort": "high",
+      "state": "returned"
+    },
+    {
+      "phase": "Gate",
+      "occurrence": 1,
+      "role": "advisor",
+      "profile": "source-review",
+      "model": "gpt-6-astra",
+      "effort": "high",
+      "state": "returned"
+    }
+  ],
+  "bp-design-20261122T182826Z-6d4545de": [
+    {
+      "phase": "Design",
+      "occurrence": 1,
+      "role": "architect",
+      "profile": "source-review",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "state": "returned"
+    },
+    {
+      "phase": "Gate",
+      "occurrence": 1,
+      "role": "advisor",
+      "profile": "source-review",
+      "model": "gpt-6-astra",
+      "effort": "high",
+      "state": "returned"
+    }
+  ],
+  "bp-interview-20261122T182644Z-403c1093": [
+    {
+      "phase": "Extract",
+      "occurrence": 1,
+      "role": "extractor",
+      "profile": "source-review",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "state": "returned"
+    },
+    {
+      "phase": "Interview",
+      "occurrence": 1,
+      "role": "questioner",
+      "profile": "source-review",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "state": "returned"
+    }
+  ]
+}

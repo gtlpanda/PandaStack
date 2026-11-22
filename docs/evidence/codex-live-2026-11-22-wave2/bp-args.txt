@@ -1,0 +1,14 @@
+start: {"repo":"<scratch>/bp/app","request":"A small command-line tool that converts temperatures between Celsius and Fahrenheit. It reads a number and a unit and prints the converted value. No network, no accounts, no database."}
+
+interview: {"repo":"<scratch>/bp/app","installationRoot":"<home>/code/PandaStack","codexBin":"<home>/.npm-global/bin/codex","env":{"HOME":"<scratch>/home","CODEX_HOME":"<scratch>/codex-home","PATH":"<node-bin>:/usr/bin:/bin"},"timeoutMs":3600000}
+
+answer: {"repo":"<scratch>/bp/app","answers":[{"id":"Q1","answer":"Node.js"},{"id":"Q2","answer":"Command-line arguments"}]}
+
+design: {"repo":"<scratch>/bp/app","installationRoot":"<home>/code/PandaStack","codexBin":"<home>/.npm-global/bin/codex","env":{"HOME":"<scratch>/home","CODEX_HOME":"<scratch>/codex-home","PATH":"<node-bin>:/usr/bin:/bin"},"timeoutMs":3600000}
+
+backlog: {"repo":"<scratch>/bp/app","installationRoot":"<home>/code/PandaStack","codexBin":"<home>/.npm-global/bin/codex","env":{"HOME":"<scratch>/home","CODEX_HOME":"<scratch>/codex-home","PATH":"<node-bin>:/usr/bin:/bin"},"timeoutMs":3600000}
+
+show: {"repo":"<scratch>/bp/app"}
+
+approve: {"repo":"<scratch>/bp/app","approvalSha256":"8d06bc61946dab89e8096d2b893bd22f8e6eecde9413a26128fe99c0524eb0dc"}
+

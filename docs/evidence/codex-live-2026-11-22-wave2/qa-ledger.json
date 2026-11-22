@@ -1,0 +1,79 @@
+{
+  "runs": [
+    {
+      "status": "done",
+      "reason": "VERIFY: PASS and no HIGH/CRITICAL review or QA findings",
+      "fixRounds": 1,
+      "stuckSig": null,
+      "lastVerify": "  [0] npm run test\nVERIFY: PASS",
+      "touched": [
+        "src/math.mjs",
+        "test/average.test.mjs"
+      ],
+      "fixed": [
+        "Corrected average() to divide by the number of values.",
+        "Added a mixed-sign regression assertion that fails before the fix and passes afterward."
+      ],
+      "noted": [],
+      "refuted": [],
+      "history": [
+        {
+          "node": "check",
+          "verdict": "FAIL",
+          "reported": "FAIL",
+          "failures": 1
+        },
+        {
+          "node": "fix",
+          "trigger": "verify",
+          "sig": "verify|npm run test#1#node:test",
+          "result": {
+            "fixed": [
+              "Corrected average() to divide by the number of values.",
+              "Added a mixed-sign regression assertion that fails before the fix and passes afterward."
+            ],
+            "unfixed": [],
+            "touched": [
+              "src/math.mjs",
+              "test/average.test.mjs"
+            ],
+            "verify_verdict": "PASS",
+            "summary": "2 files changed, 2 insertions(+), 1 deletion(-). Required verification completed: npm run test exited 0; VERIFY: PASS."
+          }
+        },
+        {
+          "node": "check",
+          "verdict": "PASS",
+          "reported": "PASS",
+          "failures": 0
+        },
+        {
+          "node": "review",
+          "scope": "branch",
+          "files": null,
+          "findings": 0
+        },
+        {
+          "node": "qa",
+          "scope": "branch",
+          "files": null,
+          "findings": 0
+        }
+      ],
+      "invocationId": "qa-20261122T182344Z-d5827188",
+      "loopChecks": {
+        "verify": "PASS",
+        "touched": "MATCH",
+        "changed": [
+          "src/math.mjs",
+          "test/average.test.mjs"
+        ],
+        "verifyTail": "----- skipped: no \"lint\" script in package.json\n----- skipped: no \"typecheck\" script in package.json\n----- node:test\n$ npm run test\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 38.458618\nexit: 0\nVERIFY_EVIDENCE: <tmp>/verify-evidence/manifest.json\n  [0] npm run test\nVERIFY: PASS"
+      },
+      "at": "2026-11-22T18:26:00Z"
+    }
+  ],
+  "stuckSigs": [],
+  "blockedOn": null,
+  "idleRuns": 0
+}
