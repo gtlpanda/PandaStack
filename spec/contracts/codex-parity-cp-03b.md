@@ -173,7 +173,9 @@ These names are existing exports read as they are: intake.mjs `ALWAYS`, `SIGNALS
 ## Install and other frozen gates
 
 - `installPlan` (CP-01c) still returns exactly the two entries, autobuild and bughunt.
-  The installed set does not change, and no dependency is linked.
+  The installed set does not change, and no dependency is linked. (Amended at the tier-4 freeze (CP-04e, W2-10): 
+  blueprint joins the set once CP-04e flips its codex row; its closure also lives under
+  core/skills.)
 - bughunt's transitive closure gains backlog, so install-plan now checks it: a root
   without core/skills/backlog gives `DEPENDENCY_MISSING`.
 - The transitive closure of every Codex-eligible offering stays under core/skills/. That

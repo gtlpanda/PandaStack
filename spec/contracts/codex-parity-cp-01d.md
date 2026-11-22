@@ -197,6 +197,10 @@ module and reads no `process.env.<NAME>`.
   the catalog.
 - No live provider, network or HOME use in any test.
 
+Amended at the tier-4 freeze (CP-04e, W2-10): the "only the codex-partial offerings can be ready"
+case expects autobuild and bughunt, or autobuild, blueprint and bughunt once CP-04e flips
+blueprint's row, and checks that no other codex row is partial.
+
 ## Acceptance
 
 acceptance/codex-parity/cp-01d-inspect-offering.test.mjs (node:test, a few seconds). It

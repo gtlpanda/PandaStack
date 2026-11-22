@@ -61,6 +61,16 @@ function flip(catalog, id) {
   assert.ok(row?.providers?.codex, 'the candidate catalog is v2 with provider rows (CP-01b)')
   row.providers.codex = structuredClone(PARTIAL)
 }
+// Amended at the CP-04e freeze (W2-10): the refusal cases below used the production
+// blueprint row as "codex unavailable". CP-04e flips that row, so every fixture root
+// now sets it unavailable itself, and the cases hold before and after the flip.
+const UNAVAILABLE = Object.freeze({ implementation: 'unavailable', transportId: null,
+  limitations: ['NATIVE_UNVERIFIED', 'NO_PROVIDER_TRANSPORT', 'REQUIREMENTS_INCOMPLETE'] })
+function unflip(catalog, id) {
+  const row = catalog.offerings.find(o => o.id === id)
+  assert.ok(row?.providers?.codex, 'the candidate catalog is v2 with provider rows (CP-01b)')
+  row.providers.codex = structuredClone(UNAVAILABLE)
+}
 
 let WORK, PRISTINE, BASE_ROOT, STUB
 // The base root: the candidate catalog with only `dev`'s codex row flipped to partial.
@@ -69,6 +79,7 @@ function makeRoot(edit = () => {}) {
   cpSync(PRISTINE, root, { recursive: true })
   const catalog = readCatalog(root)
   flip(catalog, 'dev')
+  unflip(catalog, 'blueprint')
   edit(catalog, root)
   writeCatalog(root, catalog)
   return root
@@ -242,7 +253,7 @@ describe('CP-02e refusal before dispatch (exit 2, no run directory, no provider 
   test('a codex-unavailable, unknown, non-owning or Codex-refused offering gives OFFERING_UNSUPPORTED', async () => {
     const refusedRoot = makeRoot(catalog => flip(catalog, 'security-audit'))
     const variants = [
-      { offeringId: 'blueprint' },                                     // codex `unavailable`
+      { offeringId: 'blueprint' },                                     // codex `unavailable` (set by makeRoot)
       { offeringId: 'no-such-offering' },                              // not in the catalog
       { workflowId: 'dev-build', offeringId: 'bughunt' },              // partial, but graphs/dev is owned by dev
       { workflowId: 'bughunt-flow', offeringId: 'blueprint' },

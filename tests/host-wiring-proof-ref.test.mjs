@@ -16,9 +16,15 @@ const PROOF_REF = 'cp-02f-host-wiring'
 const catalog = JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8'))
 const byId = new Map(catalog.offerings.map(o => [o.id, o]))
 const withRefs = (row, proofRefs) => ({ ...row, proofRefs })
+// Amended at the tier-4 freeze (W2-10): CP-05e appends its own proof reference to dev's
+// list, and CP-04e makes blueprint Codex install-eligible. Each pin accepts exactly the
+// state before or after that feature; their own frozen tests pin the new state.
+const CP05E_REF = 'cp-05e-qa-gate'
+const blueprintFlipped = byId.get('blueprint').providers.codex.implementation === 'partial'
 
-await test('dev carries exactly the one wiring-proof reference; every other row carries none', () => {
-  assert.deepEqual(byId.get('dev').proofRefs, [PROOF_REF])
+await test('dev carries exactly the one wiring-proof reference (plus CP-05e\'s); every other row carries none', () => {
+  assert.ok([JSON.stringify([PROOF_REF]), JSON.stringify([PROOF_REF, CP05E_REF])].includes(JSON.stringify(byId.get('dev').proofRefs)),
+    `dev's proofRefs are [${PROOF_REF}] or [${PROOF_REF}, ${CP05E_REF}]`)
   assert.ok(identifier(PROOF_REF), 'the reference is a catalog identifier')
   for (const row of catalog.offerings) {
     if (row.id !== 'dev') assert.deepEqual(row.proofRefs, [], `${row.id} has no proofRefs`)
@@ -61,7 +67,7 @@ await test('a reference is never evidence: no derived answer reads proofRefs', (
   assert.deepEqual(validateCatalog({ ...catalog, offerings: catalog.offerings.map(o => withRefs(o, [])) }), [], 'and without it')
 })
 
-await test('the Codex install plan still names only autobuild and bughunt', () => {
+await test('the Codex install plan still names only autobuild and bughunt (and blueprint once CP-04e flips it)', () => {
   assert.deepEqual(installPlan({ installationRoot: REPO, backend: 'codex' }).map(entry => entry.dest),
-    ['skills/autobuild', 'skills/bughunt'])
+    blueprintFlipped ? ['skills/autobuild', 'skills/blueprint', 'skills/bughunt'] : ['skills/autobuild', 'skills/bughunt'])
 })

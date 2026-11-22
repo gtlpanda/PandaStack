@@ -216,6 +216,9 @@ code is minted (decision 5).
 - The acceptance test pins that refusal. Otherwise it runs on CP-02f's fixture root with
   only blueprint's codex row flipped to `partial`. CP-04e's freeze amends the refusal
   case.
+- Amended at the tier-4 freeze (CP-04e, W2-10): case 7 and its prerequisite now run on a second fixture
+  root that sets blueprint's codex row `unavailable` itself, and case 1 accepts the row
+  `unavailable` or exactly CP-04e's. The refusal behavior pinned is unchanged.
 
 ## Not in scope
 

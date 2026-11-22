@@ -17,15 +17,22 @@ function fixture(fn) {
 const ok = r => assert.equal(r.status, 0, r.stdout + r.stderr)
 const isLink = p => { try { return lstatSync(p).isSymbolicLink() } catch { return false } }
 
-test('Codex dry-run changes nothing; install is limited to two skills and idempotent', () => fixture(({ home, skills, run }) => {
+// Amended at the CP-04e freeze (W2-10): CP-04e makes blueprint Codex install-eligible, so
+// the installed set is autobuild and bughunt, plus blueprint once its codex row is partial.
+const blueprintFlipped = () => JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8'))
+  .offerings.find(o => o.id === 'blueprint').providers?.codex?.implementation === 'partial'
+
+test('Codex dry-run changes nothing; install is limited to the eligible skills and idempotent', () => fixture(({ home, skills, run }) => {
+  const flipped = blueprintFlipped()
   ok(run(['--dry-run']))
   assert.deepEqual(readdirSync(home), [])
   ok(run())
-  assert.deepEqual(readdirSync(skills).sort(), ['autobuild', 'bughunt'])
+  assert.deepEqual(readdirSync(skills).sort(), flipped ? ['autobuild', 'blueprint', 'bughunt'] : ['autobuild', 'bughunt'])
   assert.equal(readlinkSync(join(skills, 'autobuild')), resolve(REPO, 'graphs/autobuild/skills/autobuild'))
   assert.equal(readlinkSync(join(skills, 'bughunt')), resolve(REPO, 'graphs/hunt/skills/bughunt'))
+  if (flipped) assert.equal(readlinkSync(join(skills, 'blueprint')), resolve(REPO, 'graphs/blueprint/skills/blueprint'))
   for (const p of ['.claude', '.codex', '.local']) assert.equal(existsSync(join(home, p)), false)
-  assert.match(run().stdout, /done: 0 linked, 2 already linked/)
+  assert.match(run().stdout, flipped ? /done: 0 linked, 3 already linked/ : /done: 0 linked, 2 already linked/)
   assert.equal(existsSync(join(home, '.agents', '.pandastack-codex-backups-skills')), false)
 }))
 
@@ -80,7 +87,7 @@ test('Codex custom absolute target works without HOME and honors supported skip 
   const custom = join(home, 'custom/entries')
   const env = { HOME: '', PANDASTACK_CODEX_SKILLS_DIR: custom }
   ok(run(['--skip=skills/bughunt'], env))
-  assert.deepEqual(readdirSync(custom), ['autobuild'])
+  assert.deepEqual(readdirSync(custom).sort(), blueprintFlipped() ? ['autobuild', 'blueprint'] : ['autobuild'])
   assert.notEqual(run(['--skip=settings.json'], env).status, 0)
   assert.notEqual(run(['--skip=local-bin'], env).status, 0)
   ok(run(['--uninstall'], env))

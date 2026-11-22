@@ -284,9 +284,14 @@ test('every codex install closure stays under core/skills, and install-plan chec
   requireV2(catalog)
   const { installEligible } = await loadCatalog()
   const { installPlan } = await load('core/skills/native-runtime/install-plan.mjs')
+  // Amended at the CP-04e freeze (W2-10): CP-04e adds blueprint to the installed set;
+  // its own test pins that state. Its closure (backlog, default-stack, knowledge-map,
+  // native-runtime, run-records) is checked by the loop below like every other.
+  const flipped = catalog.offerings.find(o => o.id === 'blueprint').providers.codex.implementation === 'partial'
   const expected = [{ dest: 'skills/autobuild', src: 'graphs/autobuild/skills/autobuild' },
+    ...(flipped ? [{ dest: 'skills/blueprint', src: 'graphs/blueprint/skills/blueprint' }] : []),
     { dest: 'skills/bughunt', src: 'graphs/hunt/skills/bughunt' }]
-  assert.deepEqual(installPlan({ installationRoot: ROOT, backend: 'codex' }), expected, 'the installed set is unchanged')
+  assert.deepEqual(installPlan({ installationRoot: ROOT, backend: 'codex' }), expected, 'the installed set is unchanged (plus blueprint after CP-04e)')
   const byId = new Map(catalog.offerings.map(o => [o.id, o]))
   for (const row of catalog.offerings.filter(o => installEligible(o, 'codex'))) {
     for (const id of transitive(catalog, row.id)) {
