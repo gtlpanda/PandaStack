@@ -151,6 +151,18 @@ row flipped to partial). CP-06's freeze amends the refusal case.
      published one in between (`EEXIST`), qa-loop reads that one and resumes it, as
      above. `resumed` is `false`.
    - A filesystem failure here is exit 3 `IO_ERROR`.
+   - **Already recorded.** If `resumed` and a run in `ledger.runs` has `invocationId`
+     equal to this one (a crash after done-path step 5 and before its step 6), the host
+     is not run again:
+     - no host args file is written, nothing is spawned, no check runs, and the ledger
+       is not written;
+     - the inflight file is removed (done-path step 6, with its `IO_ERROR` rule);
+     - the report (exit 0) is built from that stored run, with `recorded: false`.
+
+     The reason: the workflow args come from the ledger (step 4), and the recorded run
+     may have changed `stuckSigs`. A re-run of the host would then bind other args than
+     its checkpoint rows hold, and the store would refuse it with `CONFLICT`
+     (checkpoint-store.mjs `reserve`).
 6. **Host args file**, as above (exit 3 `IO_ERROR` on failure).
 7. **Host.** Spawn the host and wait for it to exit. stdin is ignored; stdout and
    stderr are captured, never forwarded.
@@ -187,10 +199,8 @@ crash"), exactly `node <codeRoot>/core/skills/native-runtime/graph-reconcile.mjs
    must be exactly `JSON.stringify({status}) + "\n"`. Anything else is exit 3
    `INVALID_RESULT`: the ledger is unchanged and the inflight file is kept (a rerun
    replays the run with zero spawns and rewrites result.json).
-2. **Already recorded.** If a run in `ledger.runs` has `invocationId` equal to this one
-   (a crash after step 5 and before step 6 of an earlier attempt), the ledger is not
-   written again and no check runs: go to step 6 (the inflight file is removed), then
-   step 7 with `recorded: false` and the report built from that stored run.
+2. **Already recorded** invocations never reach the host: step 5 handles them. Here
+   `ledger.runs` holds no run with this `invocationId`.
 3. **Checks, only when `result.status` is `'done'`** (loop.md step 3.4). Both always run:
    - **verify**: `bash <installationRoot>/core/skills/verify/verify.sh` in `<toplevel>`,
      stdin ignored, stdout captured (up to 64 MiB), killed with SIGKILL after
@@ -231,10 +241,10 @@ has exactly these keys, in this order:
 | key | value |
 |---|---|
 | `status` | the recorded status: `'done'` or `'escalate'` (after any downgrade) |
-| `graphStatus` | `result.status`, what the graph returned |
+| `graphStatus` | `result.status`, what the graph returned. For an already-recorded invocation (step 5): the stored run's `downgradedFrom` when present, else its `status` |
 | `invocationId` | this invocation |
 | `resumed` | boolean, step 5 |
-| `recorded` | `false` only on done-path step 2, else `true` |
+| `recorded` | `false` only for an already-recorded invocation (step 5), else `true` |
 | `reason`, `stuckSig`, `fixRounds` | the recorded run's values, `null` when absent |
 | `touched` | the recorded run's `touched`, `[]` when absent |
 | `checks` | the recorded run's `loopChecks`, `null` when absent |
@@ -333,8 +343,10 @@ Cases:
    `CHECKPOINT_UNCERTAIN`; after `graph-reconcile fail` it exits 0 `escalate` with zero
    new spawns, appends exactly one run and removes the inflight file.
 9. Already recorded: a run whose inflight file is restored after it was recorded
-   replays with zero spawns, leaves the ledger bytes unchanged, removes the inflight
-   file and reports `recorded: false`.
+   reports `recorded: false` with zero spawns (no host, no leaf, no verify), leaves the
+   ledger bytes unchanged and removes the inflight file. This holds for a recorded
+   `done` and for a recorded `escalate` whose `stuckSig` changed the ledger's
+   `stuckSigs`.
 10. An unparseable ledger is read as empty with `LEDGER_UNPARSEABLE` and rewritten
     valid; a corrupt inflight file is exit 2 `INFLIGHT_INVALID` with nothing spawned.
 11. The production catalog: `installationRoot` set to the candidate root exits 2
