@@ -1,12 +1,12 @@
 // The parallel workflow runner (scripts/workflow-pool.mjs, scripts/workflow-file-runner.mjs):
 // counting, failure accounting and output order, on tiny fixture test files in a temp dir.
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, writeFileSync, rmSync, readFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { REPO, test } from '../scripts/workflow-harness.mjs'
-import { MAX_TIMER_MS, descendants, killTree, positiveSetting, scheduleOrder, settle, runPool } from '../scripts/workflow-pool.mjs'
+import { MAX_TIMER_MS, descendants, killTree, positiveSetting, scheduleOrder, settle, runPool, shardFiles } from '../scripts/workflow-pool.mjs'
 
 const HARNESS = pathToFileURL(join(REPO, 'scripts', 'workflow-harness.mjs')).href
 // Writes fixture test files (name -> body); each body may use `test` from the real harness.
@@ -150,6 +150,23 @@ await test('${name}', () => {})`
     const lastAlone = Math.max(at['b end'], at['d end'])
     assert.ok(at['a start'] >= lastAlone && at['c start'] >= lastAlone, 'no other file started before the alone files finished')
   } finally { rmSync(dir, { recursive: true, force: true }); rmSync(dirname(log), { recursive: true, force: true }) }
+})
+
+await test('shardFiles: every file in exactly one shard, the same split every time, order kept, balanced by size', () => {
+  const sizes = [9000, 50, 4000, 3000, 2500, 10, 700, 700, 1, 6000]
+  const { dir, files } = fixtures(Object.fromEntries(sizes.map((n, i) => [`f${String(i).padStart(2, '0')}.test.mjs`, '/*' + 'x'.repeat(n) + '*/'])))
+  try {
+    for (const count of [1, 2, 3, 4, 12]) {
+      const parts = Array.from({ length: count }, (_, i) => shardFiles(files, { index: i + 1, count }))
+      assert.deepEqual(parts.flat().sort(), [...files].sort(), `count ${count}: the parts are every file`)
+      assert.equal(new Set(parts.flat()).size, files.length, `count ${count}: no file in two parts`)
+      for (const part of parts) assert.deepEqual(part, files.filter(f => part.includes(f)), 'each part keeps the given order')
+      assert.deepEqual(Array.from({ length: count }, (_, i) => shardFiles(files, { index: i + 1, count })), parts, 'same split again')
+    }
+    // Largest first to the lightest shard: 9000 | 6000 | 4000, then 3000 to the 4000 shard, ...
+    const loads = [1, 2, 3].map(index => shardFiles(files, { index, count: 3 }).reduce((n, f) => n + statSync(f).size, 0))
+    assert.ok(Math.max(...loads) - Math.min(...loads) < 2600, `balanced: ${loads}`)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
 // A process is dead for these checks once it is gone or a zombie waiting to be reaped.

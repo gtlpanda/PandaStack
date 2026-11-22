@@ -27,35 +27,62 @@
   },
   "gate": [
     {
-      "name": "baseline regression suite",
-      "command": "bash scripts/test.sh"
+      "name": "repo validation",
+      "command": "bash scripts/validate.sh",
+      "shardWeight": 6
+    },
+    {
+      "name": "install tests",
+      "command": "bash scripts/test-install.sh",
+      "shardWeight": 26
+    },
+    {
+      "name": "secret scanner tests",
+      "command": "bash scripts/test-secrets.sh",
+      "shardWeight": 1
+    },
+    {
+      "name": "workflow tests",
+      "command": "bash scripts/test-workflow.sh",
+      "shardable": true
+    },
+    {
+      "name": "autobuild tests",
+      "command": "bash scripts/test-autobuild.sh",
+      "shardWeight": 65
     },
     {
       "name": "native hunt regressions",
-      "command": "node --test graphs/hunt/test-native/*.test.mjs"
+      "command": "node --test graphs/hunt/test-native/*.test.mjs",
+      "shardWeight": 14
     },
     {
       "name": "Phase 1 acceptance",
-      "command": "node --test acceptance/phase1/p1-*.test.mjs"
+      "command": "node --test acceptance/phase1/p1-*.test.mjs",
+      "shardWeight": 11
     },
     {
       "name": "Hunt evidence retention acceptance",
-      "command": "node --test acceptance/harness/harness-repair.test.mjs"
+      "command": "node --test acceptance/harness/harness-repair.test.mjs",
+      "shardWeight": 3
     },
     {
       "name": "Hunt export and namespace acceptance",
-      "command": "node --test acceptance/harness/export-namespace.test.mjs"
+      "command": "node --test acceptance/harness/export-namespace.test.mjs",
+      "shardWeight": 3
     },
     {
       "name": "Hunt capture descendant acceptance",
-      "command": "node --test acceptance/harness/capture-descendant.test.mjs"
+      "command": "node --test acceptance/harness/capture-descendant.test.mjs",
+      "shardWeight": 1
     },
     {
       "name": "Accepted Phase 2 regression acceptance",
-      "command": "node --test acceptance/phase2/p2-01.test.mjs acceptance/phase2/p2-02.test.mjs acceptance/phase2/p2-03.test.mjs acceptance/phase2/p2-04.test.mjs acceptance/phase2/p2-05.test.mjs acceptance/phase2/p2-06.test.mjs acceptance/phase2/p2-07.test.mjs acceptance/phase2/p2-08.test.mjs acceptance/phase2/p2-09.test.mjs acceptance/phase2/p2-10.test.mjs acceptance/phase2/p2-11.test.mjs acceptance/phase2/p2-12.test.mjs acceptance/phase2/p2-13.test.mjs acceptance/phase2/p2-14.test.mjs acceptance/phase2/p2-15.test.mjs acceptance/phase2/p2-16.test.mjs"
+      "command": "node --test acceptance/phase2/p2-01.test.mjs acceptance/phase2/p2-02.test.mjs acceptance/phase2/p2-03.test.mjs acceptance/phase2/p2-04.test.mjs acceptance/phase2/p2-05.test.mjs acceptance/phase2/p2-06.test.mjs acceptance/phase2/p2-07.test.mjs acceptance/phase2/p2-08.test.mjs acceptance/phase2/p2-09.test.mjs acceptance/phase2/p2-10.test.mjs acceptance/phase2/p2-11.test.mjs acceptance/phase2/p2-12.test.mjs acceptance/phase2/p2-13.test.mjs acceptance/phase2/p2-14.test.mjs acceptance/phase2/p2-15.test.mjs acceptance/phase2/p2-16.test.mjs",
+      "shardWeight": 14
     }
   ],
-  "ciParityOptOut": "PandaStack's CI runs this same full gate (autobuild check --phase full); a parity step would run the gate inside itself.",
+  "ciParityOptOut": "PandaStack's CI runs this same full gate as three shards (autobuild check --phase full --shard i/3), and its required `test` job passes only when all three pass; a parity step would run the gate inside itself.",
   "preflight": [
     {
       "name": "Node 24",

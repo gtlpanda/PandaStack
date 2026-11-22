@@ -4016,3 +4016,30 @@ Phase 2 acceptance: 97/97.
   but validated on gate entries only; they are now read from gate entries only (a runner with
   `shardable: true` still runs in exactly one shard; the test fails on the old code).
 - Nothing adopts it yet: this repo's CI and autobuild.json change in the next PR.
+
+## 69. CI runs the gate as three parallel shards (2026-11-21)
+
+- Before: one 4-vCPU CI job ran the whole gate. 16m29s-16m52s per PR earlier today; 6m29s with
+  the parallel workflow runner (retro 67), whose regression step took 321s.
+- What: autobuild.json lists scripts/test.sh's five suites as separate gate steps (the workflow
+  suite `shardable`, every other step a `shardWeight` from measured CI seconds), so the gate can
+  spread them. scripts/test.sh stays the one-command run that verify.sh uses; a new guard test
+  (tests/gate-suites-match-test-sh.test.mjs) fails if the two lists drift or a gate step runs
+  test.sh itself. scripts/test-workflow.mjs reads AUTOBUILD_SHARD and runs only that shard's
+  files (largest first to the lightest shard, by file size, so every shard computes the same
+  split). `parseShard` moved to graphs/autobuild/tool/lib/shard.mjs, shared by the gate and
+  the runner.
+- CI: a `shard` matrix of 3 jobs runs `check --phase full --shard i/3` (fail-fast off). The
+  required `test` job needs them, runs `if: always()`, and fails unless every shard's result is
+  success: a failed, cancelled or skipped shard fails it. ciParityOptOut's reason now says so.
+  The frozen ci-parity test that pinned "the `test` job runs check --phase full" now pins the
+  new shape (shard steps run `--shard`; `test` needs shard, runs always, checks success); it
+  fails against the old single-job workflow. Host amendments to frozen .github and
+  graphs/autobuild/tool.
+- Proof, local: shards 1/3, 2/3 and 3/3 of the workflow suite together ran the same 2081
+  per-file test names as one full run, 0 differences. The three sharded gate runs ran every
+  whole step exactly once and the workflow suite and CI-parity check in each.
+- Found while proving it: graphs/autobuild/tool/test/gate-schedule.test.mjs "gateConcurrency
+  through the real gate" asserts six 1 s steps finish under 4.5 s; it failed 1 of 6 autobuild
+  suite runs on main too (0 of 6 on this branch). Pre-existing, load sensitive; listed with the
+  other wall-clock budgets to fix.
