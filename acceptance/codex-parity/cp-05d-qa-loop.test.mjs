@@ -302,6 +302,21 @@ function treeSnapshot(dir) {
   walk(dir)
   return out
 }
+// Type, mode, inode, size, mtime and bytes of every entry: equal snapshots mean nothing under
+// dir was created, removed, rewritten or touched.
+function statSnapshot(dir) {
+  const out = {}
+  const walk = path => {
+    for (const name of readdirSync(path).sort()) {
+      const full = join(path, name), info = lstatSync(full)
+      out[relative(dir, full)] = { mode: info.mode, ino: info.ino, size: info.size, mtimeMs: info.mtimeMs,
+        sha: info.isFile() ? sha(readFileSync(full)) : null }
+      if (info.isDirectory()) walk(full)
+    }
+  }
+  walk(dir)
+  return out
+}
 const workTree = c => Object.fromEntries(Object.entries(treeSnapshot(c.repo)).filter(([name]) => name !== '.git' && !name.startsWith('.git/')))
 // HEAD, every ref, every staged entry and the work tree (case 12).
 function repoSnapshot(c) {
@@ -847,44 +862,96 @@ describe('CP-05d qa-loop (frozen acceptance; wiring proof on the fake codex)', (
   })
 
   // ========================================================= 9. already recorded
-  test('9. a recorded run whose inflight file is restored replays with zero spawns, removes the inflight file and reports recorded false', T, async () => {
-    const c = await makeCase()
-    const before = repoSnapshot(c)
-    const file = writeArgs(c)
-    const first = assertReport(c, await loop(c, file))
+  // The crash window of done-path step 5 and 6: the ledger holds the run, the inflight
+  // file is still there. Restores it, reruns, and asserts the replay never reaches the host.
+  // The host leaves marks on every run (it takes and releases the checkpoint lock, rewrites
+  // result.json), and the contract forbids rewriting the host args file, so an unchanged
+  // stat snapshot of native-runs proves no host process ran. A host spawn is not observable
+  // through PATH: qa-loop starts it by process.execPath, not through the node shim.
+  async function replayRecorded(c, file, first) {
     assert.equal(first.recorded, true)
     assert.equal(existsSync(c.inflight), false)
     const id = first.invocationId
     const stat = statSync(c.ledgerFile)
     const ledgerBytes = readFileSync(c.ledgerFile)
     const spawned = spawnCalls(c).length
+    const verified = verifyRuns(c).length
+    const statuses = gitCalls(c).filter(call => call.argv[0] === 'status').length
     const listing = () => readdirSync(c.ledgerDir).filter(name => name !== 'native-inflight.json').sort()
     const dirBefore = listing()
-    // The crash window: the ledger holds the run, the inflight file is still there. The
-    // verify verdict now differs, so a recomputed check could not match the stored one.
+    const runsBefore = statSnapshot(c.nativeRuns)
     writeFileSync(c.inflight, JSON.stringify({ schemaVersion: 1, invocationId: id, runDir: nativeRunDir(c, id) }) + '\n', { mode: 0o600 })
-    setVerifyMode(c, 'fail')
-    writeFileSync(join(c.repo, 'late.txt'), 'x\n')
     const second = assertReport(c, await loop(c, file))
     assert.equal(second.recorded, false)
     assert.equal(second.resumed, true)
     assert.equal(second.invocationId, id)
-    assert.equal(second.status, 'done')
-    assert.equal(second.graphStatus, 'done')
     assert.deepEqual({ ...second, resumed: true, recorded: true }, { ...first, resumed: true, recorded: true },
       'the report is built from the stored run, not recomputed')
-    assert.equal(spawnCalls(c).length, spawned, 'zero spawns on the replay')
+    assert.equal(spawnCalls(c).length, spawned, 'zero leaf spawns on the replay')
     assert.equal(pidsOf(c).length, spawned)
-    assert.equal(verifyRuns(c).length, 1, 'no check runs')
-    assert.equal(gitCalls(c).filter(call => call.argv[0] === 'status').length, 1, 'no second status check')
+    assert.deepEqual(statSnapshot(c.nativeRuns), runsBefore, 'the host ran, or a host args file was written, on the replay')
+    assert.equal(verifyRuns(c).length, verified, 'no verify run')
+    assert.equal(gitCalls(c).filter(call => call.argv[0] === 'status').length, statuses, 'no status check')
     const after = statSync(c.ledgerFile)
     assert.deepEqual(readFileSync(c.ledgerFile), ledgerBytes, 'the ledger was written again')
     assert.deepEqual([after.ino, after.mtimeMs], [stat.ino, stat.mtimeMs])
     assert.deepEqual(listing(), dirBefore, 'a file appeared next to the ledger')
     assert.equal(existsSync(c.inflight), false, 'the replay removes the inflight file (done path step 6)')
+    return second
+  }
+
+  test('9. a recorded done whose inflight file is restored reports recorded false with zero host, leaf and verify spawns, leaves the ledger bytes unchanged and removes the inflight file', T, async () => {
+    const c = await makeCase()
+    const before = repoSnapshot(c)
+    const file = writeArgs(c)
+    const first = assertReport(c, await loop(c, file))
+    // A recomputed check could not match the stored one: verify would now fail and the tree is dirty.
+    setVerifyMode(c, 'fail')
+    writeFileSync(join(c.repo, 'late.txt'), 'x\n')
+    const second = await replayRecorded(c, file, first)
+    assert.equal(second.status, 'done')
+    assert.equal(second.graphStatus, 'done')
     assert.equal((await ledgerOf(c)).ledger.runs.length, 1)
     // late.txt is this test's own addition after the repo snapshot.
     rmSync(join(c.repo, 'late.txt'))
+    assertInvariants(c, before)
+  })
+
+  test('9b. a recorded escalate whose stuckSig changed the ledger stuckSigs is replayed without the host (bughunt F1): no CONFLICT, exit 0, recorded false', T, async () => {
+    const c = await makeCase({ replies: { checker: wire(FAIL), fixer: wire(fixed([])), reviewer: wire(CLEAN), 'qa-auditor': wire(CLEAN) } })
+    const before = repoSnapshot(c)
+    const file = writeArgs(c, { maxFixRounds: 1 })
+    const first = assertReport(c, await loop(c, file))
+    assert.equal(first.status, 'escalate')
+    assert.equal(first.stuckSig, FAIL_SIG)
+    assert.deepEqual((await ledgerOf(c)).ledger.stuckSigs, [FAIL_SIG], 'the recorded run changed stuckSigs')
+    // From the ledger the workflow args are now {knownStuckSigs: [FAIL_SIG]}: a host rerun would bind
+    // another argsHash than the stored rows and be refused with CONFLICT.
+    assert.equal(rowFiles(nativeRunDir(c, first.invocationId)).length, 3)
+    const second = await replayRecorded(c, file, first)
+    assert.equal(second.status, 'escalate')
+    assert.equal(second.graphStatus, 'escalate')
+    assert.equal(second.stuckSig, FAIL_SIG)
+    assert.equal(second.fixRounds, 1)
+    assert.equal(second.checks, null)
+    assertLeaves(c, ['checker', 'fixer', 'checker'])
+    assert.equal(existsSync(c.verifyLog), false)
+    const { ledger } = await ledgerOf(c)
+    assert.equal(ledger.runs.length, 1)
+    assert.deepEqual(ledger.stuckSigs, [FAIL_SIG])
+    assertInvariants(c, before)
+  })
+
+  test('9c. a recorded downgrade replays with graphStatus from downgradedFrom and the stored checks', T, async () => {
+    const c = await makeCase()
+    setVerifyMode(c, 'fail')
+    const before = repoSnapshot(c)
+    const file = writeArgs(c)
+    const first = assertReport(c, await loop(c, file))
+    assert.deepEqual([first.status, first.graphStatus, first.reason], ['escalate', 'done', 'VERIFY_FAILED'])
+    const second = await replayRecorded(c, file, first)
+    assert.deepEqual([second.status, second.graphStatus, second.reason, second.stuckSig], ['escalate', 'done', 'VERIFY_FAILED', null])
+    assert.equal(second.checks.verify, 'FAIL')
     assertInvariants(c, before)
   })
 
