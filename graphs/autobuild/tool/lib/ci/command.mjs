@@ -228,12 +228,17 @@ async function apply({ root, flags, values, env, json }) {
 // ---------- ci analyze (spec/contracts/ci-optimizer-co-06.md) ----------
 
 /** CO-04 metrics over each workflow's newest `baselineRuns` stored attempts, or the no-history document. */
-function analysisMetrics(root, env, policy, records) {
+function analysisMetrics(root, env, policy) {
   const stored = readHistory(root, env);
   if (!stored) return noHistoryMetrics();
-  const doc = computeMetrics(stored.attempts, { rates: policy.ratesPerMinute, window: policy.baselineRuns });
-  doc.gate = records === null ? null : gateMetrics(records);
-  return doc;
+  return computeMetrics(stored.attempts, { rates: policy.ratesPerMinute, window: policy.baselineRuns });
+}
+
+/** `{ plan }` from CO-05, or null: it needs autobuild.json and a shard count from the profile; only then are timings read. */
+function analysisGate(config, profile) {
+  const shardCount = config ? shardCountFromProfile(profile) : null;
+  if (shardCount === null) return null;
+  return { plan: planShardWeights(config.gate, measuredSeconds(gateRecords(config)), shardCount) };
 }
 
 function findingLine(f) {
@@ -244,12 +249,8 @@ async function analyzeRepo({ root, env, json }) {
   const config = projectConfig(root, env);
   const policy = ciPolicy(config);
   const { profile } = await loadProfile(root, { env, config });
-  const records = config ? gateRecords(config) : null;
-  const metricsDoc = analysisMetrics(root, env, policy, records);
-  // The CO-05 plan needs autobuild.json and a shard count from the profile; otherwise no gate plan.
-  const shardCount = config ? shardCountFromProfile(profile) : null;
-  const gate = shardCount === null ? null : { plan: planShardWeights(config.gate, measuredSeconds(records), shardCount) };
-  const findings = analyze({ profile, metrics: metricsDoc, gate, config, policy });
+  const metricsDoc = analysisMetrics(root, env, policy);
+  const findings = analyze({ profile, metrics: metricsDoc, gate: analysisGate(config, profile), config, policy });
   const unknowns = [...new Set([...profile.unknowns, ...metricsDoc.unknowns])].sort();
   // A finding is not a failed check: analyze exits 0 whatever it finds.
   if (json) return { code: 0, json: { findings, unknowns } };

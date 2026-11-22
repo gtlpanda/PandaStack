@@ -46,8 +46,15 @@ test("a multi-line run fires once per step, names every flag, and keeps evidence
   const hits = serialHits("echo start\nnpx jest --runInBand\ngo test -p 1 ./...");
   assert.equal(hits.length, 1);
   assert.match(hits[0].summary, /--runInBand, go test -p 1/);
-  assert.deepEqual(hits[0].evidence, ["step 1: echo start"]);
+  assert.deepEqual(hits[0].evidence, ["step 1: npx jest --runInBand"], "the evidence quotes the first line that matched");
   assert.ok(!hits[0].summary.includes("\n"));
+});
+
+test("missing-dependency-cache evidence quotes the install line, not the step's first line", () => {
+  const build = job("build", [step("install", { index: 2, run: "echo deps\nnpm ci --no-audit" })]);
+  const [hit] = run({ profile: profileOf({ workflows: [workflow([build])] }) });
+  assert.equal(hit.rule, "missing-dependency-cache");
+  assert.deepEqual(hit.evidence, ["step 2: npm ci --no-audit"]);
 });
 
 test("pytest workers: -n, --numprocesses and -nauto count; --no-header does not", () => {
@@ -57,15 +64,21 @@ test("pytest workers: -n, --numprocesses and -nauto count; --no-header does not"
   assert.equal(serialHits("pytest --no-header -q", xdist).length, 1);
 });
 
-test("two frameworks reading one test script give one finding, targeted at the root manifest", () => {
+test("two frameworks reading one test script give one finding; the evidence names flags, not the manifest's text", () => {
   const frameworks = [
-    { name: "jest", command: "jest --runInBand", parallel: "workers", evidence: ["a/package.json", "package.json"] },
-    { name: "vitest", command: "jest --runInBand", parallel: "threads", evidence: ["a/package.json", "package.json"] },
+    { name: "jest", command: "jest --runInBand --silent", parallel: "workers", evidence: ["package.json"] },
+    { name: "vitest", command: "jest --runInBand --silent", parallel: "threads", evidence: ["package.json"] },
   ];
   const hits = run({ profile: profileOf({ frameworks }) });
   assert.equal(hits.length, 1);
-  assert.equal(hits[0].target, "package.json", "the root is scanned first, so the command came from it");
+  assert.equal(hits[0].target, "package.json");
   assert.equal(hits[0].job, null);
+  assert.deepEqual(hits[0].evidence, ["package.json test command: --runInBand"]);
+});
+
+test("a framework declared in several manifests is not attributed to any of them", () => {
+  const frameworks = [{ name: "jest", command: "jest --runInBand", parallel: "workers", evidence: ["a/package.json", "package.json"] }];
+  assert.deepEqual(run({ profile: profileOf({ frameworks }) }), [], "the profile does not say which manifest gave the command");
 });
 
 test("a framework without a command or evidence gives nothing", () => {
@@ -164,17 +177,39 @@ jobs:
       - run: node cli.mjs check --shard "\${{ matrix.shard }}/3"
 `;
 
-test("ci analyze human output counts the apply finding in its summary line", (t) => {
+const GATE = [{ name: "a", command: "true", shardWeight: 10 }, { name: "b", command: "true", shardWeight: 1 }, { name: "c", command: "true", shardWeight: 1 }, { name: "d", command: "true", shardWeight: 1 }];
+
+/** A git repo holding `files` (strings written as given). */
+function gitRepo(t, files) {
   const repo = tempDir(t, "ci-analyze-");
-  const gate = [{ name: "a", command: "true", shardWeight: 10 }, { name: "b", command: "true", shardWeight: 1 }, { name: "c", command: "true", shardWeight: 1 }, { name: "d", command: "true", shardWeight: 1 }];
-  const record = { at: "2026-11-22T10:00:00.000Z", type: "gate", phase: "full", ok: true, wallSeconds: 200, steps: [{ name: "a", seconds: 5 }, { name: "b", seconds: 60 }, { name: "c", seconds: 50 }, { name: "d", seconds: 40 }] };
-  const files = { ".gitignore": "logs/\n", "autobuild.json": `${JSON.stringify({ gate })}\n`, ".github/workflows/test.yml": SHARDED_WORKFLOW, "logs/gate-timings.jsonl": `${JSON.stringify(record)}\n` };
   for (const [rel, text] of Object.entries(files)) {
     mkdirSync(path.dirname(path.join(repo, rel)), { recursive: true });
     writeFileSync(path.join(repo, rel), text);
   }
   assert.equal(spawnSync("git", ["init", "-q"], { cwd: repo, env: { ...process.env, ...GIT_ENV } }).status, 0);
-  const r = spawnSync(process.execPath, [CLI, "ci", "analyze"], { cwd: repo, encoding: "utf8", env: { ...process.env, ...GIT_ENV, AUTOBUILD_STATE_HOME: tempDir(t, "ci-analyze-state-") }, timeout: 120_000 });
+  return repo;
+}
+
+const analyzeCli = (t, repo, args = []) => spawnSync(process.execPath, [CLI, "ci", "analyze", ...args], { cwd: repo, encoding: "utf8", env: { ...process.env, ...GIT_ENV, AUTOBUILD_STATE_HOME: tempDir(t, "ci-analyze-state-") }, timeout: 120_000 });
+
+test("ci analyze reads gate timings only when a shard count is known", (t) => {
+  const base = { ".gitignore": "logs/\n", "autobuild.json": `${JSON.stringify({ gate: GATE })}\n` };
+  // A directory where the timings file belongs cannot be read.
+  const unsharded = gitRepo(t, base);
+  mkdirSync(path.join(unsharded, "logs", "gate-timings.jsonl"), { recursive: true });
+  const quiet = analyzeCli(t, unsharded, ["--json"]);
+  assert.equal(quiet.status, 0, `no shard count, so the unreadable timings are never read: ${quiet.stderr}`);
+  const sharded = gitRepo(t, { ...base, ".github/workflows/test.yml": SHARDED_WORKFLOW });
+  mkdirSync(path.join(sharded, "logs", "gate-timings.jsonl"), { recursive: true });
+  const failed = analyzeCli(t, sharded, ["--json"]);
+  assert.equal(failed.status, 3, "with a shard count the plan needs the timings");
+  assert.equal(JSON.parse(failed.stdout).error, "TIMINGS_UNREADABLE");
+});
+
+test("ci analyze human output counts the apply finding in its summary line", (t) => {
+  const record = { at: "2026-11-22T10:00:00.000Z", type: "gate", phase: "full", ok: true, wallSeconds: 200, steps: [{ name: "a", seconds: 5 }, { name: "b", seconds: 60 }, { name: "c", seconds: 50 }, { name: "d", seconds: 40 }] };
+  const repo = gitRepo(t, { ".gitignore": "logs/\n", "autobuild.json": `${JSON.stringify({ gate: GATE })}\n`, ".github/workflows/test.yml": SHARDED_WORKFLOW, "logs/gate-timings.jsonl": `${JSON.stringify(record)}\n` });
+  const r = analyzeCli(t, repo);
   assert.equal(r.status, 0, r.stderr);
   const lines = r.stdout.trim().split("\n");
   assert.match(lines[0], /^\[low\/apply\] gate-shard-weights autobuild\.json: /);

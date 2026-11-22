@@ -16,7 +16,8 @@ const list = (value) => (Array.isArray(value) ? value : []);
 const isNumber = (value) => typeof value === "number" && Number.isFinite(value);
 /** One line of text: control characters (newlines included) become spaces, so a human line stays one line. */
 const oneLine = (text) => String(text).replace(/[\x00-\x1f\x7f]+/g, " ").trim();
-const firstLine = (text) => oneLine(String(text).split("\n").find((line) => line.trim() !== "") ?? "");
+/** The first line of `text` that `pattern` matches, on one line (the evidence quotes only that line). */
+const matchingLine = (text, pattern) => oneLine(String(text).split("\n").find((line) => pattern.test(line)) ?? "");
 
 function finding({ rule, risk, action = "propose", target, job = null, summary, evidence = [], estimatedSavingSeconds = null }) {
   return { rule, risk, action, target, job, summary, evidence, estimatedSavingSeconds };
@@ -37,14 +38,20 @@ const SERIAL_FLAGS = [
 const PYTEST = /\bpytest\b/;
 const PYTEST_WORKERS = /(^|\s)(-n|--numprocesses)/;
 
-/** The serial flags `command` uses, one entry per flag; `xdist` says whether pytest-xdist is declared. */
+/**
+ * `{ flags, line }`: the serial flags `command` uses (one entry per flag) and the first line that
+ * uses one, else null. `xdist` says whether pytest-xdist is declared.
+ */
 function serialFlags(command, xdist) {
   const found = new Set();
+  let first = null;
   for (const line of String(command).split("\n")) {
+    const before = found.size;
     for (const [flag, matches] of SERIAL_FLAGS) if (matches(line)) found.add(flag);
     if (xdist && PYTEST.test(line) && !PYTEST_WORKERS.test(line)) found.add("pytest without -n");
+    if (first === null && found.size > before) first = oneLine(line);
   }
-  return [...found];
+  return { flags: [...found], line: first };
 }
 
 const SERIAL_ADVICE = "let the test runner use its parallel workers, or shard the tests";
@@ -54,12 +61,12 @@ function serialStepFindings(model, xdist) {
   for (const job of list(model.jobs)) {
     for (const step of list(job.steps)) {
       if (step?.kind !== "test" || typeof step.run !== "string") continue;
-      const flags = serialFlags(step.run, xdist);
+      const { flags, line } = serialFlags(step.run, xdist);
       if (!flags.length) continue;
       findings.push(finding({
         rule: "serial-test-runner", risk: "low", target: model.file, job: job.id,
         summary: `job ${job.id} runs its tests serially (${flags.join(", ")}); ${SERIAL_ADVICE}`,
-        evidence: [`step ${step.index}: ${firstLine(step.run)}`],
+        evidence: [`step ${step.index}: ${line}`],
       }));
     }
   }
@@ -67,16 +74,19 @@ function serialStepFindings(model, xdist) {
 }
 
 /**
- * The manifest a framework command came from: its first evidence file in discovery's scan order
- * (the root before child directories, then by path), which is where discovery took the command.
+ * The manifest a framework command came from: its only evidence file. A framework declared in
+ * several manifests merges their evidence, and the profile does not say which one gave the
+ * command, so it has no manifest (null) and its command is not attributed to any file.
  */
 function manifestOf(framework) {
-  const depth = (file) => file.split("/").length;
   const files = list(framework.evidence).filter((file) => typeof file === "string");
-  return [...files].sort((a, b) => depth(a) - depth(b) || (a < b ? -1 : a > b ? 1 : 0))[0] ?? null;
+  return files.length === 1 ? files[0] : null;
 }
 
-/** One finding per (manifest, command): two frameworks reading one `scripts.test` give one finding. */
+/**
+ * One finding per (manifest, command): two frameworks reading one `scripts.test` give one
+ * finding. The evidence names the flags, never the manifest's text (it is not a CI file).
+ */
 function serialFrameworkFindings(frameworks, xdist) {
   const seen = new Set();
   const findings = [];
@@ -85,13 +95,13 @@ function serialFrameworkFindings(frameworks, xdist) {
     const target = manifestOf(framework);
     if (target === null) continue;
     const key = JSON.stringify([target, framework.command]);
-    const flags = serialFlags(framework.command, xdist);
+    const { flags } = serialFlags(framework.command, xdist);
     if (!flags.length || seen.has(key)) continue;
     seen.add(key);
     findings.push(finding({
       rule: "serial-test-runner", risk: "low", target, job: null,
       summary: `the ${framework.name} test command in ${target} runs tests serially (${flags.join(", ")}); ${SERIAL_ADVICE}`,
-      evidence: [`${target}: ${firstLine(framework.command)}`],
+      evidence: flags.map((flag) => `${target} test command: ${flag}`),
     }));
   }
   return findings;
@@ -127,7 +137,7 @@ function missingWorkflowCache(model) {
     .map((job) => finding({
       rule: "missing-dependency-cache", risk: "low", target: model.file, job: job.id,
       summary: `job ${job.id} installs dependencies without a cache; enable the setup action's cache or add actions/cache keyed on the lockfile`,
-      evidence: list(job.steps).filter((step) => step?.kind === "install").map((step) => `step ${step.index}: ${firstLine(step.run)}`),
+      evidence: list(job.steps).filter((step) => step?.kind === "install").map((step) => `step ${step.index}: ${matchingLine(step.run, INSTALL_COMMAND)}`),
     }));
 }
 
@@ -231,7 +241,7 @@ function gitlabFindings(pipeline) {
     .map((job) => finding({
       rule: "missing-dependency-cache", risk: "low", target: pipeline.file, job: job.id,
       summary: `job ${job.id} installs dependencies without a cache; add a cache keyed on the lockfile`,
-      evidence: list(job.script).filter((line) => INSTALL_COMMAND.test(line)).map((line) => `script: ${firstLine(line)}`),
+      evidence: list(job.script).filter((line) => INSTALL_COMMAND.test(line)).map((line) => `script: ${matchingLine(line, INSTALL_COMMAND)}`),
     }));
 }
 
