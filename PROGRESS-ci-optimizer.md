@@ -614,16 +614,27 @@ Focused validation:
   - no `autobuild.json`, outside git, and an unknown flag.
 - Tripwires:
   - Shared `loop.mjs`, `cli.mjs` and `command.mjs`: `loop*.test.mjs`, `pr-first-loop`,
-    `status-shard-skip` and `entrypoint`, 62/62 pass (`logs/evidence/co-09-tripwires.log`).
-  - All 10 `ci-*.test.mjs` plus CO-01..09 acceptance: 321/321 pass
-    (`logs/evidence/co-09-ci-tripwires.log`).
+    `status-shard-skip` and `entrypoint`, 42/42 pass (`logs/evidence/co-09-tripwires.log`).
+  - Nine `ci-*.test.mjs` files (`analyze`, `apply`, `baseline`, `discover`, `gitlab`,
+    `history`, `metrics`, `validate`, `parity`), the new `ci-triggers` and CO-01..09
+    acceptance: 321/321 pass (`logs/evidence/co-09-ci-tripwires.log`).
+  - The other tool tests that drive `run` or `status`: `bughunt*` (5 files), `codex`,
+    `codex-missing-progress-entry`, `limit-wait-cap`, `provider-status`, `provider-lock`,
+    `pr-first-gate`, `stop-gate-*` (2 files), `ci-parity-host-without-timeout`, `git-control`
+    and `evidence`. 71/71 pass (`logs/evidence/co-09-tripwires-2.log`).
+  - Frozen acceptance that drives the loop: `p1-04`, `p1-12`, `p1-13` and `p2-04`, 49/49 pass
+    (`logs/evidence/co-09-tripwires-3.log`).
   - `tests/decision-launch.test.mjs`: 20/20 subtests pass.
+  - Not run here: the security-audit acceptance files that drive the loop
+    (`provider-refusal`, `review-baseline-correction`), the codex-parity ones and
+    `p1-09-hooks`. They are left to the PR's full regressions.
   - These ran through `logs/evidence/co-09-run-clean.mjs`, which removes the outer
     session's `AUTOBUILD_DELIVERY_MODE=pr-first` and sets a private `AUTOBUILD_STATE_HOME`.
-    The first loop run inherited `pr-first` from this session's environment and failed
-    exit-code assertions (for example `1 !== 6`, with `PR-FIRST:` lines in the log). The
-    same code with the variable removed passed all 62. So the variable caused those
-    failures, not this change.
+    - Observed: the first loop/status run, with `pr-first` inherited from this session's
+      environment, failed exit-code assertions (for example `1 !== 6`, with `PR-FIRST:`
+      lines in the log). The same code with only that variable removed passed 42/42.
+    - Untested hypothesis: the parent commit fails the same way with the variable set. It
+      was not run at the parent commit.
 - `bash scripts/check-secrets.sh` (tracked files), and the same script run on
   `lib/ci/triggers.mjs` and `test/ci-triggers.test.mjs`: clean.
 
