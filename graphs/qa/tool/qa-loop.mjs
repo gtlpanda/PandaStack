@@ -37,6 +37,7 @@ const WORKFLOW_ID = 'harness-repair'
 const OFFERING_ID = 'dev'
 const INFLIGHT_NAME = 'native-inflight.json'
 const LOCK_NAME = 'native-loop.lock'
+const LOCK_BREAK_NAME = 'native-loop.lock.break'
 const RUNS_DIR_NAME = 'native-runs'
 const RESULT_NAME = 'result.json'
 
@@ -322,46 +323,55 @@ function loopBusy(pid) {
   throw refusal
 }
 
-// Takes a stale lock out of the way: rename it aside, and remove it only when the moved
-// bytes are the ones judged stale. If another process took the lock over in between,
-// its lock is linked back; a third process holding the name by then is IO_ERROR, and
-// the moved file stays for an operator.
-function setStaleLockAside(lockFile, staleBytes) {
-  const aside = `${lockFile}.stale-${process.pid}-${randomBytes(4).toString('hex')}`
-  try { renameSync(lockFile, aside) } catch (error) {
-    if (error?.code === 'ENOENT') return
+// This process's bytes for a lock file: a fresh token each time.
+const ownLockBytes = () =>
+  Buffer.from(JSON.stringify({ schemaVersion: 1, pid: process.pid, token: randomBytes(8).toString('hex') }) + '\n', 'utf8')
+
+// Removes a stale lock without ever moving or hiding a live one (bughunt F2). Only the
+// holder of the break lock removes a stale loop lock, and a lock that exists cannot be
+// replaced (every publish is an exclusive link), so the bytes re-read under the break
+// lock cannot change before the unlink. A live process holding the break lock is about
+// to take the loop lock: refused as busy. A dead one left its break lock mid-takeover:
+// IO_ERROR, for an operator to remove it.
+function removeStaleLock(paths, staleBytes) {
+  const mine = ownLockBytes()
+  if (!linkExclusive(paths.lockBreak, mine)) {
+    const breaker = readLockBytes(paths.lockBreak)
+    if (breaker === undefined) return
+    const pid = liveLockOwner(breaker)
+    if (pid !== null) loopBusy(pid)
     fail(3, 'IO_ERROR')
   }
-  const moved = readLockBytes(aside)
-  if (moved !== undefined && moved.equals(staleBytes)) {
-    removeFile(aside)
-    return
+  try {
+    const again = readLockBytes(paths.lock)
+    if (again !== undefined && again.equals(staleBytes) && liveLockOwner(again) === null) removeFile(paths.lock)
+  } finally {
+    releaseOwnFile(paths.lockBreak, mine)
   }
-  try { linkSync(aside, lockFile) } catch { fail(3, 'IO_ERROR') }
-  removeFile(aside)
 }
 
 // Step 2a. Returns this process's lock bytes, for the release.
-function acquireLoopLock(lockFile) {
-  const mine = Buffer.from(JSON.stringify({ schemaVersion: 1, pid: process.pid, token: randomBytes(8).toString('hex') }) + '\n', 'utf8')
+function acquireLoopLock(paths) {
+  const mine = ownLockBytes()
   for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt++) {
-    if (linkExclusive(lockFile, mine)) return mine
-    const seen = readLockBytes(lockFile)
+    if (linkExclusive(paths.lock, mine)) return mine
+    const seen = readLockBytes(paths.lock)
     if (seen === undefined) continue
     const owner = liveLockOwner(seen)
     if (owner !== null) loopBusy(owner)
-    setStaleLockAside(lockFile, seen)
+    removeStaleLock(paths, seen)
   }
   return fail(3, 'IO_ERROR')
 }
 
-// Removes the lock only while it still holds this process's bytes. Best effort: a
-// failure here must not replace the iteration's own outcome, and a lock left behind
-// names this (soon dead) pid, so the next iteration takes it over.
-function releaseLoopLock(lockFile, mine) {
+// Removes `file` only while it still holds this process's bytes. Best effort: a failure
+// here must not replace the iteration's own outcome, and a file left behind names this
+// (soon dead) pid. No other process removes a live owner's file, so the bytes cannot
+// change between the read and the unlink.
+function releaseOwnFile(file, mine) {
   try {
-    const seen = readLockBytes(lockFile)
-    if (seen !== undefined && seen.equals(mine)) unlinkSync(lockFile)
+    const seen = readLockBytes(file)
+    if (seen !== undefined && seen.equals(mine)) unlinkSync(file)
   } catch { /* see above */ }
 }
 
@@ -631,13 +641,13 @@ function iterate(argv) {
   const input = loopInput(readArgsFile(argsFilePath(argv)))
   const { toplevel, ledgerDir } = locateRepository(input)
   const paths = { ledgerDir, ledgerFile: join(ledgerDir, LEDGER_FILE_NAME), inflight: join(ledgerDir, INFLIGHT_NAME),
-    runsDir: join(ledgerDir, RUNS_DIR_NAME), lock: join(ledgerDir, LOCK_NAME) }
+    runsDir: join(ledgerDir, RUNS_DIR_NAME), lock: join(ledgerDir, LOCK_NAME), lockBreak: join(ledgerDir, LOCK_BREAK_NAME) }
   ensurePrivateDirectory(paths.ledgerDir)
-  const mine = acquireLoopLock(paths.lock)
+  const mine = acquireLoopLock(paths)
   try {
     return iterateLocked(input, toplevel, paths)
   } finally {
-    releaseLoopLock(paths.lock, mine)
+    releaseOwnFile(paths.lock, mine)
   }
 }
 
