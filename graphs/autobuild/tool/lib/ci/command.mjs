@@ -9,6 +9,7 @@ import path from "node:path";
 import { CONFIG_FILE, findProjectRoot } from "../config.mjs";
 import { SAFE_GIT } from "../proc.mjs";
 import { analyze } from "./analyze.mjs";
+import { captureBaseline, compareBaselines, detectRegression, INSUFFICIENT_DATA, isBaselineDocument } from "./baseline.mjs";
 import { applyShardWeights, configIsCommitted, describeChange, measuredSeconds, planShardWeights, shardCountFromProfile } from "./apply.mjs";
 import { loadProfile, projectConfig } from "./discover.mjs";
 import { readTimings, TIMINGS_FILE } from "../gate-timings.mjs";
@@ -16,7 +17,7 @@ import { attemptKey, fetchGithubHistory, githubRepo, importedAttempts, isGithubR
 import { computeMetrics, gateMetrics, noHistoryMetrics } from "./metrics.mjs";
 import { wholeNumberOf } from "./patterns.mjs";
 import { ciPolicy } from "./policy.mjs";
-import { CiError, readState, STATE_SCHEMA_VERSION } from "./state.mjs";
+import { CiError, readState, STATE_SCHEMA_VERSION, writeState } from "./state.mjs";
 import { changedFiles, planValidation, recordValidation, resolveBase, TIERS, treeState } from "./validate.mjs";
 import { gateStepLines, runGate } from "../gate.mjs";
 
@@ -301,6 +302,108 @@ async function validate({ root, flags, values, env, json }) {
   return { code, lines: [validationHeader(plan, base, changed), ...gateStepLines(gate), validationVerdict(plan, gate.ok)] };
 }
 
+// ---------- ci baseline and ci compare (spec/contracts/ci-optimizer-co-08.md) ----------
+
+/** HEAD's sha in `root`, or null in a repository without commits. */
+function headSha(root, env) {
+  const result = spawnSync("git", [...SAFE_GIT, "rev-parse", "--verify", "--quiet", "HEAD"], { cwd: root, env, encoding: "utf8" });
+  const sha = result.status === 0 ? result.stdout.trim() : "";
+  return /^[0-9a-f]{40,64}$/.test(sha) ? sha : null;
+}
+
+const signed = (value, unit) => (value === null ? "unknown" : `${value > 0 ? "+" : ""}${value}${unit}`);
+const REGRESSION_WORDS = { ok: "ok", regressed: "REGRESSED", [INSUFFICIENT_DATA]: "insufficient data" };
+
+function regressionLines(regression) {
+  if (!regression.workflows.length) return ["baseline: the stored baseline has no workflows"];
+  const lines = [];
+  for (const w of regression.workflows) {
+    lines.push(`${w.workflow}: baseline p50 ${sec(w.baselineP50)}, recent p50 ${sec(w.recentP50)} (${signed(w.deltaPercent, "%")}) ${REGRESSION_WORDS[w.status]}${w.overTarget ? ", over target" : ""}`);
+  }
+  // A workflow that makes the top level regressed (slower past the limit, or over target) gets its steps and the advice.
+  for (const w of regression.workflows.filter((x) => x.status === "regressed" || x.overTarget === true)) {
+    lines.push(`${w.workflow}: top slower steps`);
+    if (!w.topSteps.length) lines.push("  none measured on both sides");
+    for (const s of w.topSteps) lines.push(`  ${s.job} / ${s.step}: ${s.baselineP50}s → ${s.recentP50}s (${signed(s.deltaSeconds, "s")})`);
+    lines.push("  run: autobuild ci analyze");
+  }
+  return lines;
+}
+
+async function captureCurrentBaseline({ root, env, json }) {
+  const config = projectConfig(root, env);
+  const stored = readHistory(root, env);
+  // Checked before discovery, so a refused capture writes nothing.
+  if (!stored) throw new CiError("NO_HISTORY", "no stored CI history; run `autobuild ci history --from-gh` or `--import FILE` first", 2);
+  const { profile } = await loadProfile(root, { env, config });
+  const head = headSha(root, env);
+  const doc = captureBaseline({
+    attempts: stored.attempts,
+    profile,
+    timings: config ? gateRecords(config) : [],
+    policy: ciPolicy(config),
+    head,
+    at: new Date().toISOString(),
+  });
+  writeState(root, "baseline", doc, env);
+  if (json) return { code: 0, json: doc };
+  return { code: 0, lines: [`baseline: captured at ${head === null ? "no commit" : head.slice(0, 12)}, ${doc.workflows.length} workflows`] };
+}
+
+async function baseline(context) {
+  const { root, flags, env, json } = context;
+  if (flags.has("--capture")) {
+    if (flags.has("--fail-on-regression")) throw usageError("--fail-on-regression cannot be combined with --capture");
+    return captureCurrentBaseline(context);
+  }
+  const stored = readState(root, "baseline", env);
+  if (!isBaselineDocument(stored)) throw new CiError("NO_BASELINE", "no stored baseline; run `autobuild ci baseline --capture` first", 2);
+  const policy = ciPolicy(projectConfig(root, env));
+  const attempts = readHistory(root, env)?.attempts ?? [];
+  const regression = detectRegression({ baseline: stored, attempts, policy });
+  const code = flags.has("--fail-on-regression") && regression.regressed ? 1 : 0;
+  if (json) return { code, json: { baseline: stored, regression } };
+  return { code, lines: regressionLines(regression) };
+}
+
+/** The baseline document in `given` (resolved against cwd); missing, unreadable or invalid is BASELINE_INVALID (exit 2). */
+function readBaselineFile(given, cwd) {
+  let text;
+  try {
+    text = readFileSync(path.resolve(cwd, given), "utf8");
+  } catch (error) {
+    throw new CiError("BASELINE_INVALID", `cannot read ${given}: ${error.code ?? error.message}`, 2);
+  }
+  let doc;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    // The parser's message quotes the file's text; the error names only the file.
+    throw new CiError("BASELINE_INVALID", `${given} is not valid JSON`, 2);
+  }
+  if (!isBaselineDocument(doc)) throw new CiError("BASELINE_INVALID", `${given} is not a baseline document`, 2);
+  return doc;
+}
+
+function compareLines(result) {
+  const lines = result.workflows.map((w) => `${w.workflow}: before p50 ${sec(w.before)}, after p50 ${sec(w.after)} (${signed(w.deltaSeconds, "s")}, ${signed(w.deltaPercent, "%")})`);
+  const removed = Object.values(result.removed).flat();
+  const added = Object.values(result.added).flat();
+  if (added.length) lines.push(`added: ${added.join(", ")}`);
+  lines.push(result.preserved ? "checks preserved: yes" : `checks preserved: NO (${removed.join(", ")})`);
+  return lines;
+}
+
+async function compare({ cwd, values, json }) {
+  for (const flag of ["--before", "--after"]) {
+    if (!values.has(flag)) throw usageError(`ci compare needs ${flag} FILE`);
+  }
+  const result = compareBaselines(readBaselineFile(values.get("--before"), cwd), readBaselineFile(values.get("--after"), cwd));
+  const code = result.preserved ? 0 : 1;
+  if (json) return { code, json: result };
+  return { code, lines: compareLines(result) };
+}
+
 // `flags` are booleans; each of `values` takes the next argument.
 const SUBCOMMANDS = {
   discover: { flags: ["--refresh", "--json"], values: [], run: discover },
@@ -309,6 +412,8 @@ const SUBCOMMANDS = {
   apply: { flags: ["--dry-run", "--json"], values: ["--shards"], run: apply },
   analyze: { flags: ["--json"], values: [], run: analyzeRepo },
   validate: { flags: ["--fail-fast", "--json"], values: ["--tier", "--base"], run: validate },
+  baseline: { flags: ["--capture", "--fail-on-regression", "--json"], values: [], run: baseline },
+  compare: { flags: ["--json"], values: ["--before", "--after"], run: compare },
 };
 const USAGE = `usage: autobuild ci <${Object.keys(SUBCOMMANDS).join("|")}> [flags] [--json]`;
 

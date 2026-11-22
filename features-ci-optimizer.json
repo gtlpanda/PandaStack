@@ -128,7 +128,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-08-baseline.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-09",

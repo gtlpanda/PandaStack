@@ -463,3 +463,73 @@ Focused validation:
   differ there. This is the existing `changedSince` behavior, unchanged in this feature.
 
 Still pending for the PR: the full regressions, review and the bug hunt.
+
+## CO-08 — Baseline, compare and regression
+
+Built (Claude backend, iteration 8):
+- `lib/ci/baseline.mjs` (new) exports `captureBaseline`, `detectRegression`,
+  `compareBaselines`, `round1`, plus `stepIdentity`, `isBaselineDocument` and
+  `INSUFFICIENT_DATA`.
+  - Workflow figures are projections of `computeMetrics` (window `baselineRuns` for capture,
+    `recentRuns` for regression). Gate figures are projections of `gateMetrics`. Nothing in
+    metrics is restated.
+  - `checks` lists every GitHub job (`<file>#<id>`) and every parsed GitLab job
+    (`<pipeline.file>#<id>`). `testSteps` lists kind-`test` GitHub steps by identity, and
+    GitLab `test: true` jobs as `#script`. `gateSteps` comes from `profile.gate.steps`, in
+    config order.
+- `lib/ci/command.mjs` adds `autobuild ci baseline [--capture] [--fail-on-regression] [--json]`
+  and `autobuild ci compare --before FILE --after FILE [--json]`. `cli.mjs` gains two help
+  lines.
+
+Decisions (unattended, recorded here):
+- Step identity is the name, else `uses`, else the first non-blank line of `run`, trimmed. A
+  step with none of these has no identity and is left out. A kind-`test` step always has a
+  `run`, so such a step is never a test step.
+- The identity lists keep duplicates (sorted). `removed`/`added` are counted differences, so
+  dropping one of two identically named test steps in a job is a removal, never "preserved".
+- `insufficient-data` also covers:
+  - a baseline workflow that is missing from the recent history;
+  - a recent window whose timing attempts have no wall (no `updatedAt`).
+- `topSteps` ties on `deltaSeconds` are broken by job, then step, in text order.
+- `round1` turns `-0` into `0`.
+- Human `baseline` output:
+  - A null figure prints as `unknown`. The insufficient-data line is therefore
+    `<wf>: baseline p50 unknown, recent p50 unknown (unknown) insufficient data`.
+  - Top steps and the `run: autobuild ci analyze` advice follow every workflow that makes the
+    top level regressed: status `regressed`, or over target alone.
+  - A baseline with no workflows prints one line saying so.
+- `baseline` with no stored history compares against no attempts, so every workflow is
+  `insufficient-data`.
+- `baseline --capture --fail-on-regression` is a `USAGE` error (exit 2).
+- `--capture` checks `NO_HISTORY` before discovery, so a refused capture writes nothing (not
+  even `profile.json`).
+- A repository without commits captures `head: null` and prints `captured at no commit`.
+- A stored `baseline.json` that is not a baseline document reads as absent (`NO_BASELINE`).
+- `compare`:
+  - A missing `--before` or `--after` is `USAGE`.
+  - A missing, unreadable, non-JSON or wrongly shaped file is `BASELINE_INVALID` (exit 2). The
+    message names the file but never quotes its contents.
+  - Workflows are the union of both sides, sorted by name, with `null` deltas when either side
+    lacks a wall. `deltaPercent` is `null` when `before` is 0.
+  - Human output: one line per workflow, `added: ...` when anything was added, then the
+    `checks preserved:` line.
+
+Focused validation:
+- `node --test acceptance/ci-optimizer/co-08-baseline.test.mjs`: 14/14 pass (run directly; the
+  harness showed no error, so it exited 0).
+- `node --test graphs/autobuild/tool/test/ci-baseline.test.mjs`: 13/13 pass. These are new
+  implementation tests, offline, with private `AUTOBUILD_STATE_HOME` directories. They cover
+  identity, GitLab, counted removals, one-sided workflows, `-0`, a missing recent workflow or
+  wall, document shape, and the CLI refusals (usage, `NO_HISTORY` writing nothing, corrupt
+  baseline, linked state `STATE_UNSAFE`, no `autobuild.json`, compare output).
+  - One expectation of mine was wrong on the first run: I had expected the insufficient-data
+    line to print the baseline wall, but the contract sets it to null. The test was corrected
+    to match the contract.
+- Tripwires for the shared `command.mjs` and `cli.mjs`: `node --test --test-reporter=dot
+  graphs/autobuild/tool/test/ci-*.test.mjs graphs/autobuild/tool/test/entrypoint.test.mjs
+  acceptance/ci-optimizer/co-0[1-8]-*.test.mjs` gives 342 tests with no failures.
+- `bash scripts/check-secrets.sh` (tracked files), and the same script run on
+  `lib/ci/baseline.mjs` and `test/ci-baseline.test.mjs`: clean.
+- `autobuild mark-passed CO-08`: PASS (`=== node (1 file): PASS`).
+
+Still pending for the PR: the full regressions, review and the bug hunt.
