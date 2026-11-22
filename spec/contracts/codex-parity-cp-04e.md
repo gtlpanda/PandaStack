@@ -84,8 +84,10 @@ before `## When to ask` (the bughunt SKILL.md has the same section). It says:
    added, and never a secret.
 6. **Outputs.** A stage prints `{status, file, invocationId, redacted}`; the session
    reads the questions, design or backlog from that file in the state directory, already
-   redacted. Exit 1 is bad input, 2 a refusal, 3 a failure, 4 a busy run directory;
-   stderr is one `{"error"}` line, which the session reports before it stops. A refused or
+   redacted. Exit 1 is bad input, 2 a refusal, 3 a failure; exit 4 is a busy run
+   directory from a stage (CP-04c) or, from `approve`, a repository that needs a person
+   because a rollback step failed (CP-04d). stderr is one `{"error"}` line (CP-04b's id
+   errors add `ids`), which the session reports before it stops. A refused or
    failed stage is never retried with another provider.
 7. **Approval.** `approve` runs only after the human chose `Approve` on the report
    `show` printed, with that report's hash (W2-7). It creates `integration/<app>` and
