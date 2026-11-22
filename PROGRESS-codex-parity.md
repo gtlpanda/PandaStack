@@ -2051,3 +2051,99 @@ Observed limits and untested hypotheses:
 - macOS was not run.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-04c — Blueprint stage CLI on the native runtime
+
+Implemented spec/contracts/codex-parity-cp-04c.md only:
+
+- New `graphs/blueprint/skills/blueprint/blueprint-native.mjs`, run as
+  `<verb> --args-file <absolute path>` with the verbs start, interview, answer, design,
+  gate, backlog and edit. It exports nothing, and it runs as the CLI only when
+  `realpathSync(process.argv[1])` is this file.
+  - It imports only `node:` built-ins and the contract's pinned names. From core, those are
+    `runGraphHost` (graph host) and `createCodexProvider` (provider), both static.
+  - Before any git call, it checks argv, `readArgsFile` and the key rules: the CP-02e path
+    rule, env as a plain object of strings, and timeoutMs from 1001 to 86400000.
+  - Then it runs `git -C <repo> rev-parse --show-toplevel`, which must equal
+    `realpathSync(repo)`, and `resolveStateDir(<top>)`.
+  - The stages check their inputs first:
+    - interview: state.json is lstat-absent, then `readRequest`;
+    - design: `designArgs`;
+    - backlog: `backlogArgs`, then `freshness().design === 'fresh'`, else `STALE`.
+  - Each stage then builds the per-stage workflow args and a new
+    `bp-<stage>-<UTC stamp>-<8 hex>` invocation. It makes a 0700 `native-runs`
+    directory and calls `runGraphHost` with `maxConcurrentSubagents: 1`, a
+    `createCodexProvider({codexBin, cwd: <top>, env, runDir: <runDir>/provider})`, and
+    a SIGINT/SIGTERM AbortController whose handlers are removed afterwards.
+  - On exit 0, `writeRun` stores the ledger. Its `INVALID_INPUT` becomes `INVALID_RESULT`,
+    and every writeRun refusal is exit 3.
+  - Every CP-04a and CP-04b refusal passes through with its code: exit 2, except
+    `IO_ERROR` at exit 3. `DUPLICATE_ID`, `UNKNOWN_ID` and `MISSING_ANSWER` keep their
+    shape-checked `ids`. The host's own code and exit (1 to 4) pass through.
+- `spec/offering-capabilities.json`: blueprint's `dependencies` gain `native-runtime`.
+  That is the only catalog byte changed, and blueprint's codex row stays `unavailable`.
+- New `tests/blueprint-native.test.mjs` (8 cases, harness `test()`):
+  - the key-rule bounds are admitted;
+  - a provider the factory refuses is INVALID_ARGS and creates no `native-runs`;
+  - a `native-runs` symlink is IO_ERROR, exit 3, before the host runs;
+  - a host refusal passes through and leaves `native-runs` empty and 0700;
+  - start's `redacted` for a padded request, a blank request with a document, `restart`
+    and a key;
+  - edit's report and redaction, and CP-04b's MISSING and STALE_RUN passed through;
+  - a CP-04a IO_ERROR is exit 3;
+  - a documents-only interview, run on the frozen fake codex, hands the workflow
+    `{repo, docs}` with no `request` key. The checkpoint rows' `argsHash` shows it.
+
+Decisions (no human present):
+- The provider is built before `native-runs` is created. The contract lists the
+  directory at step 3 and the provider at step 4. The factory touches no file, so this
+  order means a refused provider (INVALID_ARGS) leaves nothing behind. A case pins it.
+- `rev-parse` has a 10-second timeout, as CP-04a's `resolveStateDir` does. The contract
+  names none, and a timeout reports as `NOT_A_REPO`. This is untested.
+- `readState` is in the contract's allowed import list but is not imported: nothing
+  needs it, because the CP-04b calls return the state. The frozen import case allows
+  a subset.
+- The CLI's `native-runs` must be a real directory after mkdir (lstat). A symlink is
+  IO_ERROR instead of being followed by `chmod`.
+- A thrown code outside the known CP-04a and CP-04b codes is IO_ERROR (exit 3), so a
+  stray filesystem code never reaches the output.
+- The first run of my own test expected `STALE_RUN` for a second edit. It got `MISSING`,
+  because CP-04b deletes run2, run3 and meta.json after an edit. The case now pins
+  `MISSING` and the file removal, and covers STALE_RUN separately.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-04c-blueprint-native.test.mjs
+# tests 27, pass 27, fail 0 (first run after the change)
+node tests/blueprint-native.test.mjs
+# 8 ok (second run; the first had 1 FAIL from the test's own wrong expectation, above)
+node logs/evidence/cp-04c/run-focused.mjs tests/blueprint-native.test.mjs tests/blueprint-state.test.mjs \
+  tests/blueprint-decisions.test.mjs tests/blueprint-approve.test.mjs tests/native-catalog-drift.test.mjs \
+  tests/reference-closure-catalog.test.mjs tests/native-offering-catalog.test.mjs tests/install-plan.test.mjs
+# FOCUSED: 75 passed, 0 failed, 0 skipped (harness summary())
+node --test acceptance/codex-parity/cp-04c-blueprint-native.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs \
+  acceptance/codex-parity/cp-03b-reference-closure.test.mjs acceptance/codex-parity/cp-04a-blueprint-state.test.mjs \
+  acceptance/codex-parity/cp-04b-blueprint-decisions.test.mjs acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs \
+  acceptance/codex-parity/cp-02e-graph-host.test.mjs
+# tests 224, pass 224, fail 0
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+bash scripts/check-secrets.sh graphs/blueprint/skills/blueprint/blueprint-native.mjs tests/blueprint-native.test.mjs   # check-secrets: clean
+```
+
+Saved under logs/evidence/ (gitignored): `cp-04c/run-focused.mjs`.
+
+Observed limits and untested hypotheses:
+- The acceptance test was not run before the change, so its failure at the freeze was
+  not re-observed in this session.
+- No case covers these. They are enforced by review, as the contract says:
+  - the SIGINT and SIGTERM handlers and their removal;
+  - `INVALID_RESULT`;
+  - `maxConcurrentSubagents: 1`;
+  - the workflow args' key order;
+  - IO_ERROR paths other than the two cases above.
+- No mutation check was run, and macOS was not run.
+- This is fake-codex wiring proof, not runtime certification.
+
+Full regressions, review and the branch hunt remain pending for the PR.

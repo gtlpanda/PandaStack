@@ -396,7 +396,7 @@
       ],
       "test": "acceptance/codex-parity/cp-04c-blueprint-native.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-05d",

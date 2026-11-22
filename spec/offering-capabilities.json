@@ -1499,7 +1499,8 @@
       "dependencies": [
         "backlog",
         "default-stack",
-        "knowledge-map"
+        "knowledge-map",
+        "native-runtime"
       ],
       "evidenceOwners": [
         "graphs/blueprint/workflows/blueprint-design.js",
