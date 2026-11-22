@@ -1972,3 +1972,452 @@ Observed limits and untested hypotheses:
   is not detected.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-02g — The host settles an oversize leaf prompt as PROMPT_TOO_LARGE
+
+Implemented spec/contracts/codex-parity-cp-02g.md only. Two changes to
+`core/skills/native-runtime/graph-host.mjs`, nothing else in core:
+
+- `wrapProvider`'s `runLeaf` keeps CP-02e's order: the role lookup first (an unknown
+  role still throws `INVALID_SELECTION`), then `prompt = instructions + "\n\n" +
+  request.prompt`. When `Buffer.byteLength(prompt, 'utf8') > 1048576` it returns
+  `failedCompletion({selection: request.selection, code: 'PROMPT_TOO_LARGE',
+  invocationId: 'host:' + request.callId})` and never calls the caller's provider.
+  Otherwise it passes `prompt` through unchanged, so exactly 1048576 bytes is
+  forwarded. The limit is a named constant (`MAX_LEAF_PROMPT_BYTES`).
+- The store opens at `checkpointDirOf(input.runDir)`, so the host has no
+  `'checkpoints'` literal of its own. The path is unchanged.
+- New imports: `checkpointDirOf` from `./checkpoint-store.mjs` (CP-05a) and
+  `failedCompletion` from `./completion.mjs` (CP-05b). `failHeldCheckpoint` is not
+  imported. The runtime, provider (its own 1 MiB check included), store, completion,
+  catalog, role files and workflows are unchanged.
+- New `tests/native-graph-host-prompt-size.test.mjs` (5 cases, harness `test()`). It
+  uses a fixture harness-repair template, re-pinned in a fixture catalog, that runs one
+  checker leaf per `args.sizes` entry. The overhead is measured from
+  `assembleRoleInstructions`, and the first case proves the measurement:
+  - at the limit, the provider gets a combined prompt of exactly 1048576 bytes with the
+    workflow prompt whole;
+  - a provider with no size check of its own is still never called over the limit, and
+    the row is the exact failed envelope;
+  - the workflow goes on after a PROMPT_TOO_LARGE leaf, so the next leaf dispatches and
+    returns, and no row is held;
+  - a workflow prompt over the runtime's own limit still stops the run in the runtime
+    first (exit 3 `INVALID_RUNTIME_INPUT`, no row, no call, no result.json);
+  - a later invocation in the same run directory dispatches normally.
+
+Decisions (no human present):
+- That fourth case first expected the runtime's refusal to come back as an ordinary
+  leaf error. The run showed exit 3 `INVALID_RUNTIME_INPUT`: `runtime.mjs` stops the
+  scope before reserve. The test now pins what was observed. runtime.mjs is untouched.
+- The contract mandates `checkpointDirOf`, and its `absolutePathInput` accepts any
+  absolute string with no NUL. The host's own run-directory check is stricter, so every
+  admitted run directory passes. Checked by reading the code; no case tests it.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-02g-prompt-too-large.test.mjs
+# tests 7, pass 7, fail 0 (first run after the change)
+node logs/evidence/cp-02g/run-focused.mjs tests/native-graph-host-prompt-size.test.mjs tests/native-graph-host.test.mjs tests/blueprint-state.test.mjs
+# FOCUSED: 31 passed, 0 failed, 0 skipped (harness summary())
+node --test acceptance/codex-parity/cp-02g-prompt-too-large.test.mjs acceptance/codex-parity/cp-02e-graph-host.test.mjs \
+  acceptance/codex-parity/cp-02f-native-graphs.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs \
+  acceptance/codex-parity/cp-05a-checkpoint-operator.test.mjs acceptance/codex-parity/cp-05b-graph-reconcile.test.mjs
+# tests 94, pass 94, fail 0
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+bash scripts/check-secrets.sh tests/native-graph-host-prompt-size.test.mjs   # check-secrets: clean
+autobuild mark-passed CP-02g                 # === node (1 file): PASS
+```
+
+Also run: cp-04e acceptance (`passes: false`, not built). Tests 5, pass 0, fail 5, all
+in its own scope:
+1. blueprint's catalog row;
+2. the install link;
+3. inspectOffering readiness;
+4. the SKILL.md `## Codex runner` section;
+5. the end-to-end case, which stops at the same install-link assertion.
+
+cp-04c (also `passes: false`) was not run.
+
+Saved under logs/evidence/ (gitignored): `cp-02g/run-focused.mjs`.
+
+Observed limits and untested hypotheses:
+- The acceptance test was not run before the change. The contract's claim that all 7
+  cases fail at the freeze was not re-observed in this session.
+- No mutation check was run.
+- Neither the role-lookup-before-size order nor the unchanged provider check has a
+  case. Both are enforced by review, as the contract says.
+- macOS was not run.
+
+Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-04c — Blueprint stage CLI on the native runtime
+
+Implemented spec/contracts/codex-parity-cp-04c.md only:
+
+- New `graphs/blueprint/skills/blueprint/blueprint-native.mjs`, run as
+  `<verb> --args-file <absolute path>` with the verbs start, interview, answer, design,
+  gate, backlog and edit. It exports nothing, and it runs as the CLI only when
+  `realpathSync(process.argv[1])` is this file.
+  - It imports only `node:` built-ins and the contract's pinned names. From core, those are
+    `runGraphHost` (graph host) and `createCodexProvider` (provider), both static.
+  - Before any git call, it checks argv, `readArgsFile` and the key rules: the CP-02e path
+    rule, env as a plain object of strings, and timeoutMs from 1001 to 86400000.
+  - Then it runs `git -C <repo> rev-parse --show-toplevel`, which must equal
+    `realpathSync(repo)`, and `resolveStateDir(<top>)`.
+  - The stages check their inputs first:
+    - interview: state.json is lstat-absent, then `readRequest`;
+    - design: `designArgs`;
+    - backlog: `backlogArgs`, then `freshness().design === 'fresh'`, else `STALE`.
+  - Each stage then builds the per-stage workflow args and a new
+    `bp-<stage>-<UTC stamp>-<8 hex>` invocation. It makes a 0700 `native-runs`
+    directory and calls `runGraphHost` with `maxConcurrentSubagents: 1`, a
+    `createCodexProvider({codexBin, cwd: <top>, env, runDir: <runDir>/provider})`, and
+    a SIGINT/SIGTERM AbortController whose handlers are removed afterwards.
+  - On exit 0, `writeRun` stores the ledger. Its `INVALID_INPUT` becomes `INVALID_RESULT`,
+    and every writeRun refusal is exit 3.
+  - Every CP-04a and CP-04b refusal passes through with its code: exit 2, except
+    `IO_ERROR` at exit 3. `DUPLICATE_ID`, `UNKNOWN_ID` and `MISSING_ANSWER` keep their
+    shape-checked `ids`. The host's own code and exit (1 to 4) pass through.
+- `spec/offering-capabilities.json`: blueprint's `dependencies` gain `native-runtime`.
+  That is the only catalog byte changed, and blueprint's codex row stays `unavailable`.
+- New `tests/blueprint-native.test.mjs` (8 cases, harness `test()`):
+  - the key-rule bounds are admitted;
+  - a provider the factory refuses is INVALID_ARGS and creates no `native-runs`;
+  - a `native-runs` symlink is IO_ERROR, exit 3, before the host runs;
+  - a host refusal passes through and leaves `native-runs` empty and 0700;
+  - start's `redacted` for a padded request, a blank request with a document, `restart`
+    and a key;
+  - edit's report and redaction, and CP-04b's MISSING and STALE_RUN passed through;
+  - a CP-04a IO_ERROR is exit 3;
+  - a documents-only interview, run on the frozen fake codex, hands the workflow
+    `{repo, docs}` with no `request` key. The checkpoint rows' `argsHash` shows it.
+
+Decisions (no human present):
+- The provider is built before `native-runs` is created. The contract lists the
+  directory at step 3 and the provider at step 4. The factory touches no file, so this
+  order means a refused provider (INVALID_ARGS) leaves nothing behind. A case pins it.
+- `rev-parse` has a 10-second timeout, as CP-04a's `resolveStateDir` does. The contract
+  names none, and a timeout reports as `NOT_A_REPO`. This is untested.
+- `readState` is in the contract's allowed import list but is not imported: nothing
+  needs it, because the CP-04b calls return the state. The frozen import case allows
+  a subset.
+- The CLI's `native-runs` must be a real directory after mkdir (lstat). A symlink is
+  IO_ERROR instead of being followed by `chmod`.
+- A thrown code outside the known CP-04a and CP-04b codes is IO_ERROR (exit 3), so a
+  stray filesystem code never reaches the output.
+- The first run of my own test expected `STALE_RUN` for a second edit. It got `MISSING`,
+  because CP-04b deletes run2, run3 and meta.json after an edit. The case now pins
+  `MISSING` and the file removal, and covers STALE_RUN separately.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-04c-blueprint-native.test.mjs
+# tests 27, pass 27, fail 0 (first run after the change)
+node tests/blueprint-native.test.mjs
+# 8 ok (second run; the first had 1 FAIL from the test's own wrong expectation, above)
+node logs/evidence/cp-04c/run-focused.mjs tests/blueprint-native.test.mjs tests/blueprint-state.test.mjs \
+  tests/blueprint-decisions.test.mjs tests/blueprint-approve.test.mjs tests/native-catalog-drift.test.mjs \
+  tests/reference-closure-catalog.test.mjs tests/native-offering-catalog.test.mjs tests/install-plan.test.mjs
+# FOCUSED: 75 passed, 0 failed, 0 skipped (harness summary())
+node --test acceptance/codex-parity/cp-04c-blueprint-native.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs \
+  acceptance/codex-parity/cp-03b-reference-closure.test.mjs acceptance/codex-parity/cp-04a-blueprint-state.test.mjs \
+  acceptance/codex-parity/cp-04b-blueprint-decisions.test.mjs acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs \
+  acceptance/codex-parity/cp-02e-graph-host.test.mjs
+# tests 224, pass 224, fail 0
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+bash scripts/check-secrets.sh graphs/blueprint/skills/blueprint/blueprint-native.mjs tests/blueprint-native.test.mjs   # check-secrets: clean
+```
+
+Saved under logs/evidence/ (gitignored): `cp-04c/run-focused.mjs`.
+
+Observed limits and untested hypotheses:
+- The acceptance test was not run before the change, so its failure at the freeze was
+  not re-observed in this session.
+- No case covers these. They are enforced by review, as the contract says:
+  - the SIGINT and SIGTERM handlers and their removal;
+  - `INVALID_RESULT`;
+  - `maxConcurrentSubagents: 1`;
+  - the workflow args' key order;
+  - IO_ERROR paths other than the two cases above.
+- No mutation check was run, and macOS was not run.
+- This is fake-codex wiring proof, not runtime certification.
+
+Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-05d — One native QA loop iteration (no commit)
+
+Implemented spec/contracts/codex-parity-cp-05d.md only:
+
+- New `graphs/qa/tool/qa-loop.mjs`, run as `--args-file <absolute path>`. It exports
+  nothing, and it runs as the CLI only when `realpathSync(process.argv[1])` is this file.
+  - It imports only `node:` built-ins and the seven pinned CP-05c names. It takes nothing
+    from core/. It starts three kinds of process, each with its own `process.env`:
+    - `git rev-parse` and `git status`, run with `cwd`. The argv is exactly the
+      contract's, with no `-C`.
+    - the host, `process.execPath <codeRoot>/core/skills/native-runtime/graph-host.mjs
+      --args-file <file>`;
+    - `bash <installationRoot>/core/skills/verify/verify.sh`, only on `done`.
+
+    No child inherits qa-loop's stdio. It installs no signal handler and sets
+    `process.exitCode`.
+  - The steps run in contract order: input, repository, ledger, workflow args,
+    invocation, host args file, host, outcome.
+    - Nothing is created before the inflight file passes its check. A new inflight file
+      is published with temp, `link` and unlink. On `EEXIST` it resumes the other
+      process's file.
+    - An already-recorded invocation only unlinks the inflight file and reports
+      `recorded: false`.
+  - Host exits are mapped as the table says:
+    - 0 takes the done path;
+    - 4 `OWNER_BUSY` or 3 `CHECKPOINT_UNCERTAIN` becomes exit 4 with the
+      `graph-reconcile.mjs list` hint;
+    - 1, 2 or 3 with one `{"error":<CODE>}` line passes through;
+    - anything else is `HOST_FAILED`.
+
+    After any non-zero exit, the inflight file is kept exactly when `runDir` exists.
+  - The done path:
+    - it checks result.json (lstat regular, at most 16 MiB, the six keys) and the host's
+      exact stdout;
+    - on `done`, verify runs first, then `git status --porcelain=v1 -z
+      --untracked-files=all`. Both paths of an R or C entry are kept, and the list is
+      sorted by code unit;
+    - a failed check downgrades the run: `VERIFY_FAILED` outranks `TOUCHED_MISMATCH`;
+    - then `applyResult` and `writeLedger`, the inflight file is removed, and the
+      one-line report is printed.
+- New `tests/qa-loop.test.mjs` (10 cases, harness `test()`). It runs qa-loop from a copy
+  of its own tree, where `graph-host.mjs` is a stub that follows a per-case plan. The
+  stub shows the host comes from `<codeRoot>` and receives qa-loop's env. The cases are
+  the contract's review-only items that can be tested safely:
+  - `INVALID_RESULT`: 13 tampered result or stdout variants, each leaving the ledger
+    unwritten and the inflight file kept, plus the rerun resuming the same invocation;
+  - every host-exit mapping (14 variants), including the hint and the
+    inflight-kept-iff-runDir rule;
+  - `LEDGER_IO_ERROR` on write (inflight kept; the rerun records) and on read;
+  - `IO_ERROR` for a native-runs symlink;
+  - verify past `timeoutMs` is FAIL. verify.sh is a builtin-only spin that never forks;
+  - a missing verify.sh is FAIL;
+  - a done result with no `touched` list is `TOUCHED_MISMATCH`.
+
+Decisions (no human present):
+- Every child runs through `spawnSync` with `killSignal: 'SIGKILL'`.
+  - verify: `timeout: timeoutMs`, a 64 MiB `maxBuffer`, stderr ignored.
+  - git: the same `timeoutMs` bound. `git status` has a 64 MiB stdout cap and each
+    `rev-parse` a 16 KiB one (`MAX_PATH_BYTES * 4`). The contract names no git timeout,
+    and a rev-parse failure of any kind is `NOT_A_REPO`.
+  - the host: no timeout (its own deadline is `timeoutMs`) and a 1 MiB output cap. An
+    overflow is `HOST_FAILED`.
+- `ledgerDir` and `native-runs` must be real directories after mkdir (lstat). A symlink
+  is `IO_ERROR` rather than being followed, as CP-04c does for its `native-runs`.
+- If removing the inflight file fails after a non-zero host exit (with no `runDir`), the
+  result is exit 3 `IO_ERROR`, consistent with done-path step 6, instead of the host's
+  code.
+- An inflight file that passed lstat but then fails to open with `ELOOP` is
+  `INFLIGHT_INVALID`. Other open or read errors are `IO_ERROR`.
+- The verify verdict uses `trim()` on the last non-empty line. `verifyTail` uses
+  `trimEnd()` per line, as the contract says.
+- A `git status -z` record it cannot parse makes `changed` `[]` and touched `MISMATCH`.
+  The cause is either an entry that is not `XY path` or a rename with no source field.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-05d-qa-loop.test.mjs
+# before the change: tests 19, pass 0, fail 19 (each on "qa-loop.mjs must exist")
+# after the change:  tests 19, pass 19, fail 0 (first run)
+node tests/qa-loop.test.mjs
+# 10 ok (first run, before the verify-log assertions were added; the aggregate below ran them)
+node logs/evidence/cp-05d/run-focused.mjs tests/qa-loop.test.mjs tests/qa-ledger.test.mjs tests/check-refs.test.mjs \
+  tests/native-graph-reconcile.test.mjs tests/native-catalog-drift.test.mjs
+# FOCUSED: 46 passed, 0 failed, 0 skipped (harness summary())
+node --test acceptance/codex-parity/cp-05d-qa-loop.test.mjs acceptance/codex-parity/cp-05c-qa-ledger.test.mjs \
+  acceptance/codex-parity/cp-05b-graph-reconcile.test.mjs
+# tests 64, pass 64, fail 0
+node scripts/check-refs.mjs                  # check-refs: 271 references, all resolve (rerun after the feat commit)
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+bash scripts/check-secrets.sh graphs/qa/tool/qa-loop.mjs tests/qa-loop.test.mjs   # check-secrets: clean
+node --test acceptance/codex-parity/cp-05e-qa-gate.test.mjs   # read-only look at the next consumer
+# tests 4, pass 3, fail 1: the one failure is CP-05e's own dev.proofRefs catalog change, still unbuilt
+```
+
+Saved under logs/evidence/ (gitignored): `cp-05d/run-focused.mjs`.
+
+Observed limits and untested hypotheses:
+- These are review-only, and no case exercises them:
+  - the 64 MiB verify stdout bound;
+  - the `EEXIST` race on the inflight file;
+  - `IO_ERROR` when the inflight file, the host args file or the inflight removal fails.
+
+  AGENTS.md blocks the nested-capture overflow and filesystem-race reproductions, so no
+  case floods output or races the file. That verify's overflow kills it and keeps the
+  partial stdout comes from the Node `spawnSync` documentation. It is an untested
+  hypothesis here.
+- The timeout case shows a builtin-only verify.sh is killed and judged FAIL. Whether
+  `spawnSync` returns promptly when a grandchild of verify.sh holds the stdout pipe
+  after the SIGKILL is untested (that scenario is too close to the blocked orphan
+  reproduction).
+- No mutation check was run, and macOS was not run.
+- This is fake-codex wiring proof, not runtime certification.
+
+Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-04e — Blueprint on Codex: runner section, catalog flip, end-to-end proof
+
+Implemented spec/contracts/codex-parity-cp-04e.md only:
+
+- `graphs/blueprint/skills/blueprint/SKILL.md`: one new `## Codex runner` section,
+  between the opening paragraphs and `## When to ask`. `git diff -U0` shows one hunk
+  that only adds lines (77 added, 0 deleted), so sections 1 to 8 are byte-identical. It
+  says:
+  - the session drives `blueprint-design` through the two CLIs, never Claude, the
+    Workflow tool or another provider;
+  - the roots: the first bash block uses only builtins (`cd -P`, `pwd -P`,
+    `command -v`). It sets `SKILL_DIR`, `ROOT` (four levels up) and `CODEX`, and
+    reads no HOME or Claude name;
+  - both command forms;
+  - a nine-row steps table (verb, replaced SKILL.md step, args file keys);
+  - the leaf env (`HOME`, `CODEX_HOME` when set, `PATH`);
+  - outputs and exits 1 to 4;
+  - approval with the `show` hash, creating `integration/<app>` and never pushing;
+  - held `CHECKPOINT_UNCERTAIN` leaves are never resumed.
+
+  It holds none of the four Claude-only strings.
+- `spec/offering-capabilities.json`, exactly the three changes:
+  - blueprint's codex row is `partial` on `codex-graph-host` with
+    `LIVE_PROOF_MISSING`, `NATIVE_UNVERIFIED`, `REQUIREMENTS_INCOMPLETE`;
+  - a fourth transport, `codex-graph-host` -> `core/skills/native-runtime/graph-host.mjs`;
+  - blueprint's `entrySha256` is `b95e13cf…374c`, the new SKILL.md bytes.
+- New `tests/blueprint-codex-runner.test.mjs` (5 cases, harness `test()`). It covers the
+  section's review-only parts:
+  - the steps table's key sets equal the CP-04c and CP-04d tables;
+  - each row against the real CLI: all listed keys pass the key checks and stop at
+    `NOT_A_REPO` on an owned non-repo; an unlisted key is `INVALID_ARGS`; each required
+    key is needed; the optional ones may be left out;
+  - the roots block, run through a chain of two symlinks whose paths hold spaces, with
+    CDPATH set, prints nothing. With no codex on PATH it leaves `CODEX` empty;
+  - the item 5 to 8 phrases are present;
+  - the eight Claude headings follow unchanged and in order.
+
+Decisions (no human present):
+- The roots block uses `cd -P … && pwd -P` (shell builtins), not `realpath`, so it needs
+  no external tool at all. The contract allows `dirname`, `readlink` and `realpath`
+  besides builtins, and this uses fewer.
+- An empty `CODEX` is handled in prose ("say codex is not on PATH and stop") rather
+  than in the block, so the block stays silent and sets only the three variables.
+- `approve`'s exit 4 is described as "a rollback step failed, or the commit holds other
+  paths than it printed". This covers CP-04d's `UNEXPECTED_COMMIT_PATHS` as well as
+  `ROLLBACK_FAILED`. Contract item 6 names only the rollback case.
+- `approvalSha256` is listed as required. The CLI checks it at the hash step
+  (`APPROVAL_MISMATCH`), after the repo, not with the key rules. The new test records
+  that ordering instead of expecting `INVALID_ARGS`.
+- A sections 1 to 8 byte-identity check was run once (the diff above), not added as a
+  permanent test. A test pinning the old SKILL.md hash would break the first time a
+  later feature legitimately edits a Claude section.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-04e-blueprint-codex.test.mjs
+# before the change: tests 5, pass 0, fail 5
+# after the change:  tests 5, pass 5, fail 0
+node --test acceptance/codex-parity/cp-04e-blueprint-codex.test.mjs \
+  acceptance/codex-parity/cp-01a-catalog-v2.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs \
+  acceptance/codex-parity/cp-01c-install-plan.test.mjs acceptance/codex-parity/cp-01d-inspect-offering.test.mjs \
+  acceptance/codex-parity/cp-02e-graph-host.test.mjs acceptance/codex-parity/cp-03a-skill-dir.test.mjs \
+  acceptance/codex-parity/cp-03b-reference-closure.test.mjs acceptance/codex-parity/cp-03d-skill-paths.test.mjs \
+  acceptance/codex-parity/cp-04c-blueprint-native.test.mjs acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs \
+  acceptance/codex-parity/cp-02f-native-graphs.test.mjs acceptance/codex-parity/cp-02h-strict-schema.test.mjs
+# tests 264, pass 264, fail 0 (the amended W2-10 pins hold after the flip)
+node logs/evidence/cp-04e/run-focused.mjs tests/blueprint-codex-runner.test.mjs tests/install-codex.test.mjs \
+  tests/install-plan.test.mjs tests/inspect-offering.test.mjs tests/native-catalog-v2.test.mjs \
+  tests/native-catalog-drift.test.mjs tests/reference-closure-catalog.test.mjs tests/native-graph-host.test.mjs \
+  tests/blueprint-native.test.mjs tests/blueprint-approve.test.mjs tests/host-wiring-proof-ref.test.mjs \
+  tests/blueprint-state.test.mjs tests/blueprint-decisions.test.mjs tests/qa-loop.test.mjs tests/check-refs.test.mjs
+# FOCUSED: 119 passed, 0 failed, 0 skipped (harness summary())
+node scripts/check-refs.mjs                  # check-refs: 271 references, all resolve
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+bash scripts/check-secrets.sh tests/blueprint-codex-runner.test.mjs   # check-secrets: clean
+git diff --check                             # clean
+```
+
+Saved under logs/evidence/ (gitignored): `cp-04e/run-focused.mjs`.
+
+Observed limits and untested hypotheses:
+- Whether a real Codex session follows the section is untested. Every leaf here is the
+  frozen fake codex, so this is fake-codex wiring proof, not runtime certification. The
+  live blueprint smoke is a separate step after wave 2 merges.
+- The roots block was run with bash on Linux only. macOS was not run.
+- No mutation check was run on the new test.
+
+Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-05e — Native QA gate proof on the fake codex
+
+Implemented spec/contracts/codex-parity-cp-05e.md only:
+
+- `spec/offering-capabilities.json`, exactly one change: `dev`'s `proofRefs` becomes
+  `["cp-02f-host-wiring", "cp-05e-qa-gate"]` (one hunk, +2/−1 lines). `dev`'s
+  codex row stays `unavailable`. No module, workflow, role file, SKILL.md, loop.md,
+  install.sh or frozen file changed.
+- The proof itself is the existing CP-05d qa-loop, the CP-02e host, the CP-02h strict
+  schema and the CP-03d role loader, as built. Frozen cases 1 to 3 already passed
+  before the catalog edit, as the contract predicts.
+- New `tests/qa-gate-proof-ref.test.mjs` (4 cases, harness `test()`). It covers what
+  frozen case 4 does not pin:
+  - the id is a catalog identifier, appended after `cp-02f-host-wiring` with no
+    duplicate;
+  - the id appears in the contract and in its frozen test (the contract's review item);
+  - `dev` alone owns `graphs/qa/` evidence and no `qa` offering exists, which is why
+    `dev` carries the reference;
+  - the reference is never evidence. Dropping it from `dev`, or adding it to every row,
+    changes no install-eligibility, provider-implementation or native-implementation
+    answer, and the catalog validates either way.
+
+Decisions (no human present):
+- No new fixture or fake-codex test was added. The frozen acceptance already runs the
+  real failing test, the scripted fixer and both gate outcomes. A builder copy would
+  duplicate it without adding coverage.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-05e-qa-gate.test.mjs
+# before the change: tests 4, pass 3, fail 1 (case 4: dev proofRefs were [cp-02f-host-wiring])
+# after the change:  tests 4, pass 4, fail 0
+node tests/qa-gate-proof-ref.test.mjs        # 4 ok
+node tests/host-wiring-proof-ref.test.mjs    # 5 ok (the amended W2-10 pin accepts the new pair)
+node --test acceptance/codex-parity/cp-02f-native-graphs.test.mjs
+# tests 7, pass 7, fail 0
+node --test acceptance/codex-parity/cp-01a-catalog-v2.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs \
+  acceptance/codex-parity/cp-01d-inspect-offering.test.mjs
+# tests 56, pass 56, fail 0
+node --test acceptance/codex-parity/cp-01c-install-plan.test.mjs acceptance/codex-parity/cp-03b-reference-closure.test.mjs \
+  acceptance/codex-parity/cp-04e-blueprint-codex.test.mjs
+# tests 21, pass 21, fail 0 (the tier-4 "today's state, or exactly CP-04e's/CP-05e's" pins)
+node tests/install-codex.test.mjs            # 7 ok
+node logs/evidence/cp-05e/run-focused.mjs tests/qa-gate-proof-ref.test.mjs tests/host-wiring-proof-ref.test.mjs \
+  tests/native-catalog-v2.test.mjs tests/native-catalog-drift.test.mjs tests/inspect-offering.test.mjs \
+  tests/qa-loop.test.mjs tests/check-refs.test.mjs
+# FOCUSED: 47 passed, 0 failed, 0 skipped (harness summary())
+node scripts/check-refs.mjs                  # check-refs: 271 references, all resolve
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+bash scripts/check-secrets.sh tests/qa-gate-proof-ref.test.mjs   # check-secrets: clean
+git diff --check HEAD~1 HEAD                 # clean (the whole feat commit)
+```
+
+Saved under logs/evidence/ (gitignored): `cp-05e/run-focused.mjs`.
+
+Observed limits and untested hypotheses:
+- Every leaf is the frozen fake codex, and verify.sh is the fixture's inert script.
+  This is fake-codex wiring proof, not runtime certification. The repository's real
+  verify.sh and its capture machinery were not run (AGENTS.md). The live harness-repair
+  loop on a fixture repo is a separate step after wave 2 merges.
+- macOS was not run. No mutation check was run on the new test.
+
+Full regressions, review and the branch hunt remain pending for the PR.

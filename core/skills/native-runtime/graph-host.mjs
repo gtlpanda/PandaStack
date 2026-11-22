@@ -16,7 +16,8 @@ import { loadOfferingCatalog, providerImplementation } from './catalog.mjs'
 import { assembleRoleInstructions } from './role-files.mjs'
 import { resolveLeaf, CODEX_REFUSED_WORKFLOWS } from './codex-selection.mjs'
 import { createCodexProvider } from './codex-provider.mjs'
-import { createFileCheckpointStore } from './checkpoint-store.mjs'
+import { createFileCheckpointStore, checkpointDirOf } from './checkpoint-store.mjs'
+import { failedCompletion } from './completion.mjs'
 import { createNativeRuntime } from './runtime.mjs'
 import { loadWorkflowRegistry, registryWorkflow } from './registry.mjs'
 import { fields, json, record, ownErrorCode } from './boundary.mjs'
@@ -32,6 +33,8 @@ const MAX_TIMEOUT_MS = 86400000
 const MAX_SUBAGENTS = 64
 const RESULT = 'result.json'
 const RESULT_VERSION = 1
+// CP-02g: the Codex provider's own prompt limit, applied to the combined leaf prompt.
+const MAX_LEAF_PROMPT_BYTES = 1048576
 // The library keys besides `provider` and `signal`; the CLI args file carries the same.
 const VALUE_KEYS = ['installationRoot', 'workflowId', 'offeringId', 'invocationId', 'args', 'runDir', 'timeoutMs', 'maxConcurrentSubagents']
 const LIBRARY_KEYS = [...VALUE_KEYS, 'provider']
@@ -162,12 +165,18 @@ function makeRunDir(runDir) {
 
 // The leaf prompt is the role's instructions, a blank line, then the workflow's
 // own prompt. The runtime has already hashed the workflow's prompt for its binding.
+// CP-02g: a combined prompt over the limit is a failed leaf that the runtime settles
+// like any other; the caller's provider is never called and the prompt is never cut.
 function wrapProvider(input, instructions) {
   return Object.freeze({
     runLeaf(request) {
       const text = instructions.get(request.agentType)
       if (text === undefined) throw Object.assign(new Error('Graph host: INVALID_SELECTION.'), { code: 'INVALID_SELECTION' })
-      return input.runLeaf.call(input.provider, { ...request, prompt: text + '\n\n' + request.prompt })
+      const prompt = text + '\n\n' + request.prompt
+      if (Buffer.byteLength(prompt, 'utf8') > MAX_LEAF_PROMPT_BYTES) {
+        return failedCompletion({ selection: request.selection, code: 'PROMPT_TOO_LARGE', invocationId: 'host:' + request.callId })
+      }
+      return input.runLeaf.call(input.provider, { ...request, prompt })
     },
   })
 }
@@ -253,7 +262,7 @@ async function closeAll(runtime, store, outcome) {
 async function runAdmitted(input, admitted) {
   try { makeRunDir(input.runDir) } catch { return outcomeError(3, 'IO_ERROR') }
   let store
-  try { store = await createFileCheckpointStore({ dir: join(input.runDir, 'checkpoints') }) }
+  try { store = await createFileCheckpointStore({ dir: checkpointDirOf(input.runDir) }) }
   catch (e) {
     const code = codeOf(e, 'IO_ERROR')
     return outcomeError(code === 'OWNER_BUSY' ? 4 : 3, code)

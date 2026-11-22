@@ -1499,7 +1499,8 @@
       "dependencies": [
         "backlog",
         "default-stack",
-        "knowledge-map"
+        "knowledge-map",
+        "native-runtime"
       ],
       "evidenceOwners": [
         "graphs/blueprint/workflows/blueprint-design.js",
@@ -1508,7 +1509,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "72b4513168007cb4e021314ed62eaea5f2399797c46ac3b5b6f646e49ea9843e",
+      "entrySha256": "b95e13cf7f7451e9c3e73cf0193f0d2f6e72757308a9f533811390047e00374c",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1518,11 +1519,11 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-graph-host",
           "limitations": [
+            "LIVE_PROOF_MISSING",
             "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1617,7 +1618,8 @@
       },
       "permissionProfile": null,
       "proofRefs": [
-        "cp-02f-host-wiring"
+        "cp-02f-host-wiring",
+        "cp-05e-qa-gate"
       ]
     },
     {
@@ -2750,6 +2752,11 @@
       "id": "codex-bughunt",
       "provider": "codex",
       "entry": "graphs/hunt/skills/bughunt/native-runner.mjs"
+    },
+    {
+      "id": "codex-graph-host",
+      "provider": "codex",
+      "entry": "core/skills/native-runtime/graph-host.mjs"
     }
   ],
   "limits": [

@@ -375,7 +375,7 @@
       ],
       "test": "acceptance/codex-parity/cp-02g-prompt-too-large.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-04c",
@@ -396,7 +396,7 @@
       ],
       "test": "acceptance/codex-parity/cp-04c-blueprint-native.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-05d",
@@ -417,7 +417,7 @@
       ],
       "test": "acceptance/codex-parity/cp-05d-qa-loop.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-04e",
@@ -437,7 +437,7 @@
       ],
       "test": "acceptance/codex-parity/cp-04e-blueprint-codex.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-05e",
@@ -456,7 +456,7 @@
       ],
       "test": "acceptance/codex-parity/cp-05e-qa-gate.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     }
   ]
 }

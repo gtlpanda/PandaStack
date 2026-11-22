@@ -1092,3 +1092,223 @@ async function feedFifo(path, text, run) {
     }
   } finally { closeSync(fd) }
 }
+
+// ---------------------------------------------------------------- case 13
+// One iteration at a time (step 2a; bughunt F1). Self-contained: the candidate's qa-loop.mjs
+// and qa-ledger.mjs are copied into an owned code root whose graph-host.mjs is a stub that
+// records each call and writes a valid `done` result, and whose verify.sh parks until the
+// test creates `release` (so a parked verify never depends on how many iterations run).
+// No codex, claude, gh, network or HOME; the repository's own verify.sh is never run.
+const L13_STUB_HOST = `import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+const args = JSON.parse(readFileSync(process.argv[3], 'utf8'))
+appendFileSync(process.env.L13_DIR + '/host-calls.log', args.invocationId + '\\n')
+mkdirSync(args.runDir, { recursive: true })
+writeFileSync(args.runDir + '/result.json', JSON.stringify({ schemaVersion: 1, workflowId: 'harness-repair', offeringId: 'dev',
+  invocationId: args.invocationId, status: 'done',
+  result: { status: 'done', touched: [], fixRounds: 0, reason: 'stub', stuckSig: null } }))
+process.stdout.write('{"status":"done"}\\n')
+`
+// Marks itself in verify, then waits (at most ~40 s, under the 60 s verify timeout) for `release`.
+const L13_VERIFY = `: > "$L13_DIR/in-verify.$$"
+for _ in $(seq 1 800); do
+  [ -e "$L13_DIR/release" ] && break
+  sleep 0.05
+done
+printf 'VERIFY: PASS\\n'
+`
+const L13_TOKEN = '0123456789abcdef' // allow-secret: a fixture lock token
+const l13Lock = (pid, extra = {}) => Buffer.from(JSON.stringify({ schemaVersion: 1, pid, token: L13_TOKEN, ...extra }) + '\n')
+const l13Hint = pid => `another qa-loop iteration (pid ${pid}) is running in this repository; run it again after that one exits`
+
+// Recursive listing of a directory: relative path -> 'dir' or the file's bytes (hex).
+function l13Snapshot(dir, prefix = '') {
+  const out = {}
+  if (!existsSync(dir)) return out
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const rel = prefix + entry.name
+    if (entry.isDirectory()) { out[rel] = 'dir'; Object.assign(out, l13Snapshot(join(dir, entry.name), rel + '/')) } else out[rel] = readFileSync(join(dir, entry.name)).toString('hex')
+  }
+  return out
+}
+
+// A non-throwing bounded wait: true when `check` became true.
+async function l13Wait(check, ms) {
+  for (const end = Date.now() + ms; Date.now() < end && !check(); await sleep(10));
+  return check()
+}
+
+// One owned repository + code root. verify parks until `release()`; cleanup releases and kills.
+function l13Fixture(t) {
+  const work = realpathSync(mkdtempSync(join(tmpdir(), 'cp-05d-case13-')))
+  const state = join(work, 'state')
+  const repo = join(work, 'repo')
+  const install = join(work, 'install')
+  const codeRoot = join(work, 'code')
+  for (const dir of [state, repo, join(install, 'core/skills/verify'), join(codeRoot, 'graphs/qa/tool'),
+    join(codeRoot, 'core/skills/native-runtime')]) mkdirSync(dir, { recursive: true })
+  const gitEnv = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' }
+  assert.equal(spawnSync('git', ['init', '-q', repo], { env: gitEnv }).status, 0, 'fixture: git init')
+  writeFileSync(join(install, 'core/skills/verify/verify.sh'), L13_VERIFY)
+  for (const name of ['qa-loop.mjs', 'qa-ledger.mjs']) cpSync(join(ROOT, 'graphs/qa/tool', name), join(codeRoot, 'graphs/qa/tool', name))
+  writeFileSync(join(codeRoot, 'core/skills/native-runtime/graph-host.mjs'), L13_STUB_HOST)
+  writeFileSync(join(codeRoot, 'core/skills/native-runtime/graph-reconcile.mjs'), '')
+  const argsFile = join(work, 'loop-args.json')
+  writeFileSync(argsFile, JSON.stringify({ schemaVersion: 1, repo, installationRoot: install, codexBin: join(work, 'codex'),
+    env: {}, timeoutMs: 60000 }))
+  const ledgerDir = spawnSync('git', ['-C', repo, 'rev-parse', '--path-format=absolute', '--git-path', 'harness-loop'],
+    { env: gitEnv, encoding: 'utf8' }).stdout.trim()
+  assert.ok(ledgerDir.startsWith('/'), 'fixture: ledger dir')
+
+  const children = []
+  const env = { ...gitEnv, L13_DIR: state }
+  const fixture = {
+    ledgerDir,
+    lockFile: join(ledgerDir, 'native-loop.lock'),
+    start() {
+      const proc = { exited: false, stdout: '', stderr: '' }
+      const child = spawn(process.execPath, [join(codeRoot, 'graphs/qa/tool/qa-loop.mjs'), '--args-file', argsFile],
+        { env, stdio: ['ignore', 'pipe', 'pipe'] })
+      // qa-loop runs node directly, so the spawned pid is the pid its lock names.
+      proc.pid = child.pid
+      children.push(child)
+      child.stdout.on('data', d => { proc.stdout += d })
+      child.stderr.on('data', d => { proc.stderr += d })
+      proc.done = new Promise(resolve => child.on('close', code => { proc.exited = true; proc.code = code; resolve(proc) }))
+      return proc
+    },
+    release: () => writeFileSync(join(state, 'release'), 'go\n'),
+    inVerify: () => readdirSync(state).filter(name => name.startsWith('in-verify.')).length,
+    hostCalls: () => lines(join(state, 'host-calls.log')),
+    ledgerRuns: () => existsSync(join(ledgerDir, 'ledger.json')) ? readJson(join(ledgerDir, 'ledger.json')).runs : [],
+    lockResidue: () => existsSync(ledgerDir) ? readdirSync(ledgerDir).filter(name => name.startsWith('native-loop.lock')) : [],
+    plantLock(bytes) {
+      mkdirSync(ledgerDir, { recursive: true, mode: 0o700 })
+      writeFileSync(fixture.lockFile, bytes, { mode: 0o600 })
+    },
+    detail: procs => `host calls: ${JSON.stringify(fixture.hostCalls())}; ledger runs: ${fixture.ledgerRuns().length}; ` +
+      `lock files: ${JSON.stringify(fixture.lockResidue())}; ` + procs.map((p, i) => `proc${i} exit ${p.code} stdout ${JSON.stringify(p.stdout)} stderr ${JSON.stringify(p.stderr)}`).join('; '),
+  }
+  t.after(async () => {
+    try { fixture.release() } catch { /* the work directory may already be gone */ }
+    for (const child of children) { try { child.kill('SIGKILL') } catch { /* already exited */ } }
+    await sleep(50)
+    rmSync(work, { recursive: true, force: true })
+  })
+  return fixture
+}
+
+// Asserts `proc` refused with exit 4 OWNER_BUSY naming `pid`: one stderr line, empty stdout.
+function l13AssertBusy(proc, pid, detail) {
+  assert.equal(proc.code, 4, `expected exit 4 OWNER_BUSY. ${detail}`)
+  assert.equal(proc.stdout, '', `a refused iteration prints nothing on stdout. ${detail}`)
+  assert.ok(proc.stderr.endsWith('\n') && proc.stderr.indexOf('\n') === proc.stderr.length - 1, `stderr must be exactly one line. ${detail}`)
+  assert.deepEqual(JSON.parse(proc.stderr), { error: 'OWNER_BUSY', invocationId: null, hint: l13Hint(pid) }, detail)
+}
+
+// A pid that is dead: a trivial child that has exited.
+async function l13DeadPid() {
+  const dead = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' })
+  await new Promise(resolve => dead.on('close', resolve))
+  return dead.pid
+}
+
+describe('13. one iteration at a time (step 2a; bughunt F1)', () => {
+  test('live owner: a second iteration is refused while the first finalises, and writes nothing', T, async t => {
+    const fx = l13Fixture(t)
+    const a = fx.start()
+    assert.ok(await l13Wait(() => fx.inVerify() >= 1 || a.exited, 60000) && fx.inVerify() >= 1,
+      `fixture: A never reached verify. ${fx.detail([a])}`)
+    const before = l13Snapshot(fx.ledgerDir)
+    assert.ok(Object.hasOwn(before, 'native-inflight.json'), 'fixture: A left no inflight file while parked')
+
+    // B: bounded wait for it to finish, or for it to have run the host (a missing lock).
+    const b = fx.start()
+    await l13Wait(() => b.exited || fx.hostCalls().length >= 2 || fx.inVerify() >= 2, 15000)
+    const bFinished = b.exited
+    const afterB = l13Snapshot(fx.ledgerDir)
+    const callsDuringB = fx.hostCalls().length
+    fx.release()
+    await a.done
+    await b.done
+    const detail = fx.detail([a, b])
+
+    assert.equal(bFinished, true, `B did not refuse while A was running (it re-ran the host or waited). ${detail}`)
+    l13AssertBusy(b, a.pid, detail)
+    assert.equal(callsDuringB, 1, `B ran the host. ${detail}`)
+    assert.deepEqual(afterB, before, `B changed the ledger directory. ${detail}`)
+    assert.equal(a.code, 0, `A must finish normally. ${detail}`)
+    assert.equal(fx.hostCalls().length, 1, `exactly one host call. ${detail}`)
+    assert.equal(fx.ledgerRuns().length, 1, `exactly one ledger run. ${detail}`)
+    assert.equal(existsSync(fx.lockFile), false, `native-loop.lock must be released. ${detail}`)
+  })
+
+  test('a lock whose pid is alive (the test process) refuses and is left untouched', T, async t => {
+    const fx = l13Fixture(t)
+    fx.release()
+    const bytes = l13Lock(process.pid)
+    fx.plantLock(bytes)
+    const before = l13Snapshot(fx.ledgerDir)
+    assert.deepEqual(Object.keys(before), ['native-loop.lock'], 'fixture: only the planted lock')
+    const run = fx.start()
+    await run.done
+    const detail = fx.detail([run])
+    assert.equal(fx.hostCalls().length, 0, `the host ran. ${detail}`)
+    l13AssertBusy(run, process.pid, detail)
+    assert.ok(existsSync(fx.lockFile) && readFileSync(fx.lockFile).equals(bytes), `the lock bytes changed. ${detail}`)
+    assert.deepEqual(l13Snapshot(fx.ledgerDir), before, `the ledger directory changed (only the lock may exist). ${detail}`)
+  })
+
+  test('a lock whose pid is dead is taken over: exit 0, one host call, no lock, no stale file', T, async t => {
+    const fx = l13Fixture(t)
+    fx.release()
+    fx.plantLock(l13Lock(await l13DeadPid()))
+    const run = fx.start()
+    await run.done
+    const detail = fx.detail([run])
+    assert.equal(run.code, 0, `a dead owner's lock must be taken over. ${detail}`)
+    assert.equal(fx.hostCalls().length, 1, detail)
+    assert.equal(fx.ledgerRuns().length, 1, detail)
+    assert.deepEqual(fx.lockResidue(), [], `no native-loop.lock and no native-loop.lock.stale-* file may remain. ${detail}`)
+  })
+
+  const invalidLocks = {
+    'text that is not JSON': Buffer.from('not a lock\n'),
+    'an empty file': Buffer.alloc(0),
+    'an extra key, pid alive': l13Lock(process.pid, { extra: 1 }),
+    'a token that is not 16 lowercase hex, pid alive': Buffer.from(JSON.stringify({ schemaVersion: 1, pid: process.pid, token: 'ABCDEF0123456789' }) + '\n'), // allow-secret: invalid-token fixture
+    'schemaVersion 2, pid alive': Buffer.from(JSON.stringify({ schemaVersion: 2, pid: process.pid, token: L13_TOKEN }) + '\n'),
+    'a pid that is not a positive integer': Buffer.from(JSON.stringify({ schemaVersion: 1, pid: 0, token: L13_TOKEN }) + '\n'),
+  }
+  for (const [what, bytes] of Object.entries(invalidLocks)) {
+    test(`a lock with invalid bytes (${what}) is taken over: exit 0, one host call, no lock, no stale file`, T, async t => {
+      const fx = l13Fixture(t)
+      fx.release()
+      fx.plantLock(bytes)
+      const run = fx.start()
+      await run.done
+      const detail = fx.detail([run])
+      assert.equal(run.code, 0, `an invalid lock is stale and must be taken over. ${detail}`)
+      assert.equal(fx.hostCalls().length, 1, detail)
+      assert.equal(fx.ledgerRuns().length, 1, detail)
+      assert.deepEqual(fx.lockResidue(), [], `no native-loop.lock and no native-loop.lock.stale-* file may remain. ${detail}`)
+    })
+  }
+
+  test("two iterations started together over a dead owner's lock: one runs, the other is refused", T, async t => {
+    const fx = l13Fixture(t)
+    fx.plantLock(l13Lock(await l13DeadPid()))
+    const procs = [fx.start(), fx.start()]
+    // Either one is refused at once, or (no lock) both reach verify.
+    await l13Wait(() => procs.some(p => p.exited) || fx.inVerify() >= 2, 15000)
+    fx.release()
+    await Promise.all(procs.map(p => p.done))
+    const detail = fx.detail(procs)
+    assert.equal(fx.hostCalls().length, 1, `exactly one host call. ${detail}`)
+    assert.equal(fx.ledgerRuns().length, 1, `exactly one ledger run. ${detail}`)
+    assert.deepEqual(procs.map(p => p.code).sort(), [0, 4], `exactly one iteration must exit 4 and the other 0. ${detail}`)
+    const loser = procs.find(p => p.code === 4)
+    const winner = procs.find(p => p.code === 0)
+    l13AssertBusy(loser, winner.pid, detail)
+    assert.deepEqual(fx.lockResidue(), [], `no lock or stale file may remain. ${detail}`)
+  })
+})
