@@ -2147,3 +2147,120 @@ Observed limits and untested hypotheses:
 - This is fake-codex wiring proof, not runtime certification.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-05d — One native QA loop iteration (no commit)
+
+Implemented spec/contracts/codex-parity-cp-05d.md only:
+
+- New `graphs/qa/tool/qa-loop.mjs`, run as `--args-file <absolute path>`. It exports
+  nothing, and it runs as the CLI only when `realpathSync(process.argv[1])` is this file.
+  - It imports only `node:` built-ins and the seven pinned CP-05c names. It takes nothing
+    from core/. It starts three kinds of process, each with its own `process.env`:
+    - `git rev-parse` and `git status`, run with `cwd`. The argv is exactly the
+      contract's, with no `-C`.
+    - the host, `process.execPath <codeRoot>/core/skills/native-runtime/graph-host.mjs
+      --args-file <file>`;
+    - `bash <installationRoot>/core/skills/verify/verify.sh`, only on `done`.
+
+    No child inherits qa-loop's stdio. It installs no signal handler and sets
+    `process.exitCode`.
+  - The steps run in contract order: input, repository, ledger, workflow args,
+    invocation, host args file, host, outcome.
+    - Nothing is created before the inflight file passes its check. A new inflight file
+      is published with temp, `link` and unlink. On `EEXIST` it resumes the other
+      process's file.
+    - An already-recorded invocation only unlinks the inflight file and reports
+      `recorded: false`.
+  - Host exits are mapped as the table says:
+    - 0 takes the done path;
+    - 4 `OWNER_BUSY` or 3 `CHECKPOINT_UNCERTAIN` becomes exit 4 with the
+      `graph-reconcile.mjs list` hint;
+    - 1, 2 or 3 with one `{"error":<CODE>}` line passes through;
+    - anything else is `HOST_FAILED`.
+
+    After any non-zero exit, the inflight file is kept exactly when `runDir` exists.
+  - The done path:
+    - it checks result.json (lstat regular, at most 16 MiB, the six keys) and the host's
+      exact stdout;
+    - on `done`, verify runs first, then `git status --porcelain=v1 -z
+      --untracked-files=all`. Both paths of an R or C entry are kept, and the list is
+      sorted by code unit;
+    - a failed check downgrades the run: `VERIFY_FAILED` outranks `TOUCHED_MISMATCH`;
+    - then `applyResult` and `writeLedger`, the inflight file is removed, and the
+      one-line report is printed.
+- New `tests/qa-loop.test.mjs` (10 cases, harness `test()`). It runs qa-loop from a copy
+  of its own tree, where `graph-host.mjs` is a stub that follows a per-case plan. The
+  stub shows the host comes from `<codeRoot>` and receives qa-loop's env. The cases are
+  the contract's review-only items that can be tested safely:
+  - `INVALID_RESULT`: 13 tampered result or stdout variants, each leaving the ledger
+    unwritten and the inflight file kept, plus the rerun resuming the same invocation;
+  - every host-exit mapping (14 variants), including the hint and the
+    inflight-kept-iff-runDir rule;
+  - `LEDGER_IO_ERROR` on write (inflight kept; the rerun records) and on read;
+  - `IO_ERROR` for a native-runs symlink;
+  - verify past `timeoutMs` is FAIL. verify.sh is a builtin-only spin that never forks;
+  - a missing verify.sh is FAIL;
+  - a done result with no `touched` list is `TOUCHED_MISMATCH`.
+
+Decisions (no human present):
+- Every child runs through `spawnSync` with `killSignal: 'SIGKILL'`.
+  - verify: `timeout: timeoutMs`, a 64 MiB `maxBuffer`, stderr ignored.
+  - git: the same `timeoutMs` bound. `git status` has a 64 MiB stdout cap and each
+    `rev-parse` a 16 KiB one (`MAX_PATH_BYTES * 4`). The contract names no git timeout,
+    and a rev-parse failure of any kind is `NOT_A_REPO`.
+  - the host: no timeout (its own deadline is `timeoutMs`) and a 1 MiB output cap. An
+    overflow is `HOST_FAILED`.
+- `ledgerDir` and `native-runs` must be real directories after mkdir (lstat). A symlink
+  is `IO_ERROR` rather than being followed, as CP-04c does for its `native-runs`.
+- If removing the inflight file fails after a non-zero host exit (with no `runDir`), the
+  result is exit 3 `IO_ERROR`, consistent with done-path step 6, instead of the host's
+  code.
+- An inflight file that passed lstat but then fails to open with `ELOOP` is
+  `INFLIGHT_INVALID`. Other open or read errors are `IO_ERROR`.
+- The verify verdict uses `trim()` on the last non-empty line. `verifyTail` uses
+  `trimEnd()` per line, as the contract says.
+- A `git status -z` record it cannot parse makes `changed` `[]` and touched `MISMATCH`.
+  The cause is either an entry that is not `XY path` or a rename with no source field.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-05d-qa-loop.test.mjs
+# before the change: tests 19, pass 0, fail 19 (each on "qa-loop.mjs must exist")
+# after the change:  tests 19, pass 19, fail 0 (first run)
+node tests/qa-loop.test.mjs
+# 10 ok (first run, before the verify-log assertions were added; the aggregate below ran them)
+node logs/evidence/cp-05d/run-focused.mjs tests/qa-loop.test.mjs tests/qa-ledger.test.mjs tests/check-refs.test.mjs \
+  tests/native-graph-reconcile.test.mjs tests/native-catalog-drift.test.mjs
+# FOCUSED: 46 passed, 0 failed, 0 skipped (harness summary())
+node --test acceptance/codex-parity/cp-05d-qa-loop.test.mjs acceptance/codex-parity/cp-05c-qa-ledger.test.mjs \
+  acceptance/codex-parity/cp-05b-graph-reconcile.test.mjs
+# tests 64, pass 64, fail 0
+node scripts/check-refs.mjs                  # check-refs: 271 references, all resolve (rerun after the feat commit)
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+bash scripts/check-secrets.sh graphs/qa/tool/qa-loop.mjs tests/qa-loop.test.mjs   # check-secrets: clean
+node --test acceptance/codex-parity/cp-05e-qa-gate.test.mjs   # read-only look at the next consumer
+# tests 4, pass 3, fail 1: the one failure is CP-05e's own dev.proofRefs catalog change, still unbuilt
+```
+
+Saved under logs/evidence/ (gitignored): `cp-05d/run-focused.mjs`.
+
+Observed limits and untested hypotheses:
+- These are review-only, and no case exercises them:
+  - the 64 MiB verify stdout bound;
+  - the `EEXIST` race on the inflight file;
+  - `IO_ERROR` when the inflight file, the host args file or the inflight removal fails.
+
+  AGENTS.md blocks the nested-capture overflow and filesystem-race reproductions, so no
+  case floods output or races the file. That verify's overflow kills it and keeps the
+  partial stdout comes from the Node `spawnSync` documentation. It is an untested
+  hypothesis here.
+- The timeout case shows a builtin-only verify.sh is killed and judged FAIL. Whether
+  `spawnSync` returns promptly when a grandchild of verify.sh holds the stdout pipe
+  after the SIGKILL is untested (that scenario is too close to the blocked orphan
+  reproduction).
+- No mutation check was run, and macOS was not run.
+- This is fake-codex wiring proof, not runtime certification.
+
+Full regressions, review and the branch hunt remain pending for the PR.

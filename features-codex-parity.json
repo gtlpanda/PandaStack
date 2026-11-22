@@ -417,7 +417,7 @@
       ],
       "test": "acceptance/codex-parity/cp-05d-qa-loop.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-04e",
