@@ -4043,3 +4043,39 @@ Phase 2 acceptance: 97/97.
   through the real gate" asserts six 1 s steps finish under 4.5 s; it failed 1 of 6 autobuild
   suite runs on main too (0 of 6 on this branch). Pre-existing, load sensitive; listed with the
   other wall-clock budgets to fix.
+
+## 70. Codex parity wave 2, run A: tiers 1 and 2 built, 8 features (2026-11-22)
+
+- What: autobuild built the 8 frozen wave-2 features (CP-05a, CP-02h, CP-03d, CP-04a, CP-05c,
+  CP-05b, CP-04b, CP-04d) on branch autobuild/codex-parity-w2a, Claude backend, pr-first, from
+  a runner pinned at 8942c5c in ~/autobuild/runner-main-8942c5c (the PATH symlink still points
+  to the older pin). PR #83, merged as 40b4587. features-codex-parity.json: 21/21.
+- Cost: 8 iterations, no retries, 47-65 turns each, **$41.07 estimated** (the tool's estimate,
+  not a bill), 1 h 17 min wall clock. Parity runs so far: $21.33 + $52.26 + $41.07.
+- Proof on the head 761a6a3: all 21 codex-parity acceptance tests 621/621; `autobuild check
+  --phase full` GATE: PASS locally in 3 min 18 s; CI's three shards green (2m43s, 2m12s, 1m50s).
+  No frozen file changed. One existing test changed: tests/native-graph-host.test.mjs's fixture
+  copies every file of each skill directory, so CP-03d's skill-path tokens resolve.
+- /bughunt over 8942c5c..761a6a3: 0 findings across six lenses, recheck PASS, disposition
+  manual_review. The regression lens did not trace the new blueprint-state, blueprint-decisions
+  and qa-ledger modules in depth (no prior behavior), and the logic lens did not audit the tests.
+- Allowlist gap (open): the 8 sessions hit 38 permission denials, all compound or piped Bash
+  commands. The builders worked around each one; no feature failed on them.
+
+## 71. Live Codex: strict schemas accepted and enforced; the wave-1 smoke now passes (2026-11-22)
+
+- The live steps the priority contract schedules after CP-02h and CP-03d, under D126.
+  docs/evidence/codex-live-2026-11-22.md has the details; the raw records are beside it.
+  Codex 0.167.0 on Linux (WSL2), 16 live calls, auth.json symlinked and unchanged.
+- Probe: through the real provider, Codex accepted the strict form of all 10 harness-repair and
+  blueprint-design leaf schemas, and every reply passed the runtime's NR-01 decode.
+  - Asked for `excerpt` as an array, it still returned a string: the wave-1 failure did not recur.
+    That is one sample, not a proof of every case.
+  - Handed a raw non-strict schema, the API refused it with HTTP 400 `invalid_json_schema`
+    (strict mode needs `additionalProperties: false`), so CP-02h's conversion is required.
+- Smoke rerun (graph host, harness-repair on a passing fixture): status done in 45 s through
+  checker, reviewer and qa-auditor. On 2026-11-20 it escalated at the first leaf.
+  - The checker ran verify.sh at the absolute path CP-03d's loader substituted, inside Codex's
+    workspace-write sandbox, and got VERIFY: PASS. In wave 1 that step was exit 127.
+- Not established: certification of any offering; the fix, advise and unstick leaves (the
+  fixture's tests passed); any blueprint graph run; the effect of the agents.* keys.

@@ -1,0 +1,93 @@
+[nr-04a7f195f54b] exit=0 /bin/bash -lc 'cd <scratch>/smoke/fixture && bash "<home>/code/PandaStack/core/skills/verify/verify.sh"'
+----- skipped: no "lint" script in package.json
+----- skipped: no "typecheck" script in package.json
+----- node:test
+$ npm run test
+exit: 0
+VERIFY_EVIDENCE: <tmp>/verify-evidence/manifest.json
+
+  [0] npm run test
+VERIFY: PASS
+
+
+[nr-211b3c457fd7] exit=0 /bin/bash -lc "git diff --merge-base main -- . ':"'!*.lock'"' ':"'!package-lock.json'"' ':"'!pnpm-lock.yaml'"'"
+diff --git a/add.js b/add.js
+index 2249e21..b5fe173 100644
+--- a/add.js
++++ b/add.js
+@@ -1 +1,2 @@
+ export function add(a, b) { return a + b }
++export function double(n) { return add(n, n) }
+diff --git a/add.test.js b/add.test.js
+index 6931797..7adf69b 100644
+--- a/add.test.js
++++ b/add.test.js
+@@ -2,3 +2,5 @@ import { test } from 'node:test'
+ import assert from 'node:assert/strict'
+ import { add } from './add.js'
+ test('add sums two numbers', () => { assert.equal(add(2, 3), 5) })
++import { double } from './add.js'
++test('double doubles', () => { assert.equal(double(4), 8) })
+
+
+[nr-211b3c457fd7] exit=0 /bin/bash -lc 'git diff HEAD'
+
+
+[nr-211b3c457fd7] exit=0 /bin/bash -lc 'git status --short'
+
+
+[nr-211b3c457fd7] exit=0 /bin/bash -lc 'git show HEAD:add.js'
+export function add(a, b) { return a + b }
+export function double(n) { return add(n, n) }
+
+
+[nr-211b3c457fd7] exit=0 /bin/bash -lc 'git show HEAD:add.test.js'
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { add } from './add.js'
+test('add sums two numbers', () => { assert.equal(add(2, 3), 5) })
+import { double } from './add.js'
+test('double doubles', () => { assert.equal(double(4), 8) })
+
+
+[nr-211b3c457fd7] exit=128 /bin/bash -lc 'git show HEAD:docs/knowledge-map.json'
+fatal: path 'docs/knowledge-map.json' does not exist in 'HEAD'
+
+
+[nr-211b3c457fd7] exit=0 /bin/bash -lc 'git show HEAD:package.json'
+{ "name": "smoke-fixture", "version": "1.0.0", "private": true, "type": "module", "scripts": { "test": "node --test" } }
+
+
+[nr-277fd887ba96] exit=0 /bin/bash -lc 'cd <scratch>/smoke/fixture && git status --short && git diff --name-only main...HEAD && git diff --name-only && git diff --name-only --cached && ls -a'
+add.js
+add.test.js
+.
+..
+.git
+add.js
+add.test.js
+package.json
+
+
+[nr-277fd887ba96] exit=0 /bin/bash -lc 'cd <scratch>/smoke/fixture && cat add.js add.test.js package.json && git diff main...HEAD && git diff && git diff --cached && git log --oneline -5'
+s b/add.js
+index 2249e21..b5fe173 100644
+--- a/add.js
++++ b/add.js
+@@ -1 +1,2 @@
+ export function add(a, b) { return a + b }
++export function double(n) { return add(n, n) }
+diff --git a/add.test.js b/add.test.js
+index 6931797..7adf69b 100644
+--- a/add.test.js
++++ b/add.test.js
+@@ -2,3 +2,5 @@ import { test } from 'node:test'
+ import assert from 'node:assert/strict'
+ import { add } from './add.js'
+ test('add sums two numbers', () => { assert.equal(add(2, 3), 5) })
++import { double } from './add.js'
++test('double doubles', () => { assert.equal(double(4), 8) })
+989c738 add double
+ca2ecc7 initial
+
+

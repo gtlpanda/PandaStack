@@ -1,0 +1,137 @@
+[
+  {
+    "version": 1,
+    "callId": "nr-04a7f195f54b51a312d899e68775e455bfa66f3ce47a722ccb0cb0d283cf0bef",
+    "binding": {
+      "callId": "nr-04a7f195f54b51a312d899e68775e455bfa66f3ce47a722ccb0cb0d283cf0bef",
+      "invocationId": "live-smoke-w2-rerun-001",
+      "workflowId": "harness-repair",
+      "workflowPath": [
+        "harness-repair"
+      ],
+      "agentType": "checker",
+      "label": "check #1",
+      "phase": "Check",
+      "occurrence": 1,
+      "workflowHash": "696413de1aadeb9c1dc550f490259854346ca33d3d602dc2105e0325f77423be",
+      "argsHash": "06b0d3f601999e35372df85321343074b280710f5f2b27a1857a8ac2ef680b7c",
+      "promptHash": "093e4bf1ead8b93f1ca7e06e7e18ff36ba9f96d2cfcac4d6782f36895c2e9628",
+      "schemaHash": "9a52a1416159b82d1f9741e9a3a4fe085276b1867d3c8d914504359937daa759",
+      "selection": {
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "effort": "high"
+      },
+      "profile": "build-workspace"
+    },
+    "state": "returned",
+    "completion": {
+      "outcome": "returned",
+      "wire": {
+        "json": "{\"verdict\":\"PASS\",\"verify_block\":\"  [0] npm run test\\nVERIFY: PASS\",\"failures\":[]}"
+      },
+      "usage": {
+        "input_tokens": 33279,
+        "cached_input_tokens": 16256,
+        "output_tokens": 550,
+        "reasoning_output_tokens": 369
+      },
+      "receipt": {
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "effort": "high",
+        "invocationId": "nr-04a7f195f54b51a312d899e68775e455bfa66f3ce47a722ccb0cb0d283cf0bef"
+      }
+    }
+  },
+  {
+    "version": 1,
+    "callId": "nr-277fd887ba96e0fe7843a3992202950c7c4602ae29c4ea9e9d5b5bde8046474f",
+    "binding": {
+      "callId": "nr-277fd887ba96e0fe7843a3992202950c7c4602ae29c4ea9e9d5b5bde8046474f",
+      "invocationId": "live-smoke-w2-rerun-001",
+      "workflowId": "harness-repair",
+      "workflowPath": [
+        "harness-repair"
+      ],
+      "agentType": "qa-auditor",
+      "label": "qa: branch",
+      "phase": "QA",
+      "occurrence": 1,
+      "workflowHash": "696413de1aadeb9c1dc550f490259854346ca33d3d602dc2105e0325f77423be",
+      "argsHash": "06b0d3f601999e35372df85321343074b280710f5f2b27a1857a8ac2ef680b7c",
+      "promptHash": "4e36cd279bff0fc907ec146cbac9ca4fdd9f6dffad828a3c7126e406eb232407",
+      "schemaHash": "da48faf085a6a7daf69c2c8b07acdae20564399be3826d1d53fbb7aa3aa3e6f1",
+      "selection": {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "effort": "high"
+      },
+      "profile": "source-review"
+    },
+    "state": "returned",
+    "completion": {
+      "outcome": "returned",
+      "wire": {
+        "json": "{\"files_reviewed\":3,\"findings\":[]}"
+      },
+      "usage": {
+        "input_tokens": 52868,
+        "cached_input_tokens": 34688,
+        "output_tokens": 319,
+        "reasoning_output_tokens": 54
+      },
+      "receipt": {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "effort": "high",
+        "invocationId": "nr-277fd887ba96e0fe7843a3992202950c7c4602ae29c4ea9e9d5b5bde8046474f"
+      }
+    }
+  },
+  {
+    "version": 1,
+    "callId": "nr-211b3c457fd70f6e957d5bd033267b439c5e0907fdaccc4bf9539a74a5700bd2",
+    "binding": {
+      "callId": "nr-211b3c457fd70f6e957d5bd033267b439c5e0907fdaccc4bf9539a74a5700bd2",
+      "invocationId": "live-smoke-w2-rerun-001",
+      "workflowId": "harness-repair",
+      "workflowPath": [
+        "harness-repair"
+      ],
+      "agentType": "reviewer",
+      "label": "review: branch",
+      "phase": "Review",
+      "occurrence": 1,
+      "workflowHash": "696413de1aadeb9c1dc550f490259854346ca33d3d602dc2105e0325f77423be",
+      "argsHash": "06b0d3f601999e35372df85321343074b280710f5f2b27a1857a8ac2ef680b7c",
+      "promptHash": "81ccd49e6f805c3612813cc0c8784fae55af9cd3c1554b2d2604c25bfa76fcd2",
+      "schemaHash": "da48faf085a6a7daf69c2c8b07acdae20564399be3826d1d53fbb7aa3aa3e6f1",
+      "selection": {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "effort": "high"
+      },
+      "profile": "source-review"
+    },
+    "state": "returned",
+    "completion": {
+      "outcome": "returned",
+      "wire": {
+        "json": "{\"files_reviewed\":2,\"findings\":[]}"
+      },
+      "usage": {
+        "input_tokens": 58203,
+        "cached_input_tokens": 38400,
+        "output_tokens": 443,
+        "reasoning_output_tokens": 0
+      },
+      "receipt": {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "effort": "high",
+        "invocationId": "nr-211b3c457fd70f6e957d5bd033267b439c5e0907fdaccc4bf9539a74a5700bd2"
+      }
+    }
+  }
+]

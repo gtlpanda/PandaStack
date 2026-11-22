@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "installationRoot": "<home>/code/PandaStack",
+  "workflowId": "harness-repair",
+  "offeringId": "bughunt",
+  "invocationId": "live-smoke-w2-rerun-001",
+  "args": {
+    "repo": "<scratch>/smoke/fixture",
+    "base": "main"
+  },
+  "runDir": "<scratch>/smoke/run/host",
+  "timeoutMs": 900000,
+  "maxConcurrentSubagents": 2,
+  "codexBin": "<home>/.npm-global/bin/codex",
+  "cwd": "<scratch>/smoke/fixture",
+  "env": {
+    "HOME": "<scratch>/live/home",
+    "CODEX_HOME": "<scratch>/live/codex-home",
+    "PATH": "<PATH>"
+  }
+}
