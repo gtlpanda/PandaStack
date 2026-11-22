@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { REPO, test } from '../scripts/workflow-harness.mjs'
-import { MAX_TIMER_MS, positiveSetting, scheduleOrder, settle, runPool, shardFiles } from '../scripts/workflow-pool.mjs'
+import { MAX_TIMER_MS, descendants, killTree, positiveSetting, scheduleOrder, settle, runPool, shardFiles } from '../scripts/workflow-pool.mjs'
 
 const HARNESS = pathToFileURL(join(REPO, 'scripts', 'workflow-harness.mjs')).href
 // Writes fixture test files (name -> body); each body may use `test` from the real harness.
@@ -135,9 +135,9 @@ await test('settle: malformed or missing counts never count as passing', () => {
 await test('pool: "alone" files run first, one at a time, before any other file starts', async () => {
   const log = join(mkdtempSync(join(tmpdir(), 'workflow-pool-alone-')), 'spans')
   const span = name => `import { appendFileSync } from 'node:fs'
-appendFileSync(${JSON.stringify(log)}, '${name} start ' + (performance.timeOrigin + performance.now()) + '\\n')
+appendFileSync(${JSON.stringify(log)}, '${name} start ' + Date.now() + '\\n')
 await new Promise(r => setTimeout(r, 150))
-appendFileSync(${JSON.stringify(log)}, '${name} end ' + (performance.timeOrigin + performance.now()) + '\\n')
+appendFileSync(${JSON.stringify(log)}, '${name} end ' + Date.now() + '\\n')
 await test('${name}', () => {})`
   const { dir, files } = fixtures({ 'a.test.mjs': span('a'), 'b.test.mjs': span('b'), 'c.test.mjs': span('c'), 'd.test.mjs': span('d') })
   try {
@@ -167,4 +167,121 @@ await test('shardFiles: every file in exactly one shard, the same split every ti
     const loads = [1, 2, 3].map(index => shardFiles(files, { index, count: 3 }).reduce((n, f) => n + statSync(f).size, 0))
     assert.ok(Math.max(...loads) - Math.min(...loads) < 2600, `balanced: ${loads}`)
   } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+// A process is dead for these checks once it is gone or a zombie waiting to be reaped.
+function alive(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+    return stat.slice(stat.lastIndexOf(')') + 2, stat.lastIndexOf(')') + 3) !== 'Z'
+  } catch {
+    if (existsSync('/proc')) return false
+    try { process.kill(pid, 0); return true } catch { return false }
+  }
+}
+async function settles(pid) {
+  for (let i = 0; i < 150 && alive(pid); i++) await new Promise(r => setTimeout(r, 20))
+  return !alive(pid)
+}
+// The process group of `pid` (field 5 of /proc/<pid>/stat), or null without procfs.
+function groupOf(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+    return Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[2])
+  } catch { return null }
+}
+// Cleanup for a pid a test itself started and recorded: exact, real pids only.
+function killStarted(pid) {
+  if (Number.isInteger(pid) && pid > 1 && pid !== process.pid) { try { process.kill(pid, 'SIGKILL') } catch { /* already gone */ } }
+}
+async function waitForFile(file) {
+  for (let i = 0; i < 250 && !existsSync(file); i++) await new Promise(r => setTimeout(r, 20))
+  return Number(readFileSync(file, 'utf8'))
+}
+
+await test('descendants: walks parent links down from the root, never returning the root or pid 0/1', () => {
+  const table = [
+    { pid: 1, ppid: 0 }, { pid: 50, ppid: 1 }, { pid: 51, ppid: 1 },
+    { pid: 100, ppid: 50 }, { pid: 101, ppid: 100 }, { pid: 102, ppid: 101 }, { pid: 103, ppid: 100 },
+    { pid: 200, ppid: 51 },
+  ]
+  assert.deepEqual(descendants(50, table).sort((a, b) => a - b), [100, 101, 102, 103])
+  assert.deepEqual(descendants(101, table), [102])
+  assert.deepEqual(descendants(102, table), [], 'a leaf has none')
+  assert.deepEqual(descendants(999, table), [], 'an unknown root has none')
+  assert.deepEqual(descendants(50, []), [], 'an empty table has none')
+  // Bad rows cannot widen the result: a loop back to the root, and rows naming pid 0 or 1.
+  const odd = [{ pid: 60, ppid: 70 }, { pid: 70, ppid: 60 }, { pid: 1, ppid: 60 }, { pid: 0, ppid: 60 }]
+  assert.deepEqual(descendants(60, odd), [70])
+})
+
+await test('killTree: refuses pid 0, 1, a negative pid and this process; kills the root when the table cannot be read', async () => {
+  const unreadable = () => { throw Object.assign(new Error('no ps'), { code: 'ENOENT' }) }
+  for (const root of [0, 1, -1, process.pid, 1.5, NaN]) assert.equal(killTree(root, { table: unreadable }), null, String(root))
+  const { spawn } = await import('node:child_process')
+  const sleeper = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })
+  try {
+    const exited = new Promise(resolve => sleeper.once('exit', (code, signal) => resolve(signal)))
+    assert.match(killTree(sleeper.pid, { table: unreadable }), new RegExp(`could not list processes below ${sleeper.pid} \\(ENOENT\\); killed only ${sleeper.pid}`))
+    assert.equal(await exited, 'SIGKILL')
+  } finally { killStarted(sleeper.pid) }
+})
+
+// A fixture body that starts a grandchild, which starts its own child; both record their pids,
+// the grandchild records its process group, then the file passes a test and hangs.
+const spawnsTreeAndHangs = dir => {
+  const great = `const { writeFileSync } = require('node:fs'); writeFileSync(${JSON.stringify(join(dir, 'great.pid'))}, String(process.pid)); setInterval(() => {}, 1000)`
+  const grand = `const { spawn } = require('node:child_process'); const { readFileSync, writeFileSync } = require('node:fs')
+spawn(process.execPath, ['-e', ${JSON.stringify(great)}], { stdio: 'ignore' })
+let group = ''; try { const s = readFileSync('/proc/self/stat', 'utf8'); group = s.slice(s.lastIndexOf(')') + 2).split(' ')[2] } catch {}
+writeFileSync(${JSON.stringify(join(dir, 'group'))}, group)
+writeFileSync(${JSON.stringify(join(dir, 'grand.pid'))}, String(process.pid))
+setInterval(() => {}, 1000)`
+  return `import { spawn } from 'node:child_process'
+spawn(process.execPath, ['-e', ${JSON.stringify(grand)}], { stdio: 'ignore' })
+await test('starts a process tree, then hangs', () => {})
+setInterval(() => {}, 1000)`
+}
+
+await test('pool: a timeout kills every process below the file, and children stay in the caller\'s process group (bughunt F2)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'workflow-pool-tree-'))
+  let grand = null, great = null
+  try {
+    const r = await pool({ 'spawns.test.mjs': spawnsTreeAndHangs(dir) }, { fileTimeoutMs: 2500 })
+    assert.equal(r.fail, 1, r.out)
+    assert.match(r.out, /spawns\.test\.mjs still running after 2500 ms/)
+    grand = await waitForFile(join(dir, 'grand.pid'))
+    great = await waitForFile(join(dir, 'great.pid'))
+    assert.equal(await settles(grand), true, `grandchild ${grand} outlived its timed-out file`)
+    assert.equal(await settles(great), true, `great-grandchild ${great} outlived its timed-out file`)
+    const mine = groupOf(process.pid)
+    if (mine !== null) assert.equal(Number(readFileSync(join(dir, 'group'), 'utf8')), mine, 'the test tree ran in the caller\'s process group')
+  } finally {
+    killStarted(grand); killStarted(great)
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+await test('pool: a child that exits in time is not timed out, even while a grandchild keeps its output open', async () => {
+  // After the child exits it has been reaped, so its pid may already belong to another process:
+  // the timeout must never fire for it (no kill by a stale pid) and the file is not a timeout.
+  const dir = mkdtempSync(join(tmpdir(), 'workflow-pool-exited-'))
+  const pidFile = join(dir, 'holder.pid')
+  const body = `import { spawn } from 'node:child_process'
+import { writeFileSync } from 'node:fs'
+const holder = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 8000)'], { stdio: ['ignore', 'inherit', 'ignore'] })
+writeFileSync(${JSON.stringify(pidFile)}, String(holder.pid))
+holder.unref()
+await test('passes and exits at once', () => {})`
+  let holder = null
+  try {
+    const r = await pool({ 'exits.test.mjs': body }, { fileTimeoutMs: 1000 })
+    holder = await waitForFile(pidFile)
+    assert.deepEqual([r.pass, r.fail], [1, 0], r.out)
+    assert.doesNotMatch(r.out, /still running/)
+    assert.equal(alive(holder), true, 'the pool sent no kill after the child had exited')
+  } finally {
+    killStarted(holder)
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
