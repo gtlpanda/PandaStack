@@ -133,6 +133,46 @@ row flipped to partial). CP-06's freeze amends the refusal case.
    `<toplevel>`. Then `<ledgerDir>` as above, in `<toplevel>`. Either git call failing
    (spawn error, non-zero exit, empty output, or a relative path) is exit 2
    `NOT_A_REPO`.
+
+   2a. **Loop lock** (added after bughunt F1 on the run-B build: two iterations in one
+   repository re-ran and double-recorded one invocation). Only one iteration at a time
+   reads and records a repository's ledger.
+   - `<ledgerDir>` is created 0700 when missing. The lock is
+     `<ledgerDir>/native-loop.lock`, mode 0600, holding exactly
+     `JSON.stringify({schemaVersion: 1, pid: process.pid, token}) + "\n"`, where `token`
+     is 16 lowercase hex characters from 8 random bytes. It is published atomically and
+     exclusively, as the inflight file is (temp file, `link`, temp removed), so it is
+     never visible empty or half written.
+   - On `EEXIST` the existing lock is read (`lstat`: a regular file of at most 4096
+     bytes). Its owner is **alive** when its bytes are valid (exactly those keys,
+     `schemaVersion` 1, `pid` a positive safe integer, `token` matching
+     `^[0-9a-f]{16}$`) and `process.kill(pid, 0)` succeeds or fails with `EPERM`. Then
+     the iteration is refused: exit 4 `OWNER_BUSY` with `invocationId: null` and the
+     hint `another qa-loop iteration (pid <pid>) is running in this repository; run it
+     again after that one exits`. Nothing else is read, written, removed or spawned.
+   - Otherwise (`ESRCH`, or bytes that are not valid) the lock is **stale** and is taken
+     over: it is renamed to `<ledgerDir>/native-loop.lock.stale-<process.pid>-<8 hex>`,
+     and the renamed file's bytes must equal the bytes judged stale. Then the renamed
+     file is removed and publishing is tried again. When the renamed bytes differ
+     (another process took the lock over in between), the file is linked back to
+     `native-loop.lock` and the attempt starts again from the read; if that link fails
+     with `EEXIST`, it is exit 3 `IO_ERROR` and the renamed file is kept for an operator.
+     A rename failing with `ENOENT` (another process removed the lock) also starts
+     again. After 3 attempts it is exit 3 `IO_ERROR`. Any other filesystem failure here
+     is exit 3 `IO_ERROR`.
+   - The lock is held for the rest of the iteration and released on every exit after
+     this step (0, 2, 3 and 4): it is removed only while it still holds this process's
+     bytes. A process killed before its release (qa-loop installs no signal handler)
+     leaves a lock whose `pid` is dead, and the next iteration takes it over.
+   - Why this differs from W2-1 (a checkpoint store lock is never broken
+     automatically): the loop lock guards only qa-loop's own bookkeeping, from the
+     ledger read to the inflight removal. A held leaf is still held by the checkpoint
+     store, which the takeover never touches, so the host still refuses with
+     `OWNER_BUSY` or `CHECKPOINT_UNCERTAIN` (case 8).
+   - Not covered (known limit, untested): a dead owner's `pid` reused by an unrelated
+     process makes a stale lock look alive (exit 4 until that process exits; an operator
+     may remove the file), and separate pid namespaces sharing one repository can make a
+     live owner look dead.
 3. **Ledger.** `readLedger(<ledgerDir>/ledger.json)` (CP-05c). Its `warning`
    (`LEDGER_UNPARSEABLE`) goes into the report; the ledger is then the empty one, and
    the next write replaces the file with a valid ledger. `LEDGER_IO_ERROR` is exit 3.
@@ -353,11 +393,26 @@ Cases:
     `OFFERING_UNSUPPORTED` with zero spawns, no run directory and no inflight file.
 12. Every case: HEAD, refs and staged entries unchanged; the git wrapper saw only
     `rev-parse` and `status`; the `gh` and `claude` stubs recorded nothing.
+13. One iteration at a time (step 2a; bughunt F1). These cases copy the candidate's
+    qa-loop.mjs and qa-ledger.mjs into an owned code root whose graph-host.mjs is a stub
+    that records each call and writes a valid `done` result, and whose verify.sh can be
+    parked until the test releases it.
+    - Live owner: iteration A parks in verify (host done, ledger not written). Iteration
+      B exits 4 `OWNER_BUSY` with `invocationId: null` and the hint naming A's pid, runs
+      no host, and writes nothing. After A is released there is exactly one host call,
+      one ledger run, and no lock file.
+    - A lock whose `pid` is alive (the test's own) refuses the same way, and its bytes
+      are unchanged.
+    - A lock whose `pid` is dead, and a lock whose bytes are not valid, are taken over:
+      the iteration exits 0 and leaves no lock and no `native-loop.lock.stale-*` file.
+    - Two iterations started together over a dead owner's lock: exactly one host call
+      and one ledger run; the other exits 4 `OWNER_BUSY`.
 
 At this freeze qa-loop.mjs does not exist, so every case fails. Against a tree with
 every dependency built and no qa-loop.mjs, every case fails on the missing module.
 
-Enforced by review, not by a case: qa-loop installs no signal handler and never calls
+Enforced by review, not by a case: the loop lock's link-back and `IO_ERROR` paths (a
+three-way takeover race); qa-loop installs no signal handler and never calls
 `process.exit`; the verify timeout and the 64 MiB stdout bound; the `EEXIST` race on the
 inflight file; `INVALID_RESULT` on a tampered result.json; `IO_ERROR` and
 `LEDGER_IO_ERROR` paths; `HOST_FAILED`.
