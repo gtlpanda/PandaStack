@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "workflowId": "harness-repair",
+  "offeringId": "bughunt",
+  "invocationId": "live-smoke-w2-rerun-001",
+  "status": "done",
+  "result": {
+    "status": "done",
+    "reason": "VERIFY: PASS and no HIGH/CRITICAL review or QA findings",
+    "fixRounds": 0,
+    "stuckSig": null,
+    "lastVerify": "  [0] npm run test\nVERIFY: PASS",
+    "touched": [],
+    "fixed": [],
+    "noted": [],
+    "refuted": [],
+    "history": [
+      {
+        "node": "check",
+        "verdict": "PASS",
+        "reported": "PASS",
+        "failures": 0
+      },
+      {
+        "node": "review",
+        "scope": "branch",
+        "files": null,
+        "findings": 0
+      },
+      {
+        "node": "qa",
+        "scope": "branch",
+        "files": null,
+        "findings": 0
+      }
+    ]
+  }
+}

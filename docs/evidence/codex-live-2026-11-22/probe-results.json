@@ -1,0 +1,247 @@
+{
+  "note": "Call 0 validated the probe script; calls 1-12 are the full run. Model gpt-6-luna, effort low, profile source-review, codex-cli 0.167.0, Linux (WSL2).",
+  "authUnchanged": true,
+  "authStillSymlink": true,
+  "validation": [
+    {
+      "tag": "accept:UNSTICK_SCHEMA",
+      "flow": "harness-repair",
+      "name": "UNSTICK_SCHEMA",
+      "callId": "nr-d3a2a0c65e45ffb8984d2b3a8b014c9a00471dd5c341b0355f2400bc87d23ad2",
+      "ms": 4829,
+      "outcome": "returned",
+      "code": null,
+      "usage": {
+        "input_tokens": 14161,
+        "cached_input_tokens": 0,
+        "output_tokens": 24,
+        "reasoning_output_tokens": 0
+      },
+      "wire": {
+        "json": "{\"action\":\"retry\",\"diagnosis\":\"Placeholder\",\"strategy\":\"Placeholder\"}"
+      },
+      "decode": "OK"
+    }
+  ],
+  "rows": [
+    {
+      "tag": "accept:CHECK_SCHEMA",
+      "flow": "harness-repair",
+      "name": "CHECK_SCHEMA",
+      "callId": "nr-1ed5460c9cb8c6c96293831b8104eba141e72c5290717004ef70a2b3809e410f",
+      "ms": 3037,
+      "outcome": "returned",
+      "code": null,
+      "usage": {
+        "input_tokens": 15665,
+        "cached_input_tokens": 0,
+        "output_tokens": 43,
+        "reasoning_output_tokens": 0
+      },
+      "wire": {
+        "json": "{\"verdict\":\"PASS\",\"verify_block\":\"placeholder\",\"failures\":[{\"step\":\"placeholder\",\"exit\":0,\"error_key\":\"placeholder\",\"excerpt\":\"placeholder\"}]}"
+      },
+      "decode": "OK"
+    },
+    {
+      "tag": "accept:FIX_SCHEMA",
+      "flow": "harness-repair",
+      "name": "FIX_SCHEMA",
+      "callId": "nr-f3003d119b791ffd37847b15eaaba1772ca76e02281ef50c34767f89cbb83517",
+      "ms": 3290,
+      "outcome": "returned",
+      "code": null,
+      "usage": {
+        "input_tokens": 15680,
+        "cached_input_tokens": 0,
+        "output_tokens": 46,
+        "reasoning_output_tokens": 0
+      },
+      "wire": {
+        "json": "{\"fixed\":[\"placeholder\"],\"unfixed\":[{\"item\":\"placeholder\",\"reason\":\"placeholder\"}],\"touched\":[\"placeholder\"],\"verify_verdict\":\"NOT_RUN\",\"summary\":\"placeholder\"}"
+      },
+      "decode": "OK"
+    },
+    {
+      "tag": "accept:REVIEW_SCHEMA",
+      "flow": "harness-repair",
+      "name": "REVIEW_SCHEMA",
+      "callId": "nr-a21e2a12ba65589cafbf8940ce5816fb20404f25c8e4968e428e31e91eaef617",
+      "ms": 3515,
+      "outcome": "returned",
+      "code": null,
+      "usage": {
+        "input_tokens": 15677,
+        "cached_input_tokens": 0,
+        "output_tokens": 46,
+        "reasoning_output_tokens": 0
+      },
+      "wire": {
+        "json": "{\"files_reviewed\":0,\"findings\":[{\"severity\":\"LOW\",\"title\":\"Placeholder\",\"file\":\"placeholder\",\"line\":0,\"why\":\"Placeholder\",\"fix\":\"Placeholder\"}]}"
+      },
+      "decode": "OK"
+    },
+    {
+      "tag": "accept:CONFIRM_SCHEMA",
+      "flow": "harness-repair",
+      "name": "CONFIRM_SCHEMA",
+      "callId": "nr-492d7eb0977ad4d3c75f43cd461a9eb55b0cf87d8d0c468e665fce4138f63908",
+      "ms": 5463,
+      "outcome": "returned",
+      "code": null,
+      "usage": {
+        "input_tokens": 15636,
+        "cached_input_tokens": 0,
+        "output_tokens": 29,
+        "reasoning_output_tokens": 0
+      },
+      "wire": {
+        "json": "{\"verdicts\":[{\"index\":0,\"real\":false,\"reason\":\"placeholder\"}]}"
+      },
+      "decode": "OK"
+    },
+    {
+      "tag": "accept:UNSTICK_SCHEMA",
+      "flow": "harness-repair",
+      "name": "UNSTICK_SCHEMA",
+      "callId": "nr-844cb594e4a5197496d3edf01d1d7318cbaa813b842abcae1a627bc47f867817",
+      "ms": 5510,
+      "outcome": "returned",
+      "code": null,
+      "usage": {
+        "input_tokens": 15628,
+        "cached_input_tokens": 0,
+        "output_tokens": 24,
+        "reasoning_output_tokens": 0
+      },
+      "wire": {
+        "json": "{\"action\":\"retry\",\"diagnosis\":\"Placeholder\",\"strategy\":\"Placeholder\"}"
+      },
+      "decode": "OK"
+    },
+    {
+      "tag": "accept:BRIEF_SCHEMA",
+      "flow": "blueprint-design",
+      "name": "BRIEF_SCHEMA",
+      "callId": "nr-5e983c99275da56a60a06edb8ed7da73d0c9e9139bd32eaa65721f3e00381368",
+      "ms": 5248,
+      "outcome": "returned",
+      "code": null,
+      "usage": {
+        "input_tokens": 15783,
+        "cached_input_tokens": 0,
+        "output_tokens": 105,
+        "reasoning_output_tokens": 0
+      },
+      "wire": {
+        "json": "{\"goal\":\"Placeholder goal\",\"mode\":\"app\",\"users\":[\"Placeholder user\"],\"requirements\":[{\"id\":\"REQ-1\",\"text\":\"Placeholder requirement\",\"source\":\"user\"}],\"decided\":[{\"decision\":\"Placeholder decision\",\"source\":\"user\"}],\"gaps\":[\"Placeholder gap\"],\"contradictions\":[{\"id\":\"CON-1\",\"a\":\"Placeholder A\",\"b\":\"Placeholder B\",\"sources\":[\"user\"]}],\"constraints\":[\"Placeholder constraint\"],\"existing_stack\":\"Placeholder stack\"}"
+      },
+      "decode": "OK"
+    },
+    {
+      "tag": "accept:QUESTIONS_SCHEMA",
+      "flow": "blueprint-design",
+      "name": "QUESTIONS_SCHEMA",
+      "callId": "nr-1f701dc7ca58d1a1c25f3d37e9af0c6d86ed72516207051006fcb3d0f101b538",
+      "ms": 4366,
+      "outcome": "returned",
+      "code": null,
+      "usage": {
+        "input_tokens": 15764,
+        "cached_input_tokens": 0,
+        "output_tokens": 103,
+        "reasoning_output_tokens": 0
+      },
+      "wire": {
+        "json": "{\"questions\":[{\"id\":\"q1\",\"question\":\"Placeholder question?\",\"stakes\":\"Low\",\"options\":[{\"label\":\"Option A\",\"description\":\"Placeholder choice.\"}],\"recommended\":\"Option A\",\"default_if_unasked\":\"Option A\",\"resolves\":[\"Placeholder resolution\"]}],\"preflight\":[{\"what\":\"Placeholder check\",\"why\":\"Placeholder reason\",\"needed_by\":\"Placeholder timing\"}],\"assumptions\":[{\"assumption\":\"Placeholder assumption\",\"why\":\"Placeholder reason\"}]}"
+      },
+      "decode": "OK"
+    },
+    {
+      "tag": "accept:DESIGN_SCHEMA",
+      "flow": "blueprint-design",
+      "name": "DESIGN_SCHEMA",
+      "callId": "nr-e5a08c9079c6752f41298aaa8b0cf8de84f89db044ec4d3a9dbfffb7ccafd099",
+      "ms": 7732,
+      "outcome": "returned",
+      "code": null,
+      "usage": {
+        "input_tokens": 16043,
+        "cached_input_tokens": 0,
+        "output_tokens": 230,
+        "reasoning_output_tokens": 0
+      },
+      "wire": {
+        "json": "{\"summary\":\"placeholder\",\"modules\":[{\"id\":\"m1\",\"name\":\"placeholder\",\"responsibility\":\"placeholder\",\"requirements\":[\"placeholder\"],\"boundary\":false,\"shapes\":[{\"name\":\"placeholder\",\"sketch\":\"placeholder\"}],\"pick\":\"placeholder\",\"depth_reason\":\"placeholder\"}],\"failure_modes\":[{\"id\":\"f1\",\"what\":\"placeholder\",\"module\":\"placeholder\",\"silent\":false,\"tested\":false,\"handled\":false,\"plan\":\"placeholder\"}],\"adrs\":[{\"id\":\"a1\",\"title\":\"placeholder\",\"options\":[\"placeholder\"],\"decision\":\"placeholder\",\"reason\":\"placeholder\"}],\"departures\":[{\"what\":\"placeholder\",\"default\":\"placeholder\",\"reason\":\"placeholder\",\"adr\":\"placeholder\"}],\"honors\":[{\"id\":\"h1\",\"how\":\"placeholder\"}],\"conflicts\":[{\"id\":\"c1\",\"why\":\"placeholder\"}],\"knowledge\":[{\"id\":\"k1\",\"knowledge\":\"placeholder\",\"kind\":\"placeholder\",\"owner\":\"placeholder\",\"used_by\":[\"placeholder\"],\"changes_together_because\":\"placeholder\"}],\"premises\":[{\"claim\":\"placeholder\",\"evidence\":\"placeholder\",\"status\":\"UNVERIFIED\"}]}"
+      },
+      "decode": "OK"
+    },
+    {
+      "tag": "accept:SLICES_SCHEMA",
+      "flow": "blueprint-design",
+      "name": "SLICES_SCHEMA",
+      "callId": "nr-985e8a424f2ad4897951ae342f2b6a99bd690dd9469bd5829149a99b90dc07fc",
+      "ms": 4600,
+      "outcome": "returned",
+      "code": null,
+      "usage": {
+        "input_tokens": 15752,
+        "cached_input_tokens": 0,
+        "output_tokens": 80,
+        "reasoning_output_tokens": 0
+      },
+      "wire": {
+        "json": "{\"app\":\"placeholder\",\"slices\":[{\"id\":\"placeholder\",\"title\":\"placeholder\",\"goal\":\"placeholder\",\"requirements\":[\"placeholder\"],\"acceptance\":[{\"id\":\"placeholder\",\"criterion\":\"placeholder\",\"fails_when\":\"placeholder\"}],\"depends_on\":[\"placeholder\"]}],\"knowledge\":[{\"id\":\"placeholder\",\"built_in\":\"placeholder\",\"used_by\":[\"placeholder\"]}]}"
+      },
+      "decode": "OK"
+    },
+    {
+      "tag": "accept:GATE_SCHEMA",
+      "flow": "blueprint-design",
+      "name": "GATE_SCHEMA",
+      "callId": "nr-d05e70cca874c9e35a6641cd25a3190c62daa3daaf1a45ea23a5946125c7d1fe",
+      "ms": 3212,
+      "outcome": "returned",
+      "code": null,
+      "usage": {
+        "input_tokens": 15671,
+        "cached_input_tokens": 0,
+        "output_tokens": 41,
+        "reasoning_output_tokens": 0
+      },
+      "wire": {
+        "json": "{\"verdict\":\"approve\",\"issues\":[{\"n\":1,\"issue\":\"Placeholder\",\"fix\":\"Placeholder\",\"blocking\":false}],\"questions\":[\"Placeholder\"]}"
+      },
+      "decode": "OK"
+    },
+    {
+      "tag": "adversarial:CHECK_SCHEMA",
+      "flow": "harness-repair",
+      "name": "CHECK_SCHEMA",
+      "callId": "nr-751e6de7ddea38debb62cd991886c6417f5f55539167e94820f62f7b5b6777aa",
+      "ms": 3274,
+      "outcome": "returned",
+      "code": null,
+      "usage": {
+        "input_tokens": 15694,
+        "cached_input_tokens": 0,
+        "output_tokens": 47,
+        "reasoning_output_tokens": 0
+      },
+      "wire": {
+        "json": "{\"verdict\":\"FAIL\",\"verify_block\":\"x\",\"failures\":[{\"step\":\"verify\",\"exit\":1,\"error_key\":\"k\",\"excerpt\":\"line one\\nline two\"}]}"
+      },
+      "decode": "OK"
+    },
+    {
+      "tag": "negative-nonstrict",
+      "flow": "harness-repair",
+      "name": "CHECK_SCHEMA (raw, not strict)",
+      "ms": 2553,
+      "exitCode": 1,
+      "code": "TURN_FAILED",
+      "message": "{\"type\":\"error\",\"error\":{\"message\":\"Invalid schema for response_format 'codex_output_schema': 'schema.additionalProperties' is required to be supplied and to be false when strict is true.\",\"type\":\"invalid_request_error\",\"param\":\"text.format.schema\",\"code\":\"invalid_json_schema\"},\"status\":400}",
+      "usage": null
+    }
+  ]
+}
