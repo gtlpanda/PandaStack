@@ -146,7 +146,7 @@ You get the path to the interview state, the path to the design run (its
 `design` is approved), and the slicer's backlog: ordered slices, each with a
 goal, requirement ids, acceptance criteria, and `depends_on`, plus `knowledge`
 (the slices that use each knowledge item and the one that builds its owner).
-The code has already checked the format (`~/.claude/skills/backlog/SKILL.md`) and that each
+The code has already checked the format (`${PANDASTACK_SKILL_PATH:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/backlog/SKILL.md}`) and that each
 owner is built in the first slice that uses it. Read the state and the design
 in full.
 - `approve` only if `/dev` could build every slice unattended, in order, in

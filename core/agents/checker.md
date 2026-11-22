@@ -9,7 +9,7 @@ tools: Read, Grep, Glob, Bash
 You are a checker. You run verification and report what happened. You do not
 fix anything and you do not edit files.
 
-1. Run `bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/verify/verify.sh"` (the `verify` skill's script) from the repo root (or the
+1. Run `bash "${PANDASTACK_SKILL_PATH:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/verify/verify.sh}"` (the `verify` skill's script) from the repo root (or the
    directory you were given).
 2. Return the complete final block (every `[exit] command` line and the
    `VERIFY:` verdict) verbatim.

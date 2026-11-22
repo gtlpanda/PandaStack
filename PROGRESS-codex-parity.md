@@ -1402,3 +1402,69 @@ Observed limits and untested hypotheses:
 - macOS was not run.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-03d — Provider-neutral skill paths in role bodies
+
+Implements spec/contracts/codex-parity-cp-03d.md (autonomous build, Claude backend).
+
+- `core/skills/native-runtime/role-files.mjs`: `assembleRoleInstructions` builds the
+  CP-03c text, then rewrites every exact
+  `${PANDASTACK_SKILL_PATH:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/<id>/<file>}`
+  token to `join(root, <skills dir>, <id>, <file>)`, in text order. The skill is
+  located by the same rule as `resolveSkill`, now shared as `locateSkill` (real
+  directory with a regular SKILL.md; zero hits `UNKNOWN_SKILL`, several
+  `DUPLICATE_SKILL`). `<file>` must be a regular file in that directory's listing
+  (lstat kinds), otherwise `UNKNOWN_SKILL`. A listing failure other than ENOENT is
+  `IO_ERROR`. The file's bytes are never read. When the text holds a token, the root
+  is checked for `"`, `$`, backtick, backslash and newline (`INVALID_ROLE_ROOT`)
+  before any lookup. `body` and `skills[].body` stay raw. `listRoleFiles` and
+  `loadRoleFile` are unchanged.
+- Role files: checker, fixer and implementer carry the verify token inside their
+  existing `bash "..."`; the advisor carries the backlog token inside its existing
+  backticks. One line changed per file.
+- `tests/native-graph-host.test.mjs` `copyFixture` copies every regular file of each
+  skill directory, so the fixture holds `core/skills/verify/verify.sh`.
+- New `tests/native-role-skill-paths.test.mjs` (7 cases): text-order lookup decides
+  the code, no root/id/file in error stacks, a token carried only by an inlined
+  SKILL.md triggers the root check, a token-free role with skills assembles under an
+  unsafe root, a SKILL.md-less directory does not shadow the real skill in another
+  root, a symlinked skills root is absent, and a 64-character id and a dot-led file
+  name resolve.
+
+Decisions (no human present):
+- The token check uses a non-global copy of the regex, so the module-level `g` regex
+  never carries `lastIndex` state between calls.
+- verify.sh, the hunt runner, the catalog, kit agent-memory lines, frozen tests and
+  contracts were not modified. The three host amendments listed in the contract were
+  already present on this branch.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-03d-skill-paths.test.mjs
+# 12 tests, 12 pass, 0 fail
+node --test acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs acceptance/codex-parity/cp-02c-codex-selection.test.mjs acceptance/codex-parity/cp-02e-graph-host.test.mjs acceptance/codex-parity/cp-02f-native-graphs.test.mjs acceptance/codex-parity/cp-03b-reference-closure.test.mjs acceptance/codex-parity/cp-03c-role-files.test.mjs
+# 104 tests, 104 pass, 0 fail
+node logs/evidence/cp-05a/run-focused.mjs tests/native-role-skill-paths.test.mjs tests/native-role-files.test.mjs tests/native-graph-host.test.mjs tests/native-codex-selection.test.mjs
+# FOCUSED: 39 passed, 0 failed, 0 skipped
+bash scripts/validate.sh                     # VALIDATE: PASS
+node scripts/check-refs.mjs                  # check-refs: 271 references, all resolve
+git diff --check                             # no output
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+bash scripts/check-secrets.sh tests/native-role-skill-paths.test.mjs   # check-secrets: clean
+```
+
+The outputs above are from the session transcript; no logs were saved under
+logs/evidence/ for this feature.
+
+Observed limits and untested hypotheses:
+- The acceptance test was not run against the pre-change tree in this session.
+- acceptance/codex-parity/cp-05b-graph-reconcile.test.mjs was run once alongside the
+  role-loader suites and failed 17 cases with `Cannot find module
+  …/graph-reconcile.mjs`. CP-05b is `passes: false` and that module does not exist on
+  this branch. No claim is made about it beyond that observation.
+- The bash cases are fixture wiring proof. No live Codex run of the checker was made.
+- macOS was not run; the two unreadable-mode cases are skipped when run as root.
+
+Full regressions, review and the branch hunt remain pending for the PR.

@@ -38,7 +38,12 @@ function copyFixture(target) {
   for (const c of containers) {
     for (const e of entries(`${c}/agents`)) if (e.isFile() && e.name.endsWith('.md')) copy(`${c}/agents/${e.name}`)
     for (const e of entries(`${c}/workflows`)) if (e.isFile() && e.name.endsWith('.js')) copy(`${c}/workflows/${e.name}`)
-    for (const e of entries(`${c}/skills`)) if (e.isDirectory()) copy(`${c}/skills/${e.name}/SKILL.md`)
+    // Every regular file of each skill directory, so role skill-path tokens resolve
+    // (CP-03d: the checker's verify token needs core/skills/verify/verify.sh).
+    for (const e of entries(`${c}/skills`)) {
+      if (!e.isDirectory()) continue
+      for (const f of entries(`${c}/skills/${e.name}`)) if (f.isFile()) copy(`${c}/skills/${e.name}/${f.name}`)
+    }
   }
 }
 const PRISTINE = join(WORK, 'pristine')

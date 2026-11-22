@@ -3,7 +3,9 @@
 // YAML-ish frontmatter fail-closed, and assembles the leaf instruction text: the role
 // body, then each declared skill's SKILL.md body (frontmatter stripped) once, in
 // declared order. Only real directories and regular files count, so a symlink can
-// never pull in bytes from outside the installation tree.
+// never pull in bytes from outside the installation tree. The assembled instructions
+// carry installed skill paths resolved into the tree (spec/contracts/codex-parity-cp-03d.md);
+// the raw bodies keep their shell-expandable tokens.
 import { closeSync, constants, fstatSync, openSync, readdirSync, readFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { fail, fields } from './boundary.mjs'
@@ -138,15 +140,49 @@ function toolList(value) {
 
 // ---- skills ---------------------------------------------------------------------
 
-function resolveSkill(root, name) {
+// The one skill directory (relative to the root) that is a real directory `name`
+// holding a regular SKILL.md, under any skills root. A directory without SKILL.md
+// is not a skill.
+function locateSkill(root, name) {
   const hits = kindDirs(root, 'skills')
     .filter(({ dir }) => realDirs(root, dir).includes(name) && regularFiles(root, `${dir}/${name}`).includes('SKILL.md'))
-    .map(({ dir }) => `${dir}/${name}/SKILL.md`)
+    .map(({ dir }) => `${dir}/${name}`)
   if (hits.length === 0) fail('UNKNOWN_SKILL')
   if (hits.length > 1) fail('DUPLICATE_SKILL')
-  const text = readText(root, hits[0], 'INVALID_SKILL_FILE')
+  return hits[0]
+}
+
+function resolveSkill(root, name) {
+  const path = `${locateSkill(root, name)}/SKILL.md`
+  const text = readText(root, path, 'INVALID_SKILL_FILE')
   if (!STRIP.test(text)) fail('INVALID_SKILL_FILE')
-  return { name, path: hits[0], body: text.replace(STRIP, '').replace(/^\n+/, '') }
+  return { name, path, body: text.replace(STRIP, '').replace(/^\n+/, '') }
+}
+
+// ---- skill-path tokens (spec/contracts/codex-parity-cp-03d.md) --------------------
+
+// The exact token a role file writes for an installed skill file. Its shell default
+// is today's Claude path, so the raw file behaves the same under Claude Code.
+const SKILL_PATH_TOKEN = /\$\{PANDASTACK_SKILL_PATH:-\$\{CLAUDE_CONFIG_DIR:-\$HOME\/\.claude\}\/skills\/([a-z0-9][a-z0-9-]{0,63})\/([A-Za-z0-9._-]+)\}/g
+// Characters special inside double quotes, plus the line break: the rewritten path
+// lands inside `bash "..."`.
+const UNSAFE_SPLICE_ROOT = /["$`\\\n]/
+
+// Absolute path of `file`, a regular file directly in skill `id`'s directory. Judged
+// by the directory listing (lstat kinds); the file's bytes are never read. A missing
+// name, a symlink, a directory, `.` and `..` are all absent.
+function skillFilePath(root, id, file) {
+  const dir = locateSkill(root, id)
+  if (!regularFiles(root, dir).includes(file)) fail('UNKNOWN_SKILL')
+  return join(root, dir, file)
+}
+
+// Replaces every exact token with its file in the installation tree, in text order.
+// Text with no token is returned unchanged and the root is not checked.
+function rewriteSkillPaths(root, text) {
+  if (!text.match(new RegExp(SKILL_PATH_TOKEN.source))) return text
+  if (UNSAFE_SPLICE_ROOT.test(root)) fail('INVALID_ROLE_ROOT')
+  return text.replace(SKILL_PATH_TOKEN, (_, id, file) => skillFilePath(root, id, file))
 }
 
 // ---- exports --------------------------------------------------------------------
@@ -177,6 +213,7 @@ export function assembleRoleInstructions(options) {
   const role = loadRoleFile(options)
   const root = rootInput(options)
   const skills = role.frontmatter.skills.map(skill => resolveSkill(root, skill))
-  const instructions = skills.length === 0 ? role.body : [role.body, ...skills.map(s => s.body)].join('\n')
-  return { ...role, skills, instructions }
+  const text = skills.length === 0 ? role.body : [role.body, ...skills.map(s => s.body)].join('\n')
+  // `body` and `skills[].body` stay raw; only `instructions` carries resolved paths.
+  return { ...role, skills, instructions: rewriteSkillPaths(root, text) }
 }

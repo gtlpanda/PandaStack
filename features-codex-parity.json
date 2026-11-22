@@ -275,7 +275,7 @@
       ],
       "test": "acceptance/codex-parity/cp-03d-skill-paths.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CP-04a",
