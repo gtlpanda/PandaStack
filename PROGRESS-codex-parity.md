@@ -2264,3 +2264,94 @@ Observed limits and untested hypotheses:
 - This is fake-codex wiring proof, not runtime certification.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-04e — Blueprint on Codex: runner section, catalog flip, end-to-end proof
+
+Implemented spec/contracts/codex-parity-cp-04e.md only:
+
+- `graphs/blueprint/skills/blueprint/SKILL.md`: one new `## Codex runner` section,
+  between the opening paragraphs and `## When to ask`. `git diff -U0` shows one hunk
+  that only adds lines (77 added, 0 deleted), so sections 1 to 8 are byte-identical. It
+  says:
+  - the session drives `blueprint-design` through the two CLIs, never Claude, the
+    Workflow tool or another provider;
+  - the roots: the first bash block uses only builtins (`cd -P`, `pwd -P`,
+    `command -v`). It sets `SKILL_DIR`, `ROOT` (four levels up) and `CODEX`, and
+    reads no HOME or Claude name;
+  - both command forms;
+  - a nine-row steps table (verb, replaced SKILL.md step, args file keys);
+  - the leaf env (`HOME`, `CODEX_HOME` when set, `PATH`);
+  - outputs and exits 1 to 4;
+  - approval with the `show` hash, creating `integration/<app>` and never pushing;
+  - held `CHECKPOINT_UNCERTAIN` leaves are never resumed.
+
+  It holds none of the four Claude-only strings.
+- `spec/offering-capabilities.json`, exactly the three changes:
+  - blueprint's codex row is `partial` on `codex-graph-host` with
+    `LIVE_PROOF_MISSING`, `NATIVE_UNVERIFIED`, `REQUIREMENTS_INCOMPLETE`;
+  - a fourth transport, `codex-graph-host` -> `core/skills/native-runtime/graph-host.mjs`;
+  - blueprint's `entrySha256` is `b95e13cf…374c`, the new SKILL.md bytes.
+- New `tests/blueprint-codex-runner.test.mjs` (5 cases, harness `test()`). It covers the
+  section's review-only parts:
+  - the steps table's key sets equal the CP-04c and CP-04d tables;
+  - each row against the real CLI: all listed keys pass the key checks and stop at
+    `NOT_A_REPO` on an owned non-repo; an unlisted key is `INVALID_ARGS`; each required
+    key is needed; the optional ones may be left out;
+  - the roots block, run through a chain of two symlinks whose paths hold spaces, with
+    CDPATH set, prints nothing. With no codex on PATH it leaves `CODEX` empty;
+  - the item 5 to 8 phrases are present;
+  - the eight Claude headings follow unchanged and in order.
+
+Decisions (no human present):
+- The roots block uses `cd -P … && pwd -P` (shell builtins), not `realpath`, so it needs
+  no external tool at all. The contract allows `dirname`, `readlink` and `realpath`
+  besides builtins, and this uses fewer.
+- An empty `CODEX` is handled in prose ("say codex is not on PATH and stop") rather
+  than in the block, so the block stays silent and sets only the three variables.
+- `approve`'s exit 4 is described as "a rollback step failed, or the commit holds other
+  paths than it printed". This covers CP-04d's `UNEXPECTED_COMMIT_PATHS` as well as
+  `ROLLBACK_FAILED`. Contract item 6 names only the rollback case.
+- `approvalSha256` is listed as required. The CLI checks it at the hash step
+  (`APPROVAL_MISMATCH`), after the repo, not with the key rules. The new test records
+  that ordering instead of expecting `INVALID_ARGS`.
+- A sections 1 to 8 byte-identity check was run once (the diff above), not added as a
+  permanent test. A test pinning the old SKILL.md hash would break the first time a
+  later feature legitimately edits a Claude section.
+
+Verification on Node v24.21.0, Linux (WSL2), focused only:
+
+```sh
+node --test acceptance/codex-parity/cp-04e-blueprint-codex.test.mjs
+# before the change: tests 5, pass 0, fail 5
+# after the change:  tests 5, pass 5, fail 0
+node --test acceptance/codex-parity/cp-04e-blueprint-codex.test.mjs \
+  acceptance/codex-parity/cp-01a-catalog-v2.test.mjs acceptance/codex-parity/cp-01b-catalog-v2-production.test.mjs \
+  acceptance/codex-parity/cp-01c-install-plan.test.mjs acceptance/codex-parity/cp-01d-inspect-offering.test.mjs \
+  acceptance/codex-parity/cp-02e-graph-host.test.mjs acceptance/codex-parity/cp-03a-skill-dir.test.mjs \
+  acceptance/codex-parity/cp-03b-reference-closure.test.mjs acceptance/codex-parity/cp-03d-skill-paths.test.mjs \
+  acceptance/codex-parity/cp-04c-blueprint-native.test.mjs acceptance/codex-parity/cp-04d-blueprint-approve.test.mjs \
+  acceptance/codex-parity/cp-02f-native-graphs.test.mjs acceptance/codex-parity/cp-02h-strict-schema.test.mjs
+# tests 264, pass 264, fail 0 (the amended W2-10 pins hold after the flip)
+node logs/evidence/cp-04e/run-focused.mjs tests/blueprint-codex-runner.test.mjs tests/install-codex.test.mjs \
+  tests/install-plan.test.mjs tests/inspect-offering.test.mjs tests/native-catalog-v2.test.mjs \
+  tests/native-catalog-drift.test.mjs tests/reference-closure-catalog.test.mjs tests/native-graph-host.test.mjs \
+  tests/blueprint-native.test.mjs tests/blueprint-approve.test.mjs tests/host-wiring-proof-ref.test.mjs \
+  tests/blueprint-state.test.mjs tests/blueprint-decisions.test.mjs tests/qa-loop.test.mjs tests/check-refs.test.mjs
+# FOCUSED: 119 passed, 0 failed, 0 skipped (harness summary())
+node scripts/check-refs.mjs                  # check-refs: 271 references, all resolve
+bash scripts/check-secrets.sh                # check-secrets: clean
+bash scripts/check-secrets.sh --worktree     # check-secrets: clean
+bash scripts/check-secrets.sh tests/blueprint-codex-runner.test.mjs   # check-secrets: clean
+git diff --check                             # clean
+```
+
+Saved under logs/evidence/ (gitignored): `cp-04e/run-focused.mjs`.
+
+Observed limits and untested hypotheses:
+- Whether a real Codex session follows the section is untested. Every leaf here is the
+  frozen fake codex, so this is fake-codex wiring proof, not runtime certification. The
+  live blueprint smoke is a separate step after wave 2 merges.
+- The roots block was run with bash on Linux only. macOS was not run.
+- No mutation check was run on the new test.
+
+Full regressions, review and the branch hunt remain pending for the PR.

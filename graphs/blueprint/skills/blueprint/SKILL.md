@@ -14,6 +14,83 @@ Arguments: the request text (an idea, or what to add to the current repo),
 plus `--doc <path>` any number of times for design documents or architecture
 notes. At least one of the two.
 
+## Codex runner
+
+On Codex, you drive the `blueprint-design` graph through the two CLIs beside
+this file. Never invoke Claude or the Workflow tool, and never fall back to
+another provider. Sections 1 to 8 still say what to ask, show and report; the
+table below says which command replaces which step. Ask the interview, gate
+and approval questions in chat.
+
+The roots. Replace every `<installed-skill-dir>` with the absolute path of the
+installed skill directory (a symlink), then run:
+
+```bash
+SKILL_DIR="$(cd -P -- "<installed-skill-dir>" && pwd -P)"
+ROOT="$(cd -P -- "$SKILL_DIR/../../../.." && pwd -P)"
+CODEX="$(command -v codex)"
+```
+
+`SKILL_DIR` is the real directory holding this file, `ROOT` the installation
+root four levels above it, and `CODEX` the absolute path of `codex` on `PATH`.
+If `CODEX` is empty, say codex is not on `PATH` and stop.
+
+The commands. Each reads one JSON args file (an absolute path) that you write
+with exactly the keys in the table:
+
+```bash
+node "$SKILL_DIR/blueprint-native.mjs" <verb> --args-file <file>
+node "$SKILL_DIR/blueprint-approve.mjs" <show|approve> --args-file <file>
+```
+
+| verb | replaces | args file keys (optional in brackets) |
+|---|---|---|
+| `start` | 1.3-1.4 | `repo`, [`request`], [`docs`], [`restart`] |
+| `interview` | 2 | `repo`, `installationRoot` (`ROOT`), `codexBin` (`CODEX`), `env`, `timeoutMs` |
+| `answer` | 3.4-3.5 | `repo`, `answers`, [`have`], [`overrides`] |
+| `design` | 4 | `repo`, `installationRoot` (`ROOT`), `codexBin` (`CODEX`), `env`, `timeoutMs` |
+| `gate` | 4 and 5 on `needs-human` | `repo`, `answers` |
+| `backlog` | 5 | `repo`, `installationRoot` (`ROOT`), `codexBin` (`CODEX`), `env`, `timeoutMs` |
+| `show` | 6.1 | `repo` |
+| `approve` | 6.3 | `repo`, `approvalSha256` |
+| `edit` | 6.4 | `repo`, `edit` |
+
+- `repo` is the absolute `REPO` from section 1.1; sections 1.1 and 1.2 run as
+  written. `start` takes the request text as given (it redacts) and the
+  absolute `--doc` paths; on `STATE_EXISTS`, ask as section 1.3 says and run
+  `start` again with `restart: true` only when the human chose to start over.
+- `answers` for `answer` is `[{"id": "Q<n>", "answer": <text>}]`, one per
+  question; `have` lists the preflight `what` names the human has;
+  `overrides` is `[{"id": <assumption id>, "answer": <text>}]`. For `gate`,
+  the ledger's questions are answered in order as `G1`, `G2`, ... with the
+  same `{"id", "answer"}` shape. `edit` is the human's words (section 6.4).
+- `timeoutMs` bounds the stage (1001 to 86400000). Live runs took about a
+  minute (interview), 20 minutes (design) and 11 minutes (backlog); give each
+  stage at least an hour.
+
+The leaf environment. `env` is the leaf's whole environment: `HOME`,
+`CODEX_HOME` when it is set, and `PATH`, copied from your session. Nothing
+else is added, and never a secret.
+
+Outputs. A stage prints `{status, file, invocationId, redacted}`. Read the
+questions, design or backlog from `file` in the state directory (`stateDir`
+from `start`); it is already redacted, then act on `status` as sections 3 to
+7 say. `answer`, `gate` and `edit` print counts; `show` prints the approval
+report. Exit 1 is bad input, 2 a refusal, 3 a failure. Exit 4 is a busy run
+directory from a stage, or, from `approve`, a repository that needs a person:
+a rollback step failed, or the commit holds other paths than it printed. stderr is one `{"error"}` line (an id error
+adds `ids`): report it and stop. A refused or failed stage is never retried
+with another provider.
+
+Approval. Show the report `show` printed and ask section 6.2's question. Run
+`approve` only after the human chose `Approve`, with `approvalSha256` set to
+the hash on that report's last line. It creates `integration/<app>` and
+commits the design and the backlog there; it never pushes. `Edit` runs
+`edit`, then section 4 again; `Stop` runs nothing.
+
+Held leaves. A stage that exits 3 with `CHECKPOINT_UNCERTAIN` is never
+resumed. Running the stage again starts a new invocation.
+
 ## When to ask
 
 The interview comes in section 3, once, before anything is designed. Its
