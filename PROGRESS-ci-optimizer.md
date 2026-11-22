@@ -239,3 +239,60 @@ Focused validation (all exit 0):
 - `autobuild mark-passed CO-04`: PASS.
 
 Still pending for the PR: the full regressions, review and the bug hunt.
+
+## CO-05 — Shard-weight planner and ci apply
+
+Built (Claude backend, iteration 5):
+- `graphs/autobuild/tool/lib/ci/apply.mjs` exports `measuredSeconds`, `shardCountFromProfile`,
+  `planShardWeights` and `applyShardWeights`, plus `configIsCommitted`, which is the dirty
+  check.
+- Placement uses the real `shardPlan` from `gate.mjs`. `measuredSeconds` reuses CO-04's
+  `gateMetrics` step p50 figures, so it has the same full-phase, uncached and plain-object rules.
+- `lib/ci/command.mjs` adds `autobuild ci apply [--dry-run] [--shards N] [--json]`. Its
+  `NO_TIMINGS` check is `gateMetrics(records) === null`, so the full-phase rule is stated
+  once. Timings are read through the existing `gateRecords`/`readTimings` path.
+- `lib/cli.mjs` gains one help line.
+
+Decisions (unattended, recorded here):
+- New weights are `max(1, Math.round(measured))`. `autobuild.json` accepts only whole-number
+  `shardWeight` values, so a fractional p50 from an imported or hand-written timings file would
+  otherwise write a config that fails to load. The gate records whole seconds, so on its own
+  timings this is the contract's `max(1, measured)`. Load seconds use the raw measurement.
+- Measured names are looked up with `Object.hasOwn`, so a step named `constructor` is
+  unmeasured. Non-string step names are dropped.
+- `shards` order is placement order: the order of `shardPlan`'s returned map, heaviest first.
+- `shardCountFromProfile` accepts only an integer `matrixSize` of at least 1 and skips
+  malformed workflows, jobs and steps. A `run` "contains `--shard`" literally, as the contract
+  says.
+- CLI prerequisite order: `USAGE` (flags, including `--shards`), then `NO_AUTOBUILD_CONFIG`,
+  then `SHARD_COUNT_UNKNOWN`, then `NO_TIMINGS`. Without `--shards`, shard inference goes
+  through `loadProfile`, so it may store the CO-01 profile in the state directory (outside the
+  repository) even under `--dry-run`.
+- Human `--dry-run` output ends with `apply: dry run (nothing written)`. The contract names no
+  line for this case.
+- Dirty check: `autobuild.json` must be tracked, and both the working tree and the index must
+  match HEAD. The index check is stricter than `git diff --quiet HEAD` alone. Without it, a
+  staged edit reverted only in the working tree would pass, and the printed
+  `git checkout -- autobuild.json` would restore the staged copy instead of the pre-apply bytes.
+  Anything git cannot confirm, such as no HEAD, counts as dirty.
+- `applyShardWeights` refuses in these cases and writes nothing:
+  - `NO_IMPROVEMENT` (exit 1): the plan does not improve.
+  - `PLAN_STALE`: a change names a missing entry, an entry whose current weight is not the
+    plan's `from`, or a shardable entry.
+  - `CONFIG_UNSAFE`: `autobuild.json` is not a regular file, for example a symbolic link.
+  - `CONFIG_IO`: the file cannot be read or parsed.
+
+  Otherwise it writes a `wx` draft in the project root with the original permission bits, then
+  renames it over `autobuild.json`. A failed write removes the draft.
+
+Focused validation (all exit 0):
+- `node --test --test-reporter=dot graphs/autobuild/tool/test/ci-apply.test.mjs acceptance/ci-optimizer/co-05-apply.test.mjs`:
+  34/34 pass. That is 19 acceptance tests plus 15 new implementation tests with private state
+  homes.
+- `node --test --test-reporter=dot acceptance/ci-optimizer/co-01-discover.test.mjs acceptance/ci-optimizer/co-02-gitlab.test.mjs acceptance/ci-optimizer/co-03-history.test.mjs acceptance/ci-optimizer/co-04-metrics.test.mjs graphs/autobuild/tool/test/ci-history.test.mjs graphs/autobuild/tool/test/ci-discover.test.mjs graphs/autobuild/tool/test/ci-gitlab.test.mjs graphs/autobuild/tool/test/ci-metrics.test.mjs graphs/autobuild/tool/test/entrypoint.test.mjs`:
+  168/168 pass. These are tripwires for the `command.mjs` and `cli.mjs` changes.
+- `bash scripts/check-secrets.sh` (tracked) and the same script run on `lib/ci/apply.mjs` and
+  `test/ci-apply.test.mjs`: clean.
+- `autobuild mark-passed CO-05`: PASS.
+
+Still pending for the PR: the full regressions, review and the bug hunt.

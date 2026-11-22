@@ -78,7 +78,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-05-apply.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-06",

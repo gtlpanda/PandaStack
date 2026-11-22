@@ -6,8 +6,9 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
-import { findProjectRoot } from "../config.mjs";
+import { CONFIG_FILE, findProjectRoot } from "../config.mjs";
 import { SAFE_GIT } from "../proc.mjs";
+import { applyShardWeights, configIsCommitted, measuredSeconds, planShardWeights, shardCountFromProfile } from "./apply.mjs";
 import { loadProfile, projectConfig } from "./discover.mjs";
 import { readTimings, TIMINGS_FILE } from "../gate-timings.mjs";
 import { attemptKey, fetchGithubHistory, githubRepo, importedAttempts, isGithubRepo, mergeHistory, readHistory, writeHistory } from "./history.mjs";
@@ -165,11 +166,70 @@ async function metrics({ root, values, env, json }) {
   return { code: 0, lines: metricsLines(doc, workflowName) };
 }
 
+// ---------- ci apply (spec/contracts/ci-optimizer-co-05.md) ----------
+
+/** The --shards value (a whole number of at least 2), else null; anything else is a usage error. */
+function shardsFlag(values) {
+  if (!values.has("--shards")) return null;
+  const text = values.get("--shards");
+  const count = wholeNumberOf(text);
+  if (count === null || count < 2) throw usageError(`--shards must be a whole number of at least 2, got ${JSON.stringify(text)}`);
+  return count;
+}
+
+/** --shards, else the CO-01 profile's sharded test matrix, else SHARD_COUNT_UNKNOWN (exit 2). */
+async function applyShardCount(root, env, config, given) {
+  if (given !== null) return given;
+  const { profile } = await loadProfile(root, { env, config });
+  const count = shardCountFromProfile(profile);
+  if (count === null) throw new CiError("SHARD_COUNT_UNKNOWN", "no workflow job runs tests with --shard over a matrix; pass --shards N", 2);
+  return count;
+}
+
+function applyLines(plan, verdict) {
+  return [
+    `shards: ${plan.shardCount}`,
+    `slowest shard before: ${plan.before.maxShardSeconds}s, after: ${plan.after.maxShardSeconds}s (computed from measured durations)`,
+    ...plan.changes.map((change) => `  ${change.step}: shardWeight ${change.from ?? "unset"} -> ${change.to}`),
+    `unmeasured: ${listOrNone(plan.unmeasured)}`,
+    ...verdict,
+  ];
+}
+
+const APPLY_OUTCOMES = {
+  "dry-run": { code: 0, lines: ["apply: dry run (nothing written)"] },
+  "no-improvement": { code: 1, lines: ["apply: refused (the slowest shard would not get faster)"] },
+  dirty: { code: 1, lines: ["apply: refused (autobuild.json has uncommitted changes)"] },
+};
+
+async function apply({ root, flags, values, env, json }) {
+  const given = shardsFlag(values);
+  const config = projectConfig(root, env);
+  if (!config) throw new CiError("NO_AUTOBUILD_CONFIG", `ci apply needs ${CONFIG_FILE} in the project root`, 2);
+  const shardCount = await applyShardCount(root, env, config, given);
+  const records = gateRecords(config);
+  // gateMetrics owns the "full-phase gate record" rule; it is null when there is none.
+  if (gateMetrics(records) === null) {
+    throw new CiError("NO_TIMINGS", `no full-phase gate runs in ${path.join(config.logsDir, TIMINGS_FILE)}; run \`autobuild check\` first`, 2);
+  }
+  const plan = planShardWeights(config.gate, measuredSeconds(records), shardCount);
+  // Precedence: a dry run never writes; then no improvement; then an uncommitted autobuild.json.
+  let reason = null;
+  if (flags.has("--dry-run")) reason = "dry-run";
+  else if (!plan.improves) reason = "no-improvement";
+  else if (!configIsCommitted(root, env)) reason = "dirty";
+  if (reason === null) applyShardWeights(root, plan);
+  const outcome = reason === null ? { code: 0, lines: ["apply: wrote autobuild.json", "revert: git checkout -- autobuild.json"] } : APPLY_OUTCOMES[reason];
+  if (json) return { code: outcome.code, json: { plan, applied: reason === null, reason } };
+  return { code: outcome.code, lines: applyLines(plan, outcome.lines) };
+}
+
 // `flags` are booleans; each of `values` takes the next argument.
 const SUBCOMMANDS = {
   discover: { flags: ["--refresh", "--json"], values: [], run: discover },
   history: { flags: ["--from-gh", "--json"], values: ["--repo", "--limit", "--import"], run: history },
   metrics: { flags: ["--json"], values: ["--workflow", "--window"], run: metrics },
+  apply: { flags: ["--dry-run", "--json"], values: ["--shards"], run: apply },
 };
 const USAGE = `usage: autobuild ci <${Object.keys(SUBCOMMANDS).join("|")}> [flags] [--json]`;
 
