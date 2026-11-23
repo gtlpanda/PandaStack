@@ -19,7 +19,8 @@ const PROFILE_TRIGGERS = new Set(["onboarding", "ci-config-changed"]);
 // An imported attempt or a baseline workflow may have no name (history.mjs allows it).
 const UNNAMED = "(unnamed)";
 
-const workflowLabel = (name) => (name === null || name === undefined ? UNNAMED : String(name));
+/** A workflow name for human text: `(unnamed)` for a null or missing name. */
+export const workflowLabel = (name) => (name === null || name === undefined ? UNNAMED : String(name));
 
 /** True when the attempt concluded failure or timed_out, or holds a job that timed out. */
 function failedOrTimedOut(attempt) {

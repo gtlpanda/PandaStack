@@ -9,12 +9,11 @@ import path from "node:path";
 import { CONFIG_FILE, DEFAULTS, loadConfig } from "../config.mjs";
 import { ciFiles, ciProviderOf, GITHUB_PROVIDER, readWorkflow, workflowFiles } from "../ci-parity.mjs";
 import { GITLAB_PROVIDER, readGitlabPipeline } from "./gitlab.mjs";
-import { INSTALL_COMMAND, TEST_COMMAND, wholeNumberOf } from "./patterns.mjs";
+import { INSTALL_COMMAND, sortedUnique, TEST_COMMAND, wholeNumberOf } from "./patterns.mjs";
 import { CiError, readState, STATE_SCHEMA_VERSION, writeState } from "./state.mjs";
 
 const sha256hex = (value) => createHash("sha256").update(value).digest("hex");
 const byName = (a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-const sortedUnique = (items) => [...new Set(items)].sort();
 const plainObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 const textOrNull = (value) => (typeof value === "string" ? value : null);
 const EXPRESSION = "${{";

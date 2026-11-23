@@ -5,7 +5,7 @@
 
 import { describeChange } from "./apply.mjs";
 import { jobKey } from "./metrics.mjs";
-import { INSTALL_COMMAND } from "./patterns.mjs";
+import { INSTALL_COMMAND, oneLine } from "./patterns.mjs";
 
 const CONFIG_TARGET = "autobuild.json";
 const PULL_REQUEST = "pull_request";
@@ -14,8 +14,6 @@ const PYTEST_XDIST = "pytest-xdist";
 
 const list = (value) => (Array.isArray(value) ? value : []);
 const isNumber = (value) => typeof value === "number" && Number.isFinite(value);
-/** One line of text: control characters (newlines included) become spaces, so a human line stays one line. */
-const oneLine = (text) => String(text).replace(/[\x00-\x1f\x7f]+/g, " ").trim();
 /** The first line of `text` that `pattern` matches, on one line (the evidence quotes only that line). */
 const matchingLine = (text, pattern) => oneLine(String(text).split("\n").find((line) => pattern.test(line)) ?? "");
 

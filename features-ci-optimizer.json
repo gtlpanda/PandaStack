@@ -162,7 +162,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-10-report.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-11",

@@ -203,3 +203,31 @@ export function isBaselineDocument(doc) {
     && doc.workflows.every((w) => isPlainObject(w) && (typeof w.workflow === "string" || w.workflow === null) && Array.isArray(w.steps))
     && IDENTITY_LISTS.every((key) => isTextList(doc[key]));
 }
+
+// ---------- human lines (`ci baseline`, `ci compare`, `ci metrics` and the report) ----------
+
+/** Seconds as `<n>s`, or `unknown` for null. */
+export const sec = (value) => (value === null ? "unknown" : `${value}s`);
+/** A signed delta with its unit (`+12.5%`, `-3s`), or `unknown` for null. */
+export const signed = (value, unit) => (value === null ? "unknown" : `${value > 0 ? "+" : ""}${value}${unit}`);
+const REGRESSION_WORDS = { ok: "ok", regressed: "REGRESSED", [INSUFFICIENT_DATA]: "insufficient data" };
+
+/**
+ * One line per baseline workflow, then, for each workflow that regressed or is over target, its
+ * top slower steps (indented two spaces) and the advice to run `ci analyze`.
+ */
+export function regressionLines(regression) {
+  if (!regression.workflows.length) return ["baseline: the stored baseline has no workflows"];
+  const lines = [];
+  for (const w of regression.workflows) {
+    lines.push(`${w.workflow}: baseline p50 ${sec(w.baselineP50)}, recent p50 ${sec(w.recentP50)} (${signed(w.deltaPercent, "%")}) ${REGRESSION_WORDS[w.status]}${w.overTarget ? ", over target" : ""}`);
+  }
+  // A workflow that makes the top level regressed (slower past the limit, or over target) gets its steps and the advice.
+  for (const w of regression.workflows.filter((x) => x.status === "regressed" || x.overTarget === true)) {
+    lines.push(`${w.workflow}: top slower steps`);
+    if (!w.topSteps.length) lines.push("  none measured on both sides");
+    for (const s of w.topSteps) lines.push(`  ${s.job} / ${s.step}: ${s.baselineP50}s → ${s.recentP50}s (${signed(s.deltaSeconds, "s")})`);
+    lines.push("  run: autobuild ci analyze");
+  }
+  return lines;
+}

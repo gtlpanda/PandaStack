@@ -639,3 +639,77 @@ Focused validation:
   `lib/ci/triggers.mjs` and `test/ci-triggers.test.mjs`: clean.
 
 Still pending for the PR: the full regressions, review and the bug hunt.
+
+## CO-10 — Per-repository report
+
+What changed:
+- New `lib/ci/report.mjs`:
+  - `buildReport` and `renderReport`, both pure. The JSON has the contract's shape.
+  - The Markdown has the eight headings, the nine-column Measurements table, the two Findings
+    subsections, and the unknowns explanation sentence.
+  - `checkReportOut` and `writeReportOut` guard `--out`.
+- `command.mjs` adds `autobuild ci report [--json] [--out FILE]`. `cli.mjs` gains a help line.
+- No restated logic:
+  - `analyzeRepo`'s gathering is now `analysisInputs`, which `ci analyze` and `ci report`
+    share. The report's findings therefore come from the same call as `ci analyze`'s.
+  - The report's metrics are the analysis metrics, over the `baselineRuns` window, plus
+    `gateMetrics` of the gate timings when `autobuild.json` exists.
+  - `regressionLines`, `sec` and `signed` moved from `command.mjs` to `baseline.mjs`. The
+    report reuses them as Markdown bullets.
+  - `sortedUnique` (from `discover.mjs`) and `oneLine` (from `analyze.mjs`) moved to
+    `patterns.mjs`.
+  - `triggers.mjs` exports `workflowLabel`.
+- `--out` refuses with `OUT_UNSAFE` (exit 2) before anything is gathered. It refuses:
+  - an existing symbolic link, dangling ones included (checked with `lstat`);
+  - a directory, or any other non-regular file;
+  - any path inside the work tree's `.git` entry, the `--absolute-git-dir` or the
+    `--git-common-dir`. The comparison runs after realpath-ing the target's deepest existing
+    ancestor, so a linked parent pointing into `.git` is also caught.
+- The write:
+  - opens with `O_NOFOLLOW|O_NONBLOCK`;
+  - checks the open file is regular;
+  - `fchmod`s it to 0644;
+  - only then truncates and writes.
+
+Decisions (unattended, recorded here):
+- Triggers are evaluated before `loadProfile` stores the profile, so a first report shows
+  `onboarding` (and `ci-config-changed` after a CI change). The report passes only
+  `{ fire, triggers }`.
+- The contract gives no Markdown text for `validation`. It prints one line in Repository:
+  `- Validation of HEAD: fast tier …; full tier …`, or `none recorded`.
+- CI configuration lists `repository.providers` (id, status, parse error, files), or
+  `No CI configuration found.` The JSON shape gains no keys to feed it.
+- A null workflow name prints `(unnamed)`. Every interpolated string is flattened to one line,
+  and table cells escape `|`, so names and summaries cannot add headings, columns or bullets.
+- The saving suffix is ` — ~<s>s saved (estimate)`, rounded to whole seconds. A null saving
+  prints no suffix.
+- A missing `--out` parent directory, or another write failure, is `OUT_IO` (exit 3,
+  "state or I/O error"). Nothing is created.
+- `--json --out` writes the pretty-printed JSON to the file and prints `{"wrote": FILE}`.
+- A `baseline.json` that fails `isBaselineDocument` counts as no baseline, as in CO-09.
+- Not changed: `regressionLines` still prints a null workflow name as `null`, its CO-08
+  behavior.
+
+Focused validation:
+- `node --test acceptance/ci-optimizer/co-10-report.test.mjs`: 17/17 pass.
+- `node --test graphs/autobuild/tool/test/ci-report.test.mjs`: 13/13 pass, 0 skipped. These are new
+  implementation tests, offline, with private `AUTOBUILD_STATE_HOME` directories. They cover:
+  - pipe and newline injection, and a null workflow name;
+  - the validation line;
+  - a baseline without a regression, and nested regression step bullets;
+  - first-run `onboarding` visibility;
+  - an invalid `baseline.json`;
+  - `--out` through a linked parent into `.git`;
+  - a nested `autobuild.json` root;
+  - a linked work tree's `.git` file;
+  - an existing 0600 file replaced as 0644;
+  - a missing parent (exit 3);
+  - a FIFO (skips itself without `mkfifo`; it ran here);
+  - `--out` without a value.
+- Tripwires for the shared modules: all twelve `ci-*.test.mjs` tool tests (including the new
+  `ci-report`), CO-01..10 acceptance and `entrypoint.test.mjs`. 406/406 pass
+  (`logs/evidence/co-10-tripwires.log`, gitignored).
+- `bash scripts/check-secrets.sh` (tracked files), and the same script run on
+  `lib/ci/report.mjs` and `test/ci-report.test.mjs`: clean.
+
+Still pending for the PR: the full regressions, review and the bug hunt.

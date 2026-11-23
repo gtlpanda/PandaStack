@@ -9,14 +9,15 @@ import path from "node:path";
 import { CONFIG_FILE, findProjectRoot } from "../config.mjs";
 import { SAFE_GIT } from "../proc.mjs";
 import { analyze } from "./analyze.mjs";
-import { captureBaseline, compareBaselines, detectRegression, INSUFFICIENT_DATA, isBaselineDocument } from "./baseline.mjs";
+import { captureBaseline, compareBaselines, detectRegression, isBaselineDocument, regressionLines, sec, signed } from "./baseline.mjs";
 import { applyShardWeights, configIsCommitted, describeChange, measuredSeconds, planShardWeights, shardCountFromProfile } from "./apply.mjs";
 import { loadProfile, projectConfig } from "./discover.mjs";
 import { readTimings, TIMINGS_FILE } from "../gate-timings.mjs";
 import { attemptKey, fetchGithubHistory, githubRepo, importedAttempts, isGithubRepo, mergeHistory, readHistory, writeHistory } from "./history.mjs";
 import { computeMetrics, gateMetrics, noHistoryMetrics } from "./metrics.mjs";
-import { wholeNumberOf } from "./patterns.mjs";
+import { sortedUnique, wholeNumberOf } from "./patterns.mjs";
 import { ciPolicy } from "./policy.mjs";
+import { buildReport, checkReportOut, renderReport, writeReportOut } from "./report.mjs";
 import { CiError, readState, STATE_SCHEMA_VERSION, writeState } from "./state.mjs";
 import { currentTriggers } from "./triggers.mjs";
 import { changedFiles, planValidation, recordValidation, resolveBase, TIERS, treeState } from "./validate.mjs";
@@ -141,7 +142,6 @@ function gateRecords(config) {
   }
 }
 
-const sec = (value) => (value === null ? "unknown" : `${value}s`);
 const figure = (value) => (value === null ? "unknown" : String(value));
 
 function metricsLines(doc, workflowName) {
@@ -249,13 +249,18 @@ function findingLine(f) {
   return `[${f.risk}/${f.action}] ${f.rule} ${f.target}${f.job === null ? "" : `#${f.job}`}: ${f.summary}`;
 }
 
-async function analyzeRepo({ root, env, json }) {
-  const config = projectConfig(root, env);
-  const policy = ciPolicy(config);
+/** The profile, the analysis metrics and the findings `ci analyze` reports; `ci report` builds on the same inputs. */
+async function analysisInputs(root, env, config, policy) {
   const { profile } = await loadProfile(root, { env, config });
   const metricsDoc = analysisMetrics(root, env, policy);
   const findings = analyze({ profile, metrics: metricsDoc, gate: analysisGate(config, profile), config, policy });
-  const unknowns = [...new Set([...profile.unknowns, ...metricsDoc.unknowns])].sort();
+  return { profile, metrics: metricsDoc, findings };
+}
+
+async function analyzeRepo({ root, env, json }) {
+  const config = projectConfig(root, env);
+  const { profile, metrics: metricsDoc, findings } = await analysisInputs(root, env, config, ciPolicy(config));
+  const unknowns = sortedUnique([...profile.unknowns, ...metricsDoc.unknowns]);
   // A finding is not a failed check: analyze exits 0 whatever it finds.
   if (json) return { code: 0, json: { findings, unknowns } };
   const toApply = findings.filter((f) => f.action === "apply").length;
@@ -310,25 +315,6 @@ function headSha(root, env) {
   const result = spawnSync("git", [...SAFE_GIT, "rev-parse", "--verify", "--quiet", "HEAD"], { cwd: root, env, encoding: "utf8" });
   const sha = result.status === 0 ? result.stdout.trim() : "";
   return /^[0-9a-f]{40,64}$/.test(sha) ? sha : null;
-}
-
-const signed = (value, unit) => (value === null ? "unknown" : `${value > 0 ? "+" : ""}${value}${unit}`);
-const REGRESSION_WORDS = { ok: "ok", regressed: "REGRESSED", [INSUFFICIENT_DATA]: "insufficient data" };
-
-function regressionLines(regression) {
-  if (!regression.workflows.length) return ["baseline: the stored baseline has no workflows"];
-  const lines = [];
-  for (const w of regression.workflows) {
-    lines.push(`${w.workflow}: baseline p50 ${sec(w.baselineP50)}, recent p50 ${sec(w.recentP50)} (${signed(w.deltaPercent, "%")}) ${REGRESSION_WORDS[w.status]}${w.overTarget ? ", over target" : ""}`);
-  }
-  // A workflow that makes the top level regressed (slower past the limit, or over target) gets its steps and the advice.
-  for (const w of regression.workflows.filter((x) => x.status === "regressed" || x.overTarget === true)) {
-    lines.push(`${w.workflow}: top slower steps`);
-    if (!w.topSteps.length) lines.push("  none measured on both sides");
-    for (const s of w.topSteps) lines.push(`  ${s.job} / ${s.step}: ${s.baselineP50}s → ${s.recentP50}s (${signed(s.deltaSeconds, "s")})`);
-    lines.push("  run: autobuild ci analyze");
-  }
-  return lines;
 }
 
 async function captureCurrentBaseline({ root, env, json }) {
@@ -416,6 +402,43 @@ async function triggers({ root, flags, env, json }) {
   return { code: 0, lines: [`ci-optimizer: evaluate (${fired.map((t) => `${t.id}: ${t.detail}`).join("; ")})`] };
 }
 
+// ---------- ci report (spec/contracts/ci-optimizer-co-10.md) ----------
+
+/** The stored baseline when baseline.json holds a valid one, and its regression over the stored history; else nulls. */
+function storedRegression(root, env, policy) {
+  const stored = readState(root, "baseline", env);
+  if (!isBaselineDocument(stored)) return { baseline: null, regression: null };
+  const attempts = readHistory(root, env)?.attempts ?? [];
+  return { baseline: stored, regression: detectRegression({ baseline: stored, attempts, policy }) };
+}
+
+/** The report over everything stored for the repository; needs no history. Writes only the profile, and FILE with --out. */
+async function reportRepo({ root, cwd, values, env, json }) {
+  const given = values.has("--out") ? values.get("--out") : null;
+  // A refused --out fails before anything is gathered or written.
+  const outFile = given === null ? null : checkReportOut(given, { cwd, root, env });
+  const config = projectConfig(root, env);
+  const policy = ciPolicy(config);
+  // Evaluated before analysisInputs stores the profile, so onboarding and ci-config-changed can still show.
+  const { fire, triggers: fired } = await currentTriggers(root, { policy, env });
+  const { profile, metrics: metricsDoc, findings } = await analysisInputs(root, env, config, policy);
+  const { baseline: baselineDoc, regression } = storedRegression(root, env, policy);
+  const doc = buildReport({
+    profile,
+    metrics: { ...metricsDoc, gate: config ? gateMetrics(gateRecords(config)) : null },
+    findings,
+    baseline: baselineDoc,
+    regression,
+    triggers: { fire, triggers: fired },
+    validation: readState(root, "validation", env),
+    generatedAt: new Date().toISOString(),
+  });
+  const markdown = json ? null : renderReport(doc);
+  if (outFile === null) return json ? { code: 0, json: doc } : { code: 0, lines: [markdown.trimEnd()] };
+  writeReportOut(outFile, json ? `${JSON.stringify(doc, null, 2)}\n` : markdown, given);
+  return json ? { code: 0, json: { wrote: given } } : { code: 0, lines: [`report: wrote ${given}`] };
+}
+
 // `flags` are booleans; each of `values` takes the next argument.
 const SUBCOMMANDS = {
   discover: { flags: ["--refresh", "--json"], values: [], run: discover },
@@ -427,6 +450,7 @@ const SUBCOMMANDS = {
   baseline: { flags: ["--capture", "--fail-on-regression", "--json"], values: [], run: baseline },
   compare: { flags: ["--json"], values: ["--before", "--after"], run: compare },
   triggers: { flags: ["--explicit", "--json"], values: [], run: triggers },
+  report: { flags: ["--json"], values: ["--out"], run: reportRepo },
 };
 const USAGE = `usage: autobuild ci <${Object.keys(SUBCOMMANDS).join("|")}> [flags] [--json]`;
 
