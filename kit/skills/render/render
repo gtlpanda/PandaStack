@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Read-only Render API wrapper.
-# Lives at ~/.claude/skills/render/render and is invoked directly.
+# Lives in the render skill folder (linked by install.sh) and is run with bash.
 #
 # Auth: reads ~/.config/render/api-key (mode 600).
 # Docs: https://api-docs.render.com/reference/

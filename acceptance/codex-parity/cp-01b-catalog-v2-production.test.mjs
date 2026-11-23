@@ -39,6 +39,15 @@ const CP04E_BLUEPRINT_CODEX = { implementation: 'partial', transportId: 'codex-g
   limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] }
 const cp04eFlipped = row => row.id === 'blueprint' &&
   JSON.stringify(row.providers.codex) === JSON.stringify(CP04E_BLUEPRINT_CODEX)
+// Amended for the codex-skill transport (user-authorized, direct human-directed change):
+// the 39 guidance/helper offerings listed in tests/fixtures/codex-skill-offerings.json are
+// codex `partial` over one shared `codex-skill` transport (install.sh --codex links them).
+// Their limitations are the claude row's, plus NATIVE_UNVERIFIED for the listed few whose
+// helpers the offline proof (tests/codex-skill-install.test.mjs) does not run.
+const CODEX_SKILL = JSON.parse(readFileSync(new URL('../../tests/fixtures/codex-skill-offerings.json', import.meta.url), 'utf8'))
+const codexSkillRow = row => CODEX_SKILL.ids.includes(row.id)
+const codexSkillExpected = row => ({ implementation: 'partial', transportId: CODEX_SKILL.transport.id,
+  limitations: [...row.providers.claude.limitations, ...(CODEX_SKILL.keepNativeUnverified.includes(row.id) ? ['NATIVE_UNVERIFIED'] : [])].sort() })
 const SHARED_FIELDS = ['id', 'kind', 'source', 'entrySkill', 'installTargets', 'nativeReadiness',
   'evidenceOwners', 'requiredRuntimes', 'aliases', 'requirementsComplete']
 
@@ -134,6 +143,7 @@ test('same inventory and derived values as the v1 snapshot', async () => {
     assert.ok(old.dependencies.every(d => row.dependencies.includes(d)), `${row.id} keeps its v1 dependencies`)
     assert.equal(api.installEligible(row, 'claude'), true, `${row.id} claude eligibility`)
     if (cp04eFlipped(row)) return // CP-04e's own test pins the flipped row's derived values
+    if (codexSkillRow(row)) return // the codex-skill state is pinned by the 'no supported anywhere' test below
     assert.equal(api.installEligible(row, 'codex'), old.codexInstallEligible, `${row.id} codex eligibility`)
     assert.equal(api.nativeImplementationOf(row), old.nativeImplementation, `${row.id} nativeImplementation`)
   })
@@ -148,8 +158,9 @@ test('entry and workflow hashes equal the bytes on disk, and every transport ent
   for (const workflow of catalog.workflows) {
     assert.equal(workflow.sha256, sha(readFileSync(resolve(ROOT, workflow.source))), workflow.source)
   }
-  assert.ok([JSON.stringify(TRANSPORTS), JSON.stringify([...TRANSPORTS, CP04E_TRANSPORT])]
-    .includes(JSON.stringify(catalog.transports)), 'transports are the three rows, or those plus CP-04e\'s')
+  assert.ok([JSON.stringify(TRANSPORTS), JSON.stringify([...TRANSPORTS, CP04E_TRANSPORT]),
+    JSON.stringify([...TRANSPORTS, CP04E_TRANSPORT, CODEX_SKILL.transport])]
+    .includes(JSON.stringify(catalog.transports)), 'transports are the three rows, those plus CP-04e\'s, or those plus the codex-skill row')
   for (const transport of catalog.transports) {
     assert.ok(lstatSync(resolve(ROOT, transport.entry)).isFile(), `${transport.id} entry is a regular file`)
   }
@@ -183,9 +194,11 @@ test('no supported anywhere; codex is partial only for autobuild and bughunt (an
       assert.ok(entry.limitations.includes('REQUIREMENTS_INCOMPLETE'), `${offering.id} ${name} REQUIREMENTS_INCOMPLETE`)
     }
     assert.deepEqual([claude.implementation, claude.transportId], ['partial', 'claude-code'], `${offering.id} claude`)
-    assert.ok(codex.limitations.includes('NATIVE_UNVERIFIED'), `${offering.id} codex NATIVE_UNVERIFIED`)
+    if (!codexSkillRow(offering)) assert.ok(codex.limitations.includes('NATIVE_UNVERIFIED'), `${offering.id} codex NATIVE_UNVERIFIED`)
     if (cp04eFlipped(offering)) {
       // CP-04e's state: exactly CP04E_BLUEPRINT_CODEX (checked by cp04eFlipped), pinned by its own test.
+    } else if (codexSkillRow(offering)) {
+      assert.deepEqual(codex, codexSkillExpected(offering), `${offering.id} codex-skill row`)
     } else if (Object.hasOwn(CODEX_PARTIAL, offering.id)) {
       assert.deepEqual([codex.implementation, codex.transportId], ['partial', CODEX_PARTIAL[offering.id]], `${offering.id} codex`)
       assert.ok(codex.limitations.includes('LIVE_PROOF_MISSING'), `${offering.id} codex LIVE_PROOF_MISSING`)

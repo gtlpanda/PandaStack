@@ -62,6 +62,8 @@ Standard investigation tracks (select relevant ones, add custom tracks as needed
 
 5. **Show the decomposition** to the user before launching subagents.
 
+On Codex: if this session has no subagent or background-task tool, do each investigation track, and the Phase 3 verification pass, yourself, one after another in this thread, with the same prompts and the same output format. Do the verification pass as a fresh read of the changed files, after the tests pass. The decomposition, the checks and the synthesis do not change.
+
 ### Phase 2: Fix (Synthesize + Implement)
 
 Once all investigation subagents return:

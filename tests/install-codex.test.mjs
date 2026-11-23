@@ -17,22 +17,26 @@ function fixture(fn) {
 const ok = r => assert.equal(r.status, 0, r.stdout + r.stderr)
 const isLink = p => { try { return lstatSync(p).isSymbolicLink() } catch { return false } }
 
-// Amended at the CP-04e freeze (W2-10): CP-04e makes blueprint Codex install-eligible, so
-// the installed set is autobuild and bughunt, plus blueprint once its codex row is partial.
-const blueprintFlipped = () => JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8'))
-  .offerings.find(o => o.id === 'blueprint').providers?.codex?.implementation === 'partial'
+// The installed set is read from the catalog: every offering whose codex row is not
+// `unavailable` (autobuild, bughunt, blueprint and, with the codex-skill transport, the
+// guidance and helper skills), by its install target. Amended for the codex-skill transport.
+const eligible = () => JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8')).offerings
+  .filter(o => o.providers.codex.implementation !== 'unavailable')
+const eligibleNames = (skip = []) => eligible().flatMap(o => o.installTargets.map(d => d.slice('skills/'.length)))
+  .filter(name => !skip.includes(name)).sort()
+const blueprintFlipped = () => eligibleNames().includes('blueprint')
 
 test('Codex dry-run changes nothing; install is limited to the eligible skills and idempotent', () => fixture(({ home, skills, run }) => {
   const flipped = blueprintFlipped()
   ok(run(['--dry-run']))
   assert.deepEqual(readdirSync(home), [])
   ok(run())
-  assert.deepEqual(readdirSync(skills).sort(), flipped ? ['autobuild', 'blueprint', 'bughunt'] : ['autobuild', 'bughunt'])
+  assert.deepEqual(readdirSync(skills).sort(), eligibleNames())
   assert.equal(readlinkSync(join(skills, 'autobuild')), resolve(REPO, 'graphs/autobuild/skills/autobuild'))
   assert.equal(readlinkSync(join(skills, 'bughunt')), resolve(REPO, 'graphs/hunt/skills/bughunt'))
   if (flipped) assert.equal(readlinkSync(join(skills, 'blueprint')), resolve(REPO, 'graphs/blueprint/skills/blueprint'))
   for (const p of ['.claude', '.codex', '.local']) assert.equal(existsSync(join(home, p)), false)
-  assert.match(run().stdout, flipped ? /done: 0 linked, 3 already linked/ : /done: 0 linked, 2 already linked/)
+  assert.match(run().stdout, new RegExp(`done: 0 linked, ${eligibleNames().length} already linked`))
   assert.equal(existsSync(join(home, '.agents', '.pandastack-codex-backups-skills')), false)
 }))
 
@@ -87,7 +91,7 @@ test('Codex custom absolute target works without HOME and honors supported skip 
   const custom = join(home, 'custom/entries')
   const env = { HOME: '', PANDASTACK_CODEX_SKILLS_DIR: custom }
   ok(run(['--skip=skills/bughunt'], env))
-  assert.deepEqual(readdirSync(custom).sort(), blueprintFlipped() ? ['autobuild', 'blueprint'] : ['autobuild'])
+  assert.deepEqual(readdirSync(custom).sort(), eligibleNames(['bughunt']))
   assert.notEqual(run(['--skip=settings.json'], env).status, 0)
   assert.notEqual(run(['--skip=local-bin'], env).status, 0)
   ok(run(['--uninstall'], env))

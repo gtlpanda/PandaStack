@@ -19,6 +19,9 @@ const load = rel => import(pathToFileURL(resolve(ROOT, rel)))
 const loadRoles = () => load('core/skills/native-runtime/role-files.mjs')
 const loadCatalog = () => load('core/skills/native-runtime/catalog.mjs')
 const sha = bytes => createHash('sha256').update(bytes).digest('hex')
+// Amended for the codex-skill transport (user-authorized, direct human-directed change): the
+// offerings in this fixture are codex partial; only `keepNativeUnverified` ones keep NATIVE_UNVERIFIED.
+const CODEX_SKILL = JSON.parse(readFileSync(new URL('../../tests/fixtures/codex-skill-offerings.json', import.meta.url), 'utf8'))
 const production = () => JSON.parse(readFileSync(resolve(ROOT, 'spec/offering-capabilities.json'), 'utf8'))
 const coded = code => e => e instanceof Error && e.code === code
 
@@ -265,7 +268,8 @@ test('reference rows declare dependencies, stay non-supported and carry GUIDANCE
       assert.ok(entry.limitations.includes('GUIDANCE_ONLY'), `${row.id} ${backend} GUIDANCE_ONLY`)
       assert.ok(entry.limitations.includes('REQUIREMENTS_INCOMPLETE'), `${row.id} ${backend} REQUIREMENTS_INCOMPLETE`)
     }
-    assert.ok(row.providers.codex.limitations.includes('NATIVE_UNVERIFIED'), `${row.id} codex NATIVE_UNVERIFIED`)
+    const unverified = !CODEX_SKILL.ids.includes(row.id) || CODEX_SKILL.keepNativeUnverified.includes(row.id)
+    assert.equal(row.providers.codex.limitations.includes('NATIVE_UNVERIFIED'), unverified, `${row.id} codex NATIVE_UNVERIFIED`)
   }
   // GUIDANCE_ONLY never marks a graph or a code library: those are not prose guidance.
   for (const row of catalog.offerings.filter(o => NOT_GUIDANCE_KINDS.includes(o.kind))) {
@@ -288,9 +292,12 @@ test('every codex install closure stays under core/skills, and install-plan chec
   // its own test pins that state. Its closure (backlog, default-stack, knowledge-map,
   // native-runtime, run-records) is checked by the loop below like every other.
   const flipped = catalog.offerings.find(o => o.id === 'blueprint').providers.codex.implementation === 'partial'
+  const skillsFlipped = catalog.offerings.find(o => o.id === CODEX_SKILL.ids[0]).providers.codex.implementation === 'partial'
   const expected = [{ dest: 'skills/autobuild', src: 'graphs/autobuild/skills/autobuild' },
     ...(flipped ? [{ dest: 'skills/blueprint', src: 'graphs/blueprint/skills/blueprint' }] : []),
-    { dest: 'skills/bughunt', src: 'graphs/hunt/skills/bughunt' }]
+    { dest: 'skills/bughunt', src: 'graphs/hunt/skills/bughunt' },
+    ...(skillsFlipped ? CODEX_SKILL.ids.map(id => ({ dest: `skills/${id}`, src: catalog.offerings.find(o => o.id === id).source })) : [])]
+    .sort((a, b) => (a.dest < b.dest ? -1 : a.dest > b.dest ? 1 : 0))
   assert.deepEqual(installPlan({ installationRoot: ROOT, backend: 'codex' }), expected, 'the installed set is unchanged (plus blueprint after CP-04e)')
   const byId = new Map(catalog.offerings.map(o => [o.id, o]))
   for (const row of catalog.offerings.filter(o => installEligible(o, 'codex'))) {

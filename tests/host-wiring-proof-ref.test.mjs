@@ -67,7 +67,10 @@ await test('a reference is never evidence: no derived answer reads proofRefs', (
   assert.deepEqual(validateCatalog({ ...catalog, offerings: catalog.offerings.map(o => withRefs(o, [])) }), [], 'and without it')
 })
 
-await test('the Codex install plan still names only autobuild and bughunt (and blueprint once CP-04e flips it)', () => {
+await test('the Codex install plan names autobuild and bughunt (and blueprint once CP-04e flips it), plus exactly the codex-skill offerings', () => {
+  const skills = JSON.parse(readFileSync(join(REPO, 'tests/fixtures/codex-skill-offerings.json'), 'utf8')).ids
+    .filter(id => byId.get(id).providers.codex.implementation === 'partial')
   assert.deepEqual(installPlan({ installationRoot: REPO, backend: 'codex' }).map(entry => entry.dest),
-    blueprintFlipped ? ['skills/autobuild', 'skills/blueprint', 'skills/bughunt'] : ['skills/autobuild', 'skills/bughunt'])
+    [...(blueprintFlipped ? ['skills/autobuild', 'skills/blueprint', 'skills/bughunt'] : ['skills/autobuild', 'skills/bughunt']),
+      ...skills.map(id => `skills/${id}`)].sort())
 })

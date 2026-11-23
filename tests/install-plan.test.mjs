@@ -16,6 +16,7 @@ const PLAN = join(REPO, 'core/skills/native-runtime/install-plan.mjs')
 // --codex refuses symlinked ancestors, and macOS keeps tmpdir under /var -> /private/var.
 const TMP = realpathSync(tmpdir())
 const NODE_DIR = dirname(process.execPath)
+const CODEX_SKILL_IDS = JSON.parse(readFileSync(join(REPO, 'tests/fixtures/codex-skill-offerings.json'), 'utf8')).ids
 const row = (catalog, id) => catalog.offerings.find(o => o.id === id)
 // The fixture base: this checkout's catalog with blueprint's codex row as it is before
 // CP-04e (amended at the tier-4 freeze, W2-10), so these cases hold before and after it.
@@ -23,6 +24,12 @@ const production = () => {
   const catalog = JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8'))
   row(catalog, 'blueprint').providers.codex = { implementation: 'unavailable', transportId: null,
     limitations: ['NATIVE_UNVERIFIED', 'NO_PROVIDER_TRANSPORT', 'REQUIREMENTS_INCOMPLETE'] }
+  // And the codex-skill offerings as they were before that transport (a library row keeps LIBRARY_ONLY).
+  for (const id of CODEX_SKILL_IDS) {
+    const offering = row(catalog, id)
+    offering.providers.codex = { implementation: 'unavailable', transportId: null,
+      limitations: [...(offering.entrySkill ? [] : ['LIBRARY_ONLY']), 'NATIVE_UNVERIFIED', 'NO_PROVIDER_TRANSPORT', 'REQUIREMENTS_INCOMPLETE'] }
+  }
   return catalog
 }
 const codeIs = code => e => { assert.equal(e.code, code); return true }
@@ -185,13 +192,15 @@ await test('installPlanMain writes only the plan or one error line, and importin
   const sink = () => { const chunks = []; return { chunks, write: s => { chunks.push(s); return true } } }
   const run = argv => { const out = sink(), err = sink(); return { status: installPlanMain(argv, out, err), out: out.chunks.join(''), err: err.chunks.join('') } }
 
-  // This checkout's own plan: blueprint's line appears once CP-04e flips its codex row.
-  const flipped = row(JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8')), 'blueprint')
-    .providers.codex.implementation === 'partial'
+  // This checkout's own plan: blueprint's line appears once CP-04e flips its codex row, and the
+  // codex-skill offerings' lines once their rows are partial.
+  const own = JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8'))
+  const planned = [['autobuild', 'graphs/autobuild/skills/autobuild'], ['bughunt', 'graphs/hunt/skills/bughunt'],
+    ...(row(own, 'blueprint').providers.codex.implementation === 'partial' ? [['blueprint', 'graphs/blueprint/skills/blueprint']] : []),
+    ...CODEX_SKILL_IDS.filter(id => row(own, id).providers.codex.implementation === 'partial').map(id => [id, row(own, id).source])]
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
   assert.deepEqual(run(['--installation-root', REPO, '--backend', 'codex']), { status: 0,
-    out: 'skills/autobuild\tgraphs/autobuild/skills/autobuild\n' +
-      (flipped ? 'skills/blueprint\tgraphs/blueprint/skills/blueprint\n' : '') +
-      'skills/bughunt\tgraphs/hunt/skills/bughunt\n', err: '' })
+    out: planned.map(([name, src]) => `skills/${name}\t${src}\n`).join(''), err: '' })
   assert.deepEqual(run(['--backend', 'codex', '--backend', 'codex']), { status: 1, out: '', err: 'install-plan: INVALID_INSTALL_PLAN_INPUT\n' })
   assert.deepEqual(run(['--installation-root', '/tmp/no-such-root', '--backend', 'codex']), { status: 2, out: '', err: 'install-plan: NOT_FOUND\n' })
 

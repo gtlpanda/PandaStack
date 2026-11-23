@@ -41,10 +41,15 @@ const CP04E_PLAN = [
   { dest: 'skills/blueprint', src: 'graphs/blueprint/skills/blueprint' },
   { dest: 'skills/bughunt', src: 'graphs/hunt/skills/bughunt' },
 ]
+// Amended for the codex-skill transport (user-authorized, direct human-directed change):
+// the offerings in tests/fixtures/codex-skill-offerings.json are codex `partial`, so the
+// candidate root's plan also holds one line each. Every fixture root below keeps them
+// unavailable (production()), so the plans these tests pin stay the pre-wave ones.
+const CODEX_SKILL = JSON.parse(readFileSync(new URL('../../tests/fixtures/codex-skill-offerings.json', import.meta.url), 'utf8'))
 const THIRD_SRC = 'graphs/fixture/skills/third'
 const THREE_LINES = PRODUCTION_LINES + `skills/third\t${THIRD_SRC}\n`
-// The frozen tests/install-codex.test.mjs, byte for byte.
-const INSTALL_CODEX_SHA256 = '372fd1c647d89fe09cb6840ef6aab78d74cb3fda134d3d668cb9fa5f4a6cb6d9'
+// tests/install-codex.test.mjs, byte for byte (re-pinned when it became catalog-driven for the codex-skill transport).
+const INSTALL_CODEX_SHA256 = 'd4ae93dd9d6cc044012ec0c081d30821c902fda2a4d3cbbf5e0cf38e9362ed44'
 const INSTALL_CODEX_CASES = 7
 
 // ---------------------------------------------------------------- fixtures
@@ -58,7 +63,16 @@ function owned(t, prefix = 'cp01c-') {
 const candidate = () => JSON.parse(readFileSync(join(ROOT, 'spec/offering-capabilities.json'), 'utf8'))
 const row = (catalog, id) => catalog.offerings.find(o => o.id === id)
 // The fixture base: the candidate catalog with blueprint's codex row as it is before CP-04e.
-const production = () => { const catalog = candidate(); codexUnavailable(row(catalog, 'blueprint')); return catalog }
+const production = () => {
+  const catalog = candidate()
+  codexUnavailable(row(catalog, 'blueprint'))
+  for (const id of CODEX_SKILL.ids) {
+    codexUnavailable(row(catalog, id))
+    // A library row (no entry skill) must still carry LIBRARY_ONLY to validate.
+    if (!row(catalog, id).entrySkill) row(catalog, id).providers.codex.limitations.unshift('LIBRARY_ONLY')
+  }
+  return catalog
+}
 
 // Works for either catalog version: the accessor decides, so the test must not care.
 function codexUnavailable(offering) {
@@ -151,14 +165,18 @@ function snapshot(dir) {
 
 test('install-plan prints exactly the two current dest<TAB>src lines for the candidate root (three once CP-04e flips blueprint)', async () => {
   const flipped = row(candidate(), 'blueprint').providers?.codex?.implementation === 'partial'
-  const lines = flipped ? CP04E_LINES : PRODUCTION_LINES
+  const skillsFlipped = row(candidate(), CODEX_SKILL.ids[0]).providers?.codex?.implementation === 'partial'
+  const skillPlan = skillsFlipped ? CODEX_SKILL.ids.map(id => ({ dest: `skills/${id}`, src: row(candidate(), id).source })) : []
+  const basePlan = flipped ? CP04E_PLAN : PRODUCTION_PLAN
+  const expectedPlan = [...basePlan, ...skillPlan].sort((a, b) => (a.dest < b.dest ? -1 : a.dest > b.dest ? 1 : 0))
+  const lines = expectedPlan.map(e => `${e.dest}\t${e.src}\n`).join('')
   planOk(plan(ROOT), lines)
   planOk(plan(ROOT, ['--backend', 'codex', '--installation-root', ROOT]), lines)
 
   const { installPlan } = await loadPlan()
   assert.equal(typeof installPlan, 'function', 'install-plan.mjs exports installPlan')
   const result = installPlan({ installationRoot: ROOT, backend: 'codex' })
-  assert.deepEqual(result, flipped ? CP04E_PLAN : PRODUCTION_PLAN)
+  assert.deepEqual(result, expectedPlan)
   for (const entry of result) assert.deepEqual(Object.keys(entry), ['dest', 'src'])
   assert.deepEqual(installPlan({ installationRoot: ROOT, backend: 'codex' }), result, 'same result on every call')
 

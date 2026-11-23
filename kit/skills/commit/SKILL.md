@@ -11,6 +11,8 @@ description: Create a git commit
 - Current branch: !`git branch --show-current`
 - Recent commits: !`git log --oneline -10`
 
+On Codex: the lines above are Claude Code shell injection and are not run for you. Run `git status`, `git diff HEAD`, `git branch --show-current` and `git log --oneline -10` yourself first, then follow the task below.
+
 ## Your task
 
 Based on the above changes, create a single git commit.

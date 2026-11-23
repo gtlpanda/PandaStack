@@ -365,7 +365,7 @@ Pattern (copy from `002_jigging.ts`):
 **`src/preload/index.ts`** + **`src/preload/index.d.ts`**:
 - Add typed methods for any new IPC handlers
 - Match the existing pattern (e.g., `account:create`, `monitor:save`)
-- All new mutating IPC handlers must gate on `isUnlocked()` per CLAUDE.md security policy
+- All new mutating IPC handlers must gate on `isUnlocked()` per the project's security policy in CLAUDE.md or AGENTS.md
 
 #### 5j. Renderer — site dropdowns + filters
 

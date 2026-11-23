@@ -95,7 +95,9 @@ If `.gitignore` doesn't have these, add them. If a `.env` file with real secrets
 
 ### Phase 4: Generate Settings Permissions (Optional)
 
-If `.claude/settings.local.json` doesn't exist, create it with project-appropriate tool permissions:
+On Codex: skip this phase. It writes a Claude Code permissions file, and this skill generates no Codex permission config.
+
+On Claude Code: if `.claude/settings.local.json` doesn't exist, create it with project-appropriate tool permissions:
 
 ```json
 {

@@ -182,7 +182,7 @@ jobs:
 
 #### `claude.yml` — Claude Code PR Integration (Optional)
 
-Only add if the user wants Claude Code in their GitHub workflow:
+Only add if the user wants Claude Code in their GitHub workflow. On Codex, skip this file: it is a Claude Code integration, and this skill generates no Codex PR workflow.
 
 ```yaml
 name: Claude Code

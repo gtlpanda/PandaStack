@@ -2421,3 +2421,18 @@ Observed limits and untested hypotheses:
 - macOS was not run. No mutation check was run on the new test.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## Codex skill transport (direct human-directed change, branch codex-parity/skills)
+
+The 39 guidance, helper and library offerings whose codex row was `unavailable` (all but dev,
+release-pr, build-app and security-audit) are now codex `partial` over a new `codex-skill`
+transport (`install.sh --codex` links them into the Codex skills directory). Each carries the
+Claude row's limitation set; `NATIVE_UNVERIFIED` stays only on `verify`, `run-records` and
+`decisions`, whose helpers `tests/codex-skill-install.test.mjs` does not run. The list is
+`tests/fixtures/codex-skill-offerings.json`. The graph host refuses a `codex-skill` row for graph
+execution (`core/skills/native-runtime/graph-host.mjs`). SKILL.md edits: render, seo-check and
+workflow-state use the CP-03a `SKILL_DIR` idiom; init-agents and init-claude gain explicit
+Codex output (docs/agents guides + AGENTS.md); commit, init-env, init-ci, deep, deep-fix and
+error-audit gain "On Codex" alternatives. Frozen tests amended with the user's authorization:
+cp-01b, cp-01c (and the install-codex SHA pin), cp-01d, cp-03b, cp-04e. Offline wiring proof
+only: no Codex process was run.
