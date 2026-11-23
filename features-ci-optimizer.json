@@ -13,7 +13,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-01-discover.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-02",
@@ -29,7 +29,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-02-gitlab.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-03",
@@ -45,7 +45,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-03-history.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-04",
@@ -62,7 +62,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-04-metrics.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-05",
@@ -78,7 +78,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-05-apply.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-06",
@@ -96,7 +96,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-06-analyze.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-07",
@@ -112,7 +112,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-07-validate.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-08",
@@ -128,7 +128,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-08-baseline.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-09",
@@ -144,7 +144,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-09-triggers.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-10",
@@ -162,7 +162,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-10-report.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     },
     {
       "id": "CO-11",
@@ -179,7 +179,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-11-status.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     }
   ]
 }

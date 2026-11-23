@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG_FILE, findProjectRoot, loadConfig, statePath } from "./config.mjs";
 import { blockedClosure, countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures } from "./features.mjs";
-import { failureExcerpt, parseShard, runGate } from "./gate.mjs";
+import { failureExcerpt, gateStepLines, parseShard, runGate } from "./gate.mjs";
 import { runLoop } from "./loop.mjs";
 import { huntStatus } from "./bughunt.mjs";
 import { readSession } from "./session.mjs";
@@ -34,6 +34,17 @@ const HELP = `autobuild — autonomous, test-gated build loop for Claude Code or
   autobuild selftest                   test the kit (limit parsing, guard) against this machine
   autobuild evidence manifest [--out FILE]   hash every file in the evidence dir (JSON, to commit instead of the files)
   autobuild evidence verify FILE       check the evidence dir against a manifest
+  autobuild ci discover [--refresh] [--json]   profile the repo's languages, tests, CI and gate (stored per machine)
+  autobuild ci history [--from-gh [--repo o/r] [--limit N] | --import FILE] [--json]   fetch (gh), import or show CI attempts
+  autobuild ci metrics [--workflow NAME] [--window N] [--json]   wall, queue, critical path, cost and flakes from stored history
+  autobuild ci apply [--dry-run] [--shards N] [--json]   recalibrate gate shardWeight from measured durations (only if the slowest shard gets faster)
+  autobuild ci analyze [--json]   findings over the profile, stored history and gate (proposals; only shard weights may be applied)
+  autobuild ci validate [--tier fast|full] [--base REF] [--fail-fast] [--json]   fast tier: gate steps the change since the merge-base touches (not merge validation)
+  autobuild ci baseline [--capture] [--fail-on-regression] [--json]   capture a CI baseline, or compare recent runs with it
+  autobuild ci compare --before FILE --after FILE [--json]   wall deltas between two baselines; exits 1 when a check, test step or gate step was removed
+  autobuild ci triggers [--explicit] [--json]   offline lifecycle triggers (onboarding, CI or config change, regression, repeated failures); writes nothing
+  autobuild ci report [--json] [--out FILE]   the per-repository CI report (Markdown, or JSON); applies nothing; --out refuses .git, links and directories
+  autobuild ci status [--json]   whether local fast/full validation and stored CI results are current for HEAD, and what to run next; writes nothing, never calls gh
 
 Exit codes of \`run\`: 0 verified completion or PR-first handoff, 2 no progress, 3 blocked, 4 frozen files changed, 5 preflight,
 6 total budget, 7 max iterations, 8 usage limit resets too far away, 9 billing, 10 auth,
@@ -117,6 +128,9 @@ export async function main(argv = process.argv.slice(2)) {
       const next = nextFeature(doc, blockers);
       console.log(`${countPassing(doc)}/${doc.features.length} features passing`);
       console.log(`delivery: ${config.deliveryMode}${config.deliveryMode === "pr-first" ? " (full PR checks and review pending; not merge-ready)" : ""}`);
+      // Loaded on demand, like `autobuild ci`: other commands never load the ci-optimizer.
+      const { statusLine } = await import("./ci/triggers.mjs");
+      console.log(await statusLine(config));
       console.log(`next: ${next ? `${next.id} — ${next.title}` : "none"}`);
       const review = huntStatus(config);
       console.log(`review coverage: ${review.hunted ? review.disposition : review.docsOnly ? "docs only" : "pending"}${review.dirty ? " (uncommitted changes are not reviewed)" : ""}`);
@@ -159,13 +173,7 @@ export async function main(argv = process.argv.slice(2)) {
       if (flag(args, "--json")) {
         console.log(JSON.stringify(summary));
       } else {
-        for (const step of summary.steps) {
-          console.log(`${step.ok ? "PASS" : "FAIL"}  ${step.name} (${step.cached ? `reused from ${step.cachedFrom}, tree unchanged` : `${step.seconds}s`})`);
-          if (!step.ok) console.log(step.tail);
-        }
-        for (const entry of summary.skipped) console.log(`SKIP  ${entry.name}: ${entry.reason}`);
-        for (const name of summary.notRun) console.log(`----  ${name}: not run (stopped at the first failure)`);
-        for (const warning of summary.warnings ?? []) console.log(`WARN  ${warning}`);
+        for (const line of gateStepLines(summary)) console.log(line);
         console.log(summary.ok ? `\n${summary.phase === "commit" ? "COMMIT GATE" : "GATE"}: PASS` : "\nGATE: FAIL");
         if (summary.deferred.length) console.log(`Pending PR checks: ${summary.deferred.map(step => step.name).join(", ")}`);
       }
@@ -194,6 +202,11 @@ export async function main(argv = process.argv.slice(2)) {
       writeFeatures(config, doc);
       console.log(`${id}: acceptance test passed; ${config.featuresFile} now has passes: true. Commit it with the code (feat(${id}): …).`);
       return 0;
+    }
+    case "ci": {
+      // Loaded on demand: the loop and the other commands never load the ci-optimizer.
+      const { ciMain } = await import("./ci/command.mjs");
+      return ciMain(args);
     }
     case "init":
       return init(value(args, "--backend") || process.env.AUTOBUILD_BACKEND || "claude");

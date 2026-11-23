@@ -143,6 +143,19 @@ export function gateLine({ steps = [], skipped = [], notRun = [], wallSeconds = 
   return `${summary.wallSeconds}s; ${ran.length} run, ${cached} cached, ${summary.skipped.length} skipped${summary.notRun.length ? `, ${summary.notRun.length} not run` : ""}${slowest.length ? `; slowest: ${slowest.join(", ")}` : ""}`;
 }
 
+/** A gate summary's step, skip, not-run and warning lines, as `autobuild check` prints them (no verdict line). */
+export function gateStepLines(summary) {
+  const lines = [];
+  for (const step of summary.steps) {
+    lines.push(`${step.ok ? "PASS" : "FAIL"}  ${step.name} (${step.cached ? `reused from ${step.cachedFrom}, tree unchanged` : `${step.seconds}s`})`);
+    if (!step.ok) lines.push(step.tail);
+  }
+  for (const entry of summary.skipped) lines.push(`SKIP  ${entry.name}: ${entry.reason}`);
+  for (const name of summary.notRun) lines.push(`----  ${name}: not run (stopped at the first failure)`);
+  for (const warning of summary.warnings ?? []) lines.push(`WARN  ${warning}`);
+  return lines;
+}
+
 /** One line per commit a reused PASS came from, and one per step skipped by path selection. */
 export function reuseLines({ steps = [], skipped = [] }) {
   const summary = { steps, skipped };
@@ -172,9 +185,44 @@ export function pathPattern(entry) {
   return new RegExp(`^${plain}(?:/.*)?$`);
 }
 
+/** Every gate entry, runner, `browser` and `ciParity` that declares `paths`: the scopes path selection knows. */
+export function pathEntries(config) {
+  return [...(config.gate ?? []), ...Object.values(config.runners ?? {}), config.browser, config.ciParity].filter((entry) => Array.isArray(entry?.paths));
+}
+
 /** True when any step of this project's gate declares `paths`, so a per-feature gate can be narrower than the full one. */
 export function gateHasPaths(config) {
-  return [...(config.gate ?? []), ...Object.values(config.runners ?? {}), config.browser, config.ciParity].some((entry) => Array.isArray(entry?.paths));
+  return pathEntries(config).length > 0;
+}
+
+/** The reason path selection gives a job it skips. */
+export const PATH_SKIP_REASON = "skipped (no path match)";
+
+/**
+ * Path selection over `jobs` for the `changed` files (null: the change cannot be listed, so
+ * everything runs). Returns { selected, skipped [{name, reason}], warnings }. Never skips the
+ * feature's own test, a job without paths, or a settled job.
+ */
+export function selectByPaths(config, jobs, changed) {
+  const skipped = [];
+  const warnings = [];
+  if (!changed) return { selected: jobs, skipped, warnings };
+  const tracked = git(config, ["-c", "core.quotepath=off", "ls-files", "-z"]);
+  const known = tracked.ok ? [...new Set([...tracked.output.split("\0").filter(Boolean), ...changed])] : null;
+  const selected = jobs.filter((job) => {
+    if (job.pinned || !job.paths || !job.spec) return true;
+    const patterns = job.paths.map(pathPattern);
+    if (changed.some((file) => patterns.some((pattern) => pattern.test(file)))) return true;
+    // A glob that matches nothing in the repository is a typo, not a reason to skip: the step runs.
+    const dead = known ? job.paths.filter((glob, index) => !known.some((file) => patterns[index].test(file))) : job.paths;
+    if (dead.length) {
+      warnings.push(`${job.name}: paths ${dead.map((glob) => JSON.stringify(glob)).join(", ")} match${dead.length === 1 ? "es" : ""} no file in the repository, so the step was run instead of skipped; fix the glob`);
+      return true;
+    }
+    skipped.push({ name: job.name, reason: PATH_SKIP_REASON });
+    return false;
+  });
+  return { selected, skipped, warnings };
 }
 
 // Scheduling fields a gate entry, a runner, `browser` or `ciParity` may carry.
@@ -242,6 +290,15 @@ function fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, c
     jobs.push(...featureJobs(specs, "browser", { withRegressionBrowser: true }).map((job) => (own && job.id === `browser: ${own}` ? { ...job, pinned: true } : job)));
   }
   return uniqueIds(jobs);
+}
+
+/**
+ * The full phase's jobs as runGate builds them with no feature, no shard and no focus: what a
+ * planner needs to name the steps a gate run would consider, without running any of them.
+ */
+export function gateJobs(config, { ciParity = true, skipBrowser = false } = {}) {
+  const doc = readFeatures(config);
+  return fullJobs(config, { doc, current: null, featureId: null, browserKind: config.browser?.runner ?? null, skipBrowser, ciParity, focused: false, warnings: [], deferred: [] });
 }
 
 // ---------- shards ----------
@@ -366,11 +423,13 @@ function poolResults(config, jobs, dir, { failFast, keptLogs }) {
 
 /**
  * Options beyond today's: `scope: "affected"` skips jobs whose `paths` the change since baseSha
- * does not touch (never the feature's own test, never a job without paths); `focused` keeps only
- * the prelude and the feature's own test (the Stop hook, when the full gate runs host-side).
+ * does not touch (never the feature's own test, never a job without paths); `affectedBase`, when
+ * set, is the commit that change is measured from instead (it never adds the frozen or evidence
+ * checks); `focused` keeps only the prelude and the feature's own test (the Stop hook, when the
+ * full gate runs host-side).
  * The summary adds: steps[].cached / cachedFrom, skipped [{name, reason}], notRun [names], wallSeconds.
  */
-export function runGate(config, { featureId = null, baseSha = null, failFast = false, skipBrowser = false, phase = "full", ciParity = true, scope = "full", focused = false, caller = "check", shard = null } = {}) {
+export function runGate(config, { featureId = null, baseSha = null, affectedBase = null, failFast = false, skipBrowser = false, phase = "full", ciParity = true, scope = "full", focused = false, caller = "check", shard = null } = {}) {
   if (!["full", "commit"].includes(phase)) throw new Error("Unknown gate phase");
   if (shard && (phase !== "full" || focused)) throw new Error("--shard applies only to the full gate");
   if (!["full", "affected"].includes(scope)) throw new Error("Unknown gate scope");
@@ -434,22 +493,14 @@ export function runGate(config, { featureId = null, baseSha = null, failFast = f
   const all = shardJobs(fullJobs(config, { doc, current, featureId, browserKind, skipBrowser, ciParity, focused, warnings, deferred }), shard, skipped);
 
   // Path selection: only with a base to diff against; when the change cannot be listed, everything runs.
-  const changed = scope === "affected" && baseSha ? changedSince(config, baseSha) : null;
-  const tracked = changed ? git(config, ["-c", "core.quotepath=off", "ls-files", "-z"]) : null;
-  const known = tracked?.ok ? [...new Set([...tracked.output.split("\0").filter(Boolean), ...changed])] : null;
-  const selected = all.filter((job) => {
-    if (!changed || job.pinned || !job.paths || !job.spec) return true;
-    const patterns = job.paths.map(pathPattern);
-    if (changed.some((file) => patterns.some((pattern) => pattern.test(file)))) return true;
-    // A glob that matches nothing in the repository is a typo, not a reason to skip: the step runs.
-    const dead = known ? job.paths.filter((glob, index) => !known.some((file) => patterns[index].test(file))) : job.paths;
-    if (dead.length) {
-      warnings.push(`${job.name}: paths ${dead.map((glob) => JSON.stringify(glob)).join(", ")} match${dead.length === 1 ? "es" : ""} no file in the repository, so the step was run instead of skipped; fix the glob`);
-      return true;
-    }
-    skipped.push({ name: job.name, reason: "skipped (no path match)" });
-    return false;
-  });
+  // affectedBase (ci validate's merge-base) replaces baseSha here only; the frozen and evidence
+  // checks above stay tied to baseSha.
+  const selectionBase = affectedBase ?? baseSha;
+  const changed = scope === "affected" && selectionBase ? changedSince(config, selectionBase) : null;
+  const selection = selectByPaths(config, all, changed);
+  warnings.push(...selection.warnings);
+  skipped.push(...selection.skipped);
+  const selected = selection.selected;
 
   const memory = readCache(config);
   const tree = config.gateCache ? treeDigest(config) : null;
