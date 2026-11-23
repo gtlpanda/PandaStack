@@ -103,6 +103,17 @@ after it); 9 billing or spend limit; 10 auth; 11 another driver runs for this
 app; 12 a git state the driver will not touch; 13 the push or the PR failed;
 130 stopped.
 
+## Codex backend (`--backend codex`)
+
+`driver.mjs run ... --backend codex` swaps the provider, nothing else (contract:
+`spec/contracts/codex-parity-cp-07.md`; wiring proof only, LIVE_PROOF_MISSING). A slice is one
+`codex exec` through autobuild's `runCodex`, and the driver commits what it left; the final QA is
+`graphs/qa/tool/qa-loop.mjs`; the hunt is `native-cli.mjs --backend codex --mode fix`. The lock,
+ledger, brakes, checks and the PR flow are the same code. A build stays on its provider (a bare `run`
+on a Codex build exits 6), a provider refusal brakes the run and blocks later runs until a person
+removes `provider-refusal.json`, and nothing ever starts `claude`. `skills/build-app/driver/codex-session.mjs`
+holds the Codex side; `tests/driver-codex.test.mjs` is the proof.
+
 ## Files
 
 - `skills/build-app/SKILL.md`: the `/build-app` skill.
@@ -114,7 +125,8 @@ app; 12 a git state the driver will not touch; 13 the push or the PR failed;
 - `skills/build-app/driver/limits.mjs`: usage-limit classification and reset times, ported verbatim.
 - `skills/build-app/driver/proc.mjs`: the session env and process helpers.
 - `skills/build-app/driver/hooks/`: `guard.mjs` with `guard-rules.mjs`, and `stop-failure.mjs`.
-- `tests/`: `driver.test.mjs` (end to end, a fake `claude` and `gh` in `fixtures/`), `guard.test.mjs`, `limits.test.mjs`.
+- `skills/build-app/driver/codex-session.mjs`: the Codex side (slice session, report, host commit, QA and hunt CLI wiring).
+- `tests/`: `driver.test.mjs` (end to end, a fake `claude` and `gh` in `fixtures/`), `driver-codex.test.mjs` (the same on Codex: the frozen fake codex, stub QA and hunt CLIs), `guard.test.mjs`, `limits.test.mjs`.
 - `../../scripts/smoke-build.sh`: one real slice on a throwaway repo, with its cost and models.
 
 ## Credits

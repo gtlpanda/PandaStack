@@ -2502,3 +2502,29 @@ leaves are the frozen fake codex, `gh` and `claude` are recording stubs that mus
 - Untested hypotheses: that Codex 0.167.0 honors `-c sandbox_workspace_write.network_access=true`
   under `--ignore-user-config`, and that `gh` can then reach GitHub from that sandbox. No codex
   was run. A live release smoke is a separate step.
+
+## CP-07: build-app on Codex (`--backend codex`)
+
+Contract: spec/contracts/codex-parity-cp-07.md. Proof reference `cp-07-build-app-wiring`.
+
+What changed: `driver.mjs` takes `--backend claude|codex` (default claude, unchanged) and dispatches the
+slice session, probe, final QA and bug hunt; `codex-session.mjs` (new) holds the Codex side. Slice sessions
+reuse autobuild's `runCodex` (an optional `rules` override on `codexArgs`, default unchanged); the final QA
+is `qa-loop.mjs`; the hunt is `native-cli.mjs --backend codex --mode fix`. `session.mjs` gained
+`trackSession`, `runChild` and an injectable probe (process-group stop). `outcomeOf` and `prBody` take an
+optional provider label. SKILL.md has a `## Codex runner` section (sections 1 to 6 untouched). Catalog:
+build-app's codex row is partial through the existing `codex-autobuild` transport, LIVE_PROOF_MISSING kept.
+
+Tests: graphs/build/tests/driver-codex.test.mjs (18 cases) with fixtures/fake-qa-loop.mjs and
+fixtures/fake-hunt-cli.mjs; the frozen fake codex and fake gh. Amended pins (each green before and after the
+flip): cp-01b, cp-01c (plan lines, sha of tests/install-codex.test.mjs), cp-01d, cp-03b, cp-04e,
+tests/install-codex.test.mjs, tests/install-plan.test.mjs, tests/host-wiring-proof-ref.test.mjs.
+
+Observed limits and untested hypotheses:
+- Fake codex and stubs only: wiring proof, not runtime certification. No live codex, claude or GitHub.
+- The final QA needs `dev` Codex-available in the catalog; until then qa-loop exits 2 OFFERING_UNSUPPORTED
+  and the run brakes after the last slice (observed in the real-CLI case).
+- Usage-limit, billing, auth and overload detection reuse the Claude wording patterns; their match on real
+  Codex output is an untested hypothesis. A refusal inside the QA loop is not distinguished from an escalation.
+
+Full gate: run on the final commit; its result is in the handoff report.
