@@ -309,6 +309,35 @@ await test('lock and resume: a live driver or a live session holds the lock; a b
   assert.equal(gitOut(root, 'log', '-1', '--format=%s', INT), 'S2: slice 2')
 })
 
+// Codex has no PreToolUse guard: a live run (docs/evidence) saw the QA fixer add cases to a test an
+// earlier slice froze, and the driver then braked the whole build. The driver now puts frozen tests back
+// before its commit and lets its own checks judge the rest of the fix against the original tests.
+await test('the final QA changes a frozen test on Codex: the driver puts it back, commits the rest, and the build finishes', () => {
+  const b = box({ S1: good('S1'), S2: good('S2') })
+  const root = repo()
+  const { code, out } = drive(b, root, {
+    env: { FAKE_QA_STEP: JSON.stringify({ status: 'done', writes: { 'tests/S1.test.js': 'test S1\nmore cases\n', 'src/qa-fix.js': 'export const qa = 1\n' } }) },
+  })
+  assert.equal(code, 0, `${out}\n${status(root).message}`)
+  assert.equal(status(root).state, 'done')
+  assert.deepEqual(gitOut(root, 'log', '--format=%s', `main..${INT}`).split('\n').reverse(),
+    ['blueprint: design and backlog for toy', 'S1: slice 1', 'S2: slice 2', 'final: QA fixes'])
+  assert.equal(gitOut(root, 'show', `${INT}:tests/S1.test.js`), 'test S1', 'the frozen test is the version S1 landed')
+  assert.deepEqual(gitOut(root, 'show', '--name-only', '--format=', INT).split('\n'), ['src/qa-fix.js'], 'the QA commit holds only the non-frozen file')
+  assert.equal(gitOut(root, 'status', '--porcelain'), '', 'nothing left uncommitted')
+  assert.match(driverLog(root), /final QA: put back 1 frozen test\(s\) it changed: tests\/S1\.test\.js/)
+})
+
+await test('the final QA changes only frozen tests on Codex: they are put back, no QA commit, and the build finishes', () => {
+  const b = box({ S1: good('S1'), S2: good('S2') })
+  const root = repo()
+  const { code, out } = drive(b, root, { env: { FAKE_QA_STEP: JSON.stringify({ status: 'done', writes: { 'tests/S2.test.js': 'rewritten\n' } }) } })
+  assert.equal(code, 0, `${out}\n${status(root).message}`)
+  assert.equal(status(root).state, 'done')
+  assert.deepEqual(gitOut(root, 'log', '--format=%s', `main..${INT}`).split('\n').reverse(), ['blueprint: design and backlog for toy', 'S1: slice 1', 'S2: slice 2'])
+  assert.equal(gitOut(root, 'show', `${INT}:tests/S2.test.js`), 'test S2')
+})
+
 await test('the final QA does not pass: braked with every slice landed, nothing pushed, no other provider tried', () => {
   for (const [step, why] of [
     [{ status: 'escalate', reason: 'a HIGH finding stays' }, /the final QA did not pass \(.*escalate: a HIGH finding stays/],
