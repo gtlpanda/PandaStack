@@ -93,8 +93,10 @@ What differs from Claude:
   refuses to start until a person removes that file. Refused work is never
   retried, translated or rerouted.
 
-Wiring proof only (fake codex, fake gh): this has not been run against a live
-Codex.
+Live proof: one live `--backend codex --no-pr` run built a one-slice backlog, ran the
+final QA and the fix-mode hunt on Codex, and pushed nothing
+(docs/evidence/codex-live-e2e-2026-11-23.md). The PR flow, brakes and limit handling are
+proven only with a fake codex and a fake gh.
 
 ## PR-first delivery exception
 

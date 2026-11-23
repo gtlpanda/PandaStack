@@ -106,7 +106,7 @@ app; 12 a git state the driver will not touch; 13 the push or the PR failed;
 ## Codex backend (`--backend codex`)
 
 `driver.mjs run ... --backend codex` swaps the provider, nothing else (contract:
-`spec/contracts/codex-parity-cp-07.md`; wiring proof only, LIVE_PROOF_MISSING). A slice is one
+`spec/contracts/codex-parity-cp-07.md`; one live run in docs/evidence/codex-live-e2e-2026-11-23.md). A slice is one
 `codex exec` through autobuild's `runCodex`, and the driver commits what it left; the final QA is
 `graphs/qa/tool/qa-loop.mjs`; the hunt is `native-cli.mjs --backend codex --mode fix`. The lock,
 ledger, brakes, checks and the PR flow are the same code. A build stays on its provider (a bare `run`
