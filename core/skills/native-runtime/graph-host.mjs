@@ -23,6 +23,7 @@ import { loadWorkflowRegistry, registryWorkflow } from './registry.mjs'
 import { fields, json, record, ownErrorCode } from './boundary.mjs'
 
 const INPUT = 'INVALID_HOST_INPUT'
+const SKILL_TRANSPORT = 'codex-skill'
 const ERROR_CODE = /^[A-Z][A-Z0-9_]{0,63}$/
 const ID = /^[a-z0-9][a-z0-9-]{0,63}$/
 const INVOCATION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
@@ -119,6 +120,8 @@ function offeringSupports(catalog, offeringId, graph, reach) {
   const owners = catalog.offerings.filter(row => row.entrySkill === true && row.source.startsWith(`graphs/${graph}/skills/`))
   if (owners.length > 0 && !owners.includes(offering)) return false
   if (providerImplementation(offering, 'codex') === 'unavailable') return false
+  // codex-skill rows are installed guidance skills; they run no graph, whatever their implementation says.
+  if (offering.providers?.codex?.transportId === SKILL_TRANSPORT) return false
   return !reach.some(id => CODEX_REFUSED_WORKFLOWS.includes(id))
 }
 

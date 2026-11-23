@@ -44,6 +44,8 @@ For each independent component:
 3. **Maximize parallelism** — Launch all independent subagents in a single message
 4. **Sequential where needed** — For dependent components, wait for the dependency to complete before launching
 
+On Codex: if this session has no subagent or background-task tool, do each component yourself, one after another in this thread, with the same prompts and the same output format. The decomposition, the checks and the synthesis do not change.
+
 ### Phase 3: Synthesize
 
 Once all subagents return:

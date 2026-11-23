@@ -4182,3 +4182,17 @@ hash-pin amendment PR.
   15 merged parity commits on this run's budget (now cd86609, the main commit this priority
   branches from); F2, CO-10's "Applied automatically" heading for a finding the report never
   applies (now "Auto-applicable (low risk, run `autobuild ci apply`)").
+
+## Codex skill transport (39 offerings flipped to codex partial)
+
+- Added the `codex-skill` transport and flipped 39 codex rows from `unavailable` to `partial`
+  with the Claude row's limitation set; `NATIVE_UNVERIFIED` kept on verify, run-records and
+  decisions. New `tests/codex-skill-install.test.mjs` installs through `install.sh --codex` in a
+  temp HOME, checks every SKILL.md for Claude-only references (the rule is itself tested on
+  lookalike text) and runs each offline helper through its documented `SKILL_DIR` command.
+- Bug caught while writing the graph-host test: without a transport check, any `partial` codex
+  row (including a guidance skill) was admitted by an unowned graph such as harness-repair.
+  The host now refuses `codex-skill` rows; the test fails with the check removed.
+- Found, not fixed: `preflight-cli.mjs` run through a symlink (an installed skill link) exits 0
+  and prints nothing, because it compares `process.argv[1]` without a realpath, and a test
+  forbids it importing `node:fs`.

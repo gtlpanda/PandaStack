@@ -1,12 +1,31 @@
 ---
 name: init-agents
-description: Set up the .claude/agents/ system with specialized agent definitions, memory directories, routing table, and permission settings. Use when the user says "init agents", "set up agents", "add claude agents", "create agent system", "agent routing", "specialized agents", or when a project is complex enough to benefit from domain-specific agent knowledge bases.
+description: Set up a specialist-agent system for a project. For Claude Code, writes .claude/agents/ definitions, memory directories, a CLAUDE.md routing table and permission settings; for Codex, writes domain guides and an AGENTS.md routing table. Use when the user says "init agents", "set up agents", "add claude agents", "create agent system", "agent routing", "specialized agents", or when a project is complex enough to benefit from domain-specific agent knowledge bases.
 version: 0.1.0
 ---
 
 # Init Agents — Specialized Agent System
 
-You are setting up a system of specialized Claude agents for a project. Each agent is an expert in one domain and is consulted before writing code in that domain. This prevents hallucination and enforces accuracy.
+You are setting up a system of specialist agents for a project. Each agent is an expert in one domain and is consulted before writing code in that domain. This prevents hallucination and enforces accuracy.
+
+## Provider output
+
+This skill runs on Claude Code and on Codex, and the two hosts get different files.
+Decide the target first, from the host you are running in. If that is unclear, ask the
+user once, in one message: "Claude Code, Codex, or both?" Generate only what the target needs.
+
+| Target | Domain knowledge | Routing table | Also written |
+|--------|------------------|---------------|--------------|
+| Claude Code | `.claude/agents/{domain}.md` agent definitions | `CLAUDE.md` | `.claude/agent-memory/`, `.claude/settings.local.json` |
+| Codex | `docs/agents/{domain}.md` domain guides (no frontmatter) | `AGENTS.md` | nothing else |
+
+Codex has no agent-definition format this skill generates, no Agent tool to invoke a
+specialist, no per-agent memory directory and no `settings.local.json`. For Codex the
+specialist is a guide the main session reads before it works in that domain.
+
+Phases 1, 3 (the Role, Context, Knowledge Base, Requirements and Output Format sections),
+4 and 7 apply to both targets. Phases 2, 5 and 6 are Claude Code output; each one ends
+with what Codex does instead.
 
 ## Protocol
 
@@ -31,6 +50,8 @@ Ask the user which domains they want agents for if it's not obvious.
 
 ### Phase 2: Create Directory Structure
 
+Claude Code:
+
 ```
 .claude/
 ├── agents/
@@ -47,9 +68,12 @@ Ask the user which domains they want agents for if it's not obvious.
 └── settings.local.json
 ```
 
+On Codex: create `docs/agents/{domain}.md` for each domain (and no `.claude/` tree). Put each
+guide's memory in a `## Memory` section at its end instead of a separate directory.
+
 ### Phase 3: Generate Agent Definitions
 
-Each agent file follows this template:
+Each Claude Code agent file follows this template. For Codex, use the same body from `# {Agent Title}` down, without the frontmatter, and write it to `docs/agents/{domain}.md`:
 
 ```markdown
 ---
@@ -109,7 +133,7 @@ When answering questions, structure your response as:
 
 ### Phase 4: Generate Agent Memory
 
-Each agent's `MEMORY.md` starts minimal:
+On Claude Code each agent's `MEMORY.md` starts minimal (on Codex this is the `## Memory` section of the guide):
 
 ```markdown
 # {Agent Name} — Memory
@@ -126,7 +150,9 @@ Each agent's `MEMORY.md` starts minimal:
 
 ### Phase 5: Generate Settings
 
-Create `.claude/settings.local.json` with appropriate permissions:
+On Codex: skip this phase.
+
+On Claude Code, create `.claude/settings.local.json` with appropriate permissions:
 
 ```json
 {
@@ -144,9 +170,9 @@ Customize based on project needs:
 - **Go projects**: Add `"Bash(go test:*)"`, `"Bash(golangci-lint:*)"`
 - **Node projects**: Add `"Bash(pnpm:*)"` or `"Bash(npm:*)"`
 
-### Phase 6: Update CLAUDE.md
+### Phase 6: Update CLAUDE.md (Claude Code) or AGENTS.md (Codex)
 
-If a CLAUDE.md exists, add the agent routing table:
+If the target's instructions file (`CLAUDE.md` for Claude Code, `AGENTS.md` for Codex) exists, add the agent routing table; if it does not, create `AGENTS.md` for Codex only (for Claude Code, suggest `init-claude`):
 
 ```markdown
 ## Agent Routing
@@ -164,13 +190,17 @@ Before implementing in an agent's domain:
 4. If the agent's guidance conflicts with CLAUDE.md, CLAUDE.md wins
 ```
 
+On Codex, write the table with a guide path in place of the agent name
+(`docs/agents/{domain}.md`), and change step 2 to "Read the guide for the domain" and
+step 4 to "If the guide conflicts with AGENTS.md, AGENTS.md wins".
+
 ### Phase 7: Verify
 
 1. Every agent file has valid YAML frontmatter
 2. Every agent has at least 2 examples in the description
 3. Every agent memory directory exists with a MEMORY.md
-4. The CLAUDE.md routing table matches the agents created
-5. settings.local.json is valid JSON
+4. The routing table (CLAUDE.md or AGENTS.md) matches the agents or guides created
+5. On Claude Code, settings.local.json is valid JSON
 
 ## Rules
 
@@ -178,5 +208,5 @@ Before implementing in an agent's domain:
 - **Examples are critical.** The description's examples teach Claude when to invoke the agent. Bad examples = agent never gets used.
 - **Memory is for decisions.** Agent memory tracks decisions and patterns, not session transcripts. Keep it structured and concise.
 - **Agents don't write code.** Agents provide guidance. The main session writes code based on that guidance.
-- **CLAUDE.md is the source of truth.** If an agent says one thing and CLAUDE.md says another, CLAUDE.md wins. Document this in every agent.
+- **The instructions file is the source of truth.** If an agent or guide says one thing and CLAUDE.md (Claude Code) or AGENTS.md (Codex) says another, the instructions file wins. Document this in every agent or guide.
 - **Start lean.** Create 2-3 agents for the most critical domains. Add more as the project grows and new domains emerge.

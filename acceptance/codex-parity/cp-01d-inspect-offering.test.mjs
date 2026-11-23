@@ -533,8 +533,12 @@ test('on the candidate root only the codex-partial offerings can be ready (wirin
     }
     // Amended at the CP-04e freeze (W2-10): blueprint joins once CP-04e flips its codex row.
     const partial = row => row.providers.codex.implementation === 'partial'
-    const expected = catalog.offerings.find(o => o.id === 'blueprint').providers.codex.implementation === 'partial'
-      ? ['autobuild', 'blueprint', 'bughunt'] : ['autobuild', 'bughunt']
+    // Amended for the codex-skill transport: the offerings in tests/fixtures/codex-skill-offerings.json
+    // are codex partial too, so each is inspectable as ready (wiring proof) once flipped.
+    const skills = JSON.parse(readFileSync(new URL('../../tests/fixtures/codex-skill-offerings.json', import.meta.url), 'utf8')).ids
+    const skillsFlipped = catalog.offerings.find(o => o.id === skills[0]).providers.codex.implementation === 'partial'
+    const expected = [...(catalog.offerings.find(o => o.id === 'blueprint').providers.codex.implementation === 'partial'
+      ? ['autobuild', 'blueprint', 'bughunt'] : ['autobuild', 'bughunt']), ...(skillsFlipped ? skills : [])].sort()
     assert.deepEqual(catalog.offerings.filter(partial).map(o => o.id).sort(), expected, 'no other codex row is partial')
     assert.deepEqual(ready.sort(), expected)
     assert.deepEqual(calls.map(call => call.offeringId).sort(), expected)

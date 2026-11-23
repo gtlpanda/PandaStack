@@ -181,6 +181,24 @@ try {
     assert.equal(existsSync(c.runDir), false)
   })
 
+  await test('a codex-skill row (an installed guidance skill) is refused for graph execution, though its codex row is partial', async () => {
+    // verify is partial over codex-skill in the production catalog copied into BASE. Without the
+    // transport check, the unowned harness-repair graph would admit it like any partial row.
+    const catalog = JSON.parse(readFileSync(join(BASE, CATALOG), 'utf8'))
+    const verify = catalog.offerings.find(o => o.id === 'verify')
+    assert.deepEqual([verify.providers.codex.implementation, verify.providers.codex.transportId], ['partial', 'codex-skill'])
+    const c = freshCase(), { provider, calls } = recorder()
+    assert.deepEqual(await host(options(c, provider, { offeringId: 'verify' })), { exitCode: 2, error: 'OFFERING_UNSUPPORTED' })
+    assert.equal(existsSync(c.runDir), false, 'refused before the run directory exists')
+    assert.equal(calls.length, 0, 'no leaf ran')
+    // The same row on a graph transport is admitted, so the refusal is the transport's, not the offering id's.
+    verify.providers.codex.transportId = 'codex-graph-host'
+    const root = makeRoot()
+    writeFileSync(join(root, CATALOG), JSON.stringify({ ...catalog, transports: catalog.transports }, null, 2) + '\n')
+    const c2 = freshCase()
+    assert.equal((await host(options(c2, recorder().provider, { installationRoot: root, offeringId: 'verify' }))).exitCode, 0)
+  })
+
   await test('runLeaf runs with this = the caller provider; only the prompt differs from the runtime request', async () => {
     const c = freshCase(), seen = []
     const provider = {

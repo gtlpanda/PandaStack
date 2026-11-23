@@ -1,0 +1,13 @@
+{
+  "transport": { "id": "codex-skill", "provider": "codex", "entry": "install.sh" },
+  "ids": [
+    "backlog", "bug-lenses", "build-bot-integration", "build-scraper", "clean-gone", "commit",
+    "copywriting", "decisions", "deep", "deep-fix", "default-stack", "dockerize", "dry",
+    "error-audit", "findings", "fix-scraper", "frontend-design", "gtm-brief", "harness-review",
+    "init-agents", "init-ci", "init-claude", "init-env", "init-monorepo", "init-tasks",
+    "init-tests", "knowledge-map", "logging", "native-runtime", "release", "render",
+    "run-records", "scaffold-app", "security", "seo", "seo-check", "vendor-lens", "verify",
+    "workflow-state"
+  ],
+  "keepNativeUnverified": ["decisions", "run-records", "verify"]
+}

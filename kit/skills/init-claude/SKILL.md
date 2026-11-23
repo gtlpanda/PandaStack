@@ -1,12 +1,29 @@
 ---
 name: init-claude
-description: Generate a production-grade CLAUDE.md for any project. Detects project type (Go CLI, Node API, full-stack monorepo, IaC, Python, etc.) and generates a comprehensive CLAUDE.md with architecture map, agent routing, dev commands, QA checklist, code standards, and workflow instructions. Use when the user says "init claude", "create claude.md", "set up claude", "bootstrap claude", "add claude.md", "project setup", or when starting any new project.
+description: Generate a production-grade CLAUDE.md (Claude Code) or AGENTS.md (Codex) for any project. Detects project type (Go CLI, Node API, full-stack monorepo, IaC, Python, etc.) and generates a comprehensive instructions file with architecture map, agent routing, dev commands, QA checklist, code standards, and workflow instructions. Use when the user says "init claude", "create claude.md", "set up claude", "bootstrap claude", "add claude.md", "project setup", or when starting any new project.
 version: 0.1.0
 ---
 
 # Init CLAUDE.md — Project-Aware Generation
 
 You are generating a CLAUDE.md file tailored to the detected project. This is the single source of truth that future Claude sessions will use to understand and work within this codebase. It must be accurate, comprehensive, and opinionated.
+
+## Output file
+
+The file name depends on the host the project is for. Decide it first, from the host you
+are running in. If that is unclear, ask the user once, in one message: "Claude Code,
+Codex, or both?"
+
+| Target | File written | Title line |
+|--------|--------------|------------|
+| Claude Code | `CLAUDE.md` | `# CLAUDE.md — {Project Name}` |
+| Codex | `AGENTS.md` | `# AGENTS.md — {Project Name}` |
+| Both | both files, same content | each file's own title line |
+
+Everything below applies to either file: read "CLAUDE.md" as the file you are writing.
+Detect and audit an existing file of the same name (Phase 1, item 5). In the Agent Routing
+section, a Claude Code file names agents (`.claude/agents/`). On Codex, an AGENTS.md names the
+domain guides under `docs/agents/` (written by the `init-agents` skill) or omits the section.
 
 ## Protocol
 
@@ -18,7 +35,7 @@ Scan the project root to determine:
 2. **Project structure** — Monorepo (`pnpm-workspace.yaml`, `turbo.json`, `apps/`, `packages/`) vs single-app vs CLI vs library
 3. **Key technologies** — Database (Prisma, Mongoose, SQLAlchemy), auth (Auth0, Supabase, JWT), AI (OpenAI, Anthropic), deployment (Render, AWS, Vercel)
 4. **Existing conventions** — Test framework (Vitest, Jest, Go test, pytest), linter config, CI workflows
-5. **Existing CLAUDE.md** — If one exists, audit it against the template below and fill gaps rather than overwriting
+5. **Existing CLAUDE.md / AGENTS.md** — If one exists for the target, audit it against the template below and fill gaps rather than overwriting
 
 Announce what you detected before generating.
 
