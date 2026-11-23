@@ -4259,3 +4259,41 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
   asking the host for every caller, the loop and build-app driver tests taking the host's provider, a test
   that copies config.mjs with a fixed file list, and frozen Phase 1 acceptance (fixed by pinning the provider
   in the gate environment rather than editing frozen tests).
+
+## 81. security-audit on Codex: native entry, critic partitions, source-only leaf profile (2026-11-23)
+
+- The last of the 46 offerings, security-audit, flipped from `unavailable` to codex `partial` on a new transport
+  `codex-security-audit` (entry `audit-native.mjs`), limitations `NATIVE_UNVERIFIED`, `REQUIREMENTS_INCOMPLETE`. One bounded
+  live run completed with all three reports (docs/evidence/codex-security-audit-live-2026-11-23.md), so `LIVE_PROOF_MISSING`
+  is dropped. Claude row, the generic host (`CODEX_REFUSED_WORKFLOWS`, `SANDBOXES['audit-source-only'] = null`) and every
+  other profile's argv are untouched; the frozen refusal tests still pass because the new path is a second argument, not a
+  change of the old one.
+- Source-only leaf (core/skills/native-runtime/codex-source-only.mjs): `codexSourceOnlyArgs` extends `codexExecArgs`
+  (read-only, 13 `--disable` features, per-run one-model catalog without apply-patch/experimental/multi-agent, one loopback
+  MCP reader by URL and env var, hosted search off). `runWirePreflight` runs the exact leaf argv against a loopback fake
+  Responses API and refuses on any tool outside exec/wait, three nested MCP listers and `mcp__reader`. Checked with a control:
+  the same call with default flags fails on 9 top-level, 9 nested and 12 deferred tools.
+- Critic partitions (SA-05 integration): `critic-stage.mjs` is the trusted adapter into the pure `critic-partitions.mjs`
+  planner (every unit, candidate and prior lead in full; script size measured with the exact run-script bytes);
+  `native-critic.mjs` runs each partition and then the global reconciliation as separate runs of the pinned workflow under
+  derived invocation ids, and applies the accepted union once through the unchanged applier. The call ids would have
+  collided (the critic label is always `c<wave>`), hence one invocation id per leaf and a sibling checkpoint factory.
+- Bug found by the first fake-codex end-to-end: the synthesizer, minter and verifier leaves came back `SCHEMA_UNSUPPORTED`.
+  Three audit schemas have optional properties, and a verifier's `record` declares four properties while carrying a dozen,
+  which Codex's strict output subset (no extra property) would forbid even where it is expressible. cp-02h had named the gap.
+  Fix at the provider boundary only: an audit leaf is handed the NR-01 wire schema and answers `{"json": text}`; the schema
+  moves into the prompt; the runtime's decode still judges the text against the leaf's own schema. No workflow edit (its hash
+  is pinned) and no null coercion.
+- Entry: `audit-native.mjs run|resume` uses `audit-run.mjs init`, `nextStep`, the skill's helper table (a test compares it
+  to SKILL.md) and `runNativeAuditStage`; finite `--budget` required, `--max-budget`/`--grant` for the journal's maximum,
+  exit 0/5/3/1/2. New: `native-codex.mjs` (preflight before the first leaf, reader per leaf, empty cwd, per-run
+  `CODEX_HOME` with `auth.json` as a symlink, selection that refuses an unverified model before any reservation) and
+  `native-reader-manifest.mjs` (the manifest builder nothing in production had).
+- Catalog: transport row, fixture row and `unavailable: []`, `entrySha256` re-pinned for the new `## Codex runner` section.
+  Two frozen acceptance assertions that pinned security-audit as unavailable were made fixture-driven (cp-01b "decision 2",
+  cp-08 "keeps its refusal"). `evidenceOwners` stays at the four frozen owners.
+- Not solved, stated in the evidence file: the `exec` JS isolate, hosted tools of the real provider, one model/version/repo
+  observed, no cross-partition reconciliation seen live, a partitioned critic costs parts + 1 calls where the budget reserve
+  assumes 1. The roadmap (docs/roadmap/security-audit-priority.md, frozen) still describes the 2026-11-23 `unavailable` status.
+- Tests: native-codex-source-only (10), native-codex-source-only-provider (5), native-critic (7), native-e2e (10, a fake
+  codex running the toy audit to its three reports), native-reader-manifest (3), native-skill-section (1).
