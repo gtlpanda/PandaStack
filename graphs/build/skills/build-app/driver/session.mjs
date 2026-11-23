@@ -41,13 +41,28 @@ export const SYSTEM_PROMPT = 'UNATTENDED BUILD (PandaStack /build-app). No human
 
 // Running sessions, so stopping the driver stops them instead of orphaning them.
 const sessions = new Set()
+// Sessions started detached (a Codex session, a native CLI): a stop ends the whole process group.
+const groups = new Set()
 const sleep = ms => new Promise(r => setTimeout(r, ms))
+const signalSession = (child, sig) => {
+  try { if (groups.has(child) && child.pid) process.kill(-child.pid, sig); else child.kill(sig) } catch { /* already gone */ }
+}
+
+// Registers a session another module spawned, so stopSessions ends it too. With
+// pidFile it also holds the pid while the session runs (the orphan check reads it).
+export function trackSession(child, { pidFile, group = false } = {}) {
+  sessions.add(child)
+  if (group) groups.add(child)
+  if (pidFile && child.pid) writeFileSync(pidFile, String(child.pid))
+  child.once('close', () => { sessions.delete(child); groups.delete(child); if (pidFile) rmSync(pidFile, { force: true }) })
+  return child
+}
 
 // SIGTERM every running session, then SIGKILL any still running after `graceMs`.
 export async function stopSessions(graceMs = 30_000) {
-  const closed = [...sessions].map(child => new Promise(r => { child.once('close', r); child.kill('SIGTERM') }))
+  const closed = [...sessions].map(child => new Promise(r => { child.once('close', r); signalSession(child, 'SIGTERM') }))
   await Promise.race([Promise.all(closed), sleep(graceMs)])
-  for (const child of sessions) child.kill('SIGKILL')
+  for (const child of sessions) signalSession(child, 'SIGKILL')
 }
 
 // Starts `bin` and resolves its exit code (124 on timeout, 127 if it cannot start).
@@ -60,17 +75,17 @@ export async function runClaude(options) {
   return withTrackedRun(buildSessionTracking(options), () => runClaudeWork(options))
 }
 
-async function runClaudeWork({ bin, repo, args, env, logFile, timeoutMs, pidFile }) {
+// `group`: the child is started detached and a stop or timeout ends its whole process group
+// (the native CLIs start children of their own).
+async function runClaudeWork({ bin, repo, args, env, logFile, timeoutMs, pidFile, group = false }) {
   const out = openSync(logFile, 'w')
   const err = openSync(`${logFile}.stderr`, 'w')
   try {
     return await new Promise(resolve => {
-      const child = spawn(bin, args, { cwd: repo, env, stdio: ['ignore', out, err] })
-      sessions.add(child)
-      if (pidFile && child.pid) writeFileSync(pidFile, String(child.pid))
+      const child = trackSession(spawn(bin, args, { cwd: repo, env, stdio: ['ignore', out, err], detached: group }), { pidFile, group })
       let timedOut = false
-      const timer = setTimeout(() => { timedOut = true; child.kill('SIGTERM'); setTimeout(() => child.kill('SIGKILL'), 30_000).unref() }, timeoutMs)
-      const done = code => { clearTimeout(timer); sessions.delete(child); if (pidFile) rmSync(pidFile, { force: true }); resolve(code) }
+      const timer = setTimeout(() => { timedOut = true; signalSession(child, 'SIGTERM'); setTimeout(() => signalSession(child, 'SIGKILL'), 30_000).unref() }, timeoutMs)
+      const done = code => { clearTimeout(timer); sessions.delete(child); groups.delete(child); if (pidFile) rmSync(pidFile, { force: true }); resolve(code) }
       child.on('close', code => done(timedOut ? 124 : (code ?? 1)))
       child.on('error', () => done(127))
     })
@@ -79,6 +94,10 @@ async function runClaudeWork({ bin, repo, args, env, logFile, timeoutMs, pidFile
     closeSync(err)
   }
 }
+
+// A native CLI (the QA loop, the bug hunt) as a tracked child: its stdout and stderr go to logFile and
+// logFile.stderr, and a stop or timeout ends its whole process group. Resolves its exit code.
+export const runChild = options => runClaudeWork({ ...options, group: true })
 
 export function sliceArgs({ prompt, model, settingsFile }) {
   return ['-p', prompt, '--model', model, '--permission-mode', 'bypassPermissions', '--settings', settingsFile,
@@ -112,15 +131,18 @@ export function sessionVerdict(logFile, stopFailureFile) {
 
 // After a usage limit with no reset time: a one-turn session every probeMinutes
 // until usage is back, up to maxWaitHours, or until stopped() is true. Returns { ok, ms }.
-export async function probeUntilAvailable({ bin, repo, probeLog, probeMinutes, maxWaitHours, marginMinutes, sleepMs, log, stopped = () => false }) {
+// `probe` (default: the Claude Haiku probe) and `readProbe` let another provider supply its own one-turn probe.
+export async function probeUntilAvailable({ bin, repo, probeLog, probeMinutes, maxWaitHours, marginMinutes, sleepMs, log, stopped = () => false, probe = null, readProbe = readResult }) {
   const started = Date.now()
   const deadline = started + maxWaitHours * 3_600_000
   while (Date.now() < deadline && !stopped()) {
     log(`usage limit: reset time unknown; probing again in ${probeMinutes} min`)
     await sleepMs(probeMinutes * 60_000)
     if (stopped()) break
-    const code = await runClaude({ bin, repo, args: ['-p', 'Reply with OK.', '--model', 'haiku', '--max-turns', '1', '--tools', '', '--output-format', 'stream-json', '--verbose'], env: buildEnv(), logFile: probeLog, timeoutMs: 5 * 60_000 })
-    const result = readResult(probeLog)
+    const code = probe
+      ? await probe()
+      : await runClaude({ bin, repo, args: ['-p', 'Reply with OK.', '--model', 'haiku', '--max-turns', '1', '--tools', '', '--output-format', 'stream-json', '--verbose'], env: buildEnv(), logFile: probeLog, timeoutMs: 5 * 60_000 })
+    const result = readProbe(probeLog)
     const errored = result && (result.is_error || result.subtype !== 'success') ? result : null
     const verdict = classifyOutcome({ result: errored })
     if (code === 0 && result && result.subtype === 'success' && !result.is_error && verdict.kind === 'normal') {

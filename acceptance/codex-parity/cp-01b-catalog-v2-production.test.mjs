@@ -39,6 +39,13 @@ const CP04E_BLUEPRINT_CODEX = { implementation: 'partial', transportId: 'codex-g
   limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] }
 const cp04eFlipped = row => row.id === 'blueprint' &&
   JSON.stringify(row.providers.codex) === JSON.stringify(CP04E_BLUEPRINT_CODEX)
+// Amended for CP-07 (build-app on Codex): build-app's codex row is partial through the existing
+// codex-autobuild transport (no new transport). Pinned by graphs/build/tests/driver-codex.test.mjs's
+// catalog case and tests/host-wiring-proof-ref.test.mjs.
+const CP07_BUILD_APP_CODEX = { implementation: 'partial', transportId: 'codex-autobuild',
+  limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] }
+const cp07Flipped = row => row.id === 'build-app' &&
+  JSON.stringify(row.providers.codex) === JSON.stringify(CP07_BUILD_APP_CODEX)
 const SHARED_FIELDS = ['id', 'kind', 'source', 'entrySkill', 'installTargets', 'nativeReadiness',
   'evidenceOwners', 'requiredRuntimes', 'aliases', 'requirementsComplete']
 
@@ -133,7 +140,7 @@ test('same inventory and derived values as the v1 snapshot', async () => {
     assert.ok(!Object.hasOwn(row, 'codexInstallEligible') && !Object.hasOwn(row, 'nativeImplementation'), `${row.id} has no v1-only field`)
     assert.ok(old.dependencies.every(d => row.dependencies.includes(d)), `${row.id} keeps its v1 dependencies`)
     assert.equal(api.installEligible(row, 'claude'), true, `${row.id} claude eligibility`)
-    if (cp04eFlipped(row)) return // CP-04e's own test pins the flipped row's derived values
+    if (cp04eFlipped(row) || cp07Flipped(row)) return // CP-04e's and CP-07's own tests pin the flipped rows' derived values
     assert.equal(api.installEligible(row, 'codex'), old.codexInstallEligible, `${row.id} codex eligibility`)
     assert.equal(api.nativeImplementationOf(row), old.nativeImplementation, `${row.id} nativeImplementation`)
   })
@@ -184,8 +191,9 @@ test('no supported anywhere; codex is partial only for autobuild and bughunt (an
     }
     assert.deepEqual([claude.implementation, claude.transportId], ['partial', 'claude-code'], `${offering.id} claude`)
     assert.ok(codex.limitations.includes('NATIVE_UNVERIFIED'), `${offering.id} codex NATIVE_UNVERIFIED`)
-    if (cp04eFlipped(offering)) {
+    if (cp04eFlipped(offering) || cp07Flipped(offering)) {
       // CP-04e's state: exactly CP04E_BLUEPRINT_CODEX (checked by cp04eFlipped), pinned by its own test.
+      // CP-07's state: exactly CP07_BUILD_APP_CODEX, pinned by graphs/build/tests/driver-codex.test.mjs.
     } else if (Object.hasOwn(CODEX_PARTIAL, offering.id)) {
       assert.deepEqual([codex.implementation, codex.transportId], ['partial', CODEX_PARTIAL[offering.id]], `${offering.id} codex`)
       assert.ok(codex.limitations.includes('LIVE_PROOF_MISSING'), `${offering.id} codex LIVE_PROOF_MISSING`)

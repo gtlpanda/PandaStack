@@ -21,13 +21,16 @@ const withRefs = (row, proofRefs) => ({ ...row, proofRefs })
 // state before or after that feature; their own frozen tests pin the new state.
 const CP05E_REF = 'cp-05e-qa-gate'
 const blueprintFlipped = byId.get('blueprint').providers.codex.implementation === 'partial'
+const buildAppFlipped = byId.get('build-app').providers.codex.implementation === 'partial'
 
 await test('dev carries exactly the one wiring-proof reference (plus CP-05e\'s); every other row carries none', () => {
   assert.ok([JSON.stringify([PROOF_REF]), JSON.stringify([PROOF_REF, CP05E_REF])].includes(JSON.stringify(byId.get('dev').proofRefs)),
     `dev's proofRefs are [${PROOF_REF}] or [${PROOF_REF}, ${CP05E_REF}]`)
   assert.ok(identifier(PROOF_REF), 'the reference is a catalog identifier')
   for (const row of catalog.offerings) {
-    if (row.id !== 'dev') assert.deepEqual(row.proofRefs, [], `${row.id} has no proofRefs`)
+    // Amended for CP-07 (build-app on Codex): build-app carries its own wiring-proof reference.
+    if (row.id === 'build-app') assert.deepEqual(row.proofRefs, ['cp-07-build-app-wiring'], 'build-app carries exactly its CP-07 reference')
+    else if (row.id !== 'dev') assert.deepEqual(row.proofRefs, [], `${row.id} has no proofRefs`)
   }
 })
 
@@ -69,5 +72,20 @@ await test('a reference is never evidence: no derived answer reads proofRefs', (
 
 await test('the Codex install plan still names only autobuild and bughunt (and blueprint once CP-04e flips it)', () => {
   assert.deepEqual(installPlan({ installationRoot: REPO, backend: 'codex' }).map(entry => entry.dest),
-    blueprintFlipped ? ['skills/autobuild', 'skills/blueprint', 'skills/bughunt'] : ['skills/autobuild', 'skills/bughunt'])
+    [...['skills/autobuild', ...(blueprintFlipped ? ['skills/blueprint'] : []), 'skills/bughunt', ...(buildAppFlipped ? ['skills/build-app'] : [])]])
+})
+
+await test('build-app\'s CP-07 reference is an identifier that names its contract and its test, and its Codex row is the one the contract pins', () => {
+  const ref = 'cp-07-build-app-wiring'
+  assert.ok(identifier(ref))
+  for (const file of ['spec/contracts/codex-parity-cp-07.md', 'graphs/build/tests/driver-codex.test.mjs']) {
+    assert.ok(readFileSync(join(REPO, file), 'utf8').includes(ref), `${file} names ${ref}`)
+  }
+  assert.deepEqual(byId.get('build-app').providers.codex,
+    { implementation: 'partial', transportId: 'codex-autobuild', limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] })
+  assert.deepEqual(byId.get('build-app').providers.claude, { implementation: 'partial', transportId: 'claude-code', limitations: ['REQUIREMENTS_INCOMPLETE'] })
+  assert.equal(byId.get('build-app').requirementsComplete, false)
+  assert.equal(byId.get('build-app').nativeReadiness, 'unknown')
+  assert.equal(nativeImplementationOf(byId.get('build-app')), 'present-limited')
+  assert.deepEqual(catalog.transports.filter(t => t.id === 'codex-autobuild'), [{ id: 'codex-autobuild', provider: 'codex', entry: 'graphs/autobuild/tool/lib/codex.mjs' }], 'no new transport')
 })

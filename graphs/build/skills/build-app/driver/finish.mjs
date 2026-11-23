@@ -41,13 +41,17 @@ export function qaReport(file) {
 // The hunt session's prompt and its PR paragraph live with the hunt (land.mjs), shared with autobuild.
 export { bughuntPrompt, bughuntLine } from '../../../../hunt/skills/bughunt/land.mjs'
 
-export function prBody(backlog, ledger, qaLine, huntLine = null) {
+// `backend` is the provider that built it, so the text never claims a Claude session for a Codex build.
+export function prBody(backlog, ledger, qaLine, huntLine = null, backend = 'claude') {
+  const codex = backend === 'codex'
   const rows = backlog.slices.map(s => {
     const st = sliceState(ledger, s.id)
     return `- **${s.id}** ${s.title}: ${s.acceptance.length} criteria${st.reasons.length ? `, ${st.reasons.length} earlier attempt(s)` : ''}`
   })
   return [
-    `Built unattended by \`/build-app\` from \`docs/backlog.json\` (${backlog.slices.length} slices), one fresh \`/dev --slice\` session per slice.`,
+    codex
+      ? `Built unattended by \`/build-app\` on Codex from \`docs/backlog.json\` (${backlog.slices.length} slices), one fresh Codex session per slice.`
+      : `Built unattended by \`/build-app\` from \`docs/backlog.json\` (${backlog.slices.length} slices), one fresh \`/dev --slice\` session per slice.`,
     'Each slice landed only after the driver\'s own checks: every commit `S<n>: `-prefixed, a clean tree, no frozen test changed, and its own verify passing.',
     '',
     '## Slices',
@@ -59,7 +63,7 @@ export function prBody(backlog, ledger, qaLine, huntLine = null) {
     ...(huntLine ? ['## Bug hunt', huntLine, ''] : []),
     'Review it before merging: nothing here is merged or deployed automatically.',
     '',
-    '🤖 Generated with [Claude Code](https://claude.com/claude-code)',
+    codex ? 'Built by /build-app on Codex.' : '🤖 Generated with [Claude Code](https://claude.com/claude-code)',
   ].join('\n')
 }
 

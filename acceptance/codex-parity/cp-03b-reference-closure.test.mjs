@@ -290,8 +290,11 @@ test('every codex install closure stays under core/skills, and install-plan chec
   const flipped = catalog.offerings.find(o => o.id === 'blueprint').providers.codex.implementation === 'partial'
   const expected = [{ dest: 'skills/autobuild', src: 'graphs/autobuild/skills/autobuild' },
     ...(flipped ? [{ dest: 'skills/blueprint', src: 'graphs/blueprint/skills/blueprint' }] : []),
-    { dest: 'skills/bughunt', src: 'graphs/hunt/skills/bughunt' }]
-  assert.deepEqual(installPlan({ installationRoot: ROOT, backend: 'codex' }), expected, 'the installed set is unchanged (plus blueprint after CP-04e)')
+    { dest: 'skills/bughunt', src: 'graphs/hunt/skills/bughunt' },
+    // Amended for CP-07 (build-app on Codex): build-app joins the installed set; its closure (backlog,
+    // run-records) is checked by the loop below.
+    ...(catalog.offerings.find(o => o.id === 'build-app').providers.codex.implementation === 'partial' ? [{ dest: 'skills/build-app', src: 'graphs/build/skills/build-app' }] : [])]
+  assert.deepEqual(installPlan({ installationRoot: ROOT, backend: 'codex' }), expected, 'the installed set is unchanged (plus blueprint after CP-04e, build-app after CP-07)')
   const byId = new Map(catalog.offerings.map(o => [o.id, o]))
   for (const row of catalog.offerings.filter(o => installEligible(o, 'codex'))) {
     for (const id of transitive(catalog, row.id)) {

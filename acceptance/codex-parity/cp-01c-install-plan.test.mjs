@@ -27,24 +27,24 @@ const coded = code => e => e instanceof Error && e.code === code
 const isLink = p => { try { return lstatSync(p).isSymbolicLink() } catch { return false } }
 
 const PRODUCTION_LINES = 'skills/autobuild\tgraphs/autobuild/skills/autobuild\nskills/bughunt\tgraphs/hunt/skills/bughunt\n'
-const PRODUCTION_PLAN = [
+// Amended at the CP-04e freeze (W2-10): CP-04e makes blueprint Codex install-eligible. Every fixture
+// root sets blueprint's (and, for CP-07, build-app's) codex row unavailable itself.
+// Amended for CP-07 (build-app on Codex): build-app joins the plan once its codex row is partial. The
+// candidate-root case accepts exactly the states before and after each flip.
+const BUILD_APP_LINE = 'skills/build-app\tgraphs/build/skills/build-app\n'
+const linesFor = (blueprint, buildApp) => 'skills/autobuild\tgraphs/autobuild/skills/autobuild\n' +
+  (blueprint ? 'skills/blueprint\tgraphs/blueprint/skills/blueprint\n' : '') + 'skills/bughunt\tgraphs/hunt/skills/bughunt\n' +
+  (buildApp ? BUILD_APP_LINE : '')
+const planFor = (blueprint, buildApp) => [
   { dest: 'skills/autobuild', src: 'graphs/autobuild/skills/autobuild' },
+  ...(blueprint ? [{ dest: 'skills/blueprint', src: 'graphs/blueprint/skills/blueprint' }] : []),
   { dest: 'skills/bughunt', src: 'graphs/hunt/skills/bughunt' },
-]
-// Amended at the CP-04e freeze (W2-10): CP-04e makes blueprint Codex install-eligible.
-// The candidate-root case accepts exactly today's plan or CP-04e's (pinned by its own
-// test), and every fixture root sets blueprint's codex row unavailable itself.
-const CP04E_LINES = 'skills/autobuild\tgraphs/autobuild/skills/autobuild\n' +
-  'skills/blueprint\tgraphs/blueprint/skills/blueprint\nskills/bughunt\tgraphs/hunt/skills/bughunt\n'
-const CP04E_PLAN = [
-  { dest: 'skills/autobuild', src: 'graphs/autobuild/skills/autobuild' },
-  { dest: 'skills/blueprint', src: 'graphs/blueprint/skills/blueprint' },
-  { dest: 'skills/bughunt', src: 'graphs/hunt/skills/bughunt' },
+  ...(buildApp ? [{ dest: 'skills/build-app', src: 'graphs/build/skills/build-app' }] : []),
 ]
 const THIRD_SRC = 'graphs/fixture/skills/third'
 const THREE_LINES = PRODUCTION_LINES + `skills/third\t${THIRD_SRC}\n`
-// The frozen tests/install-codex.test.mjs, byte for byte.
-const INSTALL_CODEX_SHA256 = '372fd1c647d89fe09cb6840ef6aab78d74cb3fda134d3d668cb9fa5f4a6cb6d9'
+// The frozen tests/install-codex.test.mjs, byte for byte (re-pinned for CP-07).
+const INSTALL_CODEX_SHA256 = '74ef3857bbe5215a0e2e7bf5f669b0bd22060061faf25ddbcb3d1146685153e0'
 const INSTALL_CODEX_CASES = 7
 
 // ---------------------------------------------------------------- fixtures
@@ -58,7 +58,7 @@ function owned(t, prefix = 'cp01c-') {
 const candidate = () => JSON.parse(readFileSync(join(ROOT, 'spec/offering-capabilities.json'), 'utf8'))
 const row = (catalog, id) => catalog.offerings.find(o => o.id === id)
 // The fixture base: the candidate catalog with blueprint's codex row as it is before CP-04e.
-const production = () => { const catalog = candidate(); codexUnavailable(row(catalog, 'blueprint')); return catalog }
+const production = () => { const catalog = candidate(); codexUnavailable(row(catalog, 'blueprint')); codexUnavailable(row(catalog, 'build-app')); return catalog }
 
 // Works for either catalog version: the accessor decides, so the test must not care.
 function codexUnavailable(offering) {
@@ -150,15 +150,16 @@ function snapshot(dir) {
 // ---------------------------------------------------------------- cases
 
 test('install-plan prints exactly the two current dest<TAB>src lines for the candidate root (three once CP-04e flips blueprint)', async () => {
-  const flipped = row(candidate(), 'blueprint').providers?.codex?.implementation === 'partial'
-  const lines = flipped ? CP04E_LINES : PRODUCTION_LINES
+  const partial = id => row(candidate(), id).providers?.codex?.implementation === 'partial'
+  const [blueprint, buildApp] = [partial('blueprint'), partial('build-app')]
+  const lines = linesFor(blueprint, buildApp)
   planOk(plan(ROOT), lines)
   planOk(plan(ROOT, ['--backend', 'codex', '--installation-root', ROOT]), lines)
 
   const { installPlan } = await loadPlan()
   assert.equal(typeof installPlan, 'function', 'install-plan.mjs exports installPlan')
   const result = installPlan({ installationRoot: ROOT, backend: 'codex' })
-  assert.deepEqual(result, flipped ? CP04E_PLAN : PRODUCTION_PLAN)
+  assert.deepEqual(result, planFor(blueprint, buildApp))
   for (const entry of result) assert.deepEqual(Object.keys(entry), ['dest', 'src'])
   assert.deepEqual(installPlan({ installationRoot: ROOT, backend: 'codex' }), result, 'same result on every call')
 

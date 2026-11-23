@@ -1551,7 +1551,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "536fade2c5cb5d966f4963968d7f8eecb1875f37a38440362842c74fef8d761d",
+      "entrySha256": "a456a740d5b91fbdd045110639fea1df7b98899484b42378ad5c0c3715bf38b1",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1561,17 +1561,19 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-autobuild",
           "limitations": [
+            "LIVE_PROOF_MISSING",
             "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
       },
       "permissionProfile": null,
-      "proofRefs": []
+      "proofRefs": [
+        "cp-07-build-app-wiring"
+      ]
     },
     {
       "id": "dev",

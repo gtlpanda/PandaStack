@@ -48,6 +48,11 @@ const TRANSPORTS = [
   { id: 'codex-bughunt', provider: 'codex', entry: 'graphs/hunt/skills/bughunt/native-runner.mjs' },
   { id: 'codex-graph-host', provider: 'codex', entry: 'core/skills/native-runtime/graph-host.mjs' },
 ]
+// Amended for CP-07 (build-app on Codex): build-app joins the partial set and the install plan once its
+// codex row is partial. Everything this test pins about blueprint is unchanged.
+const buildAppPartial = readJson(join(ROOT, 'spec/offering-capabilities.json')).offerings
+  .find(o => o.id === 'build-app').providers.codex.implementation === 'partial'
+const BUILD_APP_LINE = buildAppPartial ? 'skills/build-app\tgraphs/build/skills/build-app\n' : ''
 const THREE_LINES = 'skills/autobuild\tgraphs/autobuild/skills/autobuild\n' +
   'skills/blueprint\tgraphs/blueprint/skills/blueprint\nskills/bughunt\tgraphs/hunt/skills/bughunt\n'
 // CP-04c adds the native-runtime edge; CP-04e leaves the dependency list alone.
@@ -162,7 +167,7 @@ describe('CP-04e: blueprint on Codex', () => {
     assert.equal(blueprint.requirementsComplete, false)
     assert.equal(blueprint.nativeReadiness, 'unknown')
     assert.deepEqual(catalog.offerings.filter(o => o.providers.codex.implementation === 'partial').map(o => o.id).sort(),
-      ['autobuild', 'blueprint', 'bughunt'], 'codex partial rows are exactly autobuild, blueprint and bughunt')
+      ['autobuild', 'blueprint', 'bughunt', ...(buildAppPartial ? ['build-app'] : [])], 'codex partial rows are exactly autobuild, blueprint and bughunt (plus build-app after CP-07)')
 
     const { installEligible, nativeImplementationOf, checkCatalogDrift } = await loadModule('core/skills/native-runtime/catalog.mjs')
     assert.equal(installEligible(blueprint, 'codex'), true)
@@ -173,7 +178,7 @@ describe('CP-04e: blueprint on Codex', () => {
   test('2. install: the plan is three lines, install.sh --codex links blueprint in an owned HOME, --uninstall removes it', () => {
     const plan = spawnSync(process.execPath, [join(ROOT, 'core/skills/native-runtime/install-plan.mjs'), '--installation-root', ROOT, '--backend', 'codex'],
       { encoding: 'utf8', cwd: WORK, env: { PATH: dirname(process.execPath) } })
-    assert.deepEqual([plan.status, plan.stderr, plan.stdout], [0, '', THREE_LINES], 'install-plan prints autobuild, blueprint, bughunt')
+    assert.deepEqual([plan.status, plan.stderr, plan.stdout], [0, '', THREE_LINES + BUILD_APP_LINE], 'install-plan prints autobuild, blueprint, bughunt (plus build-app after CP-07)')
 
     const { home, skills } = ownedHome()
     runInstall(home, skills)
@@ -181,7 +186,7 @@ describe('CP-04e: blueprint on Codex', () => {
     assert.equal(readlinkSync(join(skills, 'blueprint')), SKILL_DIR, 'blueprint links to graphs/blueprint/skills/blueprint')
     assert.equal(readlinkSync(join(skills, 'autobuild')), join(ROOT, 'graphs/autobuild/skills/autobuild'))
     assert.equal(readlinkSync(join(skills, 'bughunt')), join(ROOT, 'graphs/hunt/skills/bughunt'))
-    assert.deepEqual(readdirSync(skills).sort(), ['autobuild', 'blueprint', 'bughunt'])
+    assert.deepEqual(readdirSync(skills).sort(), ['autobuild', 'blueprint', 'bughunt', ...(buildAppPartial ? ['build-app'] : [])])
     assertNoAgentDirs(home)
     assert.deepEqual(readdirSync(home), ['.agents'], 'HOME holds only the skills parent')
 
