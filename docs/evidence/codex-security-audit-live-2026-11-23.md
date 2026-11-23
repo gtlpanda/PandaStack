@@ -103,15 +103,26 @@ is not a verified vulnerability, and finding the planted one twice on one reposi
 
 ## What this does not show
 
+> Updated the same day by `codex-security-audit-hardening-2026-11-23.md`, which re-examined the first four bullets: the isolate was
+> attacked, two more models ran, and a multi-partition critic was attempted twice and not reached. The bullets below are annotated
+> with what changed; the original wording stays.
+
 - **The `exec` JavaScript isolate** (the one code tool a leaf keeps) was not attacked. The preflight shows it has no
   nested shell or file tool on the wire; this run shows no leaf misused it. That is not a proof it cannot be escaped.
+  *Since attacked (hardening note, section 1): 210 scripted probe results and 4 live model-driven scripts found no network, file,
+  process or environment access from JavaScript. A V8 or host-process escape is untested, and the JSONL never records `exec` calls,
+  so this run's event scan could not have shown misuse either way.*
 - **Hosted tools of the real provider.** The preflight reads the tool list of a request sent to a loopback fake
   provider. The real provider could attach a tool the fake path did not (hosted search and image tools are turned off
   by flags, not observed absent). The event scan covers this one run only.
 - **One model, one version, one repository, two runs.** A Codex release that renders its tools differently fails the
-  preflight closed; one that keeps the rendering but changes behavior would not be noticed.
+  preflight closed; one that keeps the rendering but changes behavior would not be noticed. `versionPinned` is a record, not a
+  gate: a release outside the pinned list runs when the preflight passes and its receipt says `versionPinned false`.
+  *Since: `gpt-6-astra` and `gpt-6-luna` each completed a live audit (hardening note, section 2), and `gpt-6.1-sol` ran two larger
+  repositories (67 and 193 files). Still one Codex release (0.167.0) and one machine.*
 - **Critic evidence.** The global reconciliation reads the partitions' summaries and proposals, not raw evidence.
   Both live runs had one partition, so no cross-partition reconciliation was exercised live; that is covered offline only.
+  *Still true after six live runs (all one partition; the largest script was 303,625 of the 500,000-byte cap): hardening note, section 3.*
 - **Not supported natively:** a critic of a ledger no hunting wave ran (the partition prompt would claim one did) and a
   reconciliation too large for one script stop the run with exit 1; neither occurred here.
 - **A leaf aborted mid-call** is held as uncertain and the journal has no way to clear that, so such a run cannot continue;

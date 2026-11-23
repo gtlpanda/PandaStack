@@ -33,7 +33,7 @@ node <resolved-skill-dir>/audit-native.mjs resume <run dir> [--grant <N>]
 later `resume --grant` may raise it to (default: the budget). Run it in the background and read its output; relay the `note:` lines `init` prints, as
 section 3 says. Every leaf is a fresh `codex exec` that can only list, read and search the sealed snapshot through a loopback reader: no shell, no patch tool,
 no network, no hosted tools. Before the first leaf of every run the host checks that with a wire preflight (the exact leaf command against a fake Responses
-API, no model call) and refuses, spending nothing, if any tool outside that set appears. An unpinned Codex version runs only if that check passes.
+API, no model call) and refuses, spending nothing, if any tool outside that set appears. The Codex version is recorded, not gated: a release outside the pinned list (0.167.0, the one the live evidence used) is not refused; it runs when that check passes, and its receipt says `versionPinned: false`.
 
 Exit status: `0` complete, with the three reports in the run directory; `5` ended incomplete (a partial pass: read why in `REPORT.md`); `3` paused: for the
 budget (`resume`, with `--grant`), or between stages after one Ctrl-C (`resume`), or held on an uncertain leaf (a leaf aborted mid-call; this version cannot
@@ -41,7 +41,7 @@ reconcile it, so that run cannot continue); `1` any other failure, with the run 
 nothing), including a critic of a ledger no hunting wave ran and a critic reconciliation too large for one script, which are not supported natively; `2`
 usage. Report the result as section 6 says. Limits to say plainly: the critic runs as full-evidence partitions plus
 a global reconciliation that sees their summaries and proposals but reads no raw evidence, and that costs one more call than the budget's critic reserve
-assumes, so a tight budget can pause there; the `exec` JavaScript isolate and any hosted tool a real provider adds are not proven absent by the preflight;
+assumes, so a tight budget can pause there; the `exec` JavaScript isolate was attacked live on Codex 0.167.0 (docs/evidence/codex-security-audit-hardening-2026-11-23.md) and nothing escaped, which is an observation of one release and not a proof, and a hosted tool a real provider adds is not proven absent by the preflight;
 this is not hostile same-user isolation. Saved Codex login is used through a symlink in a per-run `CODEX_HOME`, never copied. No Claude dependency or fallback.
 
 ## 1. When this skill runs, and when it does not

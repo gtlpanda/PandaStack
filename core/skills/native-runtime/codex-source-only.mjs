@@ -24,7 +24,11 @@ import { error, fail, fields, record } from './boundary.mjs'
 
 const INPUT = 'INVALID_SOURCE_ONLY_INPUT'
 
-/** Codex releases the wire preflight and the live proof were recorded against. */
+/**
+ * Codex releases the wire preflight and the live proof were recorded against. This is a record, not a gate: a version outside this list is NOT refused.
+ * native-codex.mjs runs the wire preflight on any version, proceeds when it passes, and writes `versionPinned: false` into the receipt (and a note on
+ * the console). Only the preflight can refuse a run.
+ */
 export const SOURCE_ONLY_PINNED_VERSIONS = Object.freeze(['0.167.0'])
 export const SOURCE_ONLY_READER_NAME = 'reader'
 export const SOURCE_ONLY_READER_TOOLS = Object.freeze(['list_source', 'read_source', 'search_source'])

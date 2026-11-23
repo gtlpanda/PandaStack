@@ -22,4 +22,6 @@ await test('SKILL.md has one Codex runner section, in the house wording, before 
   assert.doesNotThrow(() => parseNativeArgs(['resume', '/run', '--grant', '60']))
   assert.ok(!/node "\$AUDIT\/audit-native/.test(text), 'the Claude drift test must not be asked to run the native entry')
   assert.match(body, /no Claude dependency or fallback/i)
+  assert.match(body, /recorded, not gated: a release outside the pinned list/, 'the version pin is a record: an unlisted release is not refused')
+  assert.ok(!/unpinned Codex version runs only/i.test(body))
 })

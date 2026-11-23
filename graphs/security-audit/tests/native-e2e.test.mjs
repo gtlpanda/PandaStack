@@ -127,7 +127,7 @@ await test('a failed wire preflight refuses before any leaf: exit 1, the problem
   assert.equal(meta(dir).agents_spent, 0)
 })
 
-await test('a model the catalog lacks is refused before any leaf, and an unpinned codex version passes only by its preflight', { skip: NO_LINUX_STORES }, async () => {
+await test('a model the catalog lacks is refused before any leaf, and an unpinned codex version with a bad wire is still refused', { skip: NO_LINUX_STORES }, async () => {
   const none = fakeCodex('codex-no-model', { FAKE_CODEX_MODELS: 'some-other-model' })
   const o = capture()
   assert.equal(await main(['run', mkRepo(TOY_FILES, 'toy-nomodel'), ...flags(none.bin)], { log: o.log }), 1)
@@ -137,6 +137,18 @@ await test('a model the catalog lacks is refused before any leaf, and an unpinne
   const o2 = capture()
   assert.equal(await main(['run', mkRepo(TOY_FILES, 'toy-unpinned'), ...flags(unpinned.bin)], { log: o2.log }), 1)
   assert.equal(readJson(join(runDirOf(o2), 'native-codex', 'preflight.json')).versionPinned, false)
+})
+
+await test('a codex version outside SOURCE_ONLY_PINNED_VERSIONS is not refused: the run proceeds when the wire preflight passes and records versionPinned false', { skip: NO_LINUX_STORES }, async () => {
+  const unknown = fakeCodex('codex-unknown-version', { FAKE_CODEX_VERSION: '9.9.9' })
+  const o = capture()
+  const rc = await main(['run', mkRepo(TOY_FILES, 'toy-unknown-version'), ...flags(unknown.bin)], { log: o.log })
+  assert.equal(rc, 0, o.lines.join('\n'))
+  assert.ok(leafCalls(unknown).length > 0, 'the leaves ran')
+  assert.match(o.lines.join('\n'), /source-only wire preflight passed for gpt-6\.1-sol on codex 9\.9\.9 \(not a pinned version; the preflight is the only proof\)/)
+  const receipt = readJson(join(runDirOf(o), 'native-codex', 'preflight.json'))
+  assert.equal(receipt.codexVersion, '9.9.9'); assert.equal(receipt.versionPinned, false)
+  assert.deepEqual(receipt.receipts.map(r => [r.model, r.ok, r.versionPinned]), [['gpt-6.1-sol', true, false]])
 })
 
 await test('a native run needs a finite budget and usage errors are exit 2; nothing is created', { skip: NO_LINUX_STORES }, async () => {

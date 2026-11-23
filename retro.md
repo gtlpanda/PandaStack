@@ -4310,3 +4310,34 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
 - Tests: native-codex-source-only (11), native-codex-source-only-provider (5), native-critic (7), native-e2e (15, a fake
   codex running the toy audit to its three reports, plus pause/resume, Ctrl-C, preflight refusal and cwd cases),
   native-reader-manifest (3), native-skill-section (1). Live: two runs, 16 leaves each, both complete.
+
+## 82. security-audit on Codex: the four residual risks, attacked and measured (2026-11-23)
+
+- **The `exec` isolate was attacked live and nothing escaped.** 13 probe scripts (210 result entries) ran through the real `codex`
+  0.167.0 with the shipped restricted argv, the shipped loopback reader and the leaf layout, the model replaced by a loopback
+  Responses server that returns `custom_tool_call` `exec` items and records what the isolate answered; 4 more scripts ran through
+  the shipped host and provider with `gpt-6-luna` (a loopback TCP listener logged 0 bytes in all 7 live runs, a control hit logged 1).
+  `require`, `process`, `Buffer`, `fetch`, `XMLHttpRequest`, `WebSocket`, `WebAssembly`, `SharedArrayBuffer`, `Deno`, `Bun`, every
+  `import()` and static `import` (`unsupported import in exec`), `read_mcp_resource` with `file://` URIs, 29 reader path forms, symlinks
+  planted into the snapshot after the manifest, and the reader token and an env canary (present in the `codex` and
+  `codex-code-mode-host` processes by control) all failed or were absent. Not covered: a V8 or host-process escape, other Codex
+  releases, memory exhaustion; an infinite loop is stopped only by the leaf deadline (`runCodexExec` returned 124 at the timeout).
+- **Found by the attack: the JSONL has no `exec` items,** so the earlier event scans could not see what a model did inside `exec`;
+  and **`atob` does not exist in the isolate** although `READER_NOTE` told leaves to decode with it. The note now carries a decoder
+  built from `escape` and `decodeURIComponent`, run in the real isolate and in `native-reader-note.test.mjs` under a `vm` context
+  with only those globals. Review of the first version caught that it threw on a valid UTF-8 file whenever a `read_source` range ended
+  inside a character (the test of that case failed first); it now falls back to the raw byte string.
+- **Two more models.** `gpt-6-astra` (16 leaves) and `gpt-6-luna` (11 leaves) each completed a quick audit of the planted-flaw toy
+  repo and reported `src/tools.js:6`; event scans show only `agent_message` and `reader` `mcp_tool_call` items. They ran through a
+  scratch copy of `audit-native.mjs` (three changed lines) because the shipped CLI has no model option: that is open.
+- **No multi-partition critic live.** Two generated repos (67 and 193 files, `gpt-6.1-sol`, 30 and 31 leaves) gave one partition each
+  (303,625 and 276,293 script bytes of the 500,000 cap). The synthesizer returned 33 and 24 units, so file count is not the
+  lever; the planner needs about 54 to 65 units with 28 to 36 candidates. No limit was changed and nothing was clipped.
+- **The version pin is a record, not a gate.** An unlisted release runs when the wire preflight passes and gets `versionPinned
+  false`; SKILL.md said "An unpinned Codex version runs only if that check passes", which reads as a gate. Reworded, and a new
+  e2e test (fake codex 9.9.9) pins the behavior; the old test of that name only covered a bad wire. The `entrySha256` pin moved.
+- Lesson kept: a log that omits a tool's calls (`exec` here) is not evidence about that tool (two live leaves that answered without a
+  nested call cannot be said to have skipped `exec`); an oracle needs a control (the listener was hit once from outside; the token and
+  canary were shown to be in the process environment first); and the probes were repeated under the other two models' catalogs
+  (`gpt-6.1-sol`, `gpt-6-astra`) because the shipped CLI runs `gpt-6.1-sol`, not the model the first probes used.
+- Evidence: `docs/evidence/codex-security-audit-hardening-2026-11-23.md`; the first live note's "What this does not show" is annotated.

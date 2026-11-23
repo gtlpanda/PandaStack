@@ -1666,7 +1666,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "e80b82572ee314339455ecea2cb134c217041c7580464843da8f332bf992e93a",
+      "entrySha256": "170d6389982b5e7f76ab2501c558dac9d5516c08f87931499e2cfc8e79e7b98b",
       "providers": {
         "claude": {
           "implementation": "partial",
