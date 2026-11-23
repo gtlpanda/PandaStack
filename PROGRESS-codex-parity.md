@@ -2421,3 +2421,28 @@ Observed limits and untested hypotheses:
 - macOS was not run. No mutation check was run on the new test.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-08 — /release-pr on Codex: release-controlled profile, release CLI, catalog flip
+
+Contract: spec/contracts/codex-parity-cp-08.md. WIRING PROOF, NOT RUNTIME CERTIFICATION: the
+leaves are the frozen fake codex, `gh` and `claude` are recording stubs that must stay uncalled.
+
+- `release-controlled` now runs as `--sandbox workspace-write -c
+  sandbox_workspace_write.network_access=true` for release-checker, merger and deploy-watcher
+  only (codex-exec.mjs `networkAccess`, codex-provider.mjs, codex-selection.mjs).
+  `audit-source-only` stays refused (security-audit is out of scope).
+- graphs/release/skills/release-pr/release-native.mjs (new CLI: docs, ready, approve, land,
+  verify) holds the approval-for-the-exact-head, one-merge-attempt (O_EXCL marker created just
+  before the merger dispatch, never removed) and no-fallback rules. SKILL.md gained `## Codex
+  runner`; release-pr's codex row is `partial` via `codex-graph-host`, proofRef
+  `cp-08-release-codex`, dependency `native-runtime`.
+- Frozen pins amended minimally: cp-02b (2: sandboxForProfile table, PROFILE_UNSUPPORTED loop),
+  cp-02h (1: PROFILE_UNSUPPORTED-before-SCHEMA loop), cp-02c (6: refused-workflow list and its
+  test title, accepted-set loop, release-flow leaf case, refused-path case, release-flow
+  runtime case), cp-01b (cp08Flipped, 2 branches), cp-01c (candidate plan, fixture base, install-codex
+  hash), cp-01d (ready set), cp-03b (installed set), cp-04e (partial rows, plan, linked set);
+  tests/install-codex, install-plan, host-wiring-proof-ref, reference-closure-catalog,
+  native-codex-selection.
+- Untested hypotheses: that Codex 0.167.0 honors `-c sandbox_workspace_write.network_access=true`
+  under `--ignore-user-config`, and that `gh` can then reach GitHub from that sandbox. No codex
+  was run. A live release smoke is a separate step.

@@ -21,8 +21,11 @@ const row = (catalog, id) => catalog.offerings.find(o => o.id === id)
 // CP-04e (amended at the tier-4 freeze, W2-10), so these cases hold before and after it.
 const production = () => {
   const catalog = JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8'))
-  row(catalog, 'blueprint').providers.codex = { implementation: 'unavailable', transportId: null,
-    limitations: ['NATIVE_UNVERIFIED', 'NO_PROVIDER_TRANSPORT', 'REQUIREMENTS_INCOMPLETE'] }
+  // Amended at CP-08: release-pr's codex row is reset the same way.
+  for (const id of ['blueprint', 'release-pr']) {
+    row(catalog, id).providers.codex = { implementation: 'unavailable', transportId: null,
+      limitations: ['NATIVE_UNVERIFIED', 'NO_PROVIDER_TRANSPORT', 'REQUIREMENTS_INCOMPLETE'] }
+  }
   return catalog
 }
 const codeIs = code => e => { assert.equal(e.code, code); return true }
@@ -191,7 +194,9 @@ await test('installPlanMain writes only the plan or one error line, and importin
   assert.deepEqual(run(['--installation-root', REPO, '--backend', 'codex']), { status: 0,
     out: 'skills/autobuild\tgraphs/autobuild/skills/autobuild\n' +
       (flipped ? 'skills/blueprint\tgraphs/blueprint/skills/blueprint\n' : '') +
-      'skills/bughunt\tgraphs/hunt/skills/bughunt\n', err: '' })
+      'skills/bughunt\tgraphs/hunt/skills/bughunt\n' +
+      (row(JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8')), 'release-pr')
+        .providers.codex.implementation === 'partial' ? 'skills/release-pr\tgraphs/release/skills/release-pr\n' : ''), err: '' })
   assert.deepEqual(run(['--backend', 'codex', '--backend', 'codex']), { status: 1, out: '', err: 'install-plan: INVALID_INSTALL_PLAN_INPUT\n' })
   assert.deepEqual(run(['--installation-root', '/tmp/no-such-root', '--backend', 'codex']), { status: 2, out: '', err: 'install-plan: NOT_FOUND\n' })
 

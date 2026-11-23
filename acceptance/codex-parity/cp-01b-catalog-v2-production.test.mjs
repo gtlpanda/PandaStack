@@ -39,6 +39,8 @@ const CP04E_BLUEPRINT_CODEX = { implementation: 'partial', transportId: 'codex-g
   limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] }
 const cp04eFlipped = row => row.id === 'blueprint' &&
   JSON.stringify(row.providers.codex) === JSON.stringify(CP04E_BLUEPRINT_CODEX)
+// Amended at CP-08: release-pr's codex row is exactly the same partial row (pinned by cp-08's own test).
+const cp08Flipped = row => row.id === 'release-pr' && JSON.stringify(row.providers.codex) === JSON.stringify(CP04E_BLUEPRINT_CODEX)
 const SHARED_FIELDS = ['id', 'kind', 'source', 'entrySkill', 'installTargets', 'nativeReadiness',
   'evidenceOwners', 'requiredRuntimes', 'aliases', 'requirementsComplete']
 
@@ -133,7 +135,7 @@ test('same inventory and derived values as the v1 snapshot', async () => {
     assert.ok(!Object.hasOwn(row, 'codexInstallEligible') && !Object.hasOwn(row, 'nativeImplementation'), `${row.id} has no v1-only field`)
     assert.ok(old.dependencies.every(d => row.dependencies.includes(d)), `${row.id} keeps its v1 dependencies`)
     assert.equal(api.installEligible(row, 'claude'), true, `${row.id} claude eligibility`)
-    if (cp04eFlipped(row)) return // CP-04e's own test pins the flipped row's derived values
+    if (cp04eFlipped(row) || cp08Flipped(row)) return // CP-04e's and CP-08's own tests pins the flipped row's derived values
     assert.equal(api.installEligible(row, 'codex'), old.codexInstallEligible, `${row.id} codex eligibility`)
     assert.equal(api.nativeImplementationOf(row), old.nativeImplementation, `${row.id} nativeImplementation`)
   })
@@ -184,7 +186,7 @@ test('no supported anywhere; codex is partial only for autobuild and bughunt (an
     }
     assert.deepEqual([claude.implementation, claude.transportId], ['partial', 'claude-code'], `${offering.id} claude`)
     assert.ok(codex.limitations.includes('NATIVE_UNVERIFIED'), `${offering.id} codex NATIVE_UNVERIFIED`)
-    if (cp04eFlipped(offering)) {
+    if (cp04eFlipped(offering) || cp08Flipped(offering)) {
       // CP-04e's state: exactly CP04E_BLUEPRINT_CODEX (checked by cp04eFlipped), pinned by its own test.
     } else if (Object.hasOwn(CODEX_PARTIAL, offering.id)) {
       assert.deepEqual([codex.implementation, codex.transportId], ['partial', CODEX_PARTIAL[offering.id]], `${offering.id} codex`)

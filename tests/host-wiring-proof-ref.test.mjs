@@ -26,8 +26,10 @@ await test('dev carries exactly the one wiring-proof reference (plus CP-05e\'s);
   assert.ok([JSON.stringify([PROOF_REF]), JSON.stringify([PROOF_REF, CP05E_REF])].includes(JSON.stringify(byId.get('dev').proofRefs)),
     `dev's proofRefs are [${PROOF_REF}] or [${PROOF_REF}, ${CP05E_REF}]`)
   assert.ok(identifier(PROOF_REF), 'the reference is a catalog identifier')
+  // Amended at CP-08: release-pr carries its own proof reference, never dev's.
   for (const row of catalog.offerings) {
-    if (row.id !== 'dev') assert.deepEqual(row.proofRefs, [], `${row.id} has no proofRefs`)
+    if (row.id === 'release-pr') assert.deepEqual(row.proofRefs, ['cp-08-release-codex'], 'release-pr carries only its own reference')
+    else if (row.id !== 'dev') assert.deepEqual(row.proofRefs, [], `${row.id} has no proofRefs`)
   }
 })
 
@@ -69,5 +71,6 @@ await test('a reference is never evidence: no derived answer reads proofRefs', (
 
 await test('the Codex install plan still names only autobuild and bughunt (and blueprint once CP-04e flips it)', () => {
   assert.deepEqual(installPlan({ installationRoot: REPO, backend: 'codex' }).map(entry => entry.dest),
-    blueprintFlipped ? ['skills/autobuild', 'skills/blueprint', 'skills/bughunt'] : ['skills/autobuild', 'skills/bughunt'])
+    [...(blueprintFlipped ? ['skills/autobuild', 'skills/blueprint', 'skills/bughunt'] : ['skills/autobuild', 'skills/bughunt']),
+      ...(byId.get('release-pr').providers.codex.implementation === 'partial' ? ['skills/release-pr'] : [])])
 })

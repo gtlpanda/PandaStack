@@ -45,7 +45,7 @@ await test('a getter or proxy in workflowPath is refused without running caller 
 
 await test('own method overrides on workflowPath cannot hide a refused workflow', async () => {
   const { resolveLeaf } = await api()
-  const path = ['release-flow', 'harness-repair']
+  const path = ['security-audit-flow', 'harness-repair']
   Object.defineProperties(path, {
     some: { value: () => false }, includes: { value: () => false }, at: { value: () => 'harness-repair' },
     every: { value: () => true },

@@ -48,8 +48,10 @@ const TRANSPORTS = [
   { id: 'codex-bughunt', provider: 'codex', entry: 'graphs/hunt/skills/bughunt/native-runner.mjs' },
   { id: 'codex-graph-host', provider: 'codex', entry: 'core/skills/native-runtime/graph-host.mjs' },
 ]
+// Amended at CP-08: release-pr joins the codex partial rows and the installed set (a fourth line).
 const THREE_LINES = 'skills/autobuild\tgraphs/autobuild/skills/autobuild\n' +
-  'skills/blueprint\tgraphs/blueprint/skills/blueprint\nskills/bughunt\tgraphs/hunt/skills/bughunt\n'
+  'skills/blueprint\tgraphs/blueprint/skills/blueprint\nskills/bughunt\tgraphs/hunt/skills/bughunt\n' +
+  'skills/release-pr\tgraphs/release/skills/release-pr\n'
 // CP-04c adds the native-runtime edge; CP-04e leaves the dependency list alone.
 const BLUEPRINT_DEPENDENCIES = ['backlog', 'default-stack', 'knowledge-map', 'native-runtime']
 
@@ -162,7 +164,7 @@ describe('CP-04e: blueprint on Codex', () => {
     assert.equal(blueprint.requirementsComplete, false)
     assert.equal(blueprint.nativeReadiness, 'unknown')
     assert.deepEqual(catalog.offerings.filter(o => o.providers.codex.implementation === 'partial').map(o => o.id).sort(),
-      ['autobuild', 'blueprint', 'bughunt'], 'codex partial rows are exactly autobuild, blueprint and bughunt')
+      ['autobuild', 'blueprint', 'bughunt', 'release-pr'], 'codex partial rows are exactly autobuild, blueprint, bughunt and release-pr')
 
     const { installEligible, nativeImplementationOf, checkCatalogDrift } = await loadModule('core/skills/native-runtime/catalog.mjs')
     assert.equal(installEligible(blueprint, 'codex'), true)
@@ -181,7 +183,7 @@ describe('CP-04e: blueprint on Codex', () => {
     assert.equal(readlinkSync(join(skills, 'blueprint')), SKILL_DIR, 'blueprint links to graphs/blueprint/skills/blueprint')
     assert.equal(readlinkSync(join(skills, 'autobuild')), join(ROOT, 'graphs/autobuild/skills/autobuild'))
     assert.equal(readlinkSync(join(skills, 'bughunt')), join(ROOT, 'graphs/hunt/skills/bughunt'))
-    assert.deepEqual(readdirSync(skills).sort(), ['autobuild', 'blueprint', 'bughunt'])
+    assert.deepEqual(readdirSync(skills).sort(), ['autobuild', 'blueprint', 'bughunt', 'release-pr'])
     assertNoAgentDirs(home)
     assert.deepEqual(readdirSync(home), ['.agents'], 'HOME holds only the skills parent')
 

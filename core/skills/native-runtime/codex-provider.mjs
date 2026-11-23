@@ -23,8 +23,12 @@ const REQUEST_KEYS = ['callId', 'workflowId', 'workflowPath', 'agentType', 'labe
   'requestedEffort', 'invocationId', 'prompt', 'selection', 'profile', 'schema', 'wireSchema', 'deadlineMs', 'signal']
 const USAGE_KEYS = ['input_tokens', 'cached_input_tokens', 'output_tokens', 'reasoning_output_tokens']
 const SANDBOXES = Object.freeze(Object.assign(Object.create(null), {
-  'source-review': 'read-only', 'build-workspace': 'workspace-write', 'audit-source-only': null, 'release-controlled': null,
+  'source-review': 'read-only', 'build-workspace': 'workspace-write', 'audit-source-only': null,
+  // CP-08: workspace-write plus network access (NETWORK_PROFILES), never danger-full-access.
+  'release-controlled': 'workspace-write',
 }))
+// The only profile that may reach the network: release leaves run `gh` against GitHub.
+const NETWORK_PROFILES = Object.freeze(['release-controlled'])
 // The NR-01 wire schema is the same for every leaf schema; any valid one yields it.
 const WIRE_SCHEMA = canonical(encodeOutputContract({ type: 'object' }).wireSchema)
 const UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
@@ -126,8 +130,9 @@ async function runValidLeaf(config, leaf) {
     // runCodexExec returns 130 for an already-aborted signal without truncating
     // the log, so a log left by an earlier attempt must not be classified.
     if (leaf.signal.aborted) return failed(CODES.EXIT_NONZERO)
-    const args = codexExecArgs({ sandbox, model: leaf.receipt.model, reasoningEffort: leaf.receipt.effort,
-      skipGitRepoCheck: config.skipGitRepoCheck, schemaFile: files.schemaFile, outputFile: files.outputFile })
+    const args = codexExecArgs({ sandbox, networkAccess: NETWORK_PROFILES.includes(leaf.profile),
+      model: leaf.receipt.model, reasoningEffort: leaf.receipt.effort, skipGitRepoCheck: config.skipGitRepoCheck,
+      schemaFile: files.schemaFile, outputFile: files.outputFile })
     const exitCode = await runCodexExec(config.codexBin, args, { cwd: config.cwd, env: config.env, input: leaf.prompt,
       logFile: files.logFile, timeoutMs: Math.min(leaf.timeoutMs, Number.MAX_SAFE_INTEGER), graceMs: config.graceMs,
       signal: leaf.signal })

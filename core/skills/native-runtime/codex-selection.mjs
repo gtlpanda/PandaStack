@@ -33,8 +33,8 @@ export const ROLE_PROFILES = Object.freeze(Object.fromEntries([
   ['runner', null],
 ].sort(byName)))
 
-/** No leaf of these workflows runs on Codex in wave 1, whatever its role. */
-export const CODEX_REFUSED_WORKFLOWS = Object.freeze(['release-flow', 'security-audit-flow'])
+/** No leaf of these workflows runs on Codex, whatever its role. release-flow left this list at CP-08. */
+export const CODEX_REFUSED_WORKFLOWS = Object.freeze(['security-audit-flow'])
 
 /**
  * The Codex `{selection, profile}` for one leaf context, or a throw of
@@ -72,6 +72,8 @@ function select(context) {
   check(Object.hasOwn(ROLE_PROFILES, c.agentType))
   const profile = ROLE_PROFILES[c.agentType]
   check(profile !== null)
+  // The network-capable release profile exists for release-flow's own leaves only.
+  check(profile !== 'release-controlled' || (c.workflowId === 'release-flow' && workflowPath.length === 1))
   const sandbox = sandboxForProfile(profile)
   check(sandbox !== null)
 

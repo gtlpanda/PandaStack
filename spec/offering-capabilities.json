@@ -1682,7 +1682,8 @@
       "dependencies": [
         "backlog",
         "default-stack",
-        "knowledge-map"
+        "knowledge-map",
+        "native-runtime"
       ],
       "evidenceOwners": [
         "graphs/release/workflows/release-flow.js"
@@ -1690,7 +1691,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "0b5064d39a6d3b953b51c152445b68eeac2d5273cdbf0a43776012e354f34b6e",
+      "entrySha256": "479064df14f56d8cc1f4f93012bda5cb7a1facc51ac4cbeee41415e95858bb4c",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1700,17 +1701,19 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-graph-host",
           "limitations": [
+            "LIVE_PROOF_MISSING",
             "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
       },
       "permissionProfile": null,
-      "proofRefs": []
+      "proofRefs": [
+        "cp-08-release-codex"
+      ]
     },
     {
       "id": "security-audit",

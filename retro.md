@@ -4182,3 +4182,17 @@ hash-pin amendment PR.
   15 merged parity commits on this run's budget (now cd86609, the main commit this priority
   branches from); F2, CO-10's "Applied automatically" heading for a finding the report never
   applies (now "Auto-applicable (low risk, run `autobuild ci apply`)").
+
+## 77. Codex parity CP-08: /release-pr on Codex (2026-11-22)
+
+`release-controlled` is no longer refused by the Codex leaf: it runs as `workspace-write` plus
+`sandbox_workspace_write.network_access=true`, for release-checker, merger and deploy-watcher
+only (scribe stays workspace-write without network, advisor read-only). A new
+`release-native.mjs` CLI drives release-flow through the graph host and holds the approval for
+one exact head and the single, never-retried merge attempt (an O_EXCL marker created just
+before the merger dispatch). release-pr's codex row is `partial` via `codex-graph-host`.
+- Proof: acceptance/codex-parity/cp-08-release-codex.test.mjs, 17 tests on the fake codex with
+  recording gh/claude stubs (wiring proof, not runtime certification). A mutation check
+  (marker checks removed, network profile widened to build-workspace) failed 5 of them.
+- Untested hypotheses: the Codex flag spelling under `--ignore-user-config` and `gh` reaching
+  GitHub from that sandbox; no codex was run.
