@@ -1516,6 +1516,7 @@
         "default-stack",
         "harness-review",
         "knowledge-map",
+        "native-runtime",
         "verify",
         "workflow-state"
       ],
@@ -1526,7 +1527,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "1e7d0b75fa3c85c6ec3b5161f979818d85bc0776b39635d0dc15db175dde5b7f",
+      "entrySha256": "e1f6948c3d0c526e65d5c9ac6062dad906ff02d2bcfb5d063f4aa815048cface",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1536,11 +1537,11 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-graph-host",
           "limitations": [
+            "LIVE_PROOF_MISSING",
             "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1548,7 +1549,8 @@
       "permissionProfile": null,
       "proofRefs": [
         "cp-02f-host-wiring",
-        "cp-05e-qa-gate"
+        "cp-05e-qa-gate",
+        "cp-06-dev-codex"
       ]
     },
     {

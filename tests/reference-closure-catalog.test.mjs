@@ -23,7 +23,7 @@ const codeUnitSorted = list => [...list].sort((a, b) => (a < b ? -1 : a > b ? 1 
 
 await test('dev, bughunt and release-pr declare exactly the contract table', () => {
   assert.deepEqual(byId.get('dev').dependencies,
-    ['backlog', 'default-stack', 'harness-review', 'knowledge-map', 'verify', 'workflow-state'])
+    ['backlog', 'default-stack', 'harness-review', 'knowledge-map', 'native-runtime', 'verify', 'workflow-state']) // native-runtime: CP-06's dev-native.mjs and Codex runner
   assert.deepEqual(byId.get('bughunt').dependencies,
     ['backlog', 'bug-lenses', 'default-stack', 'findings', 'knowledge-map', 'verify', 'workflow-state'])
   assert.deepEqual(byId.get('release-pr').dependencies, ['backlog', 'default-stack', 'knowledge-map'])
