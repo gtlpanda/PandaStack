@@ -93,7 +93,36 @@ function checkedRun(run, args) {
 
 const runsArgs = (repo, limit) => ["api", `repos/${repo}/actions/runs?per_page=${limit}&status=completed`];
 const attemptArgs = (repo, id, k) => ["api", `repos/${repo}/actions/runs/${id}/attempts/${k}`];
-const jobsArgs = (repo, id, a) => ["api", `repos/${repo}/actions/runs/${id}/attempts/${a}/jobs?per_page=100`];
+const JOBS_PER_PAGE = 100;
+// The cap only stops a server whose pages never end (5,000 jobs is far past any real attempt).
+const MAX_JOB_PAGES = 50;
+const jobsArgs = (repo, id, a, page = 1) => [
+  "api",
+  `repos/${repo}/actions/runs/${id}/attempts/${a}/jobs?per_page=${JOBS_PER_PAGE}${page > 1 ? `&page=${page}` : ""}`,
+];
+
+/**
+ * Every job of one attempt. The first page is the contract's exact call; later pages are
+ * requested only while the response's `total_count` says jobs are missing (or, without a
+ * `total_count`, while each page comes back full). A page that ends the list early, or a list
+ * that never ends, is GH_FAILED rather than a silently partial attempt.
+ */
+function fetchAttemptJobs(ghBin, repo, id, a, env) {
+  const jobs = [];
+  for (let page = 1; page <= MAX_JOB_PAGES; page++) {
+    const args = jobsArgs(repo, id, a, page);
+    const doc = callGh(ghBin, args, env);
+    const pageJobs = listFrom(doc, "jobs", args);
+    jobs.push(...pageJobs);
+    const total = Number.isInteger(doc.total_count) ? doc.total_count : null;
+    const more = total === null ? pageJobs.length === JOBS_PER_PAGE : jobs.length < total;
+    if (!more) return jobs;
+    if (pageJobs.length === 0) {
+      throw new CiError("GH_FAILED", `gh ${JSON.stringify(args)} returned no jobs after ${jobs.length} of ${total}`);
+    }
+  }
+  throw new CiError("GH_FAILED", `run ${id} attempt ${a} has more than ${MAX_JOB_PAGES} pages of jobs`);
+}
 
 /**
  * Every attempt of the `limit` newest completed runs of `repo`, normalized. The calls are
@@ -119,11 +148,9 @@ export function fetchGithubHistory({ repo, ghBin, limit, env = process.env }) {
   const attempts = [];
   for (const run of runs) {
     for (let a = 1; a <= run.run_attempt; a++) {
-      const args = jobsArgs(repo, run.id, a);
-      const jobsDoc = callGh(ghBin, args, env);
-      listFrom(jobsDoc, "jobs", args);
+      const jobs = fetchAttemptJobs(ghBin, repo, run.id, a, env);
       // The attempt number is the one requested, whatever the response's run_attempt says.
-      attempts.push(normalizeAttempt({ ...runObjects.get(run.id)[a - 1], run_attempt: a }, jobsDoc));
+      attempts.push(normalizeAttempt({ ...runObjects.get(run.id)[a - 1], run_attempt: a }, { jobs }));
     }
   }
   return attempts;
