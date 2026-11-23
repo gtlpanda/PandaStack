@@ -2434,7 +2434,7 @@ is `qa-loop.mjs`; the hunt is `native-cli.mjs --backend codex --mode fix`. `sess
 optional provider label. SKILL.md has a `## Codex runner` section (sections 1 to 6 untouched). Catalog:
 build-app's codex row is partial through the existing `codex-autobuild` transport, LIVE_PROOF_MISSING kept.
 
-Tests: graphs/build/tests/driver-codex.test.mjs (16 cases) with fixtures/fake-qa-loop.mjs and
+Tests: graphs/build/tests/driver-codex.test.mjs (18 cases) with fixtures/fake-qa-loop.mjs and
 fixtures/fake-hunt-cli.mjs; the frozen fake codex and fake gh. Amended pins (each green before and after the
 flip): cp-01b, cp-01c (plan lines, sha of tests/install-codex.test.mjs), cp-01d, cp-03b, cp-04e,
 tests/install-codex.test.mjs, tests/install-plan.test.mjs, tests/host-wiring-proof-ref.test.mjs.

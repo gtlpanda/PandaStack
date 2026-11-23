@@ -339,6 +339,11 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg, c
       const control = controlDigest(codexCfg)
       code = await runChild({ bin: process.execPath, repo, logFile, timeoutMs: cfg.sessionTimeoutMs, pidFile: files.session, args: [cfg.qaLoopCli, '--args-file', argsFile], env: buildEnv() })
       qaCost = 'tokens not metered by the QA loop'
+      // Before the host commit or any setAside: either would run a planted hook or config.
+      const tampered = controlChanges(codexCfg, control)
+      if (tampered.length) {
+        return end(EXIT.gitState, 'failed', `the final QA changed git control files (${tampered.map(f => f.replace(/^.*\/\.git\//, '.git/')).join(', ')}); nothing was committed or landed, its work is left on ${branch} as it is, and no other provider is tried: a person must look`)
+      }
       const qa = code === 0 ? readQaReport(readText(logFile)) : null
       if (qa) {
         writeJson(files.finalQa, { status: qa.status, reason: typeof qa.reason === 'string' ? qa.reason : '', touched: Array.isArray(qa.touched) ? qa.touched : [] })
@@ -347,10 +352,6 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg, c
           // A failed commit leaves the tree dirty, which the driver's own checks below report.
           if (!made.ok) log(`final QA: ${made.message}`)
         }
-      }
-      if (!stopping && controlChanges(codexCfg, control).length) {
-        setAside(repo, branch, integration, attempt, log)
-        return end(EXIT.gitState, 'failed', `the final QA changed git control files (hooks, config or info under .git); nothing landed and no other provider is tried: a person must look`)
       }
     } else {
       code = await runClaude({
@@ -461,6 +462,11 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg, c
         })
         cost = charge(logFile)
       }
+      // Checked before anything else touches the repo: setAside commits and checks out, which a planted hook or
+      // config would run. The work stays where it is, for a person.
+      if (codex && controlChanges(codexCfg, controlBefore).length) {
+        return end(EXIT.gitState, 'failed', `${slice.id}: the Codex session changed git control files (${controlChanges(codexCfg, controlBefore).map(f => f.replace(/^.*\/\.git\//, '.git/')).join(', ')}); nothing was committed or landed, its work is left on ${branch} as it is, and no other provider is tried: a person must look`)
+      }
       if (stopping) { setAside(repo, branch, integration, attempt, log); return end(EXIT.stopped, 'stopped', `stopped by request during ${slice.id} (${cost}); its work is kept on attempt/${attempt}`) }
 
       const report = devReport(codex ? reportFile : files.devLedger)
@@ -470,10 +476,6 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg, c
         setAside(repo, branch, integration, attempt, log)
         writeJson(files.refusal, { slice: slice.id, at: new Date().toISOString(), log: logFile })
         return end(EXIT.brake, 'braked', `${slice.id}: the provider declined this work; it is never retried, rerouted or sent to another provider. Its work is kept on attempt/${attempt}. A person decides what happens next (${files.refusal})`)
-      }
-      if (codex && controlChanges(codexCfg, controlBefore).length) {
-        setAside(repo, branch, integration, attempt, log)
-        return end(EXIT.gitState, 'failed', `${slice.id}: the Codex session changed git control files (hooks, config or info under .git); nothing landed and no other provider is tried: a person must look`)
       }
       // A session that ended on the API, not on its own work, is not counted.
       if (!report && verdict.kind !== 'normal') {

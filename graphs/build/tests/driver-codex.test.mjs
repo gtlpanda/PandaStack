@@ -59,11 +59,14 @@ const driverLog = root => readFileSync(join(stateDir(root), 'logs', 'driver.log'
 const lines = file => (existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)) : [])
 
 // One box per test: the fake codex (its script and call log), a `claude` that fails loudly, a stub QA loop and hunt.
-function box(replies = {}) {
+// `limitOnce`: the first codex call prints a usage-limit error and exits 1, as a limited account does; later calls reach the fake.
+function box(replies = {}, { limitOnce = false } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'build-codex-box-'))
   const bin = join(dir, 'bin')
   mkdirSync(bin)
-  writeFileSync(join(bin, 'codex'), `#!/bin/sh\nexec "${process.execPath}" "${FAKE_CODEX}" "$@"\n`)
+  const limit = limitOnce
+    ? `if [ ! -e "${join(dir, 'limit-hit')}" ]; then : > "${join(dir, 'limit-hit')}"; echo '{"type":"error","message":"You have hit your usage limit. Try again later."}'; exit 1; fi\n` : ''
+  writeFileSync(join(bin, 'codex'), `#!/bin/sh\n${limit}exec "${process.execPath}" "${FAKE_CODEX}" "$@"\n`)
   writeFileSync(join(bin, 'claude'), `#!/bin/sh\necho "$@" >> "${join(dir, 'claude-calls.log')}"\necho "claude must never run in codex mode" >&2\nexit 97\n`)
   chmodSync(join(bin, 'codex'), 0o755)
   chmodSync(join(bin, 'claude'), 0o755)
@@ -225,6 +228,47 @@ await test('a provider refusal ends the run: no escalated attempt, no retry, not
   assert.match(status(root).message, /a Codex provider refusal is recorded/)
 })
 
+await test('a session that changes .git hooks, config or info ends the run before anything runs in the repo: no commit, no set-aside, nothing landed', () => {
+  const b = box({ S1: reply('done', { 'src/S1.js': 'x\n', 'tests/S1.test.js': 't\n', '.git/hooks/post-checkout': '#!/bin/sh\ntouch /tmp/never-run-by-the-driver\n' }) })
+  const root = repo()
+  const before = gitOut(root, 'rev-parse', INT)
+  const r = drive(b, root)
+  assert.equal(r.code, 12, r.out)
+  assert.equal(status(root).state, 'failed')
+  assert.match(status(root).message, /S1: the Codex session changed git control files \(.*\.git\/hooks\/post-checkout.*\); nothing was committed or landed, its work is left on slice\/S1 as it is, and no other provider is tried/)
+  assert.equal(gitOut(root, 'rev-parse', INT), before, 'integration did not move')
+  assert.equal(gitOut(root, 'rev-parse', 'slice/S1'), before, 'nothing was committed on the slice branch')
+  assert.equal(gitOut(root, 'rev-parse', '--abbrev-ref', 'HEAD'), 'slice/S1', 'no checkout ran')
+  assert.equal(gitOut(root, 'branch', '--list', 'attempt/*'), '', 'no set-aside commit or branch')
+  assert.match(gitOut(root, 'status', '--porcelain', '--untracked-files=all'), /src\/S1\.js/, 'the session\'s work is still in the tree')
+  assert.equal(b.callsOf('S1').length, 1)
+  assert.ok(!existsSync(join(stateDir(root), 'ledger.json')) || ledger(root).slices.S1 === undefined, 'not recorded as an attempt')
+  // The final QA: the same check, before the driver commits what the loop touched.
+  const b2 = box({ S1: good('S1'), S2: good('S2') })
+  const root2 = repo()
+  const r2 = drive(b2, root2, { env: { FAKE_QA_STEP: JSON.stringify({ status: 'done', writes: { '.git/info/exclude': '*.secret\n', 'src/qa.js': 'q\n' } }) } })
+  assert.equal(r2.code, 12, r2.out)
+  assert.match(status(root2).message, /the final QA changed git control files \(.*\.git\/info\/exclude.*\); nothing was committed or landed/)
+  assert.equal(gitOut(root2, 'log', '-1', '--format=%s', INT), 'S2: slice 2')
+  assert.equal(gitOut(root2, 'log', '-1', '--format=%s', 'slice/final'), 'S2: slice 2', 'the QA branch has no commit of the driver\'s')
+})
+
+await test('a usage limit with no reset time: the one-turn codex probe runs, the slice is retried uncounted, nothing else is asked', () => {
+  const b = box({ S1: good('S1'), probe: { json: 'OK' } }, { limitOnce: true })
+  const root = repo({ ...BACKLOG, slices: [slice(1, [])], requirements: ['R1'] })
+  // A probe that never succeeded would spin here until the wait cap: a few seconds, not hours.
+  const r = drive(b, root, { env: { HARNESS_BUILD_MAX_LIMIT_WAIT_HOURS: '0.01' } })
+  assert.equal(r.code, 0, `${r.out}\n${status(root).message}`)
+  const probes = b.callsOf('probe')
+  assert.equal(probes.length, 1, 'exactly one probe')
+  assert.equal(probes[0].sandbox, 'read-only')
+  assert.match(probes[0].stdin, /^Reply OK\./)
+  assert.match(driverLog(root), /S1: usage limit \(.*hit your usage limit.*\); not counted/)
+  assert.match(driverLog(root), /usage limit: available again/)
+  assert.deepEqual([ledger(root).slices.S1.status, ledger(root).slices.S1.reasons], ['done', []], 'the limit is not an attempt')
+  assert.equal(b.callsOf('S1').length, 1, 'the retry reached the fake once; the limited call never did')
+})
+
 await test('lock and resume: a live driver or a live session holds the lock; a build is pinned to its provider; resume continues without rebuilding', async () => {
   const b = box({ S1: good('S1'), S2: reply('escalate', {}, { reason: 'cannot do it' }) })
   const root = repo()
@@ -308,6 +352,9 @@ await test('the real hunt CLI accepts the driver\'s arguments (--backend codex -
   assert.ok(b.callsOf(null).length > 0, 'the real CLI launched the fake codex given by --codex-bin')
 })
 
+// The leaf env of the real loop carries no FAKE_CODEX_DIR (HOME and PATH only), so every leaf the fake codex is asked
+// to run fails: the loop can only escalate, never reach `done`, and so never reaches its verify.sh (the repository's own
+// is out of bounds here). Once the dev offering flips, this case still ends in an escalation for the same reason.
 await test('the real QA loop accepts the driver\'s args file (it is refused later, by the offering catalog or a leaf, never as bad input)', () => {
   const b = box({ S1: good('S1'), S2: good('S2') })
   const root = repo()

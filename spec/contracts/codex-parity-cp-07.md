@@ -51,6 +51,13 @@ and `nativeReadiness` do not change.
   only that the CLIs accept the driver's arguments.
 - The usage-limit, billing, auth and overload patterns are the Claude ones (limits.mjs); their match on real
   Codex wording is an untested hypothesis.
+- The driver's Codex-side stand-in for the guard hook is a digest of .git config, hooks and info taken before
+  each session and compared after it. On a change the run ends (exit 12) before the driver runs any git
+  command that could execute a planted hook (no set-aside, no commit, no checkout); the work stays in place.
+- The build-app to bughunt dependency (the driver imports the hunt's land.mjs and runs its CLI) is real and not
+  declared in `dependencies`: the Claude path already had it undeclared, the SKILL.md section avoids the
+  `skills/<id>/` spelling that the drift guard reads as a mention. Declaring it is untested (cp-03b's closure
+  rule may refuse a dependency that lives under graphs/).
 - A refusal inside the QA loop's leaves escalates through the graph; the driver cannot tell it from another
   escalation, so a resume asks again. Untested hypothesis that this is acceptable.
 
@@ -59,4 +66,5 @@ and `nativeReadiness` do not change.
 Each retired only to the new intended state, before-and-after green: cp-01b (codex-partial set), cp-01c
 (plan lines; sha of tests/install-codex.test.mjs; fixture roots set build-app unavailable), cp-01d (ready set),
 cp-03b (installed set), cp-04e (partial set, plan, installed links), tests/install-codex.test.mjs (installed
-set) and tests/host-wiring-proof-ref.test.mjs (build-app's one reference).
+set), tests/install-plan.test.mjs (fixture base and this checkout's plan) and
+tests/host-wiring-proof-ref.test.mjs (build-app's one reference and the plan).

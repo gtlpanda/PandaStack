@@ -84,7 +84,7 @@ export async function runSliceSession({ config, prompt, rules, logFile, reportFi
 
 // The one-turn availability probe (the Claude driver's Haiku probe).
 export const runProbeSession = ({ config, logFile, pidFile }) =>
-  runCodex(config, { role: 'probe', prompt: 'Reply OK.', logFile }, child => trackSession(child, { pidFile, group: true }))
+  runCodex(config, { role: 'probe', prompt: 'Reply OK.', logFile, outputFile: `${logFile}.last` }, child => trackSession(child, { pidFile, group: true }))
 
 // How the session ended, in the terms the driver already has: the limits.mjs kinds plus provider_refusal,
 // which is never retried (AGENTS.md).
