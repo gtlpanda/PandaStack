@@ -44,6 +44,7 @@ const HELP = `autobuild — autonomous, test-gated build loop for Claude Code or
   autobuild ci compare --before FILE --after FILE [--json]   wall deltas between two baselines; exits 1 when a check, test step or gate step was removed
   autobuild ci triggers [--explicit] [--json]   offline lifecycle triggers (onboarding, CI or config change, regression, repeated failures); writes nothing
   autobuild ci report [--json] [--out FILE]   the per-repository CI report (Markdown, or JSON); applies nothing; --out refuses .git, links and directories
+  autobuild ci status [--json]   whether local fast/full validation and stored CI results are current for HEAD, and what to run next; writes nothing, never calls gh
 
 Exit codes of \`run\`: 0 verified completion or PR-first handoff, 2 no progress, 3 blocked, 4 frozen files changed, 5 preflight,
 6 total budget, 7 max iterations, 8 usage limit resets too far away, 9 billing, 10 auth,

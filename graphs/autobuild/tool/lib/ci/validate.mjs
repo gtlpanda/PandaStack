@@ -4,11 +4,12 @@
 // `paths` anywhere, a CI, manifest, lockfile or autobuild.json change, or a change no `paths`
 // pattern covers. The fast tier is never merge validation; the required CI check decides merges.
 
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { CONFIG_FILE } from "../config.mjs";
 import { ciFiles, ciProviderOf } from "../ci-parity.mjs";
 import { changedSince, gateHasPaths, gateJobs, pathEntries, pathPattern, selectByPaths } from "../gate.mjs";
-import { git } from "../proc.mjs";
+import { git, SAFE_GIT } from "../proc.mjs";
 import { readState, STATE_SCHEMA_VERSION, writeState } from "./state.mjs";
 
 export const TIERS = ["fast", "full"];
@@ -109,11 +110,24 @@ export function recordValidation(root, record, env = process.env) {
   return doc;
 }
 
-/** `{ head, dirty }` of the work tree: HEAD's sha (null without one) and whether `git status --porcelain` lists anything. */
-export function treeState(config) {
-  const head = git(config, ["rev-parse", "--verify", "--quiet", "HEAD"]);
-  const status = git(config, ["status", "--porcelain"]);
+/** The one `{ head, dirty }` rule; `runGit(args)` returns `{ ok, output }` with stdout and stderr together, as proc.mjs's git does. */
+function treeStateWith(runGit) {
+  const head = runGit(["rev-parse", "--verify", "--quiet", "HEAD"]);
+  const status = runGit(["status", "--porcelain"]);
   const sha = head.ok ? head.output.trim() : "";
   // Anything git cannot report counts as dirty: a record must never look cleaner than the tree.
   return { head: /^[0-9a-f]{40,64}$/.test(sha) ? sha : null, dirty: !status.ok || status.output.trim() !== "" };
+}
+
+/** `{ head, dirty }` of the work tree: HEAD's sha (null without one) and whether `git status --porcelain` lists anything. */
+export function treeState(config) {
+  return treeStateWith((args) => git(config, args));
+}
+
+/** treeState for a repository without autobuild.json: the same rule, with git run in `root` under `env`. */
+export function treeStateAt(root, env = process.env) {
+  return treeStateWith((args) => {
+    const result = spawnSync("git", [...SAFE_GIT, ...args], { cwd: root, env, encoding: "utf8" });
+    return { ok: result.status === 0, output: `${result.stdout ?? ""}${result.stderr ?? ""}` };
+  });
 }

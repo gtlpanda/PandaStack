@@ -720,3 +720,67 @@ Focused validation:
   `lib/ci/report.mjs` and `test/ci-report.test.mjs`: clean.
 
 Still pending for the PR: the full regressions, review and the bug hunt.
+
+## CO-11 — Validation status for HEAD
+
+Contract: spec/contracts/ci-optimizer-co-11.md. This adds `lib/ci/status.mjs`, which exports the
+pure `validationStatus({ root, head, dirty, validation, attempts })`, and `autobuild ci status
+[--json]`.
+
+The command reads `validation.json` (`readState`) and the stored history (`readHistory`) first,
+then HEAD and the tree's dirtiness. It prints the contract's six human lines or the JSON object
+and exits 0 whatever the advice. It writes nothing: no state directory is created and no
+profile is stored. It never calls `gh`.
+
+Changes:
+- `lib/ci/status.mjs` (new). The rules:
+  - local entries: `current` is true only for the same head, a record taken clean and a tree
+    that is clean now; otherwise `head-changed` when the heads differ, else
+    `uncommitted-changes`;
+  - `ci`: the newest attempt for HEAD under history's own `newestFirst`, projected to
+    `{ workflow, conclusion, runId, attempt, startedAt }`;
+  - notes: `NO_CI_RESULT_FOR_HEAD`, plus `NO_HISTORY` when there are no attempts;
+  - advice: the five rules, in order.
+- `lib/ci/validate.mjs`: `treeState(config)` now goes through one internal rule, which the new
+  `treeStateAt(root, env)` shares. That gives status CO-07's dirty rule without an
+  `autobuild.json`. `treeState`'s behavior is unchanged: the CO-07 acceptance and
+  `ci-validate` tests pass.
+- `lib/ci/command.mjs`: the `status` subcommand, and the help line in `lib/cli.mjs`.
+
+Decisions (unattended, recorded here):
+- Status never loads `autobuild.json`, because it needs no policy. An invalid config therefore
+  still gives exit 0. Dirtiness comes from `treeStateAt` with the `ci` process environment, not
+  the gate's `buildEnv`.
+- A null head (a repository without commits) is never current and matches no attempt. The HEAD
+  line prints `HEAD no commit`.
+- A tier record that is not an object with a boolean `ok` counts as absent. So does a
+  `validation` value that is not an object. A record without `dirty: false` is never current.
+- Human text flattens the workflow name and `at` to one line (`oneLine`). A null workflow
+  prints `(unnamed)` (`workflowLabel`), and a null conclusion prints `unknown`. A null
+  conclusion matches no advice rule.
+
+Focused validation:
+- `node --test acceptance/ci-optimizer/co-11-status.test.mjs`: 23/23 pass.
+- `node --test graphs/autobuild/tool/test/ci-status.test.mjs`: 13/13 pass, 0 skipped. These are
+  new implementation tests, offline, with private `AUTOBUILD_STATE_HOME` directories. They cover:
+  - a null head;
+  - malformed records, and a missing `dirty` flag;
+  - `startedAt` ties and a null `startedAt`;
+  - a repository without commits;
+  - an unnamed or multi-line workflow name, a null conclusion, and an `at` containing a newline;
+  - a linked state directory or file (`STATE_UNSAFE`, exit 3, under `--json` too);
+  - an invalid `autobuild.json`;
+  - a nested `autobuild.json` root;
+  - `treeStateAt` agreeing with `treeState` on a clean tree, an ignored file, an untracked file
+    and a modified file, and its result outside a repository;
+  - the help line.
+- Tripwires for the shared modules: all thirteen `ci-*.test.mjs` tool tests, CO-01..11
+  acceptance and `entrypoint.test.mjs`. 443/443 pass, which is CO-10's 407 plus the 36 new ones
+  (one `node --test` run with the dot reporter, exit 0).
+- Not run here: the loop and status tests. The modules changed here (`validate.mjs`,
+  `command.mjs`, the new `status.mjs`) are imported only through `cli.mjs`'s lazy `ci` import
+  and by tests. They are left to the PR's full regressions.
+- `bash scripts/check-secrets.sh` (tracked files), and the same script run on
+  `lib/ci/status.mjs` and `test/ci-status.test.mjs`: clean.
+
+Still pending for the PR: the full regressions, review and the bug hunt.

@@ -179,7 +179,7 @@
       ],
       "test": "acceptance/ci-optimizer/co-11-status.test.mjs",
       "testKind": "node",
-      "passes": false
+      "passes": true
     }
   ]
 }

@@ -15,12 +15,13 @@ import { loadProfile, projectConfig } from "./discover.mjs";
 import { readTimings, TIMINGS_FILE } from "../gate-timings.mjs";
 import { attemptKey, fetchGithubHistory, githubRepo, importedAttempts, isGithubRepo, mergeHistory, readHistory, writeHistory } from "./history.mjs";
 import { computeMetrics, gateMetrics, noHistoryMetrics } from "./metrics.mjs";
-import { sortedUnique, wholeNumberOf } from "./patterns.mjs";
+import { oneLine, sortedUnique, wholeNumberOf } from "./patterns.mjs";
 import { ciPolicy } from "./policy.mjs";
 import { buildReport, checkReportOut, renderReport, writeReportOut } from "./report.mjs";
 import { CiError, readState, STATE_SCHEMA_VERSION, writeState } from "./state.mjs";
-import { currentTriggers } from "./triggers.mjs";
-import { changedFiles, planValidation, recordValidation, resolveBase, TIERS, treeState } from "./validate.mjs";
+import { validationStatus } from "./status.mjs";
+import { currentTriggers, workflowLabel } from "./triggers.mjs";
+import { changedFiles, planValidation, recordValidation, resolveBase, TIERS, treeState, treeStateAt } from "./validate.mjs";
 import { gateStepLines, runGate } from "../gate.mjs";
 
 const NOT_A_GIT_REPOSITORY = "NOT_A_GIT_REPOSITORY";
@@ -439,6 +440,41 @@ async function reportRepo({ root, cwd, values, env, json }) {
   return json ? { code: 0, json: { wrote: given } } : { code: 0, lines: [`report: wrote ${given}`] };
 }
 
+// ---------- ci status (spec/contracts/ci-optimizer-co-11.md) ----------
+
+function localLine(tier, entry) {
+  if (entry === null) return `local ${tier}: none`;
+  const freshness = entry.current ? "current" : `stale: ${entry.staleReason}`;
+  return `local ${tier}: ${entry.ok ? "PASS" : "FAIL"} at ${oneLine(entry.at ?? "an unknown time")} (${freshness})`;
+}
+
+function statusLines(doc, dirty) {
+  const head = doc.head === null ? "no commit" : doc.head.slice(0, 12);
+  const ci = doc.ci === null
+    ? "ci: no result for HEAD in stored history"
+    : `ci: ${oneLine(doc.ci.conclusion ?? "unknown")} (${oneLine(workflowLabel(doc.ci.workflow))}, run ${doc.ci.runId} attempt ${doc.ci.attempt})`;
+  return [
+    `HEAD ${head}${dirty ? ", uncommitted changes" : ""}`,
+    localLine("fast", doc.local.fast),
+    localLine("full", doc.local.full),
+    ci,
+    `advice: ${doc.advice}`,
+    "merge: decided by the repository's required CI check",
+  ];
+}
+
+/** Local validation and stored CI results for HEAD, read from local state only; writes nothing, never calls gh, exits 0. */
+async function validationStatusOfHead({ root, env, json }) {
+  // Read before git runs, so a refused state directory or file fails first (STATE_UNSAFE, exit 3).
+  const validation = readState(root, "validation", env);
+  const attempts = readHistory(root, env)?.attempts ?? [];
+  // CO-07's dirty rule, without loading autobuild.json: status needs no policy and works without one.
+  const { head, dirty } = treeStateAt(root, env);
+  const doc = validationStatus({ root, head, dirty, validation, attempts });
+  if (json) return { code: 0, json: doc };
+  return { code: 0, lines: statusLines(doc, dirty) };
+}
+
 // `flags` are booleans; each of `values` takes the next argument.
 const SUBCOMMANDS = {
   discover: { flags: ["--refresh", "--json"], values: [], run: discover },
@@ -451,6 +487,7 @@ const SUBCOMMANDS = {
   compare: { flags: ["--json"], values: ["--before", "--after"], run: compare },
   triggers: { flags: ["--explicit", "--json"], values: [], run: triggers },
   report: { flags: ["--json"], values: ["--out"], run: reportRepo },
+  status: { flags: ["--json"], values: [], run: validationStatusOfHead },
 };
 const USAGE = `usage: autobuild ci <${Object.keys(SUBCOMMANDS).join("|")}> [flags] [--json]`;
 
