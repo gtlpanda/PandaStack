@@ -130,6 +130,20 @@ export function hostCommit(repo, subject, body = '', paths = null) {
   return made.ok ? { ok: true, committed: true } : { ok: false, committed: false, message: `git commit failed: ${made.out.trim().slice(0, 300)}` }
 }
 
+// Codex has no PreToolUse guard, so nothing stops the final QA's fixer from editing a test an
+// earlier slice froze (Claude's guard denies that edit as it happens). Before the host commit,
+// put every frozen test the QA loop touched back to its version on `ref`; the driver's checks
+// then judge the rest of the fix against the original tests. Returns {ok, restored, touched}:
+// `touched` without the restored files, or ok false with a message when git could not restore them.
+export function restoreFrozenTests(repo, ref, frozen, touched) {
+  const frozenSet = new Set(frozen)
+  const restored = touched.filter(path => frozenSet.has(path))
+  if (!restored.length) return { ok: true, restored, touched }
+  const back = git(repo, ['checkout', '-q', ref, '--', ...restored])
+  if (!back.ok) return { ok: false, restored: [], touched, message: `git checkout of frozen tests failed: ${back.out.trim().slice(0, 300)}` }
+  return { ok: true, restored, touched: touched.filter(path => !frozenSet.has(path)) }
+}
+
 // ---------- the native CLIs ----------
 
 // The leaf's whole environment for the QA loop: HOME, CODEX_HOME when set, and PATH, as the blueprint runner does.

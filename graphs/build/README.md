@@ -111,7 +111,9 @@ app; 12 a git state the driver will not touch; 13 the push or the PR failed;
 `graphs/qa/tool/qa-loop.mjs`; the hunt is `native-cli.mjs --backend codex --mode fix`. The lock,
 ledger, brakes, checks and the PR flow are the same code. A build stays on its provider (a bare `run`
 on a Codex build exits 6), a provider refusal brakes the run and blocks later runs until a person
-removes `provider-refusal.json`, and nothing ever starts `claude`. `skills/build-app/driver/codex-session.mjs`
+removes `provider-refusal.json`, and nothing ever starts `claude`. Codex has no PreToolUse guard, so before
+the host commits the final QA's work the driver puts back any frozen test it changed (`restoreFrozenTests`), and
+its checks judge the rest of the fix against the original tests. `skills/build-app/driver/codex-session.mjs`
 holds the Codex side; `tests/driver-codex.test.mjs` is the proof.
 
 ## Files
