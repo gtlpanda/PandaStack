@@ -4292,8 +4292,16 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
 - Catalog: transport row, fixture row and `unavailable: []`, `entrySha256` re-pinned for the new `## Codex runner` section.
   Two frozen acceptance assertions that pinned security-audit as unavailable were made fixture-driven (cp-01b "decision 2",
   cp-08 "keeps its refusal"). `evidenceOwners` stays at the four frozen owners.
+- Found by the live probe and the sanity audit, then fixed: (1) a canary in the target's untracked `AGENTS.md` reached a leaf
+  whose cwd was under `<repo>/.git` (answer YES, canary quoted); the leaf cwd is now a fresh directory outside every
+  repository, refused if a `.git`/`AGENTS.md`/`AGENTS.override.md` is at or above it (same probe: NO; second live run with the
+  canary present: no trace in any report or file). (2) The preflight passed an inventory with no top-level tool and judged only
+  the last request; it now fails closed on both. (3) The first Ctrl-C aborted a leaf mid-call, which the journal holds as
+  uncertain with no way to clear it; it now stops between stages, and the messages stopped promising a resume that cannot happen.
+  A catalog SKILL.md hash and the leaf's argv for the preflight were re-pinned/aligned with it.
 - Not solved, stated in the evidence file: the `exec` JS isolate, hosted tools of the real provider, one model/version/repo
   observed, no cross-partition reconciliation seen live, a partitioned critic costs parts + 1 calls where the budget reserve
   assumes 1. The roadmap (docs/roadmap/security-audit-priority.md, frozen) still describes the 2026-11-23 `unavailable` status.
-- Tests: native-codex-source-only (10), native-codex-source-only-provider (5), native-critic (7), native-e2e (10, a fake
-  codex running the toy audit to its three reports), native-reader-manifest (3), native-skill-section (1).
+- Tests: native-codex-source-only (11), native-codex-source-only-provider (5), native-critic (7), native-e2e (15, a fake
+  codex running the toy audit to its three reports, plus pause/resume, Ctrl-C, preflight refusal and cwd cases),
+  native-reader-manifest (3), native-skill-section (1). Live: two runs, 16 leaves each, both complete.
