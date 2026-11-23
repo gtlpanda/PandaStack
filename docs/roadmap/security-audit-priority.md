@@ -54,6 +54,10 @@ The original run and its provisional evidence remain untouched.
    execution, shell, writes, arbitrary MCP/config inheritance or network tools.
    Fail before inference if restrictions cannot be established. A read-only
    filesystem sandbox or prompt alone does not prove this property.
+   Codex status (2026-11-23): a `codex sandbox` flag set that confines a shell command to
+   the snapshot (no outside reads, no writes, no network) is proven, but source-only access
+   for a Codex model leaf is not established, so the Codex row stays `unavailable` with the
+   refusal unchanged. Evidence and blockers: docs/evidence/codex-sandbox-source-only-2026-11-23.md.
 9. SA-09: Supported installation and preflight reporting: provider, runtimes,
    exact capability support, model/effort and observed account context. Billing
    identity unknown remains unknown; never claim subscription means zero cost.
