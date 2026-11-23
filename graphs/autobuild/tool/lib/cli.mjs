@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG_FILE, findProjectRoot, loadConfig, statePath } from "./config.mjs";
+import { defaultBackendFor, withHostBackendHint } from "./host-backend.mjs";
 import { blockedClosure, countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures } from "./features.mjs";
 import { failureExcerpt, gateStepLines, parseShard, runGate } from "./gate.mjs";
 import { runLoop } from "./loop.mjs";
@@ -23,14 +24,14 @@ const HOME = path.resolve(import.meta.dirname, "..");
 
 const HELP = `autobuild — autonomous, test-gated build loop for Claude Code or Codex
 
-  autobuild run [--backend claude|codex] [--model MODEL] [--max-iterations N] [--delivery-mode full|pr-first]   run the loop (one headless session per feature)
+  autobuild run [--backend claude|codex] [--model MODEL] [--max-iterations N] [--delivery-mode full|pr-first]   run the loop (one headless session per feature); no backend flag: autobuild.json, AUTOBUILD_BACKEND, else the app you are in (Codex CLI or Claude Code)
   autobuild next                       print the feature the next session builds
   autobuild status                     passing count, next feature, blockers, last log lines
   autobuild test <ID> [ID...]          run features' frozen acceptance tests
   autobuild check [--phase full|commit] [--feature ID] [--base SHA] [--fail-fast] [--json] [--skip-browser] [--scope full|affected] [--shard i/n]
                                        run the full gate
   autobuild mark-passed <ID>           rerun a feature's test; set passes:true only if it passes
-  autobuild init [--backend claude|codex] scaffold autobuild.json, PROGRESS.md and the CLAUDE.md rules
+  autobuild init [--backend claude|codex] scaffold autobuild.json, PROGRESS.md and the CLAUDE.md rules (default backend: the app you are in)
   autobuild selftest                   test the kit (limit parsing, guard) against this machine
   autobuild evidence manifest [--out FILE]   hash every file in the evidence dir (JSON, to commit instead of the files)
   autobuild evidence verify FILE       check the evidence dir against a manifest
@@ -96,7 +97,18 @@ export async function main(argv = process.argv.slice(2)) {
   const [command, ...args] = argv;
   switch (command) {
     case "run": {
-      const config = loadConfig(undefined, process.env, { backend: value(args, "--backend"), model: value(args, "--model"), deliveryMode: value(args, "--delivery-mode") });
+      const backendFlag = value(args, "--backend");
+      const hostBackend = defaultBackendFor({ flag: backendFlag });
+      let config;
+      try { config = loadConfig(undefined, process.env, { backend: backendFlag, defaultBackend: hostBackend, model: value(args, "--model"), deliveryMode: value(args, "--delivery-mode") }); }
+      catch (error) {
+        // Hint only when the host-derived default is what failed: the same config loads with claude.
+        let claudeLoads = false;
+        if (hostBackend && hostBackend !== "claude") {
+          try { loadConfig(undefined, process.env, { defaultBackend: "claude", model: value(args, "--model"), deliveryMode: value(args, "--delivery-mode") }); claudeLoads = true; } catch { claudeLoads = false; }
+        }
+        throw claudeLoads ? withHostBackendHint(error, hostBackend) : error;
+      }
       const max = value(args, "--max-iterations");
       if (max) config.limits.maxIterations = Number(max);
       return runLoop(config);
@@ -209,7 +221,7 @@ export async function main(argv = process.argv.slice(2)) {
       return ciMain(args);
     }
     case "init":
-      return init(value(args, "--backend") || process.env.AUTOBUILD_BACKEND || "claude");
+      return init(value(args, "--backend") || process.env.AUTOBUILD_BACKEND || defaultBackendFor({ env: process.env }));
     case "evidence": {
       const config = loadConfig();
       const [action, file] = args;

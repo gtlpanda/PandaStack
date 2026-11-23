@@ -24,6 +24,78 @@ absolute paths section 1 finds in place of `REPO`, `STATE`, and `<app>` in
 every command below; they are placeholders, not shell variables. The driver
 is `"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/build-app/driver/driver.mjs"`.
 
+## Codex runner
+
+If you are running in Codex, use the Codex runner section; in Claude Code, use the sections below.
+
+On Codex the same driver builds the backlog with `--backend codex`: one fresh
+`codex exec` session per slice, the QA loop and the bug hunt through their
+native CLIs, the same lifecycle, lock, ledger, checks and PR flow. Never invoke
+Claude, and never fall back to it: a Codex failure is an escalation, a brake or
+a stop, not a Claude run. A build stays on the provider it started on; a `run`
+that resolves to the other provider (without `--backend`, the app you are in
+decides) is refused (exit 6). Sections 1 to 6 say what to check,
+show and report; every `driver.mjs` command below replaces the one in them.
+
+The roots. Replace `<installed-skill-dir>` with the absolute path of the
+installed skill directory (a symlink), then run:
+
+```bash
+SKILL_DIR="$(cd -P -- "<installed-skill-dir>" && pwd -P)"
+DRIVER="$SKILL_DIR/driver/driver.mjs"
+CODEX="$(command -v codex)"
+```
+
+If `CODEX` is empty, say codex is not on `PATH` and stop. The driver finds its
+verify script, the QA loop and the hunt CLI in the installation root four
+levels above `SKILL_DIR`, so a Codex-only machine needs no other install path.
+
+The commands (`REPO`, `STATE` and `<app>` as in section 1):
+
+```bash
+# start: detached, as in section 2 step 4
+$(command -v setsid) nohup node "$DRIVER" run --repo REPO --app <app> --backend codex [--no-pr|--pr] > STATE/logs/nohup.out 2>&1 < /dev/null &
+node "$DRIVER" status --repo REPO --app <app>
+node "$DRIVER" stop --repo REPO --app <app>
+node "$DRIVER" resume --repo REPO --app <app>
+node "$DRIVER" unblock --repo REPO --app <app> --slice S<n> --answer "<answer>"
+```
+
+`resume` and `unblock` change only the ledger, so they take no `--backend`. After
+either, start again with the `run ... --backend codex` command above.
+
+What differs from Claude:
+
+- Slice session. `codex exec` (workspace-write sandbox, approvals never) gets
+  the slice's task and criteria from the backlog, the frozen test paths, and an
+  `--output-schema` report `{status, reason, questions}`. There is no `/dev` and
+  no guard hook: the session may not commit, and the driver commits what it left
+  as `S<n>: <title>` after a `done` report, then runs the same checks as on
+  Claude (clean tree, `S<n>: ` subjects, no frozen test changed, its own verify).
+  The driver also stops the run if the session changed git hooks, config or info.
+- Final QA. `graphs/qa/tool/qa-loop.mjs` (the native `harness-repair` loop). The
+  driver commits exactly the files it reports touched as `final: QA fixes`. That
+  loop runs through the `dev` offering: `dev` is Codex-partial in the catalog, so
+  it runs; were that row unavailable it would exit 2 `OFFERING_UNSUPPORTED` and
+  the run would brake after the last slice (every slice stays landed; no other
+  provider is tried).
+- Bug hunt. The bughunt graph's native CLI (`native-cli.mjs` under `graphs/hunt`),
+  run as `node native-cli.mjs --repo REPO --base <base> --backend codex --mode fix --codex-bin "$CODEX"`
+  on `integration/<app>`. Its verified fixes land only through the driver's own
+  checks, as on Claude. `HARNESS_BUILD_BUGHUNT=0` skips it.
+- Cost. Codex reports tokens, not dollars: `status.json` has `tokens`
+  (`input`, `output`) in place of `costUsd`, and no dollar budget is enforced.
+- Limits. A usage limit, billing or auth stop, and the availability probe work as
+  on Claude (the probe is a one-turn `codex exec`); the limit wording is matched
+  by the Claude patterns and is unverified on Codex.
+- Provider refusal. A refused slice is not an escalated attempt: the run brakes
+  at once, `provider-refusal.json` is written in `STATE`, and every later run
+  refuses to start until a person removes that file. Refused work is never
+  retried, translated or rerouted.
+
+Wiring proof only (fake codex, fake gh): this has not been run against a live
+Codex.
+
 ## PR-first delivery exception
 
 When the repository's `autobuild.json` opts into `"deliveryMode": "pr-first"`,

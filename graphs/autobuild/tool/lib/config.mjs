@@ -121,6 +121,10 @@ export function loadConfig(root = findProjectRoot(), env = process.env, override
   return resolveManagedConfig({ project: raw, env, overrides, root });
 }
 
+// Backend precedence: --backend (overrides.backend) > AUTOBUILD_BACKEND > autobuild.json "backend" > the
+// host app the user is in (overrides.defaultBackend, see host-backend.mjs) > claude. loadConfig itself never
+// looks at the host: only a command that is about to start a provider supplies it.
+
 // Shared, read-only managed launch validation for the launcher and doctor.
 export function resolveManagedConfig({ project: raw = {}, env = {}, overrides = {}, root, central = readAgentConfig() } = {}) {
   const config = {
@@ -144,7 +148,7 @@ export function resolveManagedConfig({ project: raw = {}, env = {}, overrides = 
   if (!Array.isArray(config.commitGate) || config.commitGate.some(step => !step || typeof step.name !== "string" || !step.name.trim() || typeof step.command !== "string" || !step.command.trim())) {
     throw new Error("commitGate must be an array of named commands");
   }
-  config.backend = overrides.backend || env.AUTOBUILD_BACKEND || config.backend;
+  config.backend = overrides.backend || env.AUTOBUILD_BACKEND || raw.backend || overrides.defaultBackend || config.backend;
   if (!["claude", "codex"].includes(config.backend)) throw new Error('backend must be "claude" or "codex"');
   Object.assign(config, resolveManagedModels({ backend: config.backend, central, project: raw, env, overrides }).values);
   if (env.AUTOBUILD_CLAUDE_BIN) config.claudeBin = env.AUTOBUILD_CLAUDE_BIN;

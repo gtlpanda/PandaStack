@@ -643,7 +643,8 @@ describe('CP-02h provider: SCHEMA_UNSUPPORTED and request checks', () => {
   }
 
   test('PROFILE_UNSUPPORTED comes before SCHEMA_UNSUPPORTED', async () => {
-    for (const profile of ['audit-source-only', 'release-controlled']) {
+    // CP-08 amendment: release-controlled is no longer refused.
+    for (const profile of ['audit-source-only']) {
       const c = makeCase()
       const provider = await makeProvider(c, [{ output: JSON.stringify(REPLY) }])
       const req = await request({ profile, schema: obj({ a: STR, b: STR }, ['a']) })

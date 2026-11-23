@@ -2421,3 +2421,159 @@ Observed limits and untested hypotheses:
 - macOS was not run. No mutation check was run on the new test.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## Codex skill transport (direct human-directed change, branch codex-parity/skills)
+
+The 39 guidance, helper and library offerings whose codex row was `unavailable` (all but dev,
+release-pr, build-app and security-audit) are now codex `partial` over a new `codex-skill`
+transport (`install.sh --codex` links them into the Codex skills directory). Each carries the
+Claude row's limitation set; `NATIVE_UNVERIFIED` stays only on `verify`, `run-records` and
+`decisions`, whose helpers `tests/codex-skill-install.test.mjs` does not run. The list is
+`tests/fixtures/codex-expected-state.json (`skill`, now part of the one expected-state fixture)`. The graph host refuses a `codex-skill` row for graph
+execution (`core/skills/native-runtime/graph-host.mjs`). SKILL.md edits: render, seo-check and
+workflow-state use the CP-03a `SKILL_DIR` idiom; init-agents and init-claude gain explicit
+Codex output (docs/agents guides + AGENTS.md); commit, init-env, init-ci, deep, deep-fix and
+error-audit gain "On Codex" alternatives. Frozen tests amended with the user's authorization:
+cp-01b, cp-01c (and the install-codex SHA pin), cp-01d, cp-03b, cp-04e. Offline wiring proof
+only: no Codex process was run.
+
+## CP-06 — dev on Codex: native runner section, driver CLI, catalog flip, wiring proof
+
+Branch codex-parity/dev. Fake-codex wiring proof, not runtime certification. The task brief
+authorized editing SKILL.md, the catalog and the snapshot pins listed below.
+
+- `graphs/dev/skills/dev/dev-native.mjs` (new): `run --args-file <abs>` with mode `new`, `plan`
+  or `resume`. It builds the host args for `dev-build` from the saved state in the repository's
+  `harness-dev` state directory (`task.txt`, `plan.json`, `ledger.json`), runs the CP-02e host
+  CLI as a child process (it imports no repository module), and saves the ledger and, per
+  SKILL.md sections 2 and 3, the plan (approved, or `plan-ready`; a plan that escalated while
+  being made is never saved). `invocationId` re-drives a held run directory (same store,
+  finished leaves replay with zero spawns), the path after `graph-reconcile`. Verify, the
+  touched-files check and commits stay with the session.
+- `SKILL.md`: one `## Codex runner` section before `## When to ask`. Removing it gives the
+  pre-change bytes (sha256 1e7d0b75...), so the Claude path is byte-identical.
+- Catalog: dev's codex row is `partial` on `codex-graph-host` with
+  `[LIVE_PROOF_MISSING, NATIVE_UNVERIFIED, REQUIREMENTS_INCOMPLETE]`; dependencies gain
+  `native-runtime` (the section names the host's reconcile tool); proofRefs gain
+  `cp-06-dev-codex`; `entrySha256` re-pinned.
+- Tests: `tests/dev-native.test.mjs` (15 cases on the production catalog: leaf order,
+  advisor gate revise and blocked, plan-ready and edited-plan builds, triage, a refusal that
+  escalates once with no claude or gh call, same-invocation replay with zero spawns, `resume`
+  skipping built components, refusals before a spawn, an installed-symlink run) and
+  `tests/dev-codex-runner.test.mjs` (5 cases: section, table against the CLI's keys, roots
+  block, byte-identical Claude path).
+- Snapshot pins amended to dev's new state (cp-01b, cp-01c, cp-03b and tests/install-plan
+  keep accepting the old state as well; cp-01d keys dev's expected row on blueprint's, and
+  cp-04e, cp-05e, qa-gate-proof-ref and reference-closure-catalog pin the new state
+  outright): cp-01b (`cp04eFlipped` also matches dev), cp-01c (candidate plan gains `skills/dev`,
+  fixture roots set dev unavailable, install-codex sha), cp-01d (ready set), cp-03b (installed
+  set), cp-04e (partial rows, plan, installed set), cp-05d case 11 (a root copy with dev
+  unavailable replaces the production root), cp-05e case 4 (proofRefs, dev partial);
+  tests/install-codex, install-plan, host-wiring-proof-ref, qa-gate-proof-ref,
+  reference-closure-catalog.
+
+Differences from the Claude path: the host runs leaves one at a time (`maxConcurrentSubagents:
+1`); `--review` is mode `new` with `approval: human` and then `plan`; the plan travels in the
+host args rather than a generated run script (the host runs only the catalog-pinned workflow
+bytes). Not proven: a live codex run, `--slice` against a real backlog, `--unattended`, a
+held-leaf (`CHECKPOINT_UNCERTAIN`) recovery end to end.
+
+## CP-08 — /release-pr on Codex: release-controlled profile, release CLI, catalog flip
+
+Contract: spec/contracts/codex-parity-cp-08.md. WIRING PROOF, NOT RUNTIME CERTIFICATION: the
+leaves are the frozen fake codex, `gh` and `claude` are recording stubs that must stay uncalled.
+
+- `release-controlled` now runs as `--sandbox workspace-write -c
+  sandbox_workspace_write.network_access=true` for release-checker, merger and deploy-watcher
+  only (codex-exec.mjs `networkAccess`, codex-provider.mjs, codex-selection.mjs).
+  `audit-source-only` stays refused (security-audit is out of scope).
+- graphs/release/skills/release-pr/release-native.mjs (new CLI: docs, ready, approve, land,
+  verify) holds the approval-for-the-exact-head, one-merge-attempt (O_EXCL marker created just
+  before the merger dispatch, never removed) and no-fallback rules. SKILL.md gained `## Codex
+  runner`; release-pr's codex row is `partial` via `codex-graph-host`, proofRef
+  `cp-08-release-codex`, dependency `native-runtime`.
+- Frozen pins amended minimally: cp-02b (2: sandboxForProfile table, PROFILE_UNSUPPORTED loop),
+  cp-02h (1: PROFILE_UNSUPPORTED-before-SCHEMA loop), cp-02c (6: refused-workflow list and its
+  test title, accepted-set loop, release-flow leaf case, refused-path case, release-flow
+  runtime case), cp-01b (cp08Flipped, 2 branches), cp-01c (candidate plan, fixture base, install-codex
+  hash), cp-01d (ready set), cp-03b (installed set), cp-04e (partial rows, plan, linked set);
+  tests/install-codex, install-plan, host-wiring-proof-ref, reference-closure-catalog,
+  native-codex-selection.
+- Untested hypotheses: that Codex 0.167.0 honors `-c sandbox_workspace_write.network_access=true`
+  under `--ignore-user-config`, and that `gh` can then reach GitHub from that sandbox. No codex
+  was run. A live release smoke is a separate step.
+
+## CP-07: build-app on Codex (`--backend codex`)
+
+Contract: spec/contracts/codex-parity-cp-07.md. Proof reference `cp-07-build-app-wiring`.
+
+What changed: `driver.mjs` takes `--backend claude|codex` (default claude, unchanged) and dispatches the
+slice session, probe, final QA and bug hunt; `codex-session.mjs` (new) holds the Codex side. Slice sessions
+reuse autobuild's `runCodex` (an optional `rules` override on `codexArgs`, default unchanged); the final QA
+is `qa-loop.mjs`; the hunt is `native-cli.mjs --backend codex --mode fix`. `session.mjs` gained
+`trackSession`, `runChild` and an injectable probe (process-group stop). `outcomeOf` and `prBody` take an
+optional provider label. SKILL.md has a `## Codex runner` section (sections 1 to 6 untouched). Catalog:
+build-app's codex row is partial through the existing `codex-autobuild` transport, LIVE_PROOF_MISSING kept.
+
+Tests: graphs/build/tests/driver-codex.test.mjs (18 cases) with fixtures/fake-qa-loop.mjs and
+fixtures/fake-hunt-cli.mjs; the frozen fake codex and fake gh. Amended pins (each green before and after the
+flip): cp-01b, cp-01c (plan lines, sha of tests/install-codex.test.mjs), cp-01d, cp-03b, cp-04e,
+tests/install-codex.test.mjs, tests/install-plan.test.mjs, tests/host-wiring-proof-ref.test.mjs.
+
+Observed limits and untested hypotheses:
+- Fake codex and stubs only: wiring proof, not runtime certification. No live codex, claude or GitHub.
+- The final QA needs `dev` Codex-available in the catalog; until then qa-loop exits 2 OFFERING_UNSUPPORTED
+  and the run brakes after the last slice (observed in the real-CLI case). Superseded on the integration
+  branch: dev is codex partial there, and a real-qa-loop case now passes the final QA (see the integration
+  section below).
+- Usage-limit, billing, auth and overload detection reuse the Claude wording patterns; their match on real
+  Codex output is an untested hypothesis. A refusal inside the QA loop is not distinguished from an escalation.
+
+Full gate: run on the final commit; its result is in the handoff report.
+
+## Integration: five parity branches merged, host auto-detection, combined install (branch codex-parity/integration)
+
+Direct human-directed change. AGENTS.md scopes SKILL.md and catalog edits out for builder sessions; these
+were made on the user's explicit instruction, with the catalog drift guard (`checkCatalogDrift`) ok.
+
+Merged, all from 2bc3992: skills, dev, release, build-app, security-audit. The row conflicts (cp-01b..cp-04e,
+install-codex, install-plan, host-wiring-proof-ref, PROGRESS, retro) all came from tests that hardcoded
+which rows are codex partial. They now read one expected-state fixture, tests/fixtures/codex-expected-state.json,
+through tests/codex-expected-state.mjs: ordered transports, the six graph rows (transport, limitations,
+proofRefs), the 39 codex-skill ids and `keepNativeUnverified`, and the unavailable list. The catalog must equal
+it exactly (no before-or-after-flip branches); fixture roots reset every wave-flipped row with `resetToPreWave`
+so the pinned pre-wave plans stay. The install-codex sha pin in cp-01c was re-pinned.
+
+Host auto-detection: core/skills/native-runtime/host-provider.mjs. Precedence: PANDASTACK_PROVIDER, then the
+nearest ancestor process named codex or claude, then CODEX_THREAD_ID or CODEX_SANDBOX_NETWORK_DISABLED (codex) then
+CLAUDECODE, then claude. Observed with the real `codex sandbox` (Codex CLI 0.167.0, Linux, npm install, started from a
+Claude Code shell; a plain command, no model): the Claude variables leak in, the sandbox hides every real ancestor but
+makes the codex process PID 1 and the command's parent (so the walk includes PID 1; the first version stopped at PID 1
+and called this case claude), and CODEX_SANDBOX_NETWORK_DISABLED is set while CODEX_THREAD_ID is not. CODEX_THREAD_ID as
+something a Codex model session exports remains an UNTESTED HYPOTHESIS (the repo deletes it before nested sessions,
+which implies Codex sets it); no `codex exec` was run. Also unobserved: a Codex install that is not the npm package, and
+the macOS `ps` path (written, unrun). tests/host-provider.test.mjs covers the matrix, a real process-tree walk through
+stub executables named codex and claude, and (skipped where codex is absent) the real sandbox. A node child inside
+`codex sandbox` cannot print to the socketpair spawnSync gives it, so that test redirects to a file.
+
+Wired at `autobuild run` and `autobuild init` (through graphs/autobuild/tool/lib/host-backend.mjs; loadConfig itself
+never asks, so `autobuild status` or the gate still load from inside Codex in a Claude-configured project with a USD
+budget), the build-app driver `run`, and `pandastack doctor`. NOT wired: bughunt native-cli (the Codex runner; a frozen
+security-audit acceptance case calls it bare and expects the Codex path), and the blueprint, dev and release CLIs and the
+qa loop (Codex-only runners with no provider choice); the SKILL.md selection sentence routes to them.
+Behaviour changes: a bare `autobuild run` from inside Codex now means Codex, so a Claude-shaped project with
+limits.totalBudgetUsd fails to load there (message plus a hint to pass --backend claude; pinned in
+tests/host-provider-wiring.test.mjs); `pandastack doctor` with no --backend now follows the host, claude when none, where
+it used to default to codex; build-app gained a native-runtime catalog dependency.
+Decisions: an `autobuild.json` "backend" is an explicit pin and beats the host; `--claude --codex` is an error; a failing
+Codex step in plain install only warns; an empty PANDASTACK_PROVIDER counts as unset. The repo's own gate pins
+PANDASTACK_PROVIDER=claude in autobuild.json env.vars (frozen Phase 1 acceptance runs the actual build-app driver bare),
+matching its `"backend": "claude"` pin, so the gate result does not depend on which app launched it; observed by running
+the gate with a stub `codex` ancestor. Because env.vars reach every session autobuild starts, runCodex sets
+PANDASTACK_PROVIDER=codex for its own sessions (tested). Not covered: acceptance/phase1 run directly from a Codex session,
+outside `autobuild check`, still takes the host's provider.
+
+build-app final QA: the real qa-loop now passes through the production catalog with dev codex partial
+(tests/driver-codex.test.mjs, a root copy with an inert verify.sh; the repository's own is never run).
+Not proven: any live Codex or Claude run, `codex` comm/argv shapes other than the node-script and native
+binary forms the matcher handles.

@@ -20,7 +20,7 @@ Determine what to audit:
 
 ### Phase 2: Scan for Each Error Class
 
-Audit the scoped files for each of these error classes. Use subagents for parallel scanning on larger codebases.
+Audit the scoped files for each of these error classes. Use subagents for parallel scanning on larger codebases. On Codex: with no subagent tool, scan the classes one after another in this thread.
 
 #### Class 1: Swallowed Errors
 

@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
+import { PARTIAL_IDS } from '../../tests/codex-expected-state.mjs'
 
 const ROOT = process.env.PANDASTACK_CANDIDATE_ROOT || fileURLToPath(new URL('../../', import.meta.url))
 const url = path => pathToFileURL(resolve(ROOT, path)).href
@@ -531,10 +532,10 @@ test('on the candidate root only the codex-partial offerings can be ready (wirin
       if (result.status === 'ready') ready.push(row.id)
       else assert.deepEqual(checks(result).implementation, ['fail', 'PROVIDER_UNAVAILABLE'], row.id)
     }
-    // Amended at the CP-04e freeze (W2-10): blueprint joins once CP-04e flips its codex row.
+    // Amended for the codex-parity waves: the partial rows (and so the ready set) are the expected-state
+    // fixture's (tests/fixtures/codex-expected-state.json); each is inspectable as ready (wiring proof).
     const partial = row => row.providers.codex.implementation === 'partial'
-    const expected = catalog.offerings.find(o => o.id === 'blueprint').providers.codex.implementation === 'partial'
-      ? ['autobuild', 'blueprint', 'bughunt'] : ['autobuild', 'bughunt']
+    const expected = PARTIAL_IDS
     assert.deepEqual(catalog.offerings.filter(partial).map(o => o.id).sort(), expected, 'no other codex row is partial')
     assert.deepEqual(ready.sort(), expected)
     assert.deepEqual(calls.map(call => call.offeringId).sort(), expected)

@@ -17,9 +17,15 @@
 #                 overrides it); backups and --skip name it local-bin/autobuild
 #
 # Usage:
-#   ./install.sh              link; back up anything in the way
-#   ./install.sh --codex      link only the catalog's Codex entry skills (today
-#                             autobuild, bughunt) into ~/.agents/skills; needs node
+#   ./install.sh              link the Claude targets as above; back up anything in
+#                             the way. If `codex` is on PATH or ~/.agents exists, also
+#                             link the catalog's Codex entry skills into ~/.agents/skills
+#                             (the same as running --codex next; a Codex step that fails
+#                             only warns, the Claude install stands)
+#   ./install.sh --claude     the Claude targets only, never ~/.agents
+#   ./install.sh --codex      the catalog's Codex entry skills only (every offering whose
+#                             codex row is not unavailable) into ~/.agents/skills; needs
+#                             node. --claude and --codex are alternatives: not both
 #   ./install.sh --dry-run    print what would happen, change nothing
 #   ./install.sh --skip=a,b   install, but leave these targets alone (e.g.
 #                             --skip=settings.json,CLAUDE.md, or skills/verify)
@@ -53,6 +59,7 @@ LOCAL_BIN="${LOCAL_BIN%/}"
 
 DRY_RUN=0
 CODEX_MODE=0
+CLAUDE_ONLY=0
 MODE=install
 SKIP=()      # rel paths (or a whole DIR_TARGETS name) that install leaves alone
 
@@ -62,6 +69,7 @@ for arg in "$@"; do
   case "$arg" in
     --dry-run)   DRY_RUN=1 ;;
     --codex)     CODEX_MODE=1 ;;
+    --claude)    CLAUDE_ONLY=1 ;;
     --uninstall) MODE=uninstall ;;
     --skip=*)
       # An empty value (e.g. --skip="$UNSET") must not fall through to a full install.
@@ -71,6 +79,8 @@ for arg in "$@"; do
     *) echo "unknown argument: $arg" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+[ "$CLAUDE_ONLY" -eq 0 ] || [ "$CODEX_MODE" -eq 0 ] || { echo "--claude and --codex are alternatives; plain ./install.sh installs both when Codex is present" >&2; exit 2; }
 
 # Codex installs only entry skills supported by the native CLI. It never copies
 # Claude settings/hooks, changes git configuration, or installs other agent assets.
@@ -491,3 +501,37 @@ case "$MODE" in
   install)   do_install ;;
   uninstall) do_uninstall ;;
 esac
+
+# Plain ./install.sh (neither --claude nor --codex): after the Claude targets, the Codex entry
+# skills too, when Codex is here (the `codex` command, or a ~/.agents directory). The Codex part is
+# the unchanged --codex mode run as its own process, so every Codex safety check applies to it as
+# it does to `./install.sh --codex`. It never fails the install: the Claude part has already
+# succeeded, so a Codex problem is a warning that names the command to see why.
+codex_present() {
+  command -v codex >/dev/null 2>&1 || { [ -n "${HOME:-}" ] && [ -d "$HOME/.agents" ]; }
+}
+
+also_codex() {
+  [ "$CODEX_MODE" -eq 0 ] && [ "$CLAUDE_ONLY" -eq 0 ] || return 0
+  codex_present || return 0
+  command -v node >/dev/null 2>&1 || { warn "Codex found, but node is missing: Codex entry skills not handled; install Node and run ./install.sh --codex"; return 0; }
+  local plan fwd=() item line status=0
+  plan="$(node "$REPO_DIR/core/skills/native-runtime/install-plan.mjs" --installation-root "$REPO_DIR" --backend codex)" \
+    || { warn "Codex found, but its install plan failed: Codex entry skills not handled; run ./install.sh --codex to see why"; return 0; }
+  # --skip names meant for the Claude targets (settings.json, local-bin/autobuild, ...) are not Codex's.
+  for item in ${SKIP[@]+"${SKIP[@]}"}; do
+    [ "$item" = skills ] && { fwd+=("--skip=skills"); continue; }
+    while IFS=$'\t' read -r line _; do
+      [ "$line" = "$item" ] && { fwd+=("--skip=$item"); break; }
+    done <<< "$plan"
+  done
+  log ""
+  log "== Codex found: the same as ./install.sh --codex =="
+  local args=(--codex)
+  [ "$DRY_RUN" -eq 0 ] || args+=(--dry-run)
+  [ "$MODE" = install ] || args+=(--uninstall)
+  bash "$REPO_DIR/install.sh" "${args[@]}" ${fwd[@]+"${fwd[@]}"} || status=$?
+  [ "$status" -eq 0 ] || warn "the Codex step exited $status; the Claude part is done. Run ./install.sh --codex to see why"
+  return 0
+}
+also_codex

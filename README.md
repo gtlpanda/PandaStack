@@ -302,7 +302,21 @@ cd PandaStack
 ./install.sh             # link it
 ```
 
-For Codex, install just the supported entry skills:
+A plain `./install.sh` serves both apps. It links the Claude targets as above and,
+when `codex` is on PATH or `~/.agents` exists, also the Codex entry skills (the same
+as `--codex` below; if that Codex step fails it only warns and the Claude install
+stands). Pick one app with `./install.sh --claude` (never touches `~/.agents`) or
+`./install.sh --codex` (never touches `~/.claude`); the two flags are alternatives.
+Which provider PandaStack uses follows the app you are in, without a flag, where it starts a provider
+itself: `autobuild run` and `autobuild init`, `/build-app`'s driver and `pandastack doctor` (precedence:
+`--backend`, `AUTOBUILD_BACKEND`, an `autobuild.json` `"backend"` pin, then the app you are in, then Claude).
+`PANDASTACK_PROVIDER=claude|codex` overrides the detection (see
+`core/skills/native-runtime/host-provider.mjs`). Not host-wired: the Codex-only runners (`bughunt`'s
+`native-cli.mjs`, the blueprint, dev and release CLIs, the QA loop), which the skills' `## Codex runner`
+sections route to. From inside Codex, a project that sets a USD budget (`limits.totalBudgetUsd`) fails to load
+for a bare `autobuild run`, because Codex reports no dollar cost: pass `--backend claude` or pin the backend.
+
+For Codex alone, install just the supported entry skills:
 
 ```bash
 ./install.sh --codex --dry-run
@@ -311,8 +325,8 @@ For Codex, install just the supported entry skills:
 ```
 
 This links into `~/.agents/skills` only the entry skills the offering catalog
-(`spec/offering-capabilities.json`) marks Codex install-eligible, today `autobuild`
-and `bughunt`. It reads the catalog through
+(`spec/offering-capabilities.json`) marks Codex install-eligible (every offering
+whose codex row is not `unavailable`). It reads the catalog through
 `core/skills/native-runtime/install-plan.mjs`, so `--codex` needs `node` on PATH;
 if a planned skill's declared dependency is missing from the checkout, it exits 2
 and changes nothing. It does not copy Claude settings, hooks, credentials, agent

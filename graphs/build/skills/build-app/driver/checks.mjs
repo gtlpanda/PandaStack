@@ -55,10 +55,10 @@ export function devReport(file) {
 
 // The ledger outcome for a session that ended normally (no usage limit):
 // landed only when /dev says done and every check passes.
-export function outcomeOf(report, checks) {
+export function outcomeOf(report, checks, source = '/dev') {
   if (report && report.status === 'needs-human' && report.questions.length) return { kind: 'needs-human', questions: report.questions }
   if (report && report.status === 'done' && !checks.problems.length) return { kind: 'landed', frozen: checks.testFiles }
-  const said = report ? `/dev ${report.status || 'reported no status'}${report.reason ? `: ${report.reason}` : ''}` : '/dev wrote no ledger (the session ended before it finished)'
+  const said = report ? `${source} ${report.status || 'reported no status'}${report.reason ? `: ${report.reason}` : ''}` : `${source} wrote no ledger (the session ended before it finished)`
   const found = checks.problems.length ? `; the driver's checks: ${checks.problems.join('; ')}` : ''
   return { kind: 'escalated', reason: `${said}${found}` }
 }

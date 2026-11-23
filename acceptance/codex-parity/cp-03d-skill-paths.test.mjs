@@ -124,16 +124,60 @@ test('checker, fixer and implementer run verify.sh from the installation tree; t
   assert.ok(advisor.body.includes(token('backlog', 'SKILL.md')), 'advisor: the raw body keeps the token')
 })
 
+// Amended (user-authorized correction of this frozen test): the check scans the instruction TEXT for a Claude
+// path. The instructions embed absolute paths into the installation tree, so a checkout that itself lives under
+// a `.claude` directory (a Claude Code worktree) put `.claude` in every one of them and failed the check for a
+// reason that has nothing to do with the roles. The tree's own path is removed before scanning; any `.claude`,
+// CLAUDE_CONFIG_DIR or PANDASTACK_SKILL_PATH left in the text is a real reference and still fails.
+const CLAUDE_PATH_NEEDLES = ['.claude', 'CLAUDE_CONFIG_DIR', 'PANDASTACK_SKILL_PATH']
+function claudePathLeaks(instructions, root) {
+  const trees = [...new Set([resolve(root), realpathSync(root)])].sort((a, b) => b.length - a.length)
+  const text = trees.reduce((out, tree) => out.split(tree).join('<installation-root>'), instructions)
+  return CLAUDE_PATH_NEEDLES.filter(needle => text.includes(needle))
+}
+
 test('no role of harness-repair, blueprint-design or dev-build names a Claude path in its instructions', async () => {
   const api = await loadModule()
   const roles = catalogRoles(NAMED_WORKFLOWS)
   for (const name of ['advisor', ...VERIFY_ROLES]) assert.ok(roles.includes(name), `${name} is in the named workflows`)
   for (const name of roles) {
     const { instructions } = api.assembleRoleInstructions({ installationRoot: ROOT, name })
-    for (const needle of ['.claude', 'CLAUDE_CONFIG_DIR', 'PANDASTACK_SKILL_PATH']) {
-      assert.ok(!instructions.includes(needle), `${name}: instructions contain ${needle}`)
+    assert.deepEqual(claudePathLeaks(instructions, ROOT), [], `${name}: instructions name a Claude path`)
+  }
+})
+
+test('the Claude-path check ignores the checkout\'s own location (a root under a .claude directory passes) and still catches a real reference', async t => {
+  const api = await loadModule()
+  const roleFiles = {
+    'core/agents/clean.md': roleText('clean', `\nRun \`bash "${token('verify', 'verify.sh')}"\`.\n`),
+    'core/skills/verify/SKILL.md': skillText('verify'),
+    'core/skills/verify/verify.sh': 'printf ok\n',
+  }
+  // The same installation tree, once in a plain temp directory and once under <tmp>/.claude/worktrees/.
+  const plain = build(owned(t), roleFiles)
+  const underClaude = build(join(owned(t), '.claude', 'worktrees', 'agent-x'), roleFiles)
+  assert.ok(underClaude.includes('/.claude/'), 'fixture: the root path contains .claude')
+  for (const root of [plain, underClaude]) {
+    const { instructions } = api.assembleRoleInstructions({ installationRoot: root, name: 'clean' })
+    assert.ok(instructions.includes(join(root, 'core/skills/verify/verify.sh')), 'the token became the tree path')
+    assert.deepEqual(claudePathLeaks(instructions, root), [], `no leak in ${root}`)
+    assert.deepEqual(claudePathLeaks(`${instructions}\n${root}/`, `${root}/`), [], 'a trailing slash on the root changes nothing')
+  }
+
+  // A real Claude path in the role text is caught in both places: written out, as the config dir, or as the token.
+  for (const [label, text] of [['a literal ~/.claude path', 'bash ~/.claude/skills/verify/verify.sh'],
+    ['$HOME/.claude', 'bash "$HOME/.claude/skills/verify/verify.sh"'],
+    ['CLAUDE_CONFIG_DIR', 'bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/verify/verify.sh"'],
+    ['a near-miss token the loader leaves alone', 'bash "${PANDASTACK_SKILL_PATH:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/ghost/sub/run.sh}"']]) {
+    for (const base of [owned(t), join(owned(t), '.claude', 'worktrees', 'agent-y')]) {
+      const root = build(base, { ...roleFiles, 'core/agents/leaky.md': roleText('leaky', `\nRun \`${text}\`.\n`) })
+      const { instructions } = api.assembleRoleInstructions({ installationRoot: root, name: 'leaky' })
+      assert.notDeepEqual(claudePathLeaks(instructions, root), [], `${label} is caught under ${base.includes('.claude') ? 'a .claude' : 'a plain'} root`)
     }
   }
+  // The tree path itself is the only thing removed: a .claude directory INSIDE the tree is still a reference.
+  const inner = build(owned(t), roleFiles)
+  assert.deepEqual(claudePathLeaks(`Open ${inner}/.claude/settings.json`, inner), ['.claude'])
 })
 
 test('every shipped role assembles to the rewritten CP-03c text; bodies stay raw; the hunter equals the runner strip', async () => {

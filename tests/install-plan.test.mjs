@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
 import { test, REPO } from '../scripts/workflow-harness.mjs'
+import { expectedPlan, planLines, resetToPreWave } from './codex-expected-state.mjs'
 import { installPlan, installPlanMain } from '../core/skills/native-runtime/install-plan.mjs'
 
 const PLAN = join(REPO, 'core/skills/native-runtime/install-plan.mjs')
@@ -17,14 +18,10 @@ const PLAN = join(REPO, 'core/skills/native-runtime/install-plan.mjs')
 const TMP = realpathSync(tmpdir())
 const NODE_DIR = dirname(process.execPath)
 const row = (catalog, id) => catalog.offerings.find(o => o.id === id)
-// The fixture base: this checkout's catalog with blueprint's codex row as it is before
-// CP-04e (amended at the tier-4 freeze, W2-10), so these cases hold before and after it.
-const production = () => {
-  const catalog = JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8'))
-  row(catalog, 'blueprint').providers.codex = { implementation: 'unavailable', transportId: null,
-    limitations: ['NATIVE_UNVERIFIED', 'NO_PROVIDER_TRANSPORT', 'REQUIREMENTS_INCOMPLETE'] }
-  return catalog
-}
+// The fixture base: this checkout's catalog with every wave-flipped codex row as it was before its
+// wave (tests/fixtures/codex-expected-state.json, through resetToPreWave), so these cases hold the
+// pre-wave two-entry plan whatever the waves have flipped since.
+const production = () => resetToPreWave(JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8')))
 const codeIs = code => e => { assert.equal(e.code, code); return true }
 
 function owned(fn) {
@@ -185,13 +182,9 @@ await test('installPlanMain writes only the plan or one error line, and importin
   const sink = () => { const chunks = []; return { chunks, write: s => { chunks.push(s); return true } } }
   const run = argv => { const out = sink(), err = sink(); return { status: installPlanMain(argv, out, err), out: out.chunks.join(''), err: err.chunks.join('') } }
 
-  // This checkout's own plan: blueprint's line appears once CP-04e flips its codex row.
-  const flipped = row(JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8')), 'blueprint')
-    .providers.codex.implementation === 'partial'
-  assert.deepEqual(run(['--installation-root', REPO, '--backend', 'codex']), { status: 0,
-    out: 'skills/autobuild\tgraphs/autobuild/skills/autobuild\n' +
-      (flipped ? 'skills/blueprint\tgraphs/blueprint/skills/blueprint\n' : '') +
-      'skills/bughunt\tgraphs/hunt/skills/bughunt\n', err: '' })
+  // This checkout's own plan: the pre-wave two lines plus one per row the expected-state fixture lists as codex partial.
+  const own = JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8'))
+  assert.deepEqual(run(['--installation-root', REPO, '--backend', 'codex']), { status: 0, out: planLines(expectedPlan(own)), err: '' })
   assert.deepEqual(run(['--backend', 'codex', '--backend', 'codex']), { status: 1, out: '', err: 'install-plan: INVALID_INSTALL_PLAN_INPUT\n' })
   assert.deepEqual(run(['--installation-root', '/tmp/no-such-root', '--backend', 'codex']), { status: 2, out: '', err: 'install-plan: NOT_FOUND\n' })
 

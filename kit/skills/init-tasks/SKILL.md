@@ -183,7 +183,7 @@ Create `changelogs/.gitkeep` so the empty directory is tracked by git.
 ### Phase 4: Verify
 
 1. Confirm all files exist and are valid markdown
-2. If a CLAUDE.md exists, check that it references the task system in its workflow section
+2. If a CLAUDE.md (Claude Code) or AGENTS.md (Codex) exists, check that it references the task system in its workflow section
 3. Report what was created
 
 ## Rules

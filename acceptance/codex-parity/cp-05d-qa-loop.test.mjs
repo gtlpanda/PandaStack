@@ -1026,13 +1026,20 @@ describe('CP-05d qa-loop (frozen acceptance; wiring proof on the fake codex)', (
 
   // ===================================================== 11. production catalog
   test('11. the production catalog: installationRoot set to the candidate root exits 2 OFFERING_UNSUPPORTED with zero spawns, no run directory and no inflight file', T, async () => {
-    const production = readJson(join(ROOT, CATALOG))
-    const dev = production.offerings.find(o => o.id === 'dev')
-    assert.equal(dev?.providers?.codex?.implementation, 'unavailable', 'fixture: the production dev codex row is unavailable (contract, Which offering)')
+    // Amended for CP-06: the production dev row is partial now, so this case uses a copy of the
+    // candidate root whose dev codex row is `unavailable` (the state the contract describes),
+    // with the same INERT verify.sh as the fixture root.
+    const unavailableRoot = realpathSync(mkdtempSync(join(WORK, 'root-unavailable-')))
+    copyTree(unavailableRoot)
+    const catalog = readJson(join(unavailableRoot, CATALOG))
+    catalog.offerings.find(o => o.id === 'dev').providers.codex = { implementation: 'unavailable', transportId: null,
+      limitations: ['NATIVE_UNVERIFIED', 'NO_PROVIDER_TRANSPORT', 'REQUIREMENTS_INCOMPLETE'] }
+    writeFileSync(join(unavailableRoot, CATALOG), JSON.stringify(catalog, null, 2) + '\n')
+    writeFileSync(join(unavailableRoot, 'core/skills/verify/verify.sh'), INERT_VERIFY)
     // No replies: a regressed refusal could only escalate, never reach a `done` and the real verify.sh.
     const c = await makeCase({ replies: {} })
     const before = repoSnapshot(c)
-    const r = await loop(c, writeArgs(c, { installationRoot: ROOT }))
+    const r = await loop(c, writeArgs(c, { installationRoot: unavailableRoot }))
     assertError(c, r, 2, 'OFFERING_UNSUPPORTED')
     assertNoSpawns(c)
     assert.equal(existsSync(c.inflight), false, 'the inflight file is removed when no run directory exists')
@@ -1043,7 +1050,7 @@ describe('CP-05d qa-loop (frozen acceptance; wiring proof on the fake codex)', (
     assert.match(entries[0], /^qa-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}\.host-args\.json$/)
     const id = entries[0].replace('.host-args.json', '')
     assert.equal(existsSync(nativeRunDir(c, id)), false, 'no run directory')
-    assert.equal(readJson(hostArgsPath(c, id)).installationRoot, ROOT)
+    assert.equal(readJson(hostArgsPath(c, id)).installationRoot, unavailableRoot)
     assertGitCalls(c, { status: false })
     assertInvariants(c, before)
   })

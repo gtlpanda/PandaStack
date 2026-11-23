@@ -54,7 +54,7 @@ function env(root, script, extra = {}) {
   return {
     scriptFile,
     env: {
-      ...process.env, CLAUDE_CODE_INHERITED: 'from-the-parent', HARNESS_BUILD_CLAUDE_BIN: FAKE, FAKE_CLAUDE_SCRIPT: scriptFile,
+      ...process.env, PANDASTACK_PROVIDER: 'claude', CLAUDE_CODE_INHERITED: 'from-the-parent', HARNESS_BUILD_CLAUDE_BIN: FAKE, FAKE_CLAUDE_SCRIPT: scriptFile,
       HARNESS_BUILD_VERIFY: VERIFY, HARNESS_BUILD_MAX_SLEEP_MS: '50', PANDASTACK_NOTIFY: '', HARNESS_BUILD_BUGHUNT: '0', ...extra,
     },
   }

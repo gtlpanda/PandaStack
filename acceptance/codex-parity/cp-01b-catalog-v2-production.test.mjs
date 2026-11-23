@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os'
 import { basename, join, posix, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
+import { NON_PRE_WAVE_PARTIAL_IDS, PARTIAL_IDS, STATE, expectedCodexRow, expectedProofRefs } from '../../tests/codex-expected-state.mjs'
 
 const ROOT = process.env.PANDASTACK_CANDIDATE_ROOT || fileURLToPath(new URL('../../', import.meta.url))
 const loadCatalog = () => import(pathToFileURL(resolve(ROOT, 'core/skills/native-runtime/catalog.mjs')))
@@ -25,20 +26,11 @@ async function guard() {
   return api.checkCatalogDrift
 }
 
-const TRANSPORTS = [
-  { id: 'claude-code', provider: 'claude', entry: 'install.sh' },
-  { id: 'codex-autobuild', provider: 'codex', entry: 'graphs/autobuild/tool/lib/codex.mjs' },
-  { id: 'codex-bughunt', provider: 'codex', entry: 'graphs/hunt/skills/bughunt/native-runner.mjs' },
-]
-const CODEX_PARTIAL = { autobuild: 'codex-autobuild', bughunt: 'codex-bughunt' }
-// Amended at the CP-04e freeze (W2-10). CP-04e flips blueprint's codex row and adds one
-// shared transport. These pins accept exactly two states: today's, or exactly CP-04e's.
-// acceptance/codex-parity/cp-04e-blueprint-codex.test.mjs pins the CP-04e state itself.
-const CP04E_TRANSPORT = { id: 'codex-graph-host', provider: 'codex', entry: 'core/skills/native-runtime/graph-host.mjs' }
-const CP04E_BLUEPRINT_CODEX = { implementation: 'partial', transportId: 'codex-graph-host',
-  limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] }
-const cp04eFlipped = row => row.id === 'blueprint' &&
-  JSON.stringify(row.providers.codex) === JSON.stringify(CP04E_BLUEPRINT_CODEX)
+// Amended for the codex-parity waves (user-authorized, direct human-directed change): which rows
+// are codex `partial`, over which transport, with which limitations, comes from the one expected-state
+// fixture (tests/fixtures/codex-expected-state.json) through tests/codex-expected-state.mjs. The
+// catalog must equal it exactly; a row flipped by any wave is an edit to the fixture, not to this test.
+const isFlipped = row => NON_PRE_WAVE_PARTIAL_IDS.includes(row.id)
 const SHARED_FIELDS = ['id', 'kind', 'source', 'entrySkill', 'installTargets', 'nativeReadiness',
   'evidenceOwners', 'requiredRuntimes', 'aliases', 'requirementsComplete']
 
@@ -133,7 +125,7 @@ test('same inventory and derived values as the v1 snapshot', async () => {
     assert.ok(!Object.hasOwn(row, 'codexInstallEligible') && !Object.hasOwn(row, 'nativeImplementation'), `${row.id} has no v1-only field`)
     assert.ok(old.dependencies.every(d => row.dependencies.includes(d)), `${row.id} keeps its v1 dependencies`)
     assert.equal(api.installEligible(row, 'claude'), true, `${row.id} claude eligibility`)
-    if (cp04eFlipped(row)) return // CP-04e's own test pins the flipped row's derived values
+    if (isFlipped(row)) return // a flipped row's derived values are pinned by the 'no supported anywhere' test below
     assert.equal(api.installEligible(row, 'codex'), old.codexInstallEligible, `${row.id} codex eligibility`)
     assert.equal(api.nativeImplementationOf(row), old.nativeImplementation, `${row.id} nativeImplementation`)
   })
@@ -148,8 +140,7 @@ test('entry and workflow hashes equal the bytes on disk, and every transport ent
   for (const workflow of catalog.workflows) {
     assert.equal(workflow.sha256, sha(readFileSync(resolve(ROOT, workflow.source))), workflow.source)
   }
-  assert.ok([JSON.stringify(TRANSPORTS), JSON.stringify([...TRANSPORTS, CP04E_TRANSPORT])]
-    .includes(JSON.stringify(catalog.transports)), 'transports are the three rows, or those plus CP-04e\'s')
+  assert.deepEqual(catalog.transports, STATE.transports, 'transports are exactly the expected-state fixture\'s, in order')
   for (const transport of catalog.transports) {
     assert.ok(lstatSync(resolve(ROOT, transport.entry)).isFile(), `${transport.id} entry is a regular file`)
   }
@@ -171,7 +162,8 @@ test('declared dependencies are a superset of the derived edges', async () => {
   assert.deepEqual(missing, [], 'undeclared derived edges')
 })
 
-test('no supported anywhere; codex is partial only for autobuild and bughunt (and blueprint once CP-04e flips it)', () => {
+test('no supported anywhere; the codex rows are exactly the expected-state fixture (partial rows, transports, limitations, proofRefs)', async () => {
+  const api = await loadCatalog()
   const catalog = production()
   assert.equal(catalog.schemaVersion, 2)
   for (const offering of catalog.offerings) {
@@ -183,18 +175,22 @@ test('no supported anywhere; codex is partial only for autobuild and bughunt (an
       assert.ok(entry.limitations.includes('REQUIREMENTS_INCOMPLETE'), `${offering.id} ${name} REQUIREMENTS_INCOMPLETE`)
     }
     assert.deepEqual([claude.implementation, claude.transportId], ['partial', 'claude-code'], `${offering.id} claude`)
-    assert.ok(codex.limitations.includes('NATIVE_UNVERIFIED'), `${offering.id} codex NATIVE_UNVERIFIED`)
-    if (cp04eFlipped(offering)) {
-      // CP-04e's state: exactly CP04E_BLUEPRINT_CODEX (checked by cp04eFlipped), pinned by its own test.
-    } else if (Object.hasOwn(CODEX_PARTIAL, offering.id)) {
-      assert.deepEqual([codex.implementation, codex.transportId], ['partial', CODEX_PARTIAL[offering.id]], `${offering.id} codex`)
-      assert.ok(codex.limitations.includes('LIVE_PROOF_MISSING'), `${offering.id} codex LIVE_PROOF_MISSING`)
+    const expected = expectedCodexRow(catalog, offering.id)
+    if (expected) {
+      assert.deepEqual(codex, expected, `${offering.id} codex row`)
+      assert.equal(api.installEligible(offering, 'codex'), true, `${offering.id} codex eligibility`)
+      assert.equal(api.nativeImplementationOf(offering), 'present-limited', `${offering.id} nativeImplementation`)
     } else {
+      assert.ok(STATE.unavailable.includes(offering.id), `${offering.id} is codex partial in no fixture list, so it must be listed unavailable`)
+      assert.ok(codex.limitations.includes('NATIVE_UNVERIFIED'), `${offering.id} codex NATIVE_UNVERIFIED`)
       assert.deepEqual([codex.implementation, codex.transportId], ['unavailable', null], `${offering.id} codex`)
       assert.ok(codex.limitations.includes('NO_PROVIDER_TRANSPORT'), `${offering.id} codex NO_PROVIDER_TRANSPORT`)
+      assert.equal(api.installEligible(offering, 'codex'), false, `${offering.id} codex eligibility`)
     }
+    assert.deepEqual(offering.proofRefs, expectedProofRefs(offering.id), `${offering.id} proofRefs`)
     assert.equal(offering.permissionProfile, null, `${offering.id} permissionProfile`)
   }
+  assert.deepEqual(catalog.offerings.filter(o => o.providers.codex.implementation === 'partial').map(o => o.id).sort(), PARTIAL_IDS, 'the codex partial rows are exactly the fixture\'s')
   const audit = catalog.offerings.find(o => o.id === 'security-audit').providers.codex.limitations
   assert.ok(audit.includes('PROFILE_UNSUPPORTED') && audit.includes('NO_NATIVE_ENTRY'), 'security-audit records decision 2')
   assert.ok(!readFileSync(resolve(ROOT, 'spec/offering-capabilities.json'), 'utf8').includes('"supported"'), 'no "supported" string')

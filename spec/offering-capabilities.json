@@ -31,12 +31,10 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
             "GUIDANCE_ONLY",
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -71,12 +69,10 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
             "GUIDANCE_ONLY",
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -118,12 +114,11 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
             "LIBRARY_ONLY",
             "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -158,12 +153,10 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
             "GUIDANCE_ONLY",
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -199,12 +192,10 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
             "GUIDANCE_ONLY",
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -240,12 +231,10 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
             "GUIDANCE_ONLY",
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -279,11 +268,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -318,12 +305,10 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
             "GUIDANCE_ONLY",
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -363,12 +348,11 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
             "GUIDANCE_ONLY",
             "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -408,11 +392,10 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
             "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -437,7 +420,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "5045607fcd3b9d003d44795c22170955e479edb5d6e8440cefbb758413729c8c",
+      "entrySha256": "dc5917403306848fa3efd0cae50fc2637f4ba4040a6756bf094377cdc9dc201c",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -447,11 +430,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -475,7 +456,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "4a9e556e5d8b48685d8a619d7b182cb956a80283e0863c77f007b6b8fea07eea",
+      "entrySha256": "ab665d09b8ab87dca55d10bdd502003b781eb662df65dd90c8b7ec8b66050ac7",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -485,11 +466,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -523,11 +502,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -561,11 +538,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -589,7 +564,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "3017ce9d10808c2a387c36d98bdd56c69b049f7788151cbfd28905bd37367ba6",
+      "entrySha256": "c0012f65f70bcf888090c198fa3c4a22b42626ce8cb893267a2b0a70ebc5b932",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -599,11 +574,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -637,11 +610,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -665,7 +636,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "72dc7958bfbbdc433b05f6082594daa5a04397f7dfffd4bbceff2065989b87b6",
+      "entrySha256": "ecdeec4742b4eb5900d632ef0e5e9c1ef00fae732e7a320bafe802ec9ee7fbed",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -675,11 +646,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -703,7 +672,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "a3c82fd55ec377da1fa52bdbf4a065fb4181e2cdd487c640e1d6936d8514e76a",
+      "entrySha256": "90b49d2a40e5d829b73b86295aa6325ebc975b485c7df54c4d445ea11b063b9c",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -713,11 +682,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -751,11 +718,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -789,11 +754,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -817,7 +780,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "e28ba220b022cec9a443f878ae4b117bf7c0c8acaed92a426506a01ef710d297",
+      "entrySha256": "e4c6daab4218c1f999e39d9b73adac30a62104b777515d40f34774b2a09e2f5d",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -827,11 +790,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -865,11 +826,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -903,11 +862,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -931,7 +888,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "55e136f46d7cb0f56971aa7f956d689d8a20c5136bbbcbd62a64045be5db95b5",
+      "entrySha256": "81a09b61e3fd27dc28c3119469d06e62c0a268e7a86afe3cce1390823dc35fb4",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -941,11 +898,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -969,7 +924,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "588f45c4f6bff7e4d9460c83f3a124719e2a12bb4f4fd9915f05582d16c829e3",
+      "entrySha256": "61209cca53e1d7fb5a6a351e3f7131e3cc852a66ab6a190290b391a1fc21613f",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -979,11 +934,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1007,7 +960,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "c32c6468e27a9f073e2d196ebb736475066d641656312f15d6980ed362d91953",
+      "entrySha256": "a6502a1aff1291b07ffa4d4d43d677d9195564497f77e7b727c20dae0fe79971",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1017,11 +970,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1045,7 +996,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "9ab66794eabe4a7837ca23b3b9ece0ce68df98703b4ad3cdfdf89b1d50e6074b",
+      "entrySha256": "ef972218f53be875ff4e3abc7238986e7d35ab400b96839dd3eb81ca4dbbd478",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1055,11 +1006,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1093,11 +1042,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1121,7 +1068,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "7d583ad8bb59442ceacad1fa242d0ffadcc30ccbf97988b2885e4e6be4f6512e",
+      "entrySha256": "1344acc807aa0c70b122baebbc2c2e22f0bbebd126a017ee56530fd5dc1e2950",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1131,11 +1078,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1169,11 +1114,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1207,11 +1150,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1245,11 +1186,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1273,7 +1212,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "5d6e94e8d5b004af0b2a6c9c9aee5494451efb5af444e4d30a9ba950324535f4",
+      "entrySha256": "99b2a7ba04c475723f232b07b9ed6f840a5c2f35624e05644bf3fb55eeda9bb1",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1283,11 +1222,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1311,7 +1248,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "f83eb3cf4b149df07950df6f5a10b9a20c9974f98675582e7582352f3d036285",
+      "entrySha256": "23be6008401f228c9e882474a5f45b1e8dc6b0b9a764160bf75fcb41ce34464a",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1321,11 +1258,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1359,11 +1294,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1397,11 +1330,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1435,11 +1366,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1509,7 +1438,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "b95e13cf7f7451e9c3e73cf0193f0d2f6e72757308a9f533811390047e00374c",
+      "entrySha256": "84f2723c07b66a8f47842fdca596a68ba18bc5501674db3e25359798b999617a",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1542,6 +1471,7 @@
       "nativeReadiness": "unknown",
       "dependencies": [
         "backlog",
+        "native-runtime",
         "run-records"
       ],
       "evidenceOwners": [
@@ -1551,7 +1481,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "536fade2c5cb5d966f4963968d7f8eecb1875f37a38440362842c74fef8d761d",
+      "entrySha256": "cf07f10aec85d3092135f7e5f69139a027c7d03e550200f682fdce6078113c87",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1561,17 +1491,19 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-autobuild",
           "limitations": [
+            "LIVE_PROOF_MISSING",
             "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
       },
       "permissionProfile": null,
-      "proofRefs": []
+      "proofRefs": [
+        "cp-07-build-app-wiring"
+      ]
     },
     {
       "id": "dev",
@@ -1587,6 +1519,7 @@
         "default-stack",
         "harness-review",
         "knowledge-map",
+        "native-runtime",
         "verify",
         "workflow-state"
       ],
@@ -1597,7 +1530,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "1e7d0b75fa3c85c6ec3b5161f979818d85bc0776b39635d0dc15db175dde5b7f",
+      "entrySha256": "9b56b1f365052dd8c6e753addaee79bd7e3e4850a44aea1931c9fd19a0ba1aeb",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1607,11 +1540,11 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-graph-host",
           "limitations": [
+            "LIVE_PROOF_MISSING",
             "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1619,7 +1552,8 @@
       "permissionProfile": null,
       "proofRefs": [
         "cp-02f-host-wiring",
-        "cp-05e-qa-gate"
+        "cp-05e-qa-gate",
+        "cp-06-dev-codex"
       ]
     },
     {
@@ -1648,7 +1582,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "fe2adebf112967fa87be76da8cce730b1265ddbc78fec26b0945caa922cdc910",
+      "entrySha256": "751a1ece86aa1121ce0159ec35fe743965b86592d85c89038ddea408e04182b0",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1682,7 +1616,8 @@
       "dependencies": [
         "backlog",
         "default-stack",
-        "knowledge-map"
+        "knowledge-map",
+        "native-runtime"
       ],
       "evidenceOwners": [
         "graphs/release/workflows/release-flow.js"
@@ -1690,7 +1625,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "0b5064d39a6d3b953b51c152445b68eeac2d5273cdbf0a43776012e354f34b6e",
+      "entrySha256": "b2b459608892c9936fda77735ef22f49eb4dad42cd537ea08b3b8b994503004a",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1700,17 +1635,19 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-graph-host",
           "limitations": [
+            "LIVE_PROOF_MISSING",
             "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
       },
       "permissionProfile": null,
-      "proofRefs": []
+      "proofRefs": [
+        "cp-08-release-codex"
+      ]
     },
     {
       "id": "security-audit",
@@ -1773,7 +1710,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "274016cab0c1235ab4049844161b4fb7c36189927970612e38a47cbf96939dc7",
+      "entrySha256": "a92f6a50aaece969e61235792aea9c3fb7a213617ad7d6084d347cb4f74f0bd1",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1783,11 +1720,9 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -1824,12 +1759,10 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-skill",
           "limitations": [
             "LIBRARY_ONLY",
-            "NATIVE_UNVERIFIED",
-            "NO_PROVIDER_TRANSPORT",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -2757,6 +2690,11 @@
       "id": "codex-graph-host",
       "provider": "codex",
       "entry": "core/skills/native-runtime/graph-host.mjs"
+    },
+    {
+      "id": "codex-skill",
+      "provider": "codex",
+      "entry": "install.sh"
     }
   ],
   "limits": [

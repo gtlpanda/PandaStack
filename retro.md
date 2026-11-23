@@ -4182,3 +4182,80 @@ hash-pin amendment PR.
   15 merged parity commits on this run's budget (now cd86609, the main commit this priority
   branches from); F2, CO-10's "Applied automatically" heading for a finding the report never
   applies (now "Auto-applicable (low risk, run `autobuild ci apply`)").
+
+## 77. Codex skill transport (39 offerings flipped to codex partial) (2026-11-22)
+
+- Added the `codex-skill` transport and flipped 39 codex rows from `unavailable` to `partial`
+  with the Claude row's limitation set; `NATIVE_UNVERIFIED` kept on verify, run-records and
+  decisions. New `tests/codex-skill-install.test.mjs` installs through `install.sh --codex` in a
+  temp HOME, checks every SKILL.md for Claude-only references (the rule is itself tested on
+  lookalike text) and runs each offline helper through its documented `SKILL_DIR` command.
+- Bug caught while writing the graph-host test: without a transport check, any `partial` codex
+  row (including a guidance skill) was admitted by an unowned graph such as harness-repair.
+  The host now refuses `codex-skill` rows; the test fails with the check removed.
+- Found, not fixed: `preflight-cli.mjs` run through a symlink (an installed skill link) exits 0
+  and prints nothing, because it compares `process.argv[1]` without a realpath, and a test
+  forbids it importing `node:fs`.
+
+## 78. Codex parity CP-08: /release-pr on Codex (2026-11-22)
+
+`release-controlled` is no longer refused by the Codex leaf: it runs as `workspace-write` plus
+`sandbox_workspace_write.network_access=true`, for release-checker, merger and deploy-watcher
+only (scribe stays workspace-write without network, advisor read-only). A new
+`release-native.mjs` CLI drives release-flow through the graph host and holds the approval for
+one exact head and the single, never-retried merge attempt (an O_EXCL marker created just
+before the merger dispatch). release-pr's codex row is `partial` via `codex-graph-host`.
+- Proof: acceptance/codex-parity/cp-08-release-codex.test.mjs, 17 tests on the fake codex with
+  recording gh/claude stubs (wiring proof, not runtime certification). A mutation check
+  (marker checks removed, network profile widened to build-workspace) failed 5 of them.
+- Untested hypotheses: the Codex flag spelling under `--ignore-user-config` and `gh` reaching
+  GitHub from that sandbox; no codex was run.
+
+## 79. security-audit on Codex: confinement probe, row stays unavailable (2026-11-23)
+
+- Question: can native Codex enforce source-only access for the `audit-source-only` leaves? A
+  `codex sandbox` flag set (`default_permissions` plus an inline `permissions.<name>.filesystem`
+  table and `network.enabled=false`, via `-c` only) confines a shell command: reads only the
+  snapshot and the codex binary directory, no writes, no sockets, one control per property
+  (tests/codex-source-only-sandbox.test.mjs, 7 cases, skips without codex; two mutations of the
+  recipe each failed the matching cases).
+- Not established: that `codex exec` applies it to a model's tool calls (needs a live model;
+  `codex debug prompt-input` rendered a read-only projection), SA-08's no-shell requirement (the
+  shell stays and runs snapshot scripts), and the native stage itself, which throws
+  `PARTITION_INTEGRATION_REQUIRED` on the critic step (native-stage.mjs:95). The codex row,
+  the refusal in codex-provider.mjs and all frozen tests are unchanged.
+- Evidence and the list of what would change the answer:
+  docs/evidence/codex-sandbox-source-only-2026-11-23.md.
+- Gotchas: a dotted `-c` key splits at dots inside a path (use one inline table); `codex sandbox -C`
+  requires `-P`; the sandbox needs the native codex binary directory readable.
+
+## 80. Codex parity integration: five branches merged, host auto-detection, combined install (2026-11-23)
+
+- Merged codex-parity/skills, dev, release, build-app and security-audit (all from 2bc3992). The
+  conflicts in cp-01b/c/d, cp-03b, cp-04e, install-codex, install-plan and host-wiring-proof-ref came from
+  tests that hardcoded which rows are codex partial. They now read one expected-state fixture
+  (tests/fixtures/codex-expected-state.json via tests/codex-expected-state.mjs): the catalog must equal it
+  exactly, fixture roots reset flipped rows with resetToPreWave, the pinned pre-wave plans are unchanged,
+  and flipping another row is a one-file edit. The old per-branch dual-state ("before or after the flip")
+  branches are gone, which also removed a weakness: those tests accepted either state.
+- Host auto-detection (core/skills/native-runtime/host-provider.mjs): PANDASTACK_PROVIDER, then the
+  nearest codex or claude ancestor process, then CODEX_THREAD_ID (untested hypothesis) / CLAUDECODE, then
+  claude. The tree comes before the env because Claude variables leak into a Codex sandbox started from a
+  Claude shell. The real `codex sandbox` showed the first version was wrong for exactly that case: the codex
+  process is PID 1 in the sandbox's namespace and the walk stopped at PID 1, so it fell through to the leaked
+  CLAUDECODE and answered claude. Fixed, plus CODEX_SANDBOX_NETWORK_DISABLED as an env signal (observed);
+  CODEX_THREAD_ID stays an untested hypothesis. An injected env never consults the real process tree, so tests with their own env stay
+  hermetic. Wired at `autobuild run` / `init` (not loadConfig: a USD-budget Claude project must still load from
+  inside Codex), the build-app driver and doctor. Not wired: bughunt native-cli (Codex runner, called bare by a
+  frozen test) and the Codex-only blueprint/dev/release CLIs and qa loop.
+- Plain ./install.sh also installs the Codex entry skills when codex is on PATH or ~/.agents exists;
+  --claude and --codex pick one.
+- build-app's final QA passes through the real qa-loop now that dev is codex partial (root copy, inert
+  verify.sh).
+- cp-03d's Claude-path check scans the instruction text, not the checkout path.
+- Bugs caught: the build-app driver's import of host-provider created an undeclared catalog dependency
+  (checkCatalogDrift DEPENDENCY_UNDECLARED), so build-app gained native-runtime. Running the full gate with
+  a stub `codex` as an ancestor found four leaks that the default (Claude-hosted) gate cannot see: loadConfig
+  asking the host for every caller, the loop and build-app driver tests taking the host's provider, a test
+  that copies config.mjs with a fixed file list, and frozen Phase 1 acceptance (fixed by pinning the provider
+  in the gate environment rather than editing frozen tests).

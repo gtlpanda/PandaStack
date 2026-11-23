@@ -7,7 +7,8 @@ import { closeSync, existsSync, openSync, readFileSync } from "node:fs";
 import { buildEnv, evidencePromptLine } from "./proc.mjs";
 import { observeContextLaunch } from './context-receipt.mjs';
 
-export function codexArgs(config, { prompt, appendSystemPrompt = "", role = "builder", outputFile, schemaFile } = {}) {
+// `rules` replaces the autobuild session rules for another driver (/build-app); the default is unchanged.
+export function codexArgs(config, { prompt, appendSystemPrompt = "", role = "builder", outputFile, schemaFile, rules: rulesOverride } = {}) {
   const probe = role === "probe";
   const args = ["exec", "--json", "--color", "never", "--sandbox", probe ? "read-only" : "workspace-write",
     "-c", 'approval_policy="never"', "--model", probe ? config.probeModel : config.model,
@@ -16,7 +17,7 @@ export function codexArgs(config, { prompt, appendSystemPrompt = "", role = "bui
   args.push(...codexConcurrencyArgs(config.maxConcurrentSubagents));
   if (outputFile) args.push("--output-last-message", outputFile);
   if (schemaFile) args.push("--output-schema", schemaFile);
-  const rules = probe ? "Do not use tools. Reply OK." : [
+  const rules = rulesOverride !== undefined && !probe ? rulesOverride : probe ? "Do not use tools. Reply OK." : [
     "AUTOBUILD CODEX BACKEND: Read AGENTS.md and CLAUDE.md if present, and the project spec/contracts.",
     "No human is present. Do the authorized work without questions. Never push, change branches, edit git control files, or launch Claude.",
     `Frozen paths (never edit): ${JSON.stringify(config.frozen)}. Writable exceptions: ${JSON.stringify(config.writable)}.`,
@@ -40,7 +41,9 @@ async function runCodexWork(config, options, track) {
   const { args, input } = codexArgs(config, options);
   const out = openSync(options.logFile, "w");
   const err = openSync(`${options.logFile}.stderr`, "w");
-  const env = buildEnv(config, { AUTOBUILD_BACKEND: "codex", AUTOBUILD_ACTIVE: "1", AUTOBUILD_ROLE: options.role, AUTOBUILD_DELIVERY_MODE: config.deliveryMode ?? "full" });
+  // A Codex session says which provider it is: a project env.vars PANDASTACK_PROVIDER pin (this repo's gate pins claude)
+  // must not make the tools the session runs take the other one.
+  const env = buildEnv(config, { AUTOBUILD_BACKEND: "codex", PANDASTACK_PROVIDER: "codex", AUTOBUILD_ACTIVE: "1", AUTOBUILD_ROLE: options.role, AUTOBUILD_DELIVERY_MODE: config.deliveryMode ?? "full" });
   // A nested CLI must not attach itself to its parent's thread.
   delete env.CODEX_THREAD_ID;
   try {

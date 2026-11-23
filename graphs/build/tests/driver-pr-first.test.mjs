@@ -9,7 +9,8 @@ import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 const DRIVER = fileURLToPath(new URL('../skills/build-app/driver/driver.mjs', import.meta.url))
 const REAL_GIT = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim()
-const ENV = { ...process.env, GIT_AUTHOR_NAME: 'fixture', GIT_AUTHOR_EMAIL: 'fixture@example.invalid', GIT_COMMITTER_NAME: 'fixture', GIT_COMMITTER_EMAIL: 'fixture@example.invalid' }
+// These cases run the Claude path with no --backend: pin the provider, so a run launched from inside Codex still takes it.
+const ENV = { ...process.env, PANDASTACK_PROVIDER: 'claude', GIT_AUTHOR_NAME: 'fixture', GIT_AUTHOR_EMAIL: 'fixture@example.invalid', GIT_COMMITTER_NAME: 'fixture', GIT_COMMITTER_EMAIL: 'fixture@example.invalid' }
 function fixture(work) {
   const root = mkdtempSync(join(tmpdir(), 'draft-build-')), repo = join(root, 'repo'), bin = join(root, 'bin')
   mkdirSync(repo); mkdirSync(bin)

@@ -9,20 +9,25 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test, REPO } from '../scripts/workflow-harness.mjs'
 import { validateCatalog, installEligible, nativeImplementationOf, providerImplementation } from '../core/skills/native-runtime/catalog.mjs'
-
+import { KEEP_NATIVE_UNVERIFIED, SKILL_IDS, SKILL_TRANSPORT } from './codex-expected-state.mjs'
 const catalog = JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8'))
 const byId = new Map(catalog.offerings.map(o => [o.id, o]))
 const REFERENCE_ROWS = ['backlog', 'bug-lenses', 'default-stack', 'findings', 'gtm-brief', 'knowledge-map', 'run-records']
 const CLAUDE_LIMITS = ['GUIDANCE_ONLY', 'REQUIREMENTS_INCOMPLETE']
-const CODEX_LIMITS = ['GUIDANCE_ONLY', 'NATIVE_UNVERIFIED', 'NO_PROVIDER_TRANSPORT', 'REQUIREMENTS_INCOMPLETE']
+// Amended for the codex-skill transport: each reference row is codex partial over codex-skill, with the
+// Claude limitation set, plus NATIVE_UNVERIFIED only where the fixture lists the row (run-records).
+const SKILLS = { ids: SKILL_IDS, keepNativeUnverified: KEEP_NATIVE_UNVERIFIED, transport: SKILL_TRANSPORT }
+const codexLimits = id => [...CLAUDE_LIMITS, ...(SKILLS.keepNativeUnverified.includes(id) ? ['NATIVE_UNVERIFIED'] : [])].sort()
+const CODEX_LIMITS = codexLimits('backlog')
 const codeUnitSorted = list => [...list].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
 
 await test('dev, bughunt and release-pr declare exactly the contract table', () => {
   assert.deepEqual(byId.get('dev').dependencies,
-    ['backlog', 'default-stack', 'harness-review', 'knowledge-map', 'verify', 'workflow-state'])
+    ['backlog', 'default-stack', 'harness-review', 'knowledge-map', 'native-runtime', 'verify', 'workflow-state']) // native-runtime: CP-06's dev-native.mjs and Codex runner
   assert.deepEqual(byId.get('bughunt').dependencies,
     ['backlog', 'bug-lenses', 'default-stack', 'findings', 'knowledge-map', 'verify', 'workflow-state'])
-  assert.deepEqual(byId.get('release-pr').dependencies, ['backlog', 'default-stack', 'knowledge-map'])
+  // Amended at CP-08: release-pr's Codex CLI imports the native runtime.
+  assert.deepEqual(byId.get('release-pr').dependencies, ['backlog', 'default-stack', 'knowledge-map', 'native-runtime'])
 })
 
 await test('every dependency list is sorted, unique, names a known offering and never itself', () => {
@@ -54,9 +59,10 @@ await test('the seven reference rows carry exactly the sorted limitation lists a
     const row = byId.get(id)
     assert.deepEqual(row.dependencies, [], `${id}: no rule derives an edge from a reference row`)
     assert.deepEqual(row.providers.claude.limitations, CLAUDE_LIMITS, `${id} claude`)
-    assert.deepEqual(row.providers.codex.limitations, CODEX_LIMITS, `${id} codex`)
+    assert.ok(SKILLS.ids.includes(id), `${id} is a codex-skill offering`)
+    assert.deepEqual(row.providers.codex.limitations, codexLimits(id), `${id} codex`)
     assert.equal(row.providers.claude.implementation, 'partial', `${id} claude stays partial`)
-    assert.equal(row.providers.codex.implementation, 'unavailable', `${id} codex stays unavailable`)
+    assert.deepEqual([row.providers.codex.implementation, row.providers.codex.transportId], ['partial', SKILLS.transport.id], `${id} codex`)
   }
   assert.deepEqual(codeUnitSorted(CODEX_LIMITS), CODEX_LIMITS, 'GUIDANCE_ONLY sorts first')
 })
@@ -81,7 +87,7 @@ await test('GUIDANCE_ONLY is a limitation, not a refusal: stripping it changes n
     }
     assert.equal(nativeImplementationOf(row), nativeImplementationOf(bare), `${id} nativeImplementationOf`)
     assert.equal(installEligible(row, 'claude'), true, `${id} stays Claude-installable`)
-    assert.equal(installEligible(row, 'codex'), false, `${id} stays non-Codex-installable`)
+    assert.equal(installEligible(row, 'codex'), true, `${id} is Codex-installable over codex-skill`)
   }
   assert.deepEqual(validateCatalog(catalog), [], 'the catalog validates with GUIDANCE_ONLY')
   assert.deepEqual(validateCatalog({ ...catalog, offerings: catalog.offerings.map(strip) }), [], 'and without it')

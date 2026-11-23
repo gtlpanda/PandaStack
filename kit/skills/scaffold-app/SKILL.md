@@ -1167,9 +1167,9 @@ Public landing page:
 - Footer with copyright
 - All placeholder text — user replaces copy later
 
-### Phase 5: Generate CLAUDE.md
+### Phase 5: Generate CLAUDE.md (Claude Code) or AGENTS.md (Codex)
 
-Generate a minimal CLAUDE.md at the project root:
+Generate a minimal CLAUDE.md at the project root. On Codex, write the same content to `AGENTS.md` instead, with `# AGENTS.md — {Project Name}` as the title line (write both files if the user wants both hosts):
 
 ```markdown
 # CLAUDE.md — {Project Name}

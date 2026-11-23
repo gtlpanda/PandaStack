@@ -25,7 +25,8 @@ const derivedAnswers = row => JSON.stringify([
 
 await test('the QA gate reference is a catalog identifier appended after the host-wiring one', () => {
   assert.ok(identifier(PROOF_REF), 'the reference is a catalog identifier')
-  assert.deepEqual(dev.proofRefs, [HOST_WIRING_REF, PROOF_REF], 'appended, not reordered or replacing')
+  // CP-06 appends cp-06-dev-codex after this reference.
+  assert.deepEqual(dev.proofRefs, [HOST_WIRING_REF, PROOF_REF, 'cp-06-dev-codex'], 'appended, not reordered or replacing')
   assert.equal(new Set(dev.proofRefs).size, dev.proofRefs.length, 'no duplicate reference')
 })
 
@@ -43,10 +44,11 @@ await test('dev carries it because dev alone owns the graphs/qa evidence', () =>
 })
 
 await test('the QA gate reference is never evidence: no derived answer reads it', () => {
-  const withoutRef = { ...dev, proofRefs: [HOST_WIRING_REF] }
+  const withoutRef = { ...dev, proofRefs: [HOST_WIRING_REF, 'cp-06-dev-codex'] }
   assert.equal(derivedAnswers(dev), derivedAnswers(withoutRef), 'dropping the reference changes no dev answer')
-  assert.equal(installEligible(dev, 'codex'), false, 'dev stays non-Codex-installable')
-  assert.equal(nativeImplementationOf(dev), 'not-certified', 'dev stays not-certified')
+  // CP-06 flips dev's codex row to partial: installable, present-limited, and still not from a reference.
+  assert.equal(installEligible(dev, 'codex'), true, 'dev is Codex-installable through its row, not through a reference')
+  assert.equal(nativeImplementationOf(dev), 'present-limited', 'dev is present-limited through its row')
   for (const row of catalog.offerings) {
     const tagged = { ...row, proofRefs: [...new Set([...row.proofRefs, PROOF_REF])] }
     assert.equal(derivedAnswers(tagged), derivedAnswers(row), `${row.id}: answers do not depend on ${PROOF_REF}`)

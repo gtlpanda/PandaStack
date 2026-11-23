@@ -1,14 +1,18 @@
 #!/usr/bin/env node
 import { withTrackedRun } from '../../../../../core/skills/run-records/tracking.mjs'
-import { buildTracking } from '../../../../../core/skills/run-records/adapters.mjs'
+import { buildTracking, autobuildTracking } from '../../../../../core/skills/run-records/adapters.mjs'
 import { readAgentConfig } from '../../../../../scripts/agent-config.mjs'
 // driver.mjs — the /build-app driver: builds an approved backlog unattended, one
 // slice per fresh headless `claude -p "/dev --slice ..."` session, landing each on
 // integration/<app> only after its own checks pass.
 //
-//   node driver.mjs run    --repo <path> --app <slug> [--no-pr|--pr]   build until done, a brake, or a stop;
+//   node driver.mjs run    --repo <path> --app <slug> [--no-pr|--pr] [--backend claude|codex]
+//                          build until done, a brake, or a stop;
 //                          when every slice has landed: a final QA pass, then a push and one PR.
 //                          --no-pr holds for every later run of the app until one passes --pr.
+//                          --backend picks the provider. Without it, the app you are in (Codex CLI or
+//                          Claude Code) decides, else claude. A build runs on one provider from its
+//                          first session to its PR: the driver never falls back to the other.
 //   node driver.mjs status --repo <path> --app <slug>   print status.json
 //   node driver.mjs stop   --repo <path> --app <slug>   stop a running driver (and its session)
 //   node driver.mjs resume --repo <path> --app <slug>   after a brake: the brake counters start over
@@ -22,7 +26,7 @@ import { readAgentConfig } from '../../../../../scripts/agent-config.mjs'
 // Exit codes: 0 every slice landed   3 a brake (the reason is in status.json)
 //   6 preflight failed   7 the API stayed overloaded (run again later)
 //   8 a usage limit resets too far away (run again later)
-//   9 billing or spend limit   10 auth problem   11 another driver runs for this app
+//   9 billing or spend limit   10 auth problem   11 another driver (or a session it started) runs for this app
 //   12 the repo is in a state the driver will not touch   13 the push or the PR failed   130 stopped
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, realpathSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -34,21 +38,34 @@ import { defaultBase, finalQaPrompt, qaReport, prBody, pushAndOpenPr } from './f
 import { isPrFirstDelivery } from '../../../../hunt/skills/bughunt/gate.mjs'
 import { prepareHunt, readHunt, landHunt, keepAttempt, bughuntPrompt, bughuntLine } from '../../../../hunt/skills/bughunt/land.mjs'
 import { parseResetTime, planLimitWait } from './limits.mjs'
-import { buildEnv, git, run, isOurs } from './proc.mjs'
-import { sessionSettings, sliceArgs, runClaude, sessionVerdict, probeUntilAvailable, stopSessions, writeJson, readResult, NO_BG_CEILING } from './session.mjs'
+import { buildEnv, git, run, isOurs, tail } from './proc.mjs'
+import { sessionSettings, sliceArgs, runClaude, runChild, sessionVerdict, probeUntilAvailable, stopSessions, writeJson, readResult, readText, NO_BG_CEILING } from './session.mjs'
 import { sliceChecks, devReport, outcomeOf, TEST_FILE } from './checks.mjs'
+import {
+  INSTALL_ROOT, QA_LOOP_CLI, HUNT_CLI, codexRunConfig, slicePrompt, sliceRules, runSliceSession, runProbeSession, codexVerdict, tokenUsage,
+  controlDigest, controlChanges, hostCommit, writeQaArgs, readQaReport, readQaError, huntArgs, huntStateDir, huntPrep,
+} from './codex-session.mjs'
+import { readCodexResult } from '../../../../autobuild/tool/lib/codex.mjs'
+import { detectHostProvider } from '../../../../../core/skills/native-runtime/host-provider.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || join(process.env.HOME || '', '.claude')
 export const EXIT = { done: 0, brake: 3, preflight: 6, apiDown: 7, limitTooFar: 8, billing: 9, auth: 10, locked: 11, gitState: 12, pr: 13, stopped: 130 }
 
 // Everything a test may change comes from the environment, with these defaults.
-function settingsFromEnv(env = process.env) {
+// `backend` is 'claude' (the default) or 'codex'. On Codex the verify default and the native CLIs come from the
+// checkout this driver runs from, so a Codex-only machine needs no ~/.claude.
+export function settingsFromEnv(env = process.env, backend = 'claude') {
   const num = (k, d) => (env[k] !== undefined && Number.isFinite(Number(env[k])) ? Number(env[k]) : d)
+  const codex = backend === 'codex'
   return {
-    bin: env.HARNESS_BUILD_CLAUDE_BIN || 'claude',
-    model: env.HARNESS_BUILD_MODEL || readAgentConfig().claude.orchestrator.model,
-    verifyCommand: env.HARNESS_BUILD_VERIFY || `bash "${join(CONFIG_DIR, 'skills', 'verify', 'verify.sh')}"`,
+    backend: codex ? 'codex' : 'claude',
+    bin: codex ? (env.HARNESS_BUILD_CODEX_BIN || env.AUTOBUILD_CODEX_BIN || 'codex') : (env.HARNESS_BUILD_CLAUDE_BIN || 'claude'),
+    model: codex ? 'codex' : (env.HARNESS_BUILD_MODEL || readAgentConfig().claude.orchestrator.model),
+    verifyCommand: env.HARNESS_BUILD_VERIFY || `bash "${codex ? join(INSTALL_ROOT, 'core', 'skills', 'verify', 'verify.sh') : join(CONFIG_DIR, 'skills', 'verify', 'verify.sh')}"`,
+    // The native CLIs the Codex final QA and bug hunt run (a test points these at a stub).
+    qaLoopCli: env.HARNESS_BUILD_QA_LOOP || QA_LOOP_CLI,
+    huntCli: env.HARNESS_BUILD_HUNT_CLI || HUNT_CLI,
     sessionTimeoutMs: num('HARNESS_BUILD_SESSION_TIMEOUT_MS', 6 * 3_600_000),
     maxSleepMs: num('HARNESS_BUILD_MAX_SLEEP_MS', Infinity),
     maxLimitWaitHours: num('HARNESS_BUILD_MAX_LIMIT_WAIT_HOURS', 26),
@@ -102,11 +119,18 @@ function reconcile(repo, integration, backlog, ledger, log) {
   return ledger
 }
 
-export async function runDriver(options, cfg = settingsFromEnv()) {
-  return withTrackedRun(buildTracking(options.repo, cfg.model, 'build-app'), () => runDriverWork(options, cfg))
+export async function runDriver(options, cfg = settingsFromEnv(process.env, options.backend)) {
+  if (cfg.backend !== 'codex') return withTrackedRun(buildTracking(options.repo, cfg.model, 'build-app'), () => runDriverWork(options, cfg))
+  let codexCfg
+  try { codexCfg = codexRunConfig(realpathSync(resolve(options.repo)), { bin: cfg.bin, sessionTimeoutMs: cfg.sessionTimeoutMs }) } catch (e) {
+    console.error(`driver: cannot set up the Codex backend: ${e.message}`)
+    return EXIT.preflight
+  }
+  return withTrackedRun(autobuildTracking(codexCfg, 'build-app'), () => runDriverWork(options, cfg, codexCfg))
 }
 
-async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg) {
+async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg, codexCfg = null) {
+  const codex = cfg.backend === 'codex'
   // One real path: the guard compares file paths against it.
   const repo = realpathSync(resolve(given))
   const integration = `integration/${app}`
@@ -128,10 +152,18 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg) {
     spent += Number(r.total_cost_usd)
     return `$${Number(r.total_cost_usd).toFixed(2)}`
   }
+  // Codex reports tokens, not dollars: their sum is kept in status.json in place of a cost.
+  let tokens = before.tokens && Number.isFinite(Number(before.tokens.input)) && Number.isFinite(Number(before.tokens.output)) ? { input: Number(before.tokens.input), output: Number(before.tokens.output) } : { input: 0, output: 0 }
+  const chargeTokens = logFile => {
+    const used = tokenUsage(logFile)
+    tokens = { input: tokens.input + used.input, output: tokens.output + used.output }
+    return `${used.input} in / ${used.output} out tokens`
+  }
   const files = {
     ledger: join(state, 'ledger.json'), status: join(state, 'status.json'), pid: join(state, 'driver.pid'),
     settings: join(state, 'session-settings.json'), guard: join(state, 'guard.json'), stopFailure: join(state, 'stop-failure.json'), session: join(state, 'session.pid'),
     driverLog: join(logs, 'driver.log'), probe: join(logs, 'probe.jsonl'), finalQa: join(state, 'final-qa.json'), hunt: join(state, 'bughunt.json'),
+    backend: join(state, 'backend.json'), refusal: join(state, 'provider-refusal.json'),
     devLedger: join(git(repo, ['rev-parse', '--path-format=absolute', '--git-path', 'harness-dev']).stdout.trim(), 'ledger.json'),
   }
   // Bookkeeping never crashes the driver: if the state directory vanishes, the
@@ -142,7 +174,7 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg) {
     try { appendFileSync(files.driverLog, `${line}\n`) } catch (e) { console.error(`driver: cannot write ${files.driverLog}: ${e.code || e.message}`) }
   }
   const status = (fields) => {
-    try { writeJson(files.status, { app, integration, pid: process.pid, noPr, costUsd: Math.round(spent * 100) / 100, updatedAt: new Date().toISOString(), ...fields }) } catch (e) { console.error(`driver: cannot write ${files.status}: ${e.code || e.message}`) }
+    try { writeJson(files.status, { app, integration, backend: cfg.backend, pid: process.pid, noPr, ...(codex ? { tokens } : { costUsd: Math.round(spent * 100) / 100 }), updatedAt: new Date().toISOString(), ...fields }) } catch (e) { console.error(`driver: cannot write ${files.status}: ${e.code || e.message}`) }
   }
   const notify = message => {
     if (!cfg.notify) return
@@ -166,7 +198,8 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg) {
   const other = readPid(files.pid)
   if (other !== process.pid && isOurs(other, 'driver.mjs')) { log(`another driver (pid ${other}) is building ${app}`); return EXIT.locked }
   const orphan = readPid(files.session)
-  if (isOurs(orphan, cfg.bin)) { log(`a session an earlier driver started (pid ${orphan}) is still running in ${repo}; stop it first`); return EXIT.locked }
+  // A Codex build's session is codex itself or one of the native CLIs it runs.
+  if ([cfg.bin, ...(codex ? ['qa-loop.mjs', 'native-cli.mjs'] : [])].some(marker => isOurs(orphan, marker))) { log(`a session an earlier driver started (pid ${orphan}) is still running in ${repo}; stop it first`); return EXIT.locked }
   writeFileSync(files.pid, String(process.pid))
   let stopping = false
   const onSignal = () => {
@@ -206,33 +239,58 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg) {
       log(`bug hunt: already landed at ${head0.slice(0, 7)}; not repeated`)
       return { line: previous.line }
     }
-    const prep = prepareHunt({ repo, target: integration, base, stamp, log })
-    if (prep.skip) {
-      log(`bug hunt skipped: ${prep.skip}`)
-      return { line: `The bug hunt did not run: ${prep.skip}.` }
+    let prep, logFile, code, huntCost, huntOut = ''
+    if (codex) {
+      // The native CLI prepares the hunt itself (intake and the fix worktree), runs it on Codex, and never lands.
+      logFile = join(logs, `bughunt-${stamp}.log`)
+      status({ state: 'running', slice: 'bughunt', message: 'bug hunt over the whole branch (fix mode, Codex)', log: logFile })
+      log(`bug hunt over ${integration} in fix mode on Codex (${cfg.huntCli} --backend codex)`)
+      code = await runChild({ bin: process.execPath, repo, logFile, timeoutMs: cfg.sessionTimeoutMs, pidFile: files.session, args: huntArgs({ repo, base, codexBin: cfg.bin, cli: cfg.huntCli }), env: buildEnv() })
+      huntCost = 'tokens not metered by the native hunt'
+      try { huntOut = readFileSync(logFile, 'utf8') } catch { huntOut = '' }
+      const huntErr = readText(`${logFile}.stderr`)
+      const stateDir = huntStateDir(huntOut)
+      if (!stateDir) {
+        const skip = /hunt preparation: (.*nothing to review.*)/.exec(huntErr)
+        if (skip) {
+          log(`bug hunt skipped: ${skip[1].trim()}`)
+          return { line: `The bug hunt did not run: ${skip[1].trim()}.` }
+        }
+        return { ended: end(stopping ? EXIT.stopped : EXIT.brake, stopping ? 'stopped' : 'braked', `the native bug hunt did not start (exit ${code}: ${tail(huntErr || huntOut, 3).replace(/\n/g, ' | ')}); every slice and the final QA stay landed: run /build-app resume to retry it`) }
+      }
+      prep = huntPrep(stateDir, head0)
+      if (!prep) return { ended: end(EXIT.brake, 'braked', `the native bug hunt wrote no readable intake.json in ${stateDir}`) }
+    } else {
+      prep = prepareHunt({ repo, target: integration, base, stamp, log })
+      if (prep.skip) {
+        log(`bug hunt skipped: ${prep.skip}`)
+        return { line: `The bug hunt did not run: ${prep.skip}.` }
+      }
+      if (prep.error === 'intake') return { ended: end(EXIT.brake, 'braked', `the bug hunt's intake failed (${prep.detail}); every slice and the final QA stay landed: run /build-app resume to retry it`) }
+      if (prep.error === 'intake-json') return { ended: end(EXIT.brake, 'braked', `the bug hunt's intake wrote no readable intake.json: ${prep.detail}`) }
+      if (prep.error === 'worktree') return { ended: end(EXIT.gitState, 'failed', `could not create the bug hunt's fix worktree on ${prep.branch}`) }
+      rmSync(files.stopFailure, { force: true })
+      writeJson(files.guard, { repo, frozen: frozenFiles(ledger), writable: [], writableDirs: [prep.stateDir] })
+      logFile = join(logs, `bughunt-${stamp}.jsonl`)
+      status({ state: 'running', slice: 'bughunt', message: 'bug hunt over the whole branch (fix mode)', log: logFile })
+      log(`bug hunt over ${integration} in fix mode (state ${prep.stateDir})`)
+      code = await runClaude({
+        bin: cfg.bin, repo, logFile, timeoutMs: cfg.sessionTimeoutMs, pidFile: files.session,
+        args: sliceArgs({ prompt: bughuntPrompt({ repo, stateDir: prep.stateDir, configDir: CONFIG_DIR, branch: prep.branch }), model: cfg.model, settingsFile: files.settings }),
+        env: buildEnv({ ...NO_BG_CEILING, HARNESS_BUILD_ACTIVE: '1', HARNESS_BUILD_GUARD: files.guard, HARNESS_BUILD_STOP_FAILURE: files.stopFailure }),
+      })
+      huntCost = charge(logFile)
     }
-    if (prep.error === 'intake') return { ended: end(EXIT.brake, 'braked', `the bug hunt's intake failed (${prep.detail}); every slice and the final QA stay landed: run /build-app resume to retry it`) }
-    if (prep.error === 'intake-json') return { ended: end(EXIT.brake, 'braked', `the bug hunt's intake wrote no readable intake.json: ${prep.detail}`) }
-    if (prep.error === 'worktree') return { ended: end(EXIT.gitState, 'failed', `could not create the bug hunt's fix worktree on ${prep.branch}`) }
     const { stateDir, key, branch, head } = prep
-    rmSync(files.stopFailure, { force: true })
-    writeJson(files.guard, { repo, frozen: frozenFiles(ledger), writable: [], writableDirs: [stateDir] })
-    const logFile = join(logs, `bughunt-${stamp}.jsonl`)
-    status({ state: 'running', slice: 'bughunt', message: 'bug hunt over the whole branch (fix mode)', log: logFile })
-    log(`bug hunt over ${integration} in fix mode (state ${stateDir})`)
-    const code = await runClaude({
-      bin: cfg.bin, repo, logFile, timeoutMs: cfg.sessionTimeoutMs, pidFile: files.session,
-      args: sliceArgs({ prompt: bughuntPrompt({ repo, stateDir, configDir: CONFIG_DIR, branch }), model: cfg.model, settingsFile: files.settings }),
-      env: buildEnv({ ...NO_BG_CEILING, HARNESS_BUILD_ACTIVE: '1', HARNESS_BUILD_GUARD: files.guard, HARNESS_BUILD_STOP_FAILURE: files.stopFailure }),
-    })
-    const huntCost = charge(logFile)
     const keep = why => `${why}; its branch is kept as ${keepAttempt(repo, branch, stamp)}`
     if (stopping) return { ended: end(EXIT.stopped, 'stopped', keep(`stopped by request during the bug hunt (${huntCost}); every slice and the final QA stay landed`)) }
     const { ledger: hl, lastRun, finished } = readHunt({ stateDir, key, head })
     if (!finished) {
-      const verdict = sessionVerdict(logFile, files.stopFailure)
+      const verdict = codex ? { kind: 'normal', message: /provider_refusal/.test(`${huntOut}${readText(`${logFile}.stderr`)}`) ? 'the provider declined this work; automatic retry is blocked' : '' } : sessionVerdict(logFile, files.stopFailure)
+      // The native hunt exits with the driver's own codes for a usage limit (8), billing (9) and auth (10).
       const byKind = { billing: EXIT.billing, auth: EXIT.auth, usage_limit: EXIT.limitTooFar, transient: EXIT.apiDown }
-      return { ended: end(byKind[verdict.kind] || EXIT.brake, verdict.kind === 'normal' ? 'braked' : 'paused', keep(`the bug hunt did not finish (exit ${code}, ${huntCost}${lastRun ? `; its last run: ${lastRun.status}${lastRun.reason ? `: ${lastRun.reason}` : ''}` : '; it saved no run'}${verdict.message ? `, ${verdict.message}` : ''}); every slice and the final QA stay landed: run /build-app resume to retry it`)) }
+      const exitCode = codex && [EXIT.limitTooFar, EXIT.billing, EXIT.auth].includes(code) ? code : byKind[verdict.kind] || EXIT.brake
+      return { ended: end(exitCode, exitCode === EXIT.brake ? 'braked' : 'paused', keep(`the bug hunt did not finish (exit ${code}, ${huntCost}${lastRun ? `; its last run: ${lastRun.status}${lastRun.reason ? `: ${lastRun.reason}` : ''}` : '; it saved no run'}${verdict.message ? `, ${verdict.message}` : ''}); every slice and the final QA stay landed: run /build-app resume to retry it`)) }
     }
     const landed = await landHunt({ repo, integration, prep, frozen: frozenFiles(ledger), verifyCommand: cfg.verifyCommand, ledger: hl, stopped: () => stopping })
     if (landed.stopped) return { ended: end(EXIT.stopped, 'stopped', keep(`stopped by request during the bug hunt's checks (${huntCost}); every slice and the final QA stay landed`)) }
@@ -258,7 +316,7 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg) {
       try {
         pr = pushAndOpenPr({ repo, integration, base, gh: cfg.gh, draft: true,
           title: `${app}: draft built from the backlog`,
-          body: prBody(backlog, ledger, 'Pending: final QA and full regressions must run in the PR before merge.', 'Pending: bug hunt and review must complete before merge.') })
+          body: prBody(backlog, ledger, 'Pending: final QA and full regressions must run in the PR before merge.', 'Pending: bug hunt and review must complete before merge.', cfg.backend) })
       } catch (e) {
         return end(EXIT.pr, 'failed', `Every slice landed, but draft PR delivery failed: ${e.message}. ${pending}`, { pendingChecks })
       }
@@ -275,14 +333,43 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg) {
     const attempt = `final-${stamp}`
     const logFile = join(logs, `${attempt}.jsonl`)
     status({ state: 'running', slice: 'final', message: 'final QA over the whole branch', log: logFile })
-    const code = await runClaude({
-      bin: cfg.bin, repo, logFile, timeoutMs: cfg.sessionTimeoutMs, pidFile: files.session,
-      args: sliceArgs({ prompt: finalQaPrompt({ repo, base, reportFile: files.finalQa, configDir: CONFIG_DIR }), model: cfg.model, settingsFile: files.settings }),
-      env: buildEnv({ ...NO_BG_CEILING, HARNESS_BUILD_ACTIVE: '1', HARNESS_BUILD_GUARD: files.guard, HARNESS_BUILD_STOP_FAILURE: files.stopFailure }),
-    })
-    const qaCost = charge(logFile)
+    let code, qaCost
+    if (codex) {
+      // The native QA loop (graphs/qa/tool/qa-loop.mjs) never commits: the driver commits what it touched.
+      const argsFile = join(state, 'final-qa-args.json')
+      writeQaArgs(argsFile, { repo, base, codexBin: cfg.bin, timeoutMs: cfg.sessionTimeoutMs })
+      const control = controlDigest(codexCfg)
+      code = await runChild({ bin: process.execPath, repo, logFile, timeoutMs: cfg.sessionTimeoutMs, pidFile: files.session, args: [cfg.qaLoopCli, '--args-file', argsFile], env: buildEnv() })
+      qaCost = 'tokens not metered by the QA loop'
+      // Before the host commit or any setAside: either would run a planted hook or config.
+      const tampered = controlChanges(codexCfg, control)
+      if (tampered.length) {
+        return end(EXIT.gitState, 'failed', `the final QA changed git control files (${tampered.map(f => f.replace(/^.*\/\.git\//, '.git/')).join(', ')}); nothing was committed or landed, its work is left on ${branch} as it is, and no other provider is tried: a person must look`)
+      }
+      const qa = code === 0 ? readQaReport(readText(logFile)) : null
+      if (qa) {
+        writeJson(files.finalQa, { status: qa.status, reason: typeof qa.reason === 'string' ? qa.reason : '', touched: Array.isArray(qa.touched) ? qa.touched : [] })
+        if (qa.status === 'done' && Array.isArray(qa.touched) && qa.touched.length) {
+          const made = hostCommit(repo, 'final: QA fixes', `Fixed by the native QA loop on Codex (invocation ${qa.invocationId}). Committed by the driver.`, qa.touched)
+          // A failed commit leaves the tree dirty, which the driver's own checks below report.
+          if (!made.ok) log(`final QA: ${made.message}`)
+        }
+      }
+    } else {
+      code = await runClaude({
+        bin: cfg.bin, repo, logFile, timeoutMs: cfg.sessionTimeoutMs, pidFile: files.session,
+        args: sliceArgs({ prompt: finalQaPrompt({ repo, base, reportFile: files.finalQa, configDir: CONFIG_DIR }), model: cfg.model, settingsFile: files.settings }),
+        env: buildEnv({ ...NO_BG_CEILING, HARNESS_BUILD_ACTIVE: '1', HARNESS_BUILD_GUARD: files.guard, HARNESS_BUILD_STOP_FAILURE: files.stopFailure }),
+      })
+      qaCost = charge(logFile)
+    }
     if (stopping) { setAside(repo, branch, integration, attempt, log); return end(EXIT.stopped, 'stopped', `stopped by request during the final QA (${qaCost}); every slice stays landed`) }
     const report = qaReport(files.finalQa)
+    if (!report && codex) {
+      setAside(repo, branch, integration, attempt, log)
+      const why = readQaError(readText(`${logFile}.stderr`))
+      return end(EXIT.brake, 'braked', `the final QA (the native QA loop) did not complete (exit ${code}${why ? `, ${why}` : ''}); every slice stays landed and no other provider is tried: fix the cause, then run /build-app resume to retry it`)
+    }
     if (!report) {
       setAside(repo, branch, integration, attempt, log)
       const verdict = sessionVerdict(logFile, files.stopFailure)
@@ -309,7 +396,7 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg) {
     if (noPr) return end(EXIT.done, 'done', `every slice landed on ${integration}, the final QA passed${cfg.bughunt ? ', and the bug hunt ran' : ''}; --no-pr, so nothing was pushed`)
     let pr
     try {
-      pr = pushAndOpenPr({ repo, integration, base, gh: cfg.gh, title: `${app}: built from the backlog`, body: prBody(backlog, ledger, qaLine, huntLine) })
+      pr = pushAndOpenPr({ repo, integration, base, gh: cfg.gh, title: `${app}: built from the backlog`, body: prBody(backlog, ledger, qaLine, huntLine, cfg.backend) })
     } catch (e) {
       return end(EXIT.pr, 'failed', `every slice landed and the final QA passed, but ${e.message}; push ${integration} and open the PR by hand, or run /build-app resume`)
     }
@@ -325,12 +412,24 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg) {
     if (problems.length) return end(EXIT.preflight, 'failed', `preflight: the backlog on ${integration} does not pass its check: ${problems.join('; ')}`)
     if (backlog.app !== app) return end(EXIT.preflight, 'failed', `preflight: the backlog on ${integration} is for ${JSON.stringify(backlog.app)}, not ${app}`)
     if (git(repo, ['status', '--porcelain']).stdout.trim()) return end(EXIT.preflight, 'failed', 'preflight: the working tree has uncommitted changes; commit or stash them first')
-    if (!run('bash', ['-c', `command -v ${JSON.stringify(cfg.bin)}`]).ok) return end(EXIT.preflight, 'failed', `preflight: ${cfg.bin} not found`)
+    const found = run('bash', ['-c', `command -v ${JSON.stringify(cfg.bin)}`])
+    if (!found.ok) return end(EXIT.preflight, 'failed', `preflight: ${cfg.bin} not found`)
+    // The native QA loop and bug hunt take the provider binary as an absolute path, so a bare name found on
+    // PATH (the default `codex`) is resolved once here and used everywhere after.
+    const resolvedBin = found.stdout.trim().split('\n')[0]
+    if (!resolvedBin.startsWith('/')) return end(EXIT.preflight, 'failed', `preflight: ${cfg.bin} does not resolve to an executable file (command -v printed ${JSON.stringify(resolvedBin)})`)
+    cfg.bin = resolvedBin
     try { ledger = readLedger(files.ledger) } catch (e) { return end(EXIT.preflight, 'failed', `preflight: ${e.message}`) }
     const reconciled = reconcile(repo, integration, backlog, ledger, log)
     if (reconciled !== ledger) { ledger = reconciled; writeLedger(files.ledger, ledger) }
-    writeJson(files.settings, sessionSettings(join(HERE, 'hooks')))
-    log(`building ${app}: ${backlog.slices.length} slice(s), ${backlog.slices.filter(s => sliceState(ledger, s.id).status === 'done').length} already landed`)
+    // One provider from the first session to the PR: a bare `run` never resumes a build on the other one.
+    let recorded = null
+    try { recorded = JSON.parse(readFileSync(files.backend, 'utf8')).backend } catch { recorded = Object.keys(ledger.slices || {}).length ? 'claude' : null }
+    if (recorded && recorded !== cfg.backend) return end(EXIT.preflight, 'failed', `preflight: ${app} was started on ${recorded}; run it with --backend ${recorded}. The driver never switches providers or falls back to the other one mid-build`)
+    if (codex && existsSync(files.refusal)) return end(EXIT.brake, 'braked', `a Codex provider refusal is recorded (${files.refusal}); the driver never retries, translates or reroutes refused work. A person decides: remove that file to try again`)
+    if (!recorded) writeJson(files.backend, { backend: cfg.backend })
+    if (!codex) writeJson(files.settings, sessionSettings(join(HERE, 'hooks')))
+    log(`building ${app}${codex ? " on codex" : ""}: ${backlog.slices.length} slice(s), ${backlog.slices.filter(s => sliceState(ledger, s.id).status === 'done').length} already landed`)
 
     let transient = 0
     let limitWaitedMs = 0
@@ -351,19 +450,41 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg) {
       writeJson(files.guard, { repo, frozen: frozenFiles(ledger) })
       const attempt = `${slice.id}-${stamp}`
       const logFile = join(logs, `${attempt}.jsonl`)
-      const prompt = `/dev --slice ${slice.id} --base ${integration} --unattended`
+      const prompt = codex ? `a Codex session for ${slice.id}` : `/dev --slice ${slice.id} --base ${integration} --unattended`
+      const reportFile = join(logs, `${attempt}.report.json`)
       status({ state: 'running', slice: slice.id, message: `building ${slice.id}: ${slice.title}`, log: logFile })
       log(`${slice.id}: ${slice.title} (${prompt})`)
-      const code = await runClaude({
-        bin: cfg.bin, repo, logFile, timeoutMs: cfg.sessionTimeoutMs, pidFile: files.session,
-        args: sliceArgs({ prompt, model: cfg.model, settingsFile: files.settings }),
-        env: buildEnv({ ...NO_BG_CEILING, HARNESS_BUILD_ACTIVE: '1', HARNESS_BUILD_GUARD: files.guard, HARNESS_BUILD_STOP_FAILURE: files.stopFailure }),
-      })
-      const cost = charge(logFile)
+      let code, cost, controlBefore
+      if (codex) {
+        controlBefore = controlDigest(codexCfg)
+        code = await runSliceSession({
+          config: codexCfg, logFile, reportFile, pidFile: files.session,
+          prompt: slicePrompt({ backlog, ledger, sliceId: slice.id }), rules: sliceRules({ sliceId: slice.id, frozen: frozenFiles(ledger) }),
+        })
+        cost = chargeTokens(logFile)
+      } else {
+        code = await runClaude({
+          bin: cfg.bin, repo, logFile, timeoutMs: cfg.sessionTimeoutMs, pidFile: files.session,
+          args: sliceArgs({ prompt, model: cfg.model, settingsFile: files.settings }),
+          env: buildEnv({ ...NO_BG_CEILING, HARNESS_BUILD_ACTIVE: '1', HARNESS_BUILD_GUARD: files.guard, HARNESS_BUILD_STOP_FAILURE: files.stopFailure }),
+        })
+        cost = charge(logFile)
+      }
+      // Checked before anything else touches the repo: setAside commits and checks out, which a planted hook or
+      // config would run. The work stays where it is, for a person.
+      if (codex && controlChanges(codexCfg, controlBefore).length) {
+        return end(EXIT.gitState, 'failed', `${slice.id}: the Codex session changed git control files (${controlChanges(codexCfg, controlBefore).map(f => f.replace(/^.*\/\.git\//, '.git/')).join(', ')}); nothing was committed or landed, its work is left on ${branch} as it is, and no other provider is tried: a person must look`)
+      }
       if (stopping) { setAside(repo, branch, integration, attempt, log); return end(EXIT.stopped, 'stopped', `stopped by request during ${slice.id} (${cost}); its work is kept on attempt/${attempt}`) }
 
-      const report = devReport(files.devLedger)
-      const verdict = sessionVerdict(logFile, files.stopFailure)
+      const report = devReport(codex ? reportFile : files.devLedger)
+      const verdict = codex ? codexVerdict(logFile) : sessionVerdict(logFile, files.stopFailure)
+      // A refusal is never an escalated attempt: that path re-plans and tries again, and refused work is never retried.
+      if (verdict.kind === 'provider_refusal') {
+        setAside(repo, branch, integration, attempt, log)
+        writeJson(files.refusal, { slice: slice.id, at: new Date().toISOString(), log: logFile })
+        return end(EXIT.brake, 'braked', `${slice.id}: the provider declined this work; it is never retried, rerouted or sent to another provider. Its work is kept on attempt/${attempt}. A person decides what happens next (${files.refusal})`)
+      }
       // A session that ended on the API, not on its own work, is not counted.
       if (!report && verdict.kind !== 'normal') {
         setAside(repo, branch, integration, attempt, log)
@@ -388,7 +509,10 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg) {
             limitWaitedMs += plan.waitMs
             await sleepMs(plan.waitMs)
           } else if (!stopping) {
-            const waited = await probeUntilAvailable({ bin: cfg.bin, repo, probeLog: files.probe, probeMinutes: cfg.probeMinutes, maxWaitHours: cfg.maxLimitWaitHours, marginMinutes: cfg.marginMinutes, sleepMs, log, stopped: () => stopping })
+            const waited = await probeUntilAvailable({
+              bin: cfg.bin, repo, probeLog: files.probe, probeMinutes: cfg.probeMinutes, maxWaitHours: cfg.maxLimitWaitHours, marginMinutes: cfg.marginMinutes, sleepMs, log, stopped: () => stopping,
+              ...(codex ? { probe: () => runProbeSession({ config: codexCfg, logFile: files.probe }), readProbe: readCodexResult } : {}),
+            })
             limitWaitedMs += waited.ms
             if (!waited.ok && !stopping) return end(EXIT.limitTooFar, 'paused', `usage still unavailable after ${cfg.maxLimitWaitHours} h of probing; run /build-app resume later`)
           }
@@ -398,8 +522,15 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg) {
       transient = 0
       limitWaitedMs = 0
 
+      // On Codex the driver commits what the session left, once it reported done; the checks below judge the result.
+      const hostProblems = []
+      if (codex && report && report.status === 'done') {
+        const made = hostCommit(repo, `${slice.id}: ${slice.title}`, 'Built unattended by /build-app on Codex; committed by the driver after the session reported done.')
+        if (!made.ok) hostProblems.push(made.message)
+      }
       const checks = sliceChecks({ repo, integration, branch, sliceId: slice.id, frozen: frozenFiles(ledger), verifyCommand: cfg.verifyCommand })
-      const outcome = outcomeOf(report, checks)
+      checks.problems.unshift(...hostProblems)
+      const outcome = outcomeOf(report, checks, codex ? 'the Codex session' : '/dev')
       ledger = recordOutcome(ledger, slice.id, outcome)
       if (outcome.kind === 'landed') {
         const landed = git(repo, ['checkout', '-q', integration]).ok && git(repo, ['merge', '-q', '--ff-only', branch]).ok
@@ -456,16 +587,17 @@ function parseArgs(argv) {
       opts.noPr = flag === '--no-pr'
       continue
     }
-    if (!['--repo', '--app', '--slice', '--answer'].includes(flag) || rest[i + 1] === undefined) return null
+    if (!['--repo', '--app', '--slice', '--answer', '--backend'].includes(flag) || rest[i + 1] === undefined) return null
+    if (flag === '--backend' && (opts.backend !== undefined || !['claude', 'codex'].includes(rest[i + 1]))) return null
     if (flag === '--answer') opts.answers.push(rest[i + 1])
     else opts[flag.slice(2)] = rest[i + 1]
     i += 1
   }
   if (!['run', 'status', 'stop', 'resume', 'unblock'].includes(cmd) || !opts.repo || !opts.app || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(opts.app)) return null
-  if (opts.noPr !== null && cmd !== 'run') return null
+  if ((opts.noPr !== null || opts.backend !== undefined) && cmd !== 'run') return null
   if ((cmd === 'unblock') !== (opts.slice !== undefined || opts.answers.length > 0)) return null
   if (cmd === 'unblock' && (!/^S[1-9]\d*$/.test(opts.slice || '') || !opts.answers.length)) return null
-  return { cmd, repo: opts.repo, app: opts.app, noPr: opts.noPr, slice: opts.slice, answers: opts.answers }
+  return { cmd, repo: opts.repo, app: opts.app, noPr: opts.noPr, backend: opts.backend, slice: opts.slice, answers: opts.answers }
 }
 
 // resume and unblock change the ledger, so the driver must not be running.
@@ -486,12 +618,18 @@ function changeLedger(state, change) {
 export async function main(argv) {
   const a = parseArgs(argv)
   if (!a) {
-    console.error('usage: driver.mjs run|status|stop|resume --repo <path> --app <slug> [--no-pr|--pr: run only] | unblock --repo <path> --app <slug> --slice S<n> --answer <text>...')
+    console.error('usage: driver.mjs run|status|stop|resume --repo <path> --app <slug> [--no-pr|--pr] [--backend claude|codex]: run only | unblock --repo <path> --app <slug> --slice S<n> --answer <text>...')
     return 2
   }
   let state
   try { state = stateDirOf(a.repo, a.app) } catch (e) { console.error(`driver: ${e.message}`); return EXIT.preflight }
-  if (a.cmd === 'run') return runDriver(a)
+  if (a.cmd === 'run') {
+    let backend
+    // No --backend: the app the user is in (Codex CLI or Claude Code) decides, claude when neither is detected.
+    // A build recorded on the other provider is still refused at preflight (never a silent switch).
+    try { backend = a.backend ?? detectHostProvider({ env: process.env }).provider } catch (e) { console.error(`driver: ${e.message}`); return 2 }
+    return runDriver({ ...a, backend })
+  }
   if (a.cmd === 'resume') {
     const code = changeLedger(state, resume)
     if (!code) console.log(`resume: the brake counters for ${a.app} start over; blocked slices stay blocked until unblocked`)
