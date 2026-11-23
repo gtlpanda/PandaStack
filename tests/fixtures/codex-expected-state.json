@@ -54,7 +54,6 @@
       "id": "build-app",
       "transportId": "codex-autobuild",
       "limitations": [
-        "LIVE_PROOF_MISSING",
         "NATIVE_UNVERIFIED",
         "REQUIREMENTS_INCOMPLETE"
       ],
@@ -67,7 +66,6 @@
       "id": "bughunt",
       "transportId": "codex-bughunt",
       "limitations": [
-        "LIVE_PROOF_MISSING",
         "NATIVE_UNVERIFIED",
         "REQUIREMENTS_INCOMPLETE"
       ],
@@ -78,7 +76,6 @@
       "id": "dev",
       "transportId": "codex-graph-host",
       "limitations": [
-        "LIVE_PROOF_MISSING",
         "NATIVE_UNVERIFIED",
         "REQUIREMENTS_INCOMPLETE"
       ],

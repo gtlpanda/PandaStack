@@ -19,6 +19,7 @@ import { REPORT_SCHEMA, INSTALL_ROOT, huntArgs, huntPrep, huntStateDir, readQaRe
 import { settingsFromEnv } from '../skills/build-app/driver/driver.mjs'
 import { emptyLedger, recordOutcome, writeLedger } from '../../../core/skills/backlog/backlog.mjs'
 import { trackSession, stopSessions, probeUntilAvailable } from '../skills/build-app/driver/session.mjs'
+import { expectedCodexRow } from '../../../tests/codex-expected-state.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const DRIVER = join(here, '..', 'skills', 'build-app', 'driver', 'driver.mjs')
@@ -470,7 +471,10 @@ await test('a build started on Claude is never resumed on Codex', () => {
 await test('the catalog row is the one the contract pins, and the SKILL.md section holds the commands and none of the Claude paths', () => {
   const catalog = JSON.parse(readFileSync(join(INSTALL_ROOT, 'spec', 'offering-capabilities.json'), 'utf8'))
   const row = catalog.offerings.find(o => o.id === 'build-app')
-  assert.deepEqual(row.providers.codex, { implementation: 'partial', transportId: 'codex-autobuild', limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] })
+  // The fixture's row: CP-07 pinned LIVE_PROOF_MISSING until the live run recorded in
+  // docs/evidence/codex-live-e2e-2026-11-23.md dropped it.
+  assert.deepEqual(row.providers.codex, expectedCodexRow(catalog, 'build-app'))
+  assert.equal(row.providers.codex.transportId, 'codex-autobuild')
   assert.deepEqual(row.proofRefs, ['cp-07-build-app-wiring'])
   const md = readFileSync(join(INSTALL_ROOT, 'graphs', 'build', 'skills', 'build-app', 'SKILL.md'), 'utf8')
   const at = md.indexOf('## Codex runner')

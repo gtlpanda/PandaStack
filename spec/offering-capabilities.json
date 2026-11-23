@@ -1480,7 +1480,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "cf07f10aec85d3092135f7e5f69139a027c7d03e550200f682fdce6078113c87",
+      "entrySha256": "bc8200150f637ed31d27479c70e57c6f813a169e12b42488977d123533722463",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1493,7 +1493,6 @@
           "implementation": "partial",
           "transportId": "codex-autobuild",
           "limitations": [
-            "LIVE_PROOF_MISSING",
             "NATIVE_UNVERIFIED",
             "REQUIREMENTS_INCOMPLETE"
           ]
@@ -1542,7 +1541,6 @@
           "implementation": "partial",
           "transportId": "codex-graph-host",
           "limitations": [
-            "LIVE_PROOF_MISSING",
             "NATIVE_UNVERIFIED",
             "REQUIREMENTS_INCOMPLETE"
           ]
@@ -1594,7 +1592,6 @@
           "implementation": "partial",
           "transportId": "codex-bughunt",
           "limitations": [
-            "LIVE_PROOF_MISSING",
             "NATIVE_UNVERIFIED",
             "REQUIREMENTS_INCOMPLETE"
           ]

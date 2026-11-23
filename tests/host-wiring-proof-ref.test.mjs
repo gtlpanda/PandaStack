@@ -80,8 +80,10 @@ await test('build-app\'s CP-07 reference is an identifier that names its contrac
   for (const file of ['spec/contracts/codex-parity-cp-07.md', 'graphs/build/tests/driver-codex.test.mjs']) {
     assert.ok(readFileSync(join(REPO, file), 'utf8').includes(ref), `${file} names ${ref}`)
   }
-  assert.deepEqual(byId.get('build-app').providers.codex,
-    { implementation: 'partial', transportId: 'codex-autobuild', limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] })
+  // The fixture's row: CP-07 pinned LIVE_PROOF_MISSING until the live run recorded in
+  // docs/evidence/codex-live-e2e-2026-11-23.md dropped it.
+  assert.deepEqual(byId.get('build-app').providers.codex, expectedCodexRow(catalog, 'build-app'))
+  assert.equal(byId.get('build-app').providers.codex.transportId, 'codex-autobuild')
   assert.deepEqual(byId.get('build-app').providers.claude, { implementation: 'partial', transportId: 'claude-code', limitations: ['REQUIREMENTS_INCOMPLETE'] })
   assert.equal(byId.get('build-app').requirementsComplete, false)
   assert.equal(byId.get('build-app').nativeReadiness, 'unknown')
