@@ -1,5 +1,11 @@
 # Codex sandbox confinement for security-audit's `audit-source-only` profile, 2026-11-23
 
+> **Update, same day:** the blockers in section 3 were worked through afterwards. Tool removal is by flags, a
+> per-run model catalog and a wire preflight (`core/skills/native-runtime/codex-source-only.mjs`), not by this
+> `codex sandbox` recipe; critic partitions are dispatched (`native-critic.mjs`); `audit-native.mjs` drives the
+> stages. The catalog's codex row is `partial` on transport `codex-security-audit`, and one live run is recorded in
+> `codex-security-audit-live-2026-11-23.md`. The text below is the original decision and stays as written.
+
 Question: can native Codex CLI enforce source-only access for security-audit's leaves
 (roles audit-researcher, audit-synthesizer, audit-analyst), so the catalog's Codex row can
 leave `unavailable`? Decision: **no. The row stays `unavailable`, and the `audit-source-only`

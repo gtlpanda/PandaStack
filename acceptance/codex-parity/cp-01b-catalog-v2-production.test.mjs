@@ -191,8 +191,11 @@ test('no supported anywhere; the codex rows are exactly the expected-state fixtu
     assert.equal(offering.permissionProfile, null, `${offering.id} permissionProfile`)
   }
   assert.deepEqual(catalog.offerings.filter(o => o.providers.codex.implementation === 'partial').map(o => o.id).sort(), PARTIAL_IDS, 'the codex partial rows are exactly the fixture\'s')
-  const audit = catalog.offerings.find(o => o.id === 'security-audit').providers.codex.limitations
-  assert.ok(audit.includes('PROFILE_UNSUPPORTED') && audit.includes('NO_NATIVE_ENTRY'), 'security-audit records decision 2')
+  // Data-driven by the expected-state fixture: while security-audit is listed unavailable it records decision 2; once the fixture flips it, the exact-row check above holds it.
+  if (STATE.unavailable.includes('security-audit')) {
+    const audit = catalog.offerings.find(o => o.id === 'security-audit').providers.codex.limitations
+    assert.ok(audit.includes('PROFILE_UNSUPPORTED') && audit.includes('NO_NATIVE_ENTRY'), 'security-audit records decision 2')
+  }
   assert.ok(!readFileSync(resolve(ROOT, 'spec/offering-capabilities.json'), 'utf8').includes('"supported"'), 'no "supported" string')
 })
 

@@ -58,15 +58,25 @@ export function sandboxForProfile(profile) {
   return SANDBOXES[profile]
 }
 
-/** A frozen `{runLeaf}` for createNativeRuntime. Touches no file and starts no process. */
-export function createCodexProvider(options) {
-  const config = providerConfig(options)
+/**
+ * A frozen `{runLeaf}` for createNativeRuntime. Touches no file and starts no process.
+ *
+ * `launchers` is for a host that owns a profile this provider cannot launch by itself. Its only key is
+ * `audit-source-only`: an async function `({callId, model, effort, files, signal}) => {args, env, cwd, release?}`
+ * (or `{code}` to fail the leaf), which supplies the argv, the environment and the working directory of a
+ * source-only leaf (codex-source-only.mjs) and any resource that leaf holds. Without it, that profile stays
+ * PROFILE_UNSUPPORTED with zero spawns, exactly as before.
+ */
+export function createCodexProvider(options, launchers) {
+  const config = providerConfig(options, launchers)
   const runLeaf = async request => runValidLeaf(config, leafRequest(config, request))
   return Object.freeze({ runLeaf })
 }
 
-function providerConfig(options) {
+function providerConfig(options, launchers) {
   const o = fields(options)
+  const extra = launchers === undefined ? {} : fields(launchers)
+  check(Object.keys(extra).every(key => key === 'audit-source-only' && typeof extra[key] === 'function'))
   check(Object.keys(o).every(key => FACTORY_KEYS.includes(key)))
   check(absolutePath(o.codexBin) && absolutePath(o.cwd) && absolutePath(o.runDir))
   const env = fields(o.env)
@@ -75,7 +85,8 @@ function providerConfig(options) {
   check(optional(o.skipGitRepoCheck, value => typeof value === 'boolean'))
   check(optional(o.nowMs, value => typeof value === 'function'))
   return Object.freeze({ codexBin: o.codexBin, cwd: o.cwd, runDir: o.runDir, env: Object.freeze({ ...env }),
-    graceMs: o.graceMs ?? DEFAULT_GRACE_MS, skipGitRepoCheck: o.skipGitRepoCheck ?? false, nowMs: o.nowMs ?? Date.now })
+    graceMs: o.graceMs ?? DEFAULT_GRACE_MS, skipGitRepoCheck: o.skipGitRepoCheck ?? false, nowMs: o.nowMs ?? Date.now,
+    sourceOnlyLauncher: extra['audit-source-only'] ?? null })
 }
 
 // Validates the runtime's request and reads the clock. Every rejection here is a
@@ -93,14 +104,18 @@ function leafRequest(config, request) {
   check(PROFILES.has(r.profile))
   // The wire schema is the runtime contract: it is checked, never written.
   try { check(canonical(JSON.parse(JSON.stringify(r.wireSchema))) === WIRE_SCHEMA) } catch { fail(INPUT) }
-  const schemaBytes = strictSchemaBytes(r.schema)
+  // A source-only audit leaf is handed the NR-01 wire schema itself: its result schemas are advisory in the Workflow tool (a verifier's record names four
+  // properties and carries a dozen), so Codex's strict subset (no extra property) would forbid a valid record, and three audit schemas have optional properties
+  // it cannot express at all. The leaf answers {"json": <the result as text>} and the runtime's decode judges the text against the leaf's own schema.
+  const wireMode = r.profile === 'audit-source-only' && config.sourceOnlyLauncher !== null
+  const schemaBytes = wireMode ? JSON.stringify(r.wireSchema) : strictSchemaBytes(r.schema)
   check(typeof r.deadlineMs === 'number' && Number.isFinite(r.deadlineMs))
   check(isAbortSignal(r.signal))
   const { nowMs } = config
   let now
   try { now = nowMs() } catch { fail(INPUT) }
   check(typeof now === 'number' && Number.isFinite(now))
-  return { callId: r.callId, prompt: r.prompt, profile: r.profile, schemaBytes,
+  return { callId: r.callId, prompt: r.prompt, profile: r.profile, schemaBytes, wireMode,
     signal: r.signal, timeoutMs: Math.floor(r.deadlineMs - now - config.graceMs - SETTLE_MARGIN_MS),
     receipt: { provider: selection.provider, model: selection.model, effort: selection.effort, invocationId: r.callId } }
 }
@@ -118,28 +133,36 @@ function strictSchemaBytes(schema) {
 async function runValidLeaf(config, leaf) {
   const failed = (code, usage = null) => ({ outcome: 'failed', code, usage, receipt: { ...leaf.receipt } })
   const sandbox = sandboxForProfile(leaf.profile)
-  if (sandbox === null) return failed(CODES.PROFILE_UNSUPPORTED)
+  const launcher = leaf.profile === 'audit-source-only' ? config.sourceOnlyLauncher : null
+  if (sandbox === null && launcher === null) return failed(CODES.PROFILE_UNSUPPORTED)
   if (leaf.schemaBytes === null) return failed(CODES.SCHEMA_UNSUPPORTED)
   if (leaf.timeoutMs < 1) return failed(CODES.TIMEOUT)
   const files = { schemaFile: join(config.runDir, `${leaf.callId}.schema.json`),
     outputFile: join(config.runDir, `${leaf.callId}.output.json`), logFile: join(config.runDir, `${leaf.callId}.log.jsonl`) }
   // From here every filesystem or process error is an envelope, never a rejection.
-  let usage = null
+  let usage = null, launch = null
   try {
     prepareRunDir(config.runDir, files, leaf.schemaBytes)
     // runCodexExec returns 130 for an already-aborted signal without truncating
     // the log, so a log left by an earlier attempt must not be classified.
     if (leaf.signal.aborted) return failed(CODES.EXIT_NONZERO)
-    const args = codexExecArgs({ sandbox, networkAccess: NETWORK_PROFILES.includes(leaf.profile),
-      model: leaf.receipt.model, reasoningEffort: leaf.receipt.effort, skipGitRepoCheck: config.skipGitRepoCheck,
-      schemaFile: files.schemaFile, outputFile: files.outputFile })
-    const exitCode = await runCodexExec(config.codexBin, args, { cwd: config.cwd, env: config.env, input: leaf.prompt,
+    if (launcher === null) {
+      launch = { cwd: config.cwd, env: config.env, release: null,
+        args: codexExecArgs({ sandbox, networkAccess: NETWORK_PROFILES.includes(leaf.profile),
+          model: leaf.receipt.model, reasoningEffort: leaf.receipt.effort, skipGitRepoCheck: config.skipGitRepoCheck,
+          schemaFile: files.schemaFile, outputFile: files.outputFile }) }
+    } else {
+      launch = await launcher({ callId: leaf.callId, model: leaf.receipt.model, effort: leaf.receipt.effort, files, signal: leaf.signal })
+      if (typeof launch?.code === 'string' && CODES[launch.code] !== undefined) return failed(launch.code)
+      check(Array.isArray(launch?.args) && absolutePath(launch.cwd))
+    }
+    const exitCode = await runCodexExec(config.codexBin, launch.args, { cwd: launch.cwd, env: launch.env, input: leaf.prompt,
       logFile: files.logFile, timeoutMs: Math.min(leaf.timeoutMs, Number.MAX_SAFE_INTEGER), graceMs: config.graceMs,
       signal: leaf.signal })
     const classified = classifyCodexExec({ exitCode, logFile: files.logFile })
     usage = usageOf(classified.result)
     if (!classified.ok) return failed(classified.code, usage)
-    const read = readWire(files.outputFile)
+    const read = readWire(files.outputFile, leaf.wireMode)
     if (read.code) return failed(read.code, usage)
     const envelope = { outcome: 'returned', wire: { json: read.json }, usage, receipt: { ...leaf.receipt } }
     // The runtime bounds the whole completion; never return one it would reject.
@@ -147,6 +170,9 @@ async function runValidLeaf(config, leaf) {
     return envelope
   } catch {
     return failed(CODES.IO_ERROR, usage)
+  } finally {
+    // A resource the launcher handed out (a reader server) is released whatever the leaf did. A release failure cannot change the envelope.
+    try { await launch?.release?.() } catch { /* the leaf's own outcome stands */ }
   }
 }
 
@@ -171,7 +197,7 @@ function removeIfPresent(file) {
 
 // Reads the --output-last-message file as one bare object. Returns {json} or
 // {code}. Filesystem errors other than the classified ones propagate (IO_ERROR).
-function readWire(file) {
+function readWire(file, wireMode = false) {
   let stat
   try { stat = lstatSync(file) } catch (error) { if (error.code === 'ENOENT') return { code: CODES.NO_OUTPUT }; throw error }
   const sized = s => !s.isFile() || s.size > MIB ? { code: CODES.INVALID_WIRE } : s.size === 0 ? { code: CODES.NO_OUTPUT } : null
@@ -188,7 +214,7 @@ function readWire(file) {
     const opened = sized(fstatSync(fd))
     if (opened) return opened
     fchmodSync(fd, 0o600)
-    return wrapBareObject(readBounded(fd))
+    return wireMode ? passWire(readBounded(fd)) : wrapBareObject(readBounded(fd))
   } finally { closeSync(fd) }
 }
 
@@ -214,6 +240,16 @@ function wrapBareObject(bytes) {
     throw error
   }
   return { json: JSON.stringify(copy) }
+}
+
+// The wire-mode answer: exactly {"json": <string>}, passed on as the wire. The text inside is never parsed or repaired here: the runtime's decode
+// parses it and judges it against the leaf's own schema.
+function passWire(bytes) {
+  if (bytes === null) return { code: CODES.INVALID_WIRE }
+  let value
+  try { value = JSON.parse(UTF8.decode(bytes)) } catch { return { code: CODES.INVALID_WIRE } }
+  if (!record(value) || Object.keys(value).length !== 1 || typeof value.json !== 'string') return { code: CODES.INVALID_WIRE }
+  return { json: value.json }
 }
 
 // Only Codex token counters, each a non-negative safe integer. Never a cost field.

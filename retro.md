@@ -4259,3 +4259,85 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
   asking the host for every caller, the loop and build-app driver tests taking the host's provider, a test
   that copies config.mjs with a fixed file list, and frozen Phase 1 acceptance (fixed by pinning the provider
   in the gate environment rather than editing frozen tests).
+
+## 81. security-audit on Codex: native entry, critic partitions, source-only leaf profile (2026-11-23)
+
+- The last of the 46 offerings, security-audit, flipped from `unavailable` to codex `partial` on a new transport
+  `codex-security-audit` (entry `audit-native.mjs`), limitations `NATIVE_UNVERIFIED`, `REQUIREMENTS_INCOMPLETE`. One bounded
+  live run completed with all three reports (docs/evidence/codex-security-audit-live-2026-11-23.md), so `LIVE_PROOF_MISSING`
+  is dropped. Claude row, the generic host (`CODEX_REFUSED_WORKFLOWS`, `SANDBOXES['audit-source-only'] = null`) and every
+  other profile's argv are untouched; the frozen refusal tests still pass because the new path is a second argument, not a
+  change of the old one.
+- Source-only leaf (core/skills/native-runtime/codex-source-only.mjs): `codexSourceOnlyArgs` extends `codexExecArgs`
+  (read-only, 13 `--disable` features, per-run one-model catalog without apply-patch/experimental/multi-agent, one loopback
+  MCP reader by URL and env var, hosted search off). `runWirePreflight` runs the exact leaf argv against a loopback fake
+  Responses API and refuses on any tool outside exec/wait, three nested MCP listers and `mcp__reader`. Checked with a control:
+  the same call with default flags fails on 9 top-level, 9 nested and 12 deferred tools.
+- Critic partitions (SA-05 integration): `critic-stage.mjs` is the trusted adapter into the pure `critic-partitions.mjs`
+  planner (every unit, candidate and prior lead in full; script size measured with the exact run-script bytes);
+  `native-critic.mjs` runs each partition and then the global reconciliation as separate runs of the pinned workflow under
+  derived invocation ids, and applies the accepted union once through the unchanged applier. The call ids would have
+  collided (the critic label is always `c<wave>`), hence one invocation id per leaf and a sibling checkpoint factory.
+- Bug found by the first fake-codex end-to-end: the synthesizer, minter and verifier leaves came back `SCHEMA_UNSUPPORTED`.
+  Three audit schemas have optional properties, and a verifier's `record` declares four properties while carrying a dozen,
+  which Codex's strict output subset (no extra property) would forbid even where it is expressible. cp-02h had named the gap.
+  Fix at the provider boundary only: an audit leaf is handed the NR-01 wire schema and answers `{"json": text}`; the schema
+  moves into the prompt; the runtime's decode still judges the text against the leaf's own schema. No workflow edit (its hash
+  is pinned) and no null coercion.
+- Entry: `audit-native.mjs run|resume` uses `audit-run.mjs init`, `nextStep`, the skill's helper table (a test compares it
+  to SKILL.md) and `runNativeAuditStage`; finite `--budget` required, `--max-budget`/`--grant` for the journal's maximum,
+  exit 0/5/3/1/2. New: `native-codex.mjs` (preflight before the first leaf, reader per leaf, empty cwd, per-run
+  `CODEX_HOME` with `auth.json` as a symlink, selection that refuses an unverified model before any reservation) and
+  `native-reader-manifest.mjs` (the manifest builder nothing in production had).
+- Catalog: transport row, fixture row and `unavailable: []`, `entrySha256` re-pinned for the new `## Codex runner` section.
+  Two frozen acceptance assertions that pinned security-audit as unavailable were made fixture-driven (cp-01b "decision 2",
+  cp-08 "keeps its refusal"). `evidenceOwners` stays at the four frozen owners.
+- Found by the live probe and the sanity audit, then fixed: (1) a canary in the target's untracked `AGENTS.md` reached a leaf
+  whose cwd was under `<repo>/.git` (answer YES, canary quoted); the leaf cwd is now a fresh directory outside every
+  repository, refused if a `.git`/`AGENTS.md`/`AGENTS.override.md` is at or above it (same probe: NO; second live run with the
+  canary present: no trace in any report or file). (2) The preflight passed an inventory with no top-level tool and judged only
+  the last request; it now fails closed on both. (3) The first Ctrl-C aborted a leaf mid-call, which the journal holds as
+  uncertain with no way to clear it; it now stops between stages, and the messages stopped promising a resume that cannot happen.
+  A catalog SKILL.md hash and the leaf's argv for the preflight were re-pinned/aligned with it.
+- Bug hunt, both reproduced and fixed at the root: (F1) `resume --grant` raised only the journal grant while every planner gate reads
+  run-metadata `budget`, so a resumed run ended `critic_budget_exhausted`; `audit-run.mjs raiseBudget` is now the one sanctioned,
+  nonterminal, raise-only adjustment (an event is logged), called before the journal's, with the grant bounded by the maximum.
+  (F2) a failing `prepare()` on resume left the earlier passing `preflight.json` as the record; every attempt is now written to
+  `preflight.json` (latest) and appended to `preflight-history.jsonl`. Also found: a refused `--grant` left the journal open.
+- Not solved, stated in the evidence file: the `exec` JS isolate, hosted tools of the real provider, one model/version/repo
+  observed, no cross-partition reconciliation seen live, a partitioned critic costs parts + 1 calls where the budget reserve
+  assumes 1. The roadmap (docs/roadmap/security-audit-priority.md, frozen) still describes the 2026-11-23 `unavailable` status.
+- Tests: native-codex-source-only (11), native-codex-source-only-provider (5), native-critic (7), native-e2e (15, a fake
+  codex running the toy audit to its three reports, plus pause/resume, Ctrl-C, preflight refusal and cwd cases),
+  native-reader-manifest (3), native-skill-section (1). Live: two runs, 16 leaves each, both complete.
+
+## 82. security-audit on Codex: the four residual risks, attacked and measured (2026-11-23)
+
+- **The `exec` isolate was attacked live and nothing escaped.** 13 probe scripts (210 result entries) ran through the real `codex`
+  0.167.0 with the shipped restricted argv, the shipped loopback reader and the leaf layout, the model replaced by a loopback
+  Responses server that returns `custom_tool_call` `exec` items and records what the isolate answered; 4 more scripts ran through
+  the shipped host and provider with `gpt-6-luna` (a loopback TCP listener logged 0 bytes in all 7 live runs, a control hit logged 1).
+  `require`, `process`, `Buffer`, `fetch`, `XMLHttpRequest`, `WebSocket`, `WebAssembly`, `SharedArrayBuffer`, `Deno`, `Bun`, every
+  `import()` and static `import` (`unsupported import in exec`), `read_mcp_resource` with `file://` URIs, 29 reader path forms, symlinks
+  planted into the snapshot after the manifest, and the reader token and an env canary (present in the `codex` and
+  `codex-code-mode-host` processes by control) all failed or were absent. Not covered: a V8 or host-process escape, other Codex
+  releases, memory exhaustion; an infinite loop is stopped only by the leaf deadline (`runCodexExec` returned 124 at the timeout).
+- **Found by the attack: the JSONL has no `exec` items,** so the earlier event scans could not see what a model did inside `exec`;
+  and **`atob` does not exist in the isolate** although `READER_NOTE` told leaves to decode with it. The note now carries a decoder
+  built from `escape` and `decodeURIComponent`, run in the real isolate and in `native-reader-note.test.mjs` under a `vm` context
+  with only those globals. Review of the first version caught that it threw on a valid UTF-8 file whenever a `read_source` range ended
+  inside a character (the test of that case failed first); it now falls back to the raw byte string.
+- **Two more models.** `gpt-6-astra` (16 leaves) and `gpt-6-luna` (11 leaves) each completed a quick audit of the planted-flaw toy
+  repo and reported `src/tools.js:6`; event scans show only `agent_message` and `reader` `mcp_tool_call` items. They ran through a
+  scratch copy of `audit-native.mjs` (three changed lines) because the shipped CLI has no model option: that is open.
+- **No multi-partition critic live.** Two generated repos (67 and 193 files, `gpt-6.1-sol`, 30 and 31 leaves) gave one partition each
+  (303,625 and 276,293 script bytes of the 500,000 cap). The synthesizer returned 33 and 24 units, so file count is not the
+  lever; the planner needs about 54 to 65 units with 28 to 36 candidates. No limit was changed and nothing was clipped.
+- **The version pin is a record, not a gate.** An unlisted release runs when the wire preflight passes and gets `versionPinned
+  false`; SKILL.md said "An unpinned Codex version runs only if that check passes", which reads as a gate. Reworded, and a new
+  e2e test (fake codex 9.9.9) pins the behavior; the old test of that name only covered a bad wire. The `entrySha256` pin moved.
+- Lesson kept: a log that omits a tool's calls (`exec` here) is not evidence about that tool (two live leaves that answered without a
+  nested call cannot be said to have skipped `exec`); an oracle needs a control (the listener was hit once from outside; the token and
+  canary were shown to be in the process environment first); and the probes were repeated under the other two models' catalogs
+  (`gpt-6.1-sol`, `gpt-6-astra`) because the shipped CLI runs `gpt-6.1-sol`, not the model the first probes used.
+- Evidence: `docs/evidence/codex-security-audit-hardening-2026-11-23.md`; the first live note's "What this does not show" is annotated.

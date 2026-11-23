@@ -1663,7 +1663,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "d2c11a01333337852c169e47bf89fe9971667023e37d8ebeba7a4090c6dfab9d",
+      "entrySha256": "170d6389982b5e7f76ab2501c558dac9d5516c08f87931499e2cfc8e79e7b98b",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1673,13 +1673,10 @@
           ]
         },
         "codex": {
-          "implementation": "unavailable",
-          "transportId": null,
+          "implementation": "partial",
+          "transportId": "codex-security-audit",
           "limitations": [
             "NATIVE_UNVERIFIED",
-            "NO_NATIVE_ENTRY",
-            "NO_PROVIDER_TRANSPORT",
-            "PROFILE_UNSUPPORTED",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }
@@ -2683,6 +2680,11 @@
       "id": "codex-graph-host",
       "provider": "codex",
       "entry": "core/skills/native-runtime/graph-host.mjs"
+    },
+    {
+      "id": "codex-security-audit",
+      "provider": "codex",
+      "entry": "graphs/security-audit/skills/security-audit/audit-native.mjs"
     },
     {
       "id": "codex-skill",

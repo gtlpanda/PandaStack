@@ -26,7 +26,7 @@
 // is planned and not applied). Every effect of apply is idempotent and the step is saved last, so a crash leaves the step behind its
 // effects, never ahead: applying the same result again finishes the stage, and changes nothing if it had finished.
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { isDeepStrictEqual } from 'node:util'
 import { dirname, join, resolve } from 'node:path'
@@ -38,6 +38,7 @@ import { companions, ordinary, parts, resolve as resolveBlock } from './blocks.m
 import { CLIP, architectureOf, baseInput, blockText, clipText, clipValue, profileName, profilePart } from './audit-inputs.mjs'
 import { applyConsolidate, applyValidate, consolidateInput, validateInput } from './audit-verdicts.mjs'
 import { applyVerify, verifyInput } from './audit-verify.mjs'
+import { CRITIC_MANIFEST_FILE, CRITIC_SECTION, criticStageInput, criticStageScript, planCriticManifest } from './critic-stage.mjs'
 
 // Found from the real file, so the install symlink (~/.claude/skills/security-audit) does not matter, as in upstream.mjs.
 const REPO_ROOT = join(dirname(realpathSync(fileURLToPath(import.meta.url))), '..', '..', '..', '..')
@@ -137,7 +138,6 @@ export function reconInput(runDir, meta, part) {
 }
 
 // ---------- the wave stages' inputs ----------
-const CRITIC_SECTION = 'HUNTING.md#Coverage-critic waves'
 const HUNT_PARTS = ['hunterMethod', 'promotion', 'validationRules', 'hunterResult', 'schema_confirmed', 'schema_needs_validation']
 
 // hunter IDs h<wave>-<NN>, in numeric order (so h1-100 follows h1-99)
@@ -380,6 +380,31 @@ export function pendingNativeApplication(runDir) {
   return { step: marker.step, part: marker.part, stage, script, bytes: marker.bytes, returned, captured: true, invocationId: marker.invocation_id }
 }
 
+// The native critic stage: the same stage directory, capture marker and applier as every stage, but the input is a manifest of full-evidence
+// partitions (critic-stage.mjs, critic-partitions.mjs) rather than one clipped script. Nothing is clipped and no limit is raised: a unit whose evidence
+// cannot fit one script ends the run as every wave stage does. The dispatch is native-critic.mjs's; this only plans and writes.
+function planCriticPartitionStage(runDir, run, next) {
+  const started = Date.now()
+  stopOnCriticBudget(runDir, run, 'critic', 'the critic')
+  // graphInput of critic-partitions.mjs says every partition critic follows a hunting wave; a critic of a ledger no wave hunted would be told something false.
+  if (next.hunted === false) refuse('the critic of a ledger no hunting wave ran cannot be partitioned: its partition prompt would claim a wave hunted it; nothing was changed')
+  let manifest
+  try { manifest = planCriticManifest(runDir, run, next, readFileSync(WORKFLOW_FILE, 'utf8')) } catch (e) {
+    if (e?.code !== 'STAGE_INPUT_TOO_LARGE') throw e
+    const deferred = stopHunting(runDir, STAGE_TOO_LARGE, run)
+    appendEvent(runDir, { cmd: 'plan', stage: 'critic', result: 'refused', reason: STAGE_TOO_LARGE, counts: { deferred } })
+    refuse(`${STAGE_TOO_LARGE}: one unit's full evidence does not fit a ${MAX_SCRIPT_BYTES}-byte critic script and nothing was clipped; no agent was launched, ${deferred} unit(s) were deferred and the run is marked incomplete`)
+  }
+  const stage = openStage(runDir, `critic-${next.kind}-w${next.wave}`)
+  const manifestFile = join(stage.dir, CRITIC_MANIFEST_FILE), input = join(stage.dir, 'input.json'), script = join(stage.dir, 'run.js')
+  writeJson(manifestFile, manifest)
+  writeJson(input, criticStageInput(manifest, next, readFileSync(manifestFile, 'utf8')))
+  writeFileSync(script, criticStageScript(manifest))
+  const bytes = statSync(script).size
+  appendEvent(runDir, { cmd: 'plan', stage: 'critic', result: 'ok', duration_ms: Date.now() - started, part: 'critic', stage_dir: stage.name, script_bytes: bytes, partitions: manifest.partitions.length })
+  return { step: 'critic', part: 'critic', stage, script, bytes, returned: join(stage.dir, 'returned.json') }
+}
+
 export function planNativeStage(runDir) {
   if (pendingNativeApplication(runDir)) refuse('a saved native stage result awaits application recovery; it cannot be replanned')
   const run = loadRun(runDir)
@@ -400,7 +425,7 @@ export function planNativeStage(runDir) {
     return { step: marker.step, part: marker.part, stage: last, script, bytes: marker.bytes, returned: join(last.dir, 'returned.json'), captured: true, invocationId: marker.invocation_id }
 
   }
-  const out = planStage(runDir)
+  const out = next.step === 'critic' ? planCriticPartitionStage(runDir, run, next) : planStage(runDir)
   const input = join(out.stage.dir, 'input.json')
   const inputDigest = sha256File(input), workflowDigest = sha256File(WORKFLOW_FILE)
   writeJson(join(out.stage.dir, NATIVE_CAPTURE_FILE), {
