@@ -9,7 +9,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { test, REPO } from '../scripts/workflow-harness.mjs'
-import { defaultBackendFor, loadConfig } from '../graphs/autobuild/tool/lib/config.mjs'
+import { loadConfig } from '../graphs/autobuild/tool/lib/config.mjs'
+import { defaultBackendFor } from '../graphs/autobuild/tool/lib/host-backend.mjs'
 
 function project(file = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'host-wiring-'))

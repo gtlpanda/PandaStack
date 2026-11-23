@@ -293,9 +293,9 @@ await test('lock and resume: a live driver or a live session holds the lock; a b
   assert.equal(r.code, 3, r.out)
   assert.deepEqual([ledger(root).slices.S1.status, ledger(root).slices.S2.status, ledger(root).slices.S2.stuck], ['done', 'blocked', true])
   const asked = b.calls().length
-  // The human unblocks S2. A bare `run` would be Claude: refused, nothing spawned.
+  // The human unblocks S2. A bare `run` that resolves to Claude (here by PANDASTACK_PROVIDER, the stand-in for the host app): refused, nothing spawned.
   execFileSync(process.execPath, [DRIVER, 'unblock', '--repo', root, '--app', APP, '--slice', 'S2', '--answer', 'use the queue'])
-  r = drive(b, root, { flags: ['--no-pr'] })
+  r = drive(b, root, { flags: ['--no-pr'], env: { PANDASTACK_PROVIDER: 'claude' } })
   assert.equal(r.code, 6, r.out)
   assert.match(status(root).message, /was started on codex; run it with --backend codex/)
   assert.equal(b.calls().length, asked)

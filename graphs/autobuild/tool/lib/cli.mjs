@@ -6,8 +6,8 @@ import { appendFileSync, copyFileSync, existsSync, mkdtempSync, readFileSync, re
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { CONFIG_FILE, defaultBackendFor, findProjectRoot, loadConfig, statePath } from "./config.mjs";
-import { detectHostProvider } from "../../../../core/skills/native-runtime/host-provider.mjs";
+import { CONFIG_FILE, findProjectRoot, loadConfig, statePath } from "./config.mjs";
+import { defaultBackendFor } from "./host-backend.mjs";
 import { blockedClosure, countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures } from "./features.mjs";
 import { failureExcerpt, gateStepLines, parseShard, runGate } from "./gate.mjs";
 import { runLoop } from "./loop.mjs";
@@ -211,7 +211,7 @@ export async function main(argv = process.argv.slice(2)) {
       return ciMain(args);
     }
     case "init":
-      return init(value(args, "--backend") || process.env.AUTOBUILD_BACKEND || detectHostProvider({ env: process.env }).provider);
+      return init(value(args, "--backend") || process.env.AUTOBUILD_BACKEND || defaultBackendFor({ env: process.env }));
     case "evidence": {
       const config = loadConfig();
       const [action, file] = args;

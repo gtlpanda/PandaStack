@@ -8,7 +8,6 @@ import path from "node:path";
 
 import { readAgentConfig, validateConcurrency } from "../../../../scripts/agent-config.mjs";
 import { validateDecisionConfig } from "../../../../core/skills/decisions/config.mjs";
-import { detectHostProvider } from "../../../../core/skills/native-runtime/host-provider.mjs";
 
 export const CONFIG_FILE = "autobuild.json";
 
@@ -123,14 +122,8 @@ export function loadConfig(root = findProjectRoot(), env = process.env, override
 }
 
 // Backend precedence: --backend (overrides.backend) > AUTOBUILD_BACKEND > autobuild.json "backend" > the
-// host app the user is in (overrides.defaultBackend: Codex CLI or Claude Code) > claude.
-// loadConfig itself never looks at the host: only a command that is about to start a provider asks
-// (`autobuild run`, `autobuild init`), through defaultBackendFor, so `autobuild status` or the gate in a
-// Claude-configured project (USD budgets) still loads when it is run from inside Codex.
-export function defaultBackendFor({ flag, env = process.env } = {}) {
-  if (flag || env.AUTOBUILD_BACKEND) return undefined;
-  return detectHostProvider({ env }).provider;
-}
+// host app the user is in (overrides.defaultBackend, see host-backend.mjs) > claude. loadConfig itself never
+// looks at the host: only a command that is about to start a provider supplies it.
 
 // Shared, read-only managed launch validation for the launcher and doctor.
 export function resolveManagedConfig({ project: raw = {}, env = {}, overrides = {}, root, central = readAgentConfig() } = {}) {
