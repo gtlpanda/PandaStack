@@ -307,8 +307,14 @@ when `codex` is on PATH or `~/.agents` exists, also the Codex entry skills (the 
 as `--codex` below; if that Codex step fails it only warns and the Claude install
 stands). Pick one app with `./install.sh --claude` (never touches `~/.agents`) or
 `./install.sh --codex` (never touches `~/.claude`); the two flags are alternatives.
-Which provider PandaStack then uses needs no flag: it follows the app you are in
-(`PANDASTACK_PROVIDER=claude|codex` overrides; see `core/skills/native-runtime/host-provider.mjs`).
+Which provider PandaStack uses follows the app you are in, without a flag, where it starts a provider
+itself: `autobuild run` and `autobuild init`, `/build-app`'s driver and `pandastack doctor` (precedence:
+`--backend`, `AUTOBUILD_BACKEND`, an `autobuild.json` `"backend"` pin, then the app you are in, then Claude).
+`PANDASTACK_PROVIDER=claude|codex` overrides the detection (see
+`core/skills/native-runtime/host-provider.mjs`). Not host-wired: the Codex-only runners (`bughunt`'s
+`native-cli.mjs`, the blueprint, dev and release CLIs, the QA loop), which the skills' `## Codex runner`
+sections route to. From inside Codex, a project that sets a USD budget (`limits.totalBudgetUsd`) fails to load
+for a bare `autobuild run`, because Codex reports no dollar cost: pass `--backend claude` or pin the backend.
 
 For Codex alone, install just the supported entry skills:
 

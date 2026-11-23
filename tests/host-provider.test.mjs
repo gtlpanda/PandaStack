@@ -3,7 +3,7 @@
 // claude); env-only fallbacks; no signals -> claude; garbage override -> usage error. Plus the real
 // process-tree walk through stub executables named codex and claude (no live model, no network).
 import assert from 'node:assert/strict'
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -36,6 +36,7 @@ await test('the nearest host ancestor decides: codex nested in claude is codex, 
 
 await test('the env fallbacks apply only when no ancestor is a host: CODEX_THREAD_ID then CLAUDECODE then claude', () => {
   assert.deepEqual(detect({ CODEX_THREAD_ID: 't' }, ['bash', 'init']), { provider: 'codex', source: 'CODEX_THREAD_ID' })
+  assert.deepEqual(detect({ CODEX_SANDBOX_NETWORK_DISABLED: '1', CLAUDECODE: '1', CLAUDE_CODE_SESSION_ID: 's' }, []), { provider: 'codex', source: 'CODEX_SANDBOX_NETWORK_DISABLED' }, 'the variable Codex sets in its sandbox beats leaked Claude variables')
   assert.deepEqual(detect({ CLAUDECODE: '1' }, ['bash']), { provider: 'claude', source: 'CLAUDECODE' })
   assert.deepEqual(detect({ CODEX_THREAD_ID: 't', CLAUDECODE: '1' }, []), { provider: 'codex', source: 'CODEX_THREAD_ID' }, 'codex wins the env-only tie')
   assert.deepEqual(detect({ CODEX_THREAD_ID: '', CLAUDECODE: '' }, []), { provider: 'claude', source: 'default' }, 'empty signals are absent')
@@ -65,9 +66,10 @@ await test('classifyProcess matches exact executable names only, including a nod
   for (const junk of [null, undefined, 0, 7, {}, [], { comm: null, argv: 'codex' }, { argv: [1, 2] }]) assert.equal(classifyProcess(junk), null)
 })
 
-await test('readProcessAncestry walks parent links nearest first, stops at pid 1, a loop, a gap and the depth bound', () => {
-  const table = { 50: { ppid: 40, comm: 'node', argv: [] }, 40: { ppid: 30, comm: 'bash', argv: [] }, 30: { ppid: 1, comm: 'codex', argv: [] } }
-  assert.deepEqual(readProcessAncestry({ start: 50, readProcess: pid => table[pid] }).map(p => p.comm), ['node', 'bash', 'codex'])
+await test('readProcessAncestry walks parent links nearest first, through PID 1 (the codex process inside Codex\'s sandbox), stopping at ppid 0, a loop, a gap and the depth bound', () => {
+  const table = { 50: { ppid: 40, comm: 'node', argv: [] }, 40: { ppid: 30, comm: 'bash', argv: [] }, 30: { ppid: 1, comm: 'codex', argv: [] }, 1: { ppid: 0, comm: 'init', argv: [] } }
+  assert.deepEqual(readProcessAncestry({ start: 50, readProcess: pid => table[pid] }).map(p => p.comm), ['node', 'bash', 'codex', 'init'])
+  assert.deepEqual(readProcessAncestry({ start: 1, readProcess: pid => ({ ppid: 0, comm: 'codex', argv: [] }) }).map(p => p.comm), ['codex'], 'a sandboxed command whose parent is PID 1')
   assert.deepEqual(readProcessAncestry({ start: 50, readProcess: pid => (pid === 40 ? undefined : table[pid]) }).map(p => p.comm), ['node'])
   assert.deepEqual(readProcessAncestry({ start: 9, readProcess: () => ({ ppid: 9, comm: 'x', argv: [] }) }).length, 1, 'a self-loop is one step')
   assert.equal(readProcessAncestry({ start: 100, readProcess: pid => ({ ppid: pid + 1, comm: 'x', argv: [] }) }).length, 32)
@@ -111,3 +113,28 @@ await test('real process tree: a stub codex or claude parent is found; the neare
     'claude variables leaked into a codex child do not make it claude')
   assert.deepEqual(probe(dir, ['claude'], { PANDASTACK_PROVIDER: 'codex' }), { provider: 'codex', source: 'PANDASTACK_PROVIDER' })
 }))
+
+// ---- the real Codex sandbox (`codex sandbox` runs a plain command: no model, no login) ----
+// Observed with Codex CLI 0.167.0 on Linux: the command runs in its own PID namespace whose PID 1 is the codex
+// process, and the Claude variables of the shell that started it are still in its environment. Skipped where
+// there is no codex or its sandbox cannot start (no live model is ever run).
+const codexBin = spawnSync('bash', ['-c', 'command -v codex'], { encoding: 'utf8' }).stdout.trim()
+const sandboxUsable = codexBin !== '' && spawnSync(codexBin, ['sandbox', '--', 'true'], { encoding: 'utf8', timeout: 30000 }).status === 0
+const SANDBOX_PROBE = `import(${JSON.stringify(new URL('../core/skills/native-runtime/host-provider.mjs', import.meta.url).href)})` +
+  '.then(m => console.log(JSON.stringify({ real: m.detectHostProvider(), envOnly: m.detectHostProvider({ env: process.env, ancestry: [] }) })))'
+
+// The sandbox (seccomp: no sockets) cannot let a node child print to the socketpair that spawnSync gives it, so the
+// command's output goes to a regular file through a shell redirect, and the test reads that file.
+await test('real codex sandbox started from a Claude shell: the tree says codex, and the env-only fallback says codex too', { skip: sandboxUsable ? false : 'no codex on PATH, or its sandbox cannot start here' }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'host-provider-sandbox-'))
+  try {
+    const out = join(dir, 'probe.out')
+    const leaked = { CLAUDECODE: '1', CLAUDE_CODE_SESSION_ID: 'leaked', CLAUDE_CODE_ENTRYPOINT: 'cli' }
+    const r = spawnSync('bash', ['-c', 'exec "$0" sandbox -- "$1" -e "$2" > "$3"', codexBin, process.execPath, SANDBOX_PROBE, out],
+      { encoding: 'utf8', cwd: REPO, env: cleanEnv(leaked), timeout: 60000 })
+    assert.equal(r.status, 0, r.stderr)
+    const seen = JSON.parse(readFileSync(out, 'utf8').trim().split('\n').pop())
+    assert.deepEqual(seen.real, { provider: 'codex', source: 'ancestor' }, 'the codex process is the sandboxed command\'s parent')
+    assert.equal(seen.envOnly.provider, 'codex', 'CODEX_SANDBOX_NETWORK_DISABLED (set by Codex in its sandbox) beats the leaked CLAUDECODE')
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})

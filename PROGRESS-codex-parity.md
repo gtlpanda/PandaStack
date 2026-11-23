@@ -2545,18 +2545,33 @@ it exactly (no before-or-after-flip branches); fixture roots reset every wave-fl
 so the pinned pre-wave plans stay. The install-codex sha pin in cp-01c was re-pinned.
 
 Host auto-detection: core/skills/native-runtime/host-provider.mjs. Precedence: PANDASTACK_PROVIDER, then the
-nearest ancestor process named codex or claude, then CODEX_THREAD_ID (untested hypothesis: the repo deletes it
-before nested sessions, which implies Codex sets it, but nothing here observed it) then CLAUDECODE, then
-claude. Wired at `autobuild run` and `autobuild init` (through graphs/autobuild/tool/lib/host-backend.mjs; loadConfig
-itself never asks, so `autobuild status` or the gate still load from inside Codex in a Claude-configured project with a
-USD budget), the build-app driver `run`, and `pandastack doctor`. NOT wired: bughunt native-cli (the Codex runner; a
-frozen security-audit acceptance case calls it bare and expects the Codex path), and the blueprint, dev and release CLIs
-and the qa loop (Codex-only runners with no provider choice); the SKILL.md selection sentence routes to them.
+nearest ancestor process named codex or claude, then CODEX_THREAD_ID or CODEX_SANDBOX_NETWORK_DISABLED (codex) then
+CLAUDECODE, then claude. Observed with the real `codex sandbox` (Codex CLI 0.167.0, Linux, npm install, started from a
+Claude Code shell; a plain command, no model): the Claude variables leak in, the sandbox hides every real ancestor but
+makes the codex process PID 1 and the command's parent (so the walk includes PID 1; the first version stopped at PID 1
+and called this case claude), and CODEX_SANDBOX_NETWORK_DISABLED is set while CODEX_THREAD_ID is not. CODEX_THREAD_ID as
+something a Codex model session exports remains an UNTESTED HYPOTHESIS (the repo deletes it before nested sessions,
+which implies Codex sets it); no `codex exec` was run. Also unobserved: a Codex install that is not the npm package, and
+the macOS `ps` path (written, unrun). tests/host-provider.test.mjs covers the matrix, a real process-tree walk through
+stub executables named codex and claude, and (skipped where codex is absent) the real sandbox. A node child inside
+`codex sandbox` cannot print to the socketpair spawnSync gives it, so that test redirects to a file.
+
+Wired at `autobuild run` and `autobuild init` (through graphs/autobuild/tool/lib/host-backend.mjs; loadConfig itself
+never asks, so `autobuild status` or the gate still load from inside Codex in a Claude-configured project with a USD
+budget), the build-app driver `run`, and `pandastack doctor`. NOT wired: bughunt native-cli (the Codex runner; a frozen
+security-audit acceptance case calls it bare and expects the Codex path), and the blueprint, dev and release CLIs and the
+qa loop (Codex-only runners with no provider choice); the SKILL.md selection sentence routes to them.
+Behaviour changes: a bare `autobuild run` from inside Codex now means Codex, so a Claude-shaped project with
+limits.totalBudgetUsd fails to load there (message plus a hint to pass --backend claude; pinned in
+tests/host-provider-wiring.test.mjs); `pandastack doctor` with no --backend now follows the host, claude when none, where
+it used to default to codex; build-app gained a native-runtime catalog dependency.
 Decisions: an `autobuild.json` "backend" is an explicit pin and beats the host; `--claude --codex` is an error; a failing
 Codex step in plain install only warns; an empty PANDASTACK_PROVIDER counts as unset. The repo's own gate pins
 PANDASTACK_PROVIDER=claude in autobuild.json env.vars (frozen Phase 1 acceptance runs the actual build-app driver bare),
 matching its `"backend": "claude"` pin, so the gate result does not depend on which app launched it; observed by running
-the gate with a stub `codex` ancestor.
+the gate with a stub `codex` ancestor. Because env.vars reach every session autobuild starts, runCodex sets
+PANDASTACK_PROVIDER=codex for its own sessions (tested). Not covered: acceptance/phase1 run directly from a Codex session,
+outside `autobuild check`, still takes the host's provider.
 
 build-app final QA: the real qa-loop now passes through the production catalog with dev codex partial
 (tests/driver-codex.test.mjs, a root copy with an inert verify.sh; the repository's own is never run).

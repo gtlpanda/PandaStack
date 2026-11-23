@@ -7,14 +7,22 @@
 //   2. The nearest ancestor process whose executable is `codex` or `claude` (the process tree, not the
 //      environment, because one host can launch the other: Claude Code's CLAUDECODE, CLAUDE_CODE_* and
 //      other variables leak into a Codex sandbox started from a Claude shell, so an env check alone
-//      would call that shell Claude).
-//   3. Environment signals, for a sandbox that hides its process tree: CODEX_THREAD_ID -> codex, then
-//      CLAUDECODE -> claude. CODEX_THREAD_ID is an UNTESTED HYPOTHESIS about what Codex exports: the repo
-//      deletes it before nested codex sessions (core/skills/native-runtime/codex-exec.mjs,
-//      graphs/autobuild/tool/lib/codex.mjs, graphs/hunt/skills/bughunt/native-runner.mjs), which implies
-//      Codex sets it, but no test here has observed it. Codex wins this tie because the other direction
-//      (Codex variable leaking into a Claude shell) has no known cause once step 2 has failed.
+//      would call that shell Claude). Observed with the real `codex sandbox` (Codex CLI 0.167.0, Linux,
+//      npm install, started from a Claude Code shell): the sandbox is its own PID namespace in which
+//      the codex process is PID 1 and the command's parent, so the walk includes PID 1 and finds comm
+//      `codex`; a stub `codex` and a real `claude` parent are also found.
+//   3. Environment signals, for a sandbox that hides its process tree: CODEX_THREAD_ID or
+//      CODEX_SANDBOX_NETWORK_DISABLED -> codex, then CLAUDECODE -> claude. CODEX_SANDBOX_NETWORK_DISABLED
+//      was observed set inside `codex sandbox` (and absent from a plain Claude Code shell). CODEX_THREAD_ID
+//      is an UNTESTED HYPOTHESIS about what a Codex session exports: the repo deletes it before nested
+//      codex sessions (core/skills/native-runtime/codex-exec.mjs, graphs/autobuild/tool/lib/codex.mjs,
+//      graphs/hunt/skills/bughunt/native-runner.mjs), which implies Codex sets it, but `codex sandbox` did
+//      not set it and no model session was run here. Codex wins this tie because Claude variables leak
+//      into Codex, not the other way round.
 //   4. `claude`.
+//
+// Not observed: a real Codex model session (`codex exec`, never run here), a Codex install that is not the npm
+// package, and the macOS `ps` path (written, unrun).
 //
 // `ancestry` is injectable for tests: an array, or a function returning an array, of processes nearest
 // first. Each is an executable name (string) or `{ comm, argv }`. When `env` is not the real
@@ -28,6 +36,8 @@ export const HOST_PROVIDERS = Object.freeze(['claude', 'codex'])
 export const PROVIDER_ENV = 'PANDASTACK_PROVIDER'
 const MAX_DEPTH = 32
 const INTERPRETERS = new Set(['node', 'nodejs', 'bun', 'deno'])
+// Variables Codex puts in its commands' environment, strongest first (see the header for what was observed).
+const CODEX_ENV_SIGNALS = ['CODEX_THREAD_ID', 'CODEX_SANDBOX_NETWORK_DISABLED']
 
 export class HostProviderUsageError extends Error {
   constructor(message) {
@@ -84,7 +94,8 @@ export function readProcessAncestry({ start = process.ppid, readProcess } = {}) 
   const chain = []
   const seen = new Set()
   let pid = start
-  while (Number.isInteger(pid) && pid > 1 && chain.length < MAX_DEPTH && !seen.has(pid)) {
+  // PID 1 is walked too: inside Codex's sandbox it is the codex process itself. A normal init classifies as no host.
+  while (Number.isInteger(pid) && pid >= 1 && chain.length < MAX_DEPTH && !seen.has(pid)) {
     seen.add(pid)
     let proc
     try { proc = read(pid) } catch { break }
@@ -120,7 +131,7 @@ export function detectHostProvider({ env = process.env, ancestry } = {}) {
   const chain = ancestry ?? (env === process.env ? () => readProcessAncestry() : [])
   const host = ancestorProvider(chain)
   if (host) return { provider: host, source: 'ancestor' }
-  if (present(env?.CODEX_THREAD_ID)) return { provider: 'codex', source: 'CODEX_THREAD_ID' }
+  for (const name of CODEX_ENV_SIGNALS) if (present(env?.[name])) return { provider: 'codex', source: name }
   if (present(env?.CLAUDECODE)) return { provider: 'claude', source: 'CLAUDECODE' }
   return { provider: 'claude', source: 'default' }
 }

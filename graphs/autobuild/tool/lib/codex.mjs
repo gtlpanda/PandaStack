@@ -41,7 +41,9 @@ async function runCodexWork(config, options, track) {
   const { args, input } = codexArgs(config, options);
   const out = openSync(options.logFile, "w");
   const err = openSync(`${options.logFile}.stderr`, "w");
-  const env = buildEnv(config, { AUTOBUILD_BACKEND: "codex", AUTOBUILD_ACTIVE: "1", AUTOBUILD_ROLE: options.role, AUTOBUILD_DELIVERY_MODE: config.deliveryMode ?? "full" });
+  // A Codex session says which provider it is: a project env.vars PANDASTACK_PROVIDER pin (this repo's gate pins claude)
+  // must not make the tools the session runs take the other one.
+  const env = buildEnv(config, { AUTOBUILD_BACKEND: "codex", PANDASTACK_PROVIDER: "codex", AUTOBUILD_ACTIVE: "1", AUTOBUILD_ROLE: options.role, AUTOBUILD_DELIVERY_MODE: config.deliveryMode ?? "full" });
   // A nested CLI must not attach itself to its parent's thread.
   delete env.CODEX_THREAD_ID;
   try {

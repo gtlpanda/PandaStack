@@ -4241,7 +4241,10 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
 - Host auto-detection (core/skills/native-runtime/host-provider.mjs): PANDASTACK_PROVIDER, then the
   nearest codex or claude ancestor process, then CODEX_THREAD_ID (untested hypothesis) / CLAUDECODE, then
   claude. The tree comes before the env because Claude variables leak into a Codex sandbox started from a
-  Claude shell. An injected env never consults the real process tree, so tests with their own env stay
+  Claude shell. The real `codex sandbox` showed the first version was wrong for exactly that case: the codex
+  process is PID 1 in the sandbox's namespace and the walk stopped at PID 1, so it fell through to the leaked
+  CLAUDECODE and answered claude. Fixed, plus CODEX_SANDBOX_NETWORK_DISABLED as an env signal (observed);
+  CODEX_THREAD_ID stays an untested hypothesis. An injected env never consults the real process tree, so tests with their own env stay
   hermetic. Wired at `autobuild run` / `init` (not loadConfig: a USD-budget Claude project must still load from
   inside Codex), the build-app driver and doctor. Not wired: bughunt native-cli (Codex runner, called bare by a
   frozen test) and the Codex-only blueprint/dev/release CLIs and qa loop.

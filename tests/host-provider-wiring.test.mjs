@@ -1,16 +1,17 @@
 // The detected host provider is the default wherever a provider is about to be started, and it flows into the
 // model roles. autobuild run: --backend > AUTOBUILD_BACKEND > autobuild.json "backend" > host app > claude.
-// native-cli (the Codex hunt runner): --backend > host app, and a Claude host is refused rather than run on Codex.
+// native-cli (the Codex hunt runner) is NOT host-wired: a bare run stays Codex, --backend claude is refused.
 // The host app itself is stood in for by PANDASTACK_PROVIDER (a test cannot be launched from inside Codex or
 // Claude Code); tests/host-provider.test.mjs walks a real process tree through stub executables.
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { test, REPO } from '../scripts/workflow-harness.mjs'
 import { loadConfig } from '../graphs/autobuild/tool/lib/config.mjs'
-import { defaultBackendFor } from '../graphs/autobuild/tool/lib/host-backend.mjs'
+import { runCodex } from '../graphs/autobuild/tool/lib/codex.mjs'
+import { defaultBackendFor, withHostBackendHint } from '../graphs/autobuild/tool/lib/host-backend.mjs'
 
 function project(file = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'host-wiring-'))
@@ -48,6 +49,23 @@ await test('defaultBackendFor asks the host only when no flag and no AUTOBUILD_B
   assert.throws(() => defaultBackendFor({ env: { PANDASTACK_PROVIDER: 'gpt' } }), /PANDASTACK_PROVIDER must be "claude" or "codex"/)
 })
 
+await test('behaviour change: `autobuild run` from inside Codex in a Claude-shaped project with a USD budget fails to load, and says how to choose Claude', () => {
+  // Before host detection a bare `autobuild run` always meant Claude; now, from Codex, it means Codex, and Codex has no dollar cost.
+  const dir = project({ limits: { totalBudgetUsd: 5 } })
+  try {
+    const host = defaultBackendFor({ env: { PANDASTACK_PROVIDER: 'codex' } })
+    let thrown
+    try { loadConfig(dir, {}, { defaultBackend: host }) } catch (error) { thrown = error }
+    assert.match(thrown.message, /^Codex does not report dollar cost; remove totalBudgetUsd/)
+    assert.match(withHostBackendHint(thrown, host).message, /"codex" as its default because that is the app you are in; autobuild.json "backend", AUTOBUILD_BACKEND or --backend choose another\)$/)
+    // The ways out: the flag, the env var, or a pin in autobuild.json each load it as Claude.
+    assert.equal(loadConfig(dir, {}, { backend: 'claude', defaultBackend: host }).backend, 'claude')
+    assert.equal(loadConfig(dir, { AUTOBUILD_BACKEND: 'claude' }, { defaultBackend: host }).backend, 'claude')
+    assert.equal(withHostBackendHint(new Error('x'), undefined).message, 'x', 'no hint when the host was not what chose')
+    assert.equal(withHostBackendHint('not an error', 'codex'), 'not an error')
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
 await test('the detected provider flows into the model roles: Opus -> gpt-6-astra, Sonnet -> gpt-6.1-sol, Haiku -> gpt-6-luna on Codex', () => {
   const dir = project({})
   try {
@@ -56,6 +74,21 @@ await test('the detected provider flows into the model roles: Opus -> gpt-6-astr
     const claude = loadConfig(dir, {}, { defaultBackend: defaultBackendFor({ env: { PANDASTACK_PROVIDER: 'claude' } }) })
     assert.equal(claude.backend, 'claude')
     assert.ok(!/^gpt-/.test(claude.model) && !/^gpt-/.test(claude.subagentModel) && !/^gpt-/.test(claude.probeModel), 'Claude models on Claude')
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+await test('a Codex session autobuild starts carries PANDASTACK_PROVIDER=codex even when the project env.vars pin claude (this repo\'s gate does)', async () => {
+  const dir = project({ env: { vars: { PANDASTACK_PROVIDER: 'claude' } } })
+  try {
+    const seen = join(dir, 'seen.txt')
+    const stub = join(dir, 'fake-codex')
+    writeFileSync(stub, `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(seen)}, [process.env.PANDASTACK_PROVIDER, process.env.AUTOBUILD_BACKEND].join(','))\n`)
+    chmodSync(stub, 0o755)
+    const config = loadConfig(dir, { AUTOBUILD_BACKEND: 'codex', AUTOBUILD_CODEX_BIN: stub })
+    assert.equal(config.env.vars.PANDASTACK_PROVIDER, 'claude', 'fixture: the project pins claude for its gate steps')
+    const code = await runCodex(config, { role: 'probe', prompt: 'inert fixture', logFile: join(dir, 'probe.log') })
+    assert.equal(code, 0)
+    assert.equal(readFileSync(seen, 'utf8'), 'codex,codex')
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
