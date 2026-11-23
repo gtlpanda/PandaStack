@@ -12,7 +12,9 @@ import { audit, meta, mkRepo, sandbox } from './audit-fixtures.mjs'
 import { PLANTED, TOY_FILES } from './toy-app.mjs'
 import { skillText, stepCommands } from './skill-commands.mjs'
 import { HELPER_COMMANDS, main, parseNativeArgs } from '../skills/security-audit/audit-native.mjs'
-import { openAuditJournal, readAuditJournal } from '../skills/security-audit/dispatch-journal.mjs'
+import { readAuditJournal } from '../skills/security-audit/dispatch-journal.mjs'
+import { assertLeafCwdSafe } from '../skills/security-audit/native-codex.mjs'
+import { realpathSync, symlinkSync, unlinkSync } from 'node:fs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const FAKE = join(HERE, '..', '..', '..', 'tests', 'fixtures', 'fake-source-only-codex.mjs')
@@ -86,17 +88,18 @@ await test('the preflight ran first on the exact leaf argv, once per model, and 
     assert.ok(a.some(x => x.startsWith('mcp_servers.reader.url="http://127.0.0.1:')))
     assert.ok(!a.some(x => /workspace-write|danger-full-access|network_access/.test(x)))
     assert.ok(call.env.PANDASTACK_AUDIT_READER_KEY && !a.join(' ').includes(call.env.PANDASTACK_AUDIT_READER_KEY), 'the reader credential is in the environment, never argv')
-    assert.equal(call.cwd, join(RUN, 'native-codex', 'cwd'), 'the leaf runs in the empty directory, not the repo or the snapshot')
+    assert.ok(call.cwd.startsWith(realpathSync(tmpdir())) && !call.cwd.startsWith(repo), 'the leaf runs in a fresh directory outside the repository and the snapshot')
+    assert.doesNotThrow(() => assertLeafCwdSafe(call.cwd), 'no .git or AGENTS.md at or above the leaf cwd')
     assert.ok(call.env.CODEX_HOME.startsWith(join(RUN, 'native-codex')) && call.env.HOME.startsWith(join(RUN, 'native-codex')))
   }
   assert.equal(new Set(leafCalls(fake).map(c => c.env.PANDASTACK_AUDIT_READER_KEY)).size, leafCalls(fake).length, 'a reader and credential per leaf')
 })
 
-await test('the credential is a symlink to the login file, never a copy; the cwd is empty; the receipts record the preflight', { skip: NO_LINUX_STORES }, () => {
+await test('the credential is a symlink to the login file, never a copy; the leaf cwd is cleaned up; the receipts record the preflight', { skip: NO_LINUX_STORES }, () => {
   const link = join(RUN, 'native-codex', 'codex-home', 'auth.json')
   assert.ok(lstatSync(link).isSymbolicLink())
   assert.equal(readlinkSync(link), auth)
-  assert.deepEqual(readdirSync(join(RUN, 'native-codex', 'cwd')), [])
+  assert.ok(leafCalls(fake).every(c => !existsSync(c.cwd)), 'the leaf working directory is removed when the run ends')
   const receipt = readJson(join(RUN, 'native-codex', 'preflight.json'))
   assert.equal(receipt.codexVersion, '0.167.0'); assert.equal(receipt.versionPinned, true)
   assert.deepEqual(receipt.receipts.map(r => [r.model, r.ok]), [['gpt-6.1-sol', true]])
@@ -165,8 +168,10 @@ await test('a budget pause stops with exit 3, and resume with --grant replays co
   const journal = readAuditJournal(dir)
   assert.equal(leafCalls(f).length, journal.settledCalls, 'no leaf was called twice: replay is free')
   assert.equal(meta(dir).run_status, 'complete')
-  const o3 = capture()
-  assert.equal(await main(['resume', dir, '--grant', '61', '--codex-bin', f.bin, '--auth-file', auth], { log: o3.log }), 1, '--grant applies only to a paused run')
+  // --grant applies only to a run paused for its budget: a running-but-not-paused run refuses it (a finished one is just reported).
+  const again = capture()
+  assert.equal(await main(['resume', dir, '--grant', '61', '--codex-bin', f.bin, '--auth-file', auth], { log: again.log }), 0)
+  assert.match(lastLine(again), /^AUDIT: DONE status=complete/)
 })
 
 await test('the helper commands are the skill table\'s, argument for argument', () => {
@@ -178,4 +183,65 @@ await test('the helper commands are the skill table\'s, argument for argument', 
     assert.equal([script, ...args].join(' '), expected, step)
   }
   assert.deepEqual(Object.keys(HELPER_COMMANDS).sort(), [...table.keys()].filter(s => s !== 'done').sort())
+})
+
+await test('a leaf working directory under a repository or an AGENTS.md is refused: the target\'s own instructions must never reach a leaf', () => {
+  const base = realpathSync(mkdtempSync(join(work, 'cwd-')))
+  const clean = join(base, 'clean'); mkdirSync(clean)
+  assert.doesNotThrow(() => assertLeafCwdSafe(clean))
+  const withAgents = join(base, 'agents'); mkdirSync(join(withAgents, 'deep', 'er'), { recursive: true }); writeFileSync(join(withAgents, 'AGENTS.md'), 'x')
+  const withOverride = join(base, 'override'); mkdirSync(join(withOverride, 'a'), { recursive: true }); writeFileSync(join(withOverride, 'AGENTS.override.md'), 'x')
+  const withGit = join(base, 'git'); mkdirSync(join(withGit, '.git', 'security-audit', 'run-1', 'native-codex', 'cwd'), { recursive: true })
+  for (const dir of [join(withAgents, 'deep', 'er'), join(withOverride, 'a'), join(withGit, '.git', 'security-audit', 'run-1', 'native-codex', 'cwd'), withAgents]) {
+    assert.throws(() => assertLeafCwdSafe(dir), e => e.code === 'LEAF_CWD_UNSAFE', dir)
+  }
+  for (const bad of [null, undefined, 3, 'relative/dir', '']) assert.throws(() => assertLeafCwdSafe(bad), e => e.code === 'LEAF_CWD_UNSAFE')
+})
+
+await test('a first Ctrl-C stops between stages with exit 3 and the run resumes; no leaf is repeated', { skip: NO_LINUX_STORES }, async () => {
+  const f = fakeCodex('codex-sigint', { FAKE_CODEX_SIGINT_ONCE: join(work, 'sigint-once') })
+  const o = capture()
+  assert.equal(await main(['run', mkRepo(TOY_FILES, 'toy-sigint'), ...flags(f.bin)], { log: o.log }), 3, o.lines.join('\n'))
+  assert.match(o.lines.join('\n'), /signal received: stopping after the current stage/)
+  assert.match(lastLine(o), /^AUDIT: PAUSED interrupted between stages; resume with: audit-native\.mjs resume /)
+  const dir = runDirOf(o), before = leafCalls(f).length
+  assert.ok(before >= 1 && before < 10, `leaves before stopping: ${before}`)
+  assert.equal(readAuditJournal(dir).heldCalls, 0, 'nothing is held: the stage finished')
+  const o2 = capture()
+  assert.equal(await main(['resume', dir, '--codex-bin', f.bin, '--auth-file', auth], { log: o2.log }), 0, o2.lines.join('\n'))
+  assert.equal(leafCalls(f).length, readAuditJournal(dir).settledCalls, 'every leaf ran once')
+})
+
+await test('a changed --auth-file on resume repoints the credential symlink; a missing login file refuses; resuming a finished run runs nothing', { skip: NO_LINUX_STORES }, async () => {
+  const f = fakeCodex('codex-auth')
+  const init = spawnSync(process.execPath, [join(HERE, '..', 'skills', 'security-audit', 'audit-run.mjs'), 'init', mkRepo(TOY_FILES, 'toy-auth'), '--full', '--budget', '60', '--max-parallel', '2'], { encoding: 'utf8' })
+  assert.equal(init.status, 0, init.stdout + init.stderr)
+  const dir = init.stdout.split('\n')[0], other = join(work, 'auth-other.json')
+  writeFileSync(other, 'other', { mode: 0o600 })
+  mkdirSync(join(dir, 'native-codex'), { recursive: true, mode: 0o700 })
+  writeFileSync(join(dir, 'native-codex', 'native-run.json'), JSON.stringify({ version: 1, grant: 3, maxBudget: 60 }))
+  assert.equal(await main(['resume', dir, '--codex-bin', f.bin, '--auth-file', auth], { log() {} }), 3)
+  const link = join(dir, 'native-codex', 'codex-home', 'auth.json')
+  assert.equal(readlinkSync(link), auth)
+  const o = capture()
+  assert.equal(await main(['resume', dir, '--grant', '60', '--codex-bin', f.bin, '--auth-file', join(work, 'missing.json')], { log: o.log }), 1)
+  assert.match(o.lines.join('\n'), /no Codex login found/)
+  assert.equal(await main(['resume', dir, '--grant', '60', '--codex-bin', f.bin, '--auth-file', other], { log() {} }), 0)
+  assert.equal(readlinkSync(link), other, 'the symlink follows the login file of the process that resumed')
+  const spawned = leafCalls(f).length, o2 = capture()
+  assert.equal(await main(['resume', dir, '--codex-bin', f.bin, '--auth-file', other], { log: o2.log }), 0)
+  assert.match(lastLine(o2), /^AUDIT: DONE status=complete/)
+  assert.equal(leafCalls(f).length, spawned, 'a finished run starts no leaf')
+})
+
+await test('--max-budget below --budget is refused before init creates anything; a preflight that cannot run still leaves a receipt', { skip: NO_LINUX_STORES }, async () => {
+  const target = mkRepo(TOY_FILES, 'toy-maxbudget')
+  const o = capture()
+  assert.equal(await main(['run', target, ...flags(fake.bin, ['--max-budget', '10'])], { log: o.log }), 1)
+  assert.match(o.lines.join('\n'), /--max-budget cannot be below --budget/)
+  assert.ok(!existsSync(join(target, '.git', 'security-audit')))
+  const junk = join(work, 'codex-junk'); writeFileSync(junk, '#!/bin/sh\necho not-codex\n'); chmodSync(junk, 0o755)
+  const o2 = capture()
+  assert.equal(await main(['run', mkRepo(TOY_FILES, 'toy-junk'), ...flags(junk)], { log: o2.log }), 1)
+  assert.equal(readJson(join(runDirOf(o2), 'native-codex', 'preflight.json')).error, 'SOURCE_ONLY_VERSION_UNKNOWN')
 })
