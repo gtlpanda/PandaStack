@@ -18,7 +18,7 @@ import { computeMetrics, gateMetrics, noHistoryMetrics } from "./metrics.mjs";
 import { oneLine, sortedUnique, wholeNumberOf } from "./patterns.mjs";
 import { ciPolicy } from "./policy.mjs";
 import { buildReport, checkReportOut, renderReport, writeReportOut } from "./report.mjs";
-import { CiError, readState, STATE_SCHEMA_VERSION, writeState } from "./state.mjs";
+import { CiError, prepareStateDir, readState, STATE_SCHEMA_VERSION, writeState } from "./state.mjs";
 import { validationStatus } from "./status.mjs";
 import { currentTriggers, workflowLabel } from "./triggers.mjs";
 import { changedFiles, planValidation, recordValidation, resolveBase, TIERS, treeState, treeStateAt } from "./validate.mjs";
@@ -84,9 +84,12 @@ function readImport(given, cwd) {
   return importedAttempts(doc);
 }
 
-/** Merges `incoming` into the stored history, writes it, and reports the totals. */
-function storeHistory({ root, env, json }, existing, incoming, source, label) {
-  const before = existing?.attempts ?? [];
+/**
+ * Merges `incoming` into the stored history, writes it, and reports the totals. The history is
+ * read here, just before the write, so an update that landed while a fetch was running is kept.
+ */
+function storeHistory({ root, env, json }, incoming, source, label) {
+  const before = readHistory(root, env)?.attempts ?? [];
   const known = new Set(before.map(attemptKey));
   const attempts = mergeHistory(before, incoming);
   // New means stored now and absent before: a record the cap dropped is not counted.
@@ -106,15 +109,14 @@ async function history(context) {
     const policy = ciPolicy(projectConfig(root, env));
     const limit = historyLimit(values, policy);
     const repo = historyRepo(values, root, env);
-    const existing = readHistory(root, env);   // a refused state dir fails here, before any gh call
+    readHistory(root, env);   // a refused state dir fails here, before any gh call
     const incoming = fetchGithubHistory({ repo, ghBin: env.AUTOBUILD_GH_BIN || policy.ghBin, limit, env });
-    return storeHistory(context, existing, incoming, { provider: "github", repo }, `github ${repo}`);
+    return storeHistory(context, incoming, { provider: "github", repo }, `github ${repo}`);
   }
   if (values.has("--import")) {
     const given = values.get("--import");
     const incoming = readImport(given, cwd);
-    const existing = readHistory(root, env);
-    return storeHistory(context, existing, incoming, { provider: "import", file: path.basename(given) }, `import ${given}`);
+    return storeHistory(context, incoming, { provider: "import", file: path.basename(given) }, `import ${given}`);
   }
 
   const stored = readHistory(root, env);
@@ -295,8 +297,10 @@ async function validate({ root, flags, values, env, json }) {
   // Without a base, or when git cannot list the change, `changed` is null: planValidation's NO_BASE.
   const changed = tier === "fast" && base ? changedFiles(config, base.sha) : null;
   const plan = planValidation({ config, root, changed, tier });
-  // A refused state directory or file fails here, before the gate spends its time.
+  // A refused, uncreatable or unwritable state directory (or a refused file) fails here, before
+  // the gate spends its time; otherwise the gate's verdict would be lost to the record's write.
   readState(root, "validation", env);
+  prepareStateDir(root, env);
   // The tree as validated: read before the gate's steps run.
   const tree = treeState(config);
   const failFast = flags.has("--fail-fast");

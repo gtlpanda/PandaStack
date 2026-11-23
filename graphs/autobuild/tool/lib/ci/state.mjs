@@ -6,7 +6,7 @@
 // writes alike, and nothing is read or written through it.
 
 import { createHash, randomBytes } from "node:crypto";
-import { closeSync, constants, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { accessSync, closeSync, constants, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -118,6 +118,21 @@ function ensureDir(root, env) {
     throw new CiError("STATE_IO", `cannot create state directory ${dir}: ${error.message}`);
   }
   return checkedDir(dir);
+}
+
+/**
+ * Creates the state directory (0700) when missing and checks that it is writable, so a command
+ * that runs something long first (ci validate's gate) can refuse an unusable state home before
+ * spending that time. Returns the directory.
+ */
+export function prepareStateDir(root, env = process.env) {
+  const dir = ensureDir(root, env);
+  try {
+    accessSync(dir, constants.W_OK);
+  } catch (error) {
+    throw new CiError("STATE_IO", `cannot write state directory ${dir}: ${error.message}`);
+  }
+  return dir;
 }
 
 /** Writes `value` as `<name>.json` atomically with mode 0600. */
