@@ -16,6 +16,8 @@ notes. At least one of the two.
 
 ## Codex runner
 
+If you are running in Codex, use the Codex runner section; in Claude Code, use the sections below.
+
 On Codex, you drive the `blueprint-design` graph through the two CLIs beside
 this file. Never invoke Claude or the Workflow tool, and never fall back to
 another provider. Sections 1 to 8 still say what to ask, show and report; the

@@ -26,12 +26,15 @@ is `"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/build-app/driver/driver.mjs"`.
 
 ## Codex runner
 
+If you are running in Codex, use the Codex runner section; in Claude Code, use the sections below.
+
 On Codex the same driver builds the backlog with `--backend codex`: one fresh
 `codex exec` session per slice, the QA loop and the bug hunt through their
 native CLIs, the same lifecycle, lock, ledger, checks and PR flow. Never invoke
 Claude, and never fall back to it: a Codex failure is an escalation, a brake or
-a stop, not a Claude run. A build stays on the provider it started on; a bare
-`run` for a Codex build is refused (exit 6). Sections 1 to 6 say what to check,
+a stop, not a Claude run. A build stays on the provider it started on; a `run`
+that resolves to the other provider (without `--backend`, the app you are in
+decides) is refused (exit 6). Sections 1 to 6 say what to check,
 show and report; every `driver.mjs` command below replaces the one in them.
 
 The roots. Replace `<installed-skill-dir>` with the absolute path of the
@@ -72,9 +75,10 @@ What differs from Claude:
   The driver also stops the run if the session changed git hooks, config or info.
 - Final QA. `graphs/qa/tool/qa-loop.mjs` (the native `harness-repair` loop). The
   driver commits exactly the files it reports touched as `final: QA fixes`. That
-  loop runs through the `dev` offering, so until `dev` is Codex-available in the
-  catalog it exits 2 `OFFERING_UNSUPPORTED` and the run brakes after the last
-  slice (every slice stays landed; no other provider is tried).
+  loop runs through the `dev` offering: `dev` is Codex-partial in the catalog, so
+  it runs; were that row unavailable it would exit 2 `OFFERING_UNSUPPORTED` and
+  the run would brake after the last slice (every slice stays landed; no other
+  provider is tried).
 - Bug hunt. The bughunt graph's native CLI (`native-cli.mjs` under `graphs/hunt`),
   run as `node native-cli.mjs --repo REPO --base <base> --backend codex --mode fix --codex-bin "$CODEX"`
   on `integration/<app>`. Its verified fixes land only through the driver's own

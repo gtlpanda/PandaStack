@@ -25,6 +25,8 @@ not carry from one command to the next.
 
 ## Codex runner
 
+If you are running in Codex, use the Codex runner section; in Claude Code, use the sections below.
+
 On Codex, you drive the `dev-build` graph through the CLI beside this file.
 Never invoke Claude or the Workflow tool, and never fall back to another
 provider. Sections 1 to 6 still say what to check, ask, show, commit and

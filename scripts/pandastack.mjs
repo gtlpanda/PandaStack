@@ -2,6 +2,7 @@
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { inspectDoctor } from '../core/skills/run-records/doctor.mjs'
+import { HostProviderUsageError, detectHostProvider } from '../core/skills/native-runtime/host-provider.mjs'
 
 export async function main(args) {
   if (args?.[0] === 'decision') {
@@ -24,13 +25,16 @@ export async function main(args) {
     }
     if (!options.repo || (options.backend && !['claude', 'codex'].includes(options.backend)) ||
       (options.model !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(options.model))) throw Error('usage')
-    const report = await inspectDoctor({ repo: resolve(options.repo), backend: options.backend,
+    // No --backend: the app the user is in (Codex CLI or Claude Code) decides; see host-provider.mjs.
+    const backend = options.backend ?? detectHostProvider({ env: process.env }).provider
+    const report = await inspectDoctor({ repo: resolve(options.repo), backend,
       overrides: options.model === undefined ? {} : { model: options.model } })
     console.log(options.json ? JSON.stringify(report) : [`Doctor: ${report.status} (${report.backend})`,
       ...report.checks.map(c => `${c.status}: ${c.id}: ${c.message}`),
       ...Object.entries(report.settings.values).map(([key, value]) => `${key}: ${value ?? 'unknown'} (${report.settings.sources[key]})`)].join('\n'))
     return report.status === 'ready' ? 0 : 2
-  } catch {
+  } catch (error) {
+    if (error instanceof HostProviderUsageError) { console.error(`pandastack: ${error.message}`); return 1 }
     console.error('Usage: pandastack doctor --repo PATH [--backend claude|codex] [--model MODEL] [--json]')
     return 1
   }

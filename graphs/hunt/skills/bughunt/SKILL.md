@@ -33,6 +33,8 @@ These instructions are the opt-in to the Workflow tool for this skill.
 
 ## Codex runner
 
+If you are running in Codex, use the Codex runner section; in Claude Code, use the sections below.
+
 When invoked from Codex, run the same graph through the host CLI; do not invoke
 Claude or translate a one-shot audit into a ledger. Resolve this installed skill
 symlink to find `native-cli.mjs` beside this file:

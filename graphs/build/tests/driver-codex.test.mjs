@@ -9,10 +9,10 @@
 // fixtures/fake-hunt-cli.mjs), except in the two cases that run the real CLIs against the fake codex. No
 // network, no real codex, no claude: a `claude` on PATH records any call and fails.
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
 import { REPORT_SCHEMA, INSTALL_ROOT, huntArgs, huntPrep, huntStateDir, readQaReport, readQaError, tokenUsage, codexVerdict, hostCommit, sliceRules, leafEnv } from '../skills/build-app/driver/codex-session.mjs'
@@ -86,14 +86,14 @@ function box(replies = {}, { limitOnce = false } = {}) {
 const reply = (status, files = {}, extra = {}) => ({ json: JSON.stringify({ status, reason: extra.reason || `${status}`, questions: extra.questions || [] }), writes: files })
 const good = id => reply('done', { [`src/${id}.js`]: `export const ${id} = 1\n`, [`tests/${id}.test.js`]: `test ${id}\n` })
 
-function drive(b, root, { env = {}, flags = ['--no-pr', '--backend', 'codex'], cmd = 'run' } = {}) {
+function drive(b, root, { env = {}, flags = ['--no-pr', '--backend', 'codex'], cmd = 'run', driver = DRIVER } = {}) {
   const e = {
     ...process.env, PATH: `${b.bin}:${process.env.PATH}`, HOME: b.home, HARNESS_BUILD_CODEX_BIN: b.codex, FAKE_CODEX_DIR: b.fake,
     HARNESS_BUILD_VERIFY: VERIFY, HARNESS_BUILD_MAX_SLEEP_MS: '50', PANDASTACK_NOTIFY: '', HARNESS_BUILD_BUGHUNT: '0',
     HARNESS_BUILD_QA_LOOP: FAKE_QA, FAKE_QA_LOG: b.qaLog, HARNESS_BUILD_HUNT_CLI: FAKE_HUNT, FAKE_HUNT_LOG: b.huntLog, ...env,
   }
   delete e.AUTOBUILD_CODEX_BIN
-  const r = spawnSync(process.execPath, [DRIVER, cmd, '--repo', root, '--app', APP, ...flags], { encoding: 'utf8', env: e, timeout: 120_000 })
+  const r = spawnSync(process.execPath, [driver, cmd, '--repo', root, '--app', APP, ...flags], { encoding: 'utf8', env: e, timeout: 120_000 })
   // The invariant of every case: a Codex build never starts claude.
   assert.ok(!existsSync(b.claudeLog), `claude was called: ${existsSync(b.claudeLog) ? readFileSync(b.claudeLog, 'utf8') : ''}`)
   return { code: r.status, out: r.stdout + r.stderr }
@@ -354,15 +354,83 @@ await test('the real hunt CLI accepts the driver\'s arguments (--backend codex -
 
 // The leaf env of the real loop carries no FAKE_CODEX_DIR (HOME and PATH only), so every leaf the fake codex is asked
 // to run fails: the loop can only escalate, never reach `done`, and so never reaches its verify.sh (the repository's own
-// is out of bounds here). Once the dev offering flips, this case still ends in an escalation for the same reason.
-await test('the real QA loop accepts the driver\'s args file (it is refused later, by the offering catalog or a leaf, never as bad input)', () => {
+// is out of bounds here). With the dev offering flipped (CP-06) it is no longer refused by the offering catalog: it
+// gets past OFFERING_UNSUPPORTED to its first leaf, and that leaf is what fails.
+await test('the real QA loop accepts the driver\'s args file and, on the production catalog, is no longer refused by the dev offering (the unscripted leaf fails instead)', () => {
   const b = box({ S1: good('S1'), S2: good('S2') })
   const root = repo()
   const r = drive(b, root, { env: { HARNESS_BUILD_QA_LOOP: '' } })
   assert.equal(r.code, 3, `${r.out}\n${status(root).message}`)
-  assert.match(status(root).message, /the final QA/)
-  assert.doesNotMatch(status(root).message, /INVALID_(LOOP|HOST)_INPUT/)
+  assert.match(status(root).message, /the final QA did not pass \(.*escalate: checker failed: Native runtime: LEAF_FAILED/)
+  assert.doesNotMatch(status(root).message, /OFFERING_UNSUPPORTED|INVALID_(LOOP|HOST)_INPUT/)
   assert.equal(gitOut(root, 'log', '-1', '--format=%s', INT), 'S2: slice 2')
+})
+
+// The final QA PASSES through the real loop, the real dev-build offering gate and the real harness-repair graph, on
+// the production catalog. The one stand-in is verify.sh: the repository's own is out of bounds, so this runs a copy
+// of the tree whose core/skills/verify/verify.sh is an inert script (cp-05d does the same), and the driver is the copy's.
+const INERT_VERIFY = '# INERT: a test fixture, never the repository\'s verify.sh.\nbash scripts/test.sh\ncode=$?\nprintf \'  [%s] bash scripts/test.sh\\n\' "$code"\n[ "$code" -eq 0 ] && printf \'VERIFY: PASS\\n\' || printf \'VERIFY: FAIL\\n\'\nexit "$code"\n'
+await test('the final QA passes through the real QA loop now that dev is Codex-partial: every slice landed, the loop leaves ran, no OFFERING_UNSUPPORTED', async () => {
+  const copy = mkdtempSync(join(tmpdir(), 'build-codex-root-'))
+  for (const dir of ['core', 'graphs', 'spec', 'scripts']) cpSync(join(INSTALL_ROOT, dir), join(copy, dir), { recursive: true, verbatimSymlinks: true })
+  cpSync(join(INSTALL_ROOT, 'agent-config.json'), join(copy, 'agent-config.json'))
+  writeFileSync(join(copy, 'core', 'skills', 'verify', 'verify.sh'), INERT_VERIFY)
+  assert.ok(readFileSync(join(copy, 'core', 'skills', 'verify', 'verify.sh'), 'utf8').includes('INERT'), 'the copy\'s verify.sh is inert')
+  const catalog = JSON.parse(readFileSync(join(copy, 'spec', 'offering-capabilities.json'), 'utf8'))
+  assert.equal(catalog.offerings.find(o => o.id === 'dev').providers.codex.implementation, 'partial', 'the copy is the production catalog: dev is partial')
+
+  const { assembleRoleInstructions } = await import(pathToFileURL(join(copy, 'core', 'skills', 'native-runtime', 'role-files.mjs')).href)
+  const qaRoles = ['checker', 'fixer', 'reviewer', 'advisor', 'qa-auditor']
+    .map(name => ({ role: name, prefix: `${assembleRoleInstructions({ installationRoot: copy, name }).instructions}\n\n` }))
+  const wire = value => ({ json: JSON.stringify(value) })
+  const b = box({})
+  const slices = ['S1', 'S2'].map(id => ({ role: id, prefix: `UNATTENDED BUILD (PandaStack /build-app, Codex). Slice ${id}:` }))
+  writeFileSync(join(b.fake, 'script.json'), JSON.stringify({ roles: [...slices, ...qaRoles], replies: {
+    S1: good('S1'), S2: good('S2'),
+    checker: wire({ verdict: 'PASS', verify_block: '  [0] bash scripts/test.sh\nVERIFY: PASS', failures: [] }),
+    reviewer: wire({ files_reviewed: 1, findings: [] }), 'qa-auditor': wire({ files_reviewed: 1, findings: [] }),
+  } }))
+  // The loop's leaves get only HOME, CODEX_HOME and PATH, so the fake codex carries its own script directory.
+  writeFileSync(b.codex, `#!/bin/sh\nFAKE_CODEX_DIR="${b.fake}" exec "${process.execPath}" "${FAKE_CODEX}" "$@"\n`)
+
+  const root = repo()
+  mkdirSync(join(root, 'scripts'))
+  writeFileSync(join(root, 'scripts', 'test.sh'), 'exit 0\n')
+  execFileSync('git', ['add', '-A'], { cwd: root })
+  execFileSync('git', ['commit', '-q', '-m', 'blueprint: test script'], { cwd: root })
+  const r = drive(b, root, { env: { HARNESS_BUILD_QA_LOOP: '' }, driver: join(copy, 'graphs', 'build', 'skills', 'build-app', 'driver', 'driver.mjs') })
+  assert.equal(r.code, 0, `${r.out}\n${status(root).message}`)
+  assert.equal(status(root).state, 'done')
+  assert.doesNotMatch(driverLog(root), /OFFERING_UNSUPPORTED/)
+  assert.match(driverLog(root), /final QA/i, 'the driver ran the final QA')
+  assert.deepEqual(Object.values(ledger(root).slices).map(x => x.status).sort(), ['done', 'done'], 'every slice landed')
+  assert.ok(b.callsOf('checker').length >= 1 && b.callsOf('reviewer').length >= 1 && b.callsOf('qa-auditor').length >= 1, 'the real loop ran its leaves on the fake codex')
+})
+
+console.log('== build-app driver on Codex: the provider default')
+// Without --backend the app the user is in decides. A real process tree is not available to a test, so the
+// override PANDASTACK_PROVIDER stands in for it (host-provider.mjs has its own tree tests); --backend still wins.
+await test('no --backend: PANDASTACK_PROVIDER=codex builds on Codex; an explicit --backend codex beats PANDASTACK_PROVIDER=claude; a bad value is a usage error before anything runs', () => {
+  const b = box({ S1: good('S1') })
+  const root = repo({ ...BACKLOG, slices: [slice(1, [])], requirements: ['R1'] })
+  const r = drive(b, root, { flags: ['--no-pr'], env: { PANDASTACK_PROVIDER: 'codex' } })
+  assert.equal(r.code, 0, `${r.out}\n${status(root).message}`)
+  assert.equal(status(root).backend, 'codex')
+  assert.deepEqual(JSON.parse(readFileSync(join(stateDir(root), 'backend.json'), 'utf8')), { backend: 'codex' })
+  assert.equal(b.callsOf('S1').length, 1, 'the slice ran on the fake codex')
+
+  const b2 = box({ S1: good('S1') })
+  const root2 = repo({ ...BACKLOG, slices: [slice(1, [])], requirements: ['R1'] })
+  const r2 = drive(b2, root2, { flags: ['--no-pr', '--backend', 'codex'], env: { PANDASTACK_PROVIDER: 'claude' } })
+  assert.equal(r2.code, 0, `${r2.out}\n${status(root2).message}`)
+  assert.equal(status(root2).backend, 'codex', 'the flag wins')
+
+  const b3 = box({})
+  const root3 = repo()
+  const r3 = drive(b3, root3, { flags: ['--no-pr'], env: { PANDASTACK_PROVIDER: 'gpt' } })
+  assert.equal(r3.code, 2, r3.out)
+  assert.match(r3.out, /PANDASTACK_PROVIDER must be "claude" or "codex"/)
+  assert.equal(existsSync(stateDir(root3)), false, 'nothing started')
 })
 
 console.log('== build-app driver on Codex: arguments and defaults')

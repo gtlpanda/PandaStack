@@ -1438,7 +1438,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "b95e13cf7f7451e9c3e73cf0193f0d2f6e72757308a9f533811390047e00374c",
+      "entrySha256": "84f2723c07b66a8f47842fdca596a68ba18bc5501674db3e25359798b999617a",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1471,6 +1471,7 @@
       "nativeReadiness": "unknown",
       "dependencies": [
         "backlog",
+        "native-runtime",
         "run-records"
       ],
       "evidenceOwners": [
@@ -1480,7 +1481,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "a456a740d5b91fbdd045110639fea1df7b98899484b42378ad5c0c3715bf38b1",
+      "entrySha256": "cf07f10aec85d3092135f7e5f69139a027c7d03e550200f682fdce6078113c87",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1529,7 +1530,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "e1f6948c3d0c526e65d5c9ac6062dad906ff02d2bcfb5d063f4aa815048cface",
+      "entrySha256": "9b56b1f365052dd8c6e753addaee79bd7e3e4850a44aea1931c9fd19a0ba1aeb",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1570,6 +1571,7 @@
         "default-stack",
         "findings",
         "knowledge-map",
+        "native-runtime",
         "verify",
         "workflow-state"
       ],
@@ -1581,7 +1583,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "fe2adebf112967fa87be76da8cce730b1265ddbc78fec26b0945caa922cdc910",
+      "entrySha256": "751a1ece86aa1121ce0159ec35fe743965b86592d85c89038ddea408e04182b0",
       "providers": {
         "claude": {
           "implementation": "partial",
@@ -1624,7 +1626,7 @@
       "requiredRuntimes": [],
       "aliases": [],
       "requirementsComplete": false,
-      "entrySha256": "479064df14f56d8cc1f4f93012bda5cb7a1facc51ac4cbeee41415e95858bb4c",
+      "entrySha256": "b2b459608892c9936fda77735ef22f49eb4dad42cd537ea08b3b8b994503004a",
       "providers": {
         "claude": {
           "implementation": "partial",

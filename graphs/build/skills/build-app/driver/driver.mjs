@@ -10,8 +10,9 @@ import { readAgentConfig } from '../../../../../scripts/agent-config.mjs'
 //                          build until done, a brake, or a stop;
 //                          when every slice has landed: a final QA pass, then a push and one PR.
 //                          --no-pr holds for every later run of the app until one passes --pr.
-//                          --backend picks the provider (default claude). A build runs on one provider
-//                          from its first session to its PR: the driver never falls back to the other.
+//                          --backend picks the provider. Without it, the app you are in (Codex CLI or
+//                          Claude Code) decides, else claude. A build runs on one provider from its
+//                          first session to its PR: the driver never falls back to the other.
 //   node driver.mjs status --repo <path> --app <slug>   print status.json
 //   node driver.mjs stop   --repo <path> --app <slug>   stop a running driver (and its session)
 //   node driver.mjs resume --repo <path> --app <slug>   after a brake: the brake counters start over
@@ -45,6 +46,7 @@ import {
   controlDigest, controlChanges, hostCommit, writeQaArgs, readQaReport, readQaError, huntArgs, huntStateDir, huntPrep,
 } from './codex-session.mjs'
 import { readCodexResult } from '../../../../autobuild/tool/lib/codex.mjs'
+import { detectHostProvider } from '../../../../../core/skills/native-runtime/host-provider.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || join(process.env.HOME || '', '.claude')
@@ -589,7 +591,7 @@ function parseArgs(argv) {
   if ((opts.noPr !== null || opts.backend !== undefined) && cmd !== 'run') return null
   if ((cmd === 'unblock') !== (opts.slice !== undefined || opts.answers.length > 0)) return null
   if (cmd === 'unblock' && (!/^S[1-9]\d*$/.test(opts.slice || '') || !opts.answers.length)) return null
-  return { cmd, repo: opts.repo, app: opts.app, noPr: opts.noPr, backend: opts.backend || 'claude', slice: opts.slice, answers: opts.answers }
+  return { cmd, repo: opts.repo, app: opts.app, noPr: opts.noPr, backend: opts.backend, slice: opts.slice, answers: opts.answers }
 }
 
 // resume and unblock change the ledger, so the driver must not be running.
@@ -615,7 +617,13 @@ export async function main(argv) {
   }
   let state
   try { state = stateDirOf(a.repo, a.app) } catch (e) { console.error(`driver: ${e.message}`); return EXIT.preflight }
-  if (a.cmd === 'run') return runDriver(a)
+  if (a.cmd === 'run') {
+    let backend
+    // No --backend: the app the user is in (Codex CLI or Claude Code) decides, claude when neither is detected.
+    // A build recorded on the other provider is still refused at preflight (never a silent switch).
+    try { backend = a.backend ?? detectHostProvider({ env: process.env }).provider } catch (e) { console.error(`driver: ${e.message}`); return 2 }
+    return runDriver({ ...a, backend })
+  }
   if (a.cmd === 'resume') {
     const code = changeLedger(state, resume)
     if (!code) console.log(`resume: the brake counters for ${a.app} start over; blocked slices stay blocked until unblocked`)

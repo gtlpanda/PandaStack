@@ -15,6 +15,8 @@ inside stage `land`, only with an approval the user gave for one exact head.
 
 ## Codex runner
 
+If you are running in Codex, use the Codex runner section; in Claude Code, use the sections below.
+
 On Codex, you drive the `release-flow` graph through the CLI beside this file
 (`release-native.mjs`). Never invoke Claude or the Workflow tool, and never
 fall back to another provider. The Setup section's workflow call is replaced

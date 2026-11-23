@@ -8,6 +8,7 @@ import path from "node:path";
 
 import { readAgentConfig, validateConcurrency } from "../../../../scripts/agent-config.mjs";
 import { validateDecisionConfig } from "../../../../core/skills/decisions/config.mjs";
+import { detectHostProvider } from "../../../../core/skills/native-runtime/host-provider.mjs";
 
 export const CONFIG_FILE = "autobuild.json";
 
@@ -118,7 +119,16 @@ export function findProjectRoot(start = process.cwd()) {
 export function loadConfig(root = findProjectRoot(), env = process.env, overrides = {}) {
   const file = path.join(root, CONFIG_FILE);
   const raw = JSON.parse(readFileSync(file, "utf8"));
-  return resolveManagedConfig({ project: raw, env, overrides, root });
+  return resolveManagedConfig({ project: raw, env, overrides: withHostBackend(raw, env, overrides), root });
+}
+
+// Backend precedence: --backend (overrides.backend) > AUTOBUILD_BACKEND > autobuild.json "backend" > the
+// host app the user is in (Codex CLI or Claude Code) > claude. The host is detected here, at the entry
+// point, and handed down as overrides.defaultBackend, so resolveManagedConfig stays a pure function of its
+// inputs. Detection runs only when nothing above it decided.
+function withHostBackend(raw, env, overrides) {
+  if (overrides.backend || env.AUTOBUILD_BACKEND || raw.backend || overrides.defaultBackend) return overrides;
+  return { ...overrides, defaultBackend: detectHostProvider({ env }).provider };
 }
 
 // Shared, read-only managed launch validation for the launcher and doctor.
@@ -144,7 +154,7 @@ export function resolveManagedConfig({ project: raw = {}, env = {}, overrides = 
   if (!Array.isArray(config.commitGate) || config.commitGate.some(step => !step || typeof step.name !== "string" || !step.name.trim() || typeof step.command !== "string" || !step.command.trim())) {
     throw new Error("commitGate must be an array of named commands");
   }
-  config.backend = overrides.backend || env.AUTOBUILD_BACKEND || config.backend;
+  config.backend = overrides.backend || env.AUTOBUILD_BACKEND || raw.backend || overrides.defaultBackend || config.backend;
   if (!["claude", "codex"].includes(config.backend)) throw new Error('backend must be "claude" or "codex"');
   Object.assign(config, resolveManagedModels({ backend: config.backend, central, project: raw, env, overrides }).values);
   if (env.AUTOBUILD_CLAUDE_BIN) config.claudeBin = env.AUTOBUILD_CLAUDE_BIN;
