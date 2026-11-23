@@ -7,9 +7,10 @@
 //                              no_request | gzip)
 //   exec ... (leaf)         -> read the prompt from stdin, answer with the object the module named by
 //                              FAKE_CODEX_ANSWER returns (default export (prompt) => object), write it to
-//                              --output-last-message and print the JSONL a real run prints.
+//                              --output-last-message ({json: <text>} when --output-schema is the NR-01 wire
+//                              schema) and print the JSONL a real run prints.
 // Every invocation appends {argv, env} (env limited to FAKE_CODEX_ENV_KEYS) to FAKE_CODEX_RECORD.
-import { appendFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
 import { pathToFileURL } from 'node:url'
 
@@ -52,7 +53,10 @@ if (baseUrl) {
 
 const answer = await (await import(pathToFileURL(env.FAKE_CODEX_ANSWER).href)).default(stdin, { argv, env })
 const out = after('--output-last-message')
-if (out) writeFileSync(out, JSON.stringify(answer))
+// The audit profile hands Codex the NR-01 wire schema ({json: string}); any other schema gets the bare object.
+const schema = argv.includes('--output-schema') ? JSON.parse(readFileSync(after('--output-schema'), 'utf8')) : null
+const wire = schema && Object.keys(schema.properties ?? {}).join() === 'json'
+if (out) writeFileSync(out, JSON.stringify(wire ? { json: JSON.stringify(answer) } : answer))
 console.log(JSON.stringify({ type: 'thread.started', thread_id: 'fake' }))
 console.log(JSON.stringify({ type: 'item.completed', item: { id: 'item_0', type: 'agent_message', text: JSON.stringify(answer) } }))
 console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 5, reasoning_output_tokens: 0 } }))
