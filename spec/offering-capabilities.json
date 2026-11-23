@@ -395,7 +395,6 @@
           "implementation": "partial",
           "transportId": "codex-skill",
           "limitations": [
-            "NATIVE_UNVERIFIED",
             "REQUIREMENTS_INCOMPLETE"
           ]
         }

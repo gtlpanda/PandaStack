@@ -152,8 +152,7 @@
     ],
     "keepNativeUnverified": [
       "decisions",
-      "run-records",
-      "verify"
+      "run-records"
     ]
   },
   "unavailable": [
