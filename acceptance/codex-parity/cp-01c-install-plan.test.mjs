@@ -13,6 +13,7 @@ import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readd
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { expectedPlan, planLines, resetToPreWave } from '../../tests/codex-expected-state.mjs'
 
 const ROOT = process.env.PANDASTACK_CANDIDATE_ROOT || fileURLToPath(new URL('../../', import.meta.url))
 const PLAN = 'core/skills/native-runtime/install-plan.mjs'
@@ -31,25 +32,15 @@ const PRODUCTION_PLAN = [
   { dest: 'skills/autobuild', src: 'graphs/autobuild/skills/autobuild' },
   { dest: 'skills/bughunt', src: 'graphs/hunt/skills/bughunt' },
 ]
-// Amended at the CP-04e freeze (W2-10): CP-04e makes blueprint Codex install-eligible.
-// The candidate-root case accepts exactly today's plan or CP-04e's (pinned by its own
-// test), and every fixture root sets blueprint's codex row unavailable itself.
-const CP04E_LINES = 'skills/autobuild\tgraphs/autobuild/skills/autobuild\n' +
-  'skills/blueprint\tgraphs/blueprint/skills/blueprint\nskills/bughunt\tgraphs/hunt/skills/bughunt\n'
-const CP04E_PLAN = [
-  { dest: 'skills/autobuild', src: 'graphs/autobuild/skills/autobuild' },
-  { dest: 'skills/blueprint', src: 'graphs/blueprint/skills/blueprint' },
-  { dest: 'skills/bughunt', src: 'graphs/hunt/skills/bughunt' },
-]
-// Amended for the codex-skill transport (user-authorized, direct human-directed change):
-// the offerings in tests/fixtures/codex-skill-offerings.json are codex `partial`, so the
-// candidate root's plan also holds one line each. Every fixture root below keeps them
-// unavailable (production()), so the plans these tests pin stay the pre-wave ones.
-const CODEX_SKILL = JSON.parse(readFileSync(new URL('../../tests/fixtures/codex-skill-offerings.json', import.meta.url), 'utf8'))
+// Amended for the codex-parity waves (user-authorized, direct human-directed change): the candidate
+// root's plan is the pre-wave two lines plus one per row the expected-state fixture lists as codex
+// partial (tests/fixtures/codex-expected-state.json, through tests/codex-expected-state.mjs). Every
+// fixture root below resets those rows to unavailable (production()), so the plans these tests
+// pin stay the pre-wave ones.
 const THIRD_SRC = 'graphs/fixture/skills/third'
 const THREE_LINES = PRODUCTION_LINES + `skills/third\t${THIRD_SRC}\n`
 // tests/install-codex.test.mjs, byte for byte (re-pinned when it became catalog-driven for the codex-skill transport).
-const INSTALL_CODEX_SHA256 = 'd4ae93dd9d6cc044012ec0c081d30821c902fda2a4d3cbbf5e0cf38e9362ed44'
+const INSTALL_CODEX_SHA256 = '632f34a0403234332ab7e7c7e69d36df44321f235573194df2b56d0ddbd05dc4'
 const INSTALL_CODEX_CASES = 7
 
 // ---------------------------------------------------------------- fixtures
@@ -62,17 +53,8 @@ function owned(t, prefix = 'cp01c-') {
 
 const candidate = () => JSON.parse(readFileSync(join(ROOT, 'spec/offering-capabilities.json'), 'utf8'))
 const row = (catalog, id) => catalog.offerings.find(o => o.id === id)
-// The fixture base: the candidate catalog with blueprint's codex row as it is before CP-04e.
-const production = () => {
-  const catalog = candidate()
-  codexUnavailable(row(catalog, 'blueprint'))
-  for (const id of CODEX_SKILL.ids) {
-    codexUnavailable(row(catalog, id))
-    // A library row (no entry skill) must still carry LIBRARY_ONLY to validate.
-    if (!row(catalog, id).entrySkill) row(catalog, id).providers.codex.limitations.unshift('LIBRARY_ONLY')
-  }
-  return catalog
-}
+// The fixture base: the candidate catalog with every wave-flipped codex row as it was before its wave.
+const production = () => resetToPreWave(candidate())
 
 // Works for either catalog version: the accessor decides, so the test must not care.
 function codexUnavailable(offering) {
@@ -163,20 +145,17 @@ function snapshot(dir) {
 
 // ---------------------------------------------------------------- cases
 
-test('install-plan prints exactly the two current dest<TAB>src lines for the candidate root (three once CP-04e flips blueprint)', async () => {
-  const flipped = row(candidate(), 'blueprint').providers?.codex?.implementation === 'partial'
-  const skillsFlipped = row(candidate(), CODEX_SKILL.ids[0]).providers?.codex?.implementation === 'partial'
-  const skillPlan = skillsFlipped ? CODEX_SKILL.ids.map(id => ({ dest: `skills/${id}`, src: row(candidate(), id).source })) : []
-  const basePlan = flipped ? CP04E_PLAN : PRODUCTION_PLAN
-  const expectedPlan = [...basePlan, ...skillPlan].sort((a, b) => (a.dest < b.dest ? -1 : a.dest > b.dest ? 1 : 0))
-  const lines = expectedPlan.map(e => `${e.dest}\t${e.src}\n`).join('')
+test('install-plan prints exactly the pre-wave two dest<TAB>src lines plus one per expected-state codex partial row, for the candidate root', async () => {
+  const plannedExpected = expectedPlan(candidate())
+  assert.deepEqual(plannedExpected.filter(e => PRODUCTION_PLAN.some(p => p.dest === e.dest)), PRODUCTION_PLAN, 'the pre-wave two lines are in it unchanged')
+  const lines = planLines(plannedExpected)
   planOk(plan(ROOT), lines)
   planOk(plan(ROOT, ['--backend', 'codex', '--installation-root', ROOT]), lines)
 
   const { installPlan } = await loadPlan()
   assert.equal(typeof installPlan, 'function', 'install-plan.mjs exports installPlan')
   const result = installPlan({ installationRoot: ROOT, backend: 'codex' })
-  assert.deepEqual(result, expectedPlan)
+  assert.deepEqual(result, plannedExpected)
   for (const entry of result) assert.deepEqual(Object.keys(entry), ['dest', 'src'])
   assert.deepEqual(installPlan({ installationRoot: ROOT, backend: 'codex' }), result, 'same result on every call')
 

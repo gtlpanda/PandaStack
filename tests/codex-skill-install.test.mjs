@@ -1,5 +1,5 @@
 // codex-skill-install.test.mjs — offline proof for the codex-skill transport: the guidance and
-// helper offerings listed in tests/fixtures/codex-skill-offerings.json run on Codex as installed
+// helper offerings listed in tests/fixtures/codex-expected-state.json (`skill`) run on Codex as installed
 // skills. Proves, with an owned temp HOME and no network, provider, codex or claude process:
 //   1. catalog: every codex-skill row carries the Claude row's limitation set (plus
 //      NATIVE_UNVERIFIED only where the fixture lists it) and the transport row exists;
@@ -18,8 +18,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, REPO } from '../scripts/workflow-harness.mjs'
 import { installEligible, providerImplementation } from '../core/skills/native-runtime/catalog.mjs'
-
-const FIXTURE = JSON.parse(readFileSync(join(REPO, 'tests/fixtures/codex-skill-offerings.json'), 'utf8'))
+import { KEEP_NATIVE_UNVERIFIED, SKILL_IDS, SKILL_TRANSPORT } from './codex-expected-state.mjs'
+const FIXTURE = { ids: SKILL_IDS, keepNativeUnverified: KEEP_NATIVE_UNVERIFIED, transport: SKILL_TRANSPORT }
 const catalog = JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8'))
 const byId = new Map(catalog.offerings.map(o => [o.id, o]))
 const rows = FIXTURE.ids.map(id => byId.get(id))

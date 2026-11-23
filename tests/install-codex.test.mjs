@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import { test, REPO } from '../scripts/workflow-harness.mjs'
+import { PARTIAL_IDS } from './codex-expected-state.mjs'
 
 function fixture(fn) {
   const home = mkdtempSync(join(tmpdir(), 'install-codex-'))
@@ -17,17 +18,17 @@ function fixture(fn) {
 const ok = r => assert.equal(r.status, 0, r.stdout + r.stderr)
 const isLink = p => { try { return lstatSync(p).isSymbolicLink() } catch { return false } }
 
-// The installed set is read from the catalog: every offering whose codex row is not
-// `unavailable` (autobuild, bughunt, blueprint and, with the codex-skill transport, the
-// guidance and helper skills), by its install target. Amended for the codex-skill transport.
-const eligible = () => JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8')).offerings
-  .filter(o => o.providers.codex.implementation !== 'unavailable')
-const eligibleNames = (skip = []) => eligible().flatMap(o => o.installTargets.map(d => d.slice('skills/'.length)))
-  .filter(name => !skip.includes(name)).sort()
+// The installed set is the expected-state fixture's: every offering whose codex row is partial
+// (the pre-wave autobuild and bughunt, each wave-flipped graph row, the codex-skill offerings), by
+// install target. Amended for the codex-parity waves: it comes from tests/fixtures/codex-expected-state.json
+// (tests/codex-expected-state.mjs) and the catalog's install targets must agree with it.
+const catalog = () => JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8'))
+const eligibleNames = (skip = []) => PARTIAL_IDS.filter(name => !skip.includes(name))
 const blueprintFlipped = () => eligibleNames().includes('blueprint')
 
 test('Codex dry-run changes nothing; install is limited to the eligible skills and idempotent', () => fixture(({ home, skills, run }) => {
   const flipped = blueprintFlipped()
+  assert.deepEqual(catalog().offerings.filter(o => PARTIAL_IDS.includes(o.id)).flatMap(o => o.installTargets).sort(), PARTIAL_IDS.map(n => `skills/${n}`), 'the fixture names each install target')
   ok(run(['--dry-run']))
   assert.deepEqual(readdirSync(home), [])
   ok(run())

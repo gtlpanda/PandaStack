@@ -18,10 +18,10 @@ const ROOT = process.env.PANDASTACK_CANDIDATE_ROOT || fileURLToPath(new URL('../
 const load = rel => import(pathToFileURL(resolve(ROOT, rel)))
 const loadRoles = () => load('core/skills/native-runtime/role-files.mjs')
 const loadCatalog = () => load('core/skills/native-runtime/catalog.mjs')
+import { KEEP_NATIVE_UNVERIFIED, SKILL_IDS, expectedPlan } from '../../tests/codex-expected-state.mjs'
 const sha = bytes => createHash('sha256').update(bytes).digest('hex')
-// Amended for the codex-skill transport (user-authorized, direct human-directed change): the
-// offerings in this fixture are codex partial; only `keepNativeUnverified` ones keep NATIVE_UNVERIFIED.
-const CODEX_SKILL = JSON.parse(readFileSync(new URL('../../tests/fixtures/codex-skill-offerings.json', import.meta.url), 'utf8'))
+// Amended for the codex-parity waves (user-authorized, direct human-directed change): which rows are
+// codex partial, and which keep NATIVE_UNVERIFIED, come from the expected-state fixture.
 const production = () => JSON.parse(readFileSync(resolve(ROOT, 'spec/offering-capabilities.json'), 'utf8'))
 const coded = code => e => e instanceof Error && e.code === code
 
@@ -268,7 +268,7 @@ test('reference rows declare dependencies, stay non-supported and carry GUIDANCE
       assert.ok(entry.limitations.includes('GUIDANCE_ONLY'), `${row.id} ${backend} GUIDANCE_ONLY`)
       assert.ok(entry.limitations.includes('REQUIREMENTS_INCOMPLETE'), `${row.id} ${backend} REQUIREMENTS_INCOMPLETE`)
     }
-    const unverified = !CODEX_SKILL.ids.includes(row.id) || CODEX_SKILL.keepNativeUnverified.includes(row.id)
+    const unverified = !SKILL_IDS.includes(row.id) || KEEP_NATIVE_UNVERIFIED.includes(row.id)
     assert.equal(row.providers.codex.limitations.includes('NATIVE_UNVERIFIED'), unverified, `${row.id} codex NATIVE_UNVERIFIED`)
   }
   // GUIDANCE_ONLY never marks a graph or a code library: those are not prose guidance.
@@ -288,17 +288,10 @@ test('every codex install closure stays under core/skills, and install-plan chec
   requireV2(catalog)
   const { installEligible } = await loadCatalog()
   const { installPlan } = await load('core/skills/native-runtime/install-plan.mjs')
-  // Amended at the CP-04e freeze (W2-10): CP-04e adds blueprint to the installed set;
-  // its own test pins that state. Its closure (backlog, default-stack, knowledge-map,
-  // native-runtime, run-records) is checked by the loop below like every other.
-  const flipped = catalog.offerings.find(o => o.id === 'blueprint').providers.codex.implementation === 'partial'
-  const skillsFlipped = catalog.offerings.find(o => o.id === CODEX_SKILL.ids[0]).providers.codex.implementation === 'partial'
-  const expected = [{ dest: 'skills/autobuild', src: 'graphs/autobuild/skills/autobuild' },
-    ...(flipped ? [{ dest: 'skills/blueprint', src: 'graphs/blueprint/skills/blueprint' }] : []),
-    { dest: 'skills/bughunt', src: 'graphs/hunt/skills/bughunt' },
-    ...(skillsFlipped ? CODEX_SKILL.ids.map(id => ({ dest: `skills/${id}`, src: catalog.offerings.find(o => o.id === id).source })) : [])]
-    .sort((a, b) => (a.dest < b.dest ? -1 : a.dest > b.dest ? 1 : 0))
-  assert.deepEqual(installPlan({ installationRoot: ROOT, backend: 'codex' }), expected, 'the installed set is unchanged (plus blueprint after CP-04e)')
+  // Amended for the codex-parity waves: the installed set is the expected-state fixture's partial rows
+  // (autobuild and bughunt, every wave-flipped graph row, the codex-skill offerings). The closure of each
+  // is checked by the loop below like every other.
+  assert.deepEqual(installPlan({ installationRoot: ROOT, backend: 'codex' }), expectedPlan(catalog), "the installed set is the fixture's partial rows")
   const byId = new Map(catalog.offerings.map(o => [o.id, o]))
   for (const row of catalog.offerings.filter(o => installEligible(o, 'codex'))) {
     for (const id of transitive(catalog, row.id)) {
@@ -307,13 +300,13 @@ test('every codex install closure stays under core/skills, and install-plan chec
   }
   assert.ok(transitive(catalog, 'bughunt').has('backlog'), 'bughunt -> backlog is declared')
 
-  // A root holding every source as an empty real directory plans the same two entries;
+  // A root holding every source as an empty real directory plans the same entries;
   // removing backlog, which only the closure rules make a bughunt dependency, refuses.
   const root = join(owned(t), 'repo root')
   mkdirSync(join(root, 'spec'), { recursive: true })
   cpSync(resolve(ROOT, 'spec/offering-capabilities.json'), join(root, 'spec/offering-capabilities.json'))
   for (const row of catalog.offerings) mkdirSync(join(root, row.source), { recursive: true })
-  assert.deepEqual(installPlan({ installationRoot: root, backend: 'codex' }), expected)
+  assert.deepEqual(installPlan({ installationRoot: root, backend: 'codex' }), expectedPlan(catalog))
   rmSync(join(root, 'core/skills/backlog'), { recursive: true })
   assert.throws(() => installPlan({ installationRoot: root, backend: 'codex' }), coded('DEPENDENCY_MISSING'))
 })

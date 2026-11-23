@@ -1,0 +1,162 @@
+{
+  "comment": "Single source of truth for the expected codex catalog state. Tests compare the catalog to this exactly; adding or flipping a row means editing this file only.",
+  "transports": [
+    {
+      "id": "claude-code",
+      "provider": "claude",
+      "entry": "install.sh"
+    },
+    {
+      "id": "codex-autobuild",
+      "provider": "codex",
+      "entry": "graphs/autobuild/tool/lib/codex.mjs"
+    },
+    {
+      "id": "codex-bughunt",
+      "provider": "codex",
+      "entry": "graphs/hunt/skills/bughunt/native-runner.mjs"
+    },
+    {
+      "id": "codex-graph-host",
+      "provider": "codex",
+      "entry": "core/skills/native-runtime/graph-host.mjs"
+    },
+    {
+      "id": "codex-skill",
+      "provider": "codex",
+      "entry": "install.sh"
+    }
+  ],
+  "graphRows": [
+    {
+      "id": "autobuild",
+      "transportId": "codex-autobuild",
+      "limitations": [
+        "LIVE_PROOF_MISSING",
+        "NATIVE_UNVERIFIED",
+        "REQUIREMENTS_INCOMPLETE"
+      ],
+      "proofRefs": [],
+      "preWave": true
+    },
+    {
+      "id": "blueprint",
+      "transportId": "codex-graph-host",
+      "limitations": [
+        "LIVE_PROOF_MISSING",
+        "NATIVE_UNVERIFIED",
+        "REQUIREMENTS_INCOMPLETE"
+      ],
+      "proofRefs": [],
+      "preWave": false
+    },
+    {
+      "id": "build-app",
+      "transportId": "codex-autobuild",
+      "limitations": [
+        "LIVE_PROOF_MISSING",
+        "NATIVE_UNVERIFIED",
+        "REQUIREMENTS_INCOMPLETE"
+      ],
+      "proofRefs": [
+        "cp-07-build-app-wiring"
+      ],
+      "preWave": false
+    },
+    {
+      "id": "bughunt",
+      "transportId": "codex-bughunt",
+      "limitations": [
+        "LIVE_PROOF_MISSING",
+        "NATIVE_UNVERIFIED",
+        "REQUIREMENTS_INCOMPLETE"
+      ],
+      "proofRefs": [],
+      "preWave": true
+    },
+    {
+      "id": "dev",
+      "transportId": "codex-graph-host",
+      "limitations": [
+        "LIVE_PROOF_MISSING",
+        "NATIVE_UNVERIFIED",
+        "REQUIREMENTS_INCOMPLETE"
+      ],
+      "proofRefs": [
+        "cp-02f-host-wiring",
+        "cp-05e-qa-gate",
+        "cp-06-dev-codex"
+      ],
+      "preWave": false
+    },
+    {
+      "id": "release-pr",
+      "transportId": "codex-graph-host",
+      "limitations": [
+        "LIVE_PROOF_MISSING",
+        "NATIVE_UNVERIFIED",
+        "REQUIREMENTS_INCOMPLETE"
+      ],
+      "proofRefs": [
+        "cp-08-release-codex"
+      ],
+      "preWave": false
+    }
+  ],
+  "skill": {
+    "transport": {
+      "id": "codex-skill",
+      "provider": "codex",
+      "entry": "install.sh"
+    },
+    "ids": [
+      "backlog",
+      "bug-lenses",
+      "build-bot-integration",
+      "build-scraper",
+      "clean-gone",
+      "commit",
+      "copywriting",
+      "decisions",
+      "deep",
+      "deep-fix",
+      "default-stack",
+      "dockerize",
+      "dry",
+      "error-audit",
+      "findings",
+      "fix-scraper",
+      "frontend-design",
+      "gtm-brief",
+      "harness-review",
+      "init-agents",
+      "init-ci",
+      "init-claude",
+      "init-env",
+      "init-monorepo",
+      "init-tasks",
+      "init-tests",
+      "knowledge-map",
+      "logging",
+      "native-runtime",
+      "release",
+      "render",
+      "run-records",
+      "scaffold-app",
+      "security",
+      "seo",
+      "seo-check",
+      "vendor-lens",
+      "verify",
+      "workflow-state"
+    ],
+    "keepNativeUnverified": [
+      "decisions",
+      "run-records",
+      "verify"
+    ]
+  },
+  "unavailable": [
+    "security-audit"
+  ]
+}

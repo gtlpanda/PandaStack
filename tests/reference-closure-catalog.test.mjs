@@ -9,14 +9,14 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test, REPO } from '../scripts/workflow-harness.mjs'
 import { validateCatalog, installEligible, nativeImplementationOf, providerImplementation } from '../core/skills/native-runtime/catalog.mjs'
-
+import { KEEP_NATIVE_UNVERIFIED, SKILL_IDS, SKILL_TRANSPORT } from './codex-expected-state.mjs'
 const catalog = JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8'))
 const byId = new Map(catalog.offerings.map(o => [o.id, o]))
 const REFERENCE_ROWS = ['backlog', 'bug-lenses', 'default-stack', 'findings', 'gtm-brief', 'knowledge-map', 'run-records']
 const CLAUDE_LIMITS = ['GUIDANCE_ONLY', 'REQUIREMENTS_INCOMPLETE']
 // Amended for the codex-skill transport: each reference row is codex partial over codex-skill, with the
 // Claude limitation set, plus NATIVE_UNVERIFIED only where the fixture lists the row (run-records).
-const SKILLS = JSON.parse(readFileSync(join(REPO, 'tests/fixtures/codex-skill-offerings.json'), 'utf8'))
+const SKILLS = { ids: SKILL_IDS, keepNativeUnverified: KEEP_NATIVE_UNVERIFIED, transport: SKILL_TRANSPORT }
 const codexLimits = id => [...CLAUDE_LIMITS, ...(SKILLS.keepNativeUnverified.includes(id) ? ['NATIVE_UNVERIFIED'] : [])].sort()
 const CODEX_LIMITS = codexLimits('backlog')
 const codeUnitSorted = list => [...list].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))

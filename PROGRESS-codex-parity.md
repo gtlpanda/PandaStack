@@ -2429,7 +2429,7 @@ release-pr, build-app and security-audit) are now codex `partial` over a new `co
 transport (`install.sh --codex` links them into the Codex skills directory). Each carries the
 Claude row's limitation set; `NATIVE_UNVERIFIED` stays only on `verify`, `run-records` and
 `decisions`, whose helpers `tests/codex-skill-install.test.mjs` does not run. The list is
-`tests/fixtures/codex-skill-offerings.json`. The graph host refuses a `codex-skill` row for graph
+`tests/fixtures/codex-expected-state.json (`skill`, now part of the one expected-state fixture)`. The graph host refuses a `codex-skill` row for graph
 execution (`core/skills/native-runtime/graph-host.mjs`). SKILL.md edits: render, seo-check and
 workflow-state use the CP-03a `SKILL_DIR` idiom; init-agents and init-claude gain explicit
 Codex output (docs/agents guides + AGENTS.md); commit, init-env, init-ci, deep, deep-fix and

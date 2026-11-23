@@ -19,6 +19,7 @@ import {
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { PARTIAL_IDS, STATE, expectedPlan, planLines } from '../../tests/codex-expected-state.mjs'
 
 const ROOT = realpathSync(process.env.PANDASTACK_CANDIDATE_ROOT || resolve(import.meta.dirname, '..', '..'))
 const SKILL_REL = 'graphs/blueprint/skills/blueprint'
@@ -42,24 +43,13 @@ const INVOCATION_ID = /^bp-(interview|design|backlog)-([0-9]{8}T[0-9]{6}Z)-[0-9a
 const CODEX_ROW = Object.freeze({ implementation: 'partial', transportId: 'codex-graph-host',
   limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] })
 const CLAUDE_ROW = Object.freeze({ implementation: 'partial', transportId: 'claude-code', limitations: ['REQUIREMENTS_INCOMPLETE'] })
-const TRANSPORTS = [
-  { id: 'claude-code', provider: 'claude', entry: 'install.sh' },
-  { id: 'codex-autobuild', provider: 'codex', entry: 'graphs/autobuild/tool/lib/codex.mjs' },
-  { id: 'codex-bughunt', provider: 'codex', entry: 'graphs/hunt/skills/bughunt/native-runner.mjs' },
-  { id: 'codex-graph-host', provider: 'codex', entry: 'core/skills/native-runtime/graph-host.mjs' },
-]
-// Amended for the codex-skill transport (user-authorized, direct human-directed change): the
-// offerings in tests/fixtures/codex-skill-offerings.json are codex partial over a fifth transport,
-// codex-skill, so the plan and the installed set also hold one entry each.
-const CODEX_SKILL = JSON.parse(readFileSync(new URL('../../tests/fixtures/codex-skill-offerings.json', import.meta.url), 'utf8'))
-const CODEX_SKILL_SOURCES = Object.fromEntries(readJson(resolve(ROOT, CATALOG)).offerings
-  .filter(o => CODEX_SKILL.ids.includes(o.id)).map(o => [o.id, o.source]))
-const INSTALLED_NAMES = ['autobuild', 'blueprint', 'bughunt', ...CODEX_SKILL.ids].sort()
+// Amended for the codex-parity waves (user-authorized, direct human-directed change): the transports, the
+// partial rows, the plan and the installed set come from the expected-state fixture
+// (tests/fixtures/codex-expected-state.json, through tests/codex-expected-state.mjs); this test keeps
+// pinning everything about blueprint itself.
+const INSTALLED_NAMES = PARTIAL_IDS
+const THREE_LINES = planLines(expectedPlan(readJson(resolve(ROOT, CATALOG))))
 // CP-04c adds the native-runtime edge; CP-04e leaves the dependency list alone.
-const PLAN_ROWS = [['autobuild', 'graphs/autobuild/skills/autobuild'], ['blueprint', 'graphs/blueprint/skills/blueprint'],
-  ['bughunt', 'graphs/hunt/skills/bughunt'], ...CODEX_SKILL.ids.map(id => [id, CODEX_SKILL_SOURCES[id]])]
-  .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
-const THREE_LINES = PLAN_ROWS.map(([name, src]) => `skills/${name}\t${src}\n`).join('')
 const BLUEPRINT_DEPENDENCIES = ['backlog', 'default-stack', 'knowledge-map', 'native-runtime']
 
 let WORK, REAL_GIT, REAL_BASH, SYSTEM_TOOLS
@@ -163,7 +153,7 @@ describe('CP-04e: blueprint on Codex', () => {
     const blueprint = catalog.offerings.find(o => o.id === 'blueprint')
     assert.deepEqual(blueprint.providers.codex, CODEX_ROW, 'blueprint\'s codex row')
     assert.deepEqual(blueprint.providers.claude, CLAUDE_ROW, 'blueprint\'s claude row is unchanged')
-    assert.deepEqual(catalog.transports, [...TRANSPORTS, CODEX_SKILL.transport], 'the three CP-01b transports, codex-graph-host and codex-skill, in that order')
+    assert.deepEqual(catalog.transports, STATE.transports, 'the transports are the expected-state fixture\'s, in order (the CP-01b three, codex-graph-host, codex-skill)')
     assert.equal(blueprint.entrySha256, sha(readFileSync(SKILL_MD)), 'entrySha256 is the sha256 of the SKILL.md bytes')
     assert.deepEqual(blueprint.dependencies, BLUEPRINT_DEPENDENCIES)
     assert.deepEqual(blueprint.evidenceOwners, ['graphs/blueprint/workflows/blueprint-design.js', 'graphs/blueprint/skills/blueprint/write-docs.mjs'])
@@ -171,7 +161,7 @@ describe('CP-04e: blueprint on Codex', () => {
     assert.equal(blueprint.requirementsComplete, false)
     assert.equal(blueprint.nativeReadiness, 'unknown')
     assert.deepEqual(catalog.offerings.filter(o => o.providers.codex.implementation === 'partial').map(o => o.id).sort(),
-      INSTALLED_NAMES, 'codex partial rows are exactly autobuild, blueprint, bughunt and the codex-skill offerings')
+      INSTALLED_NAMES, 'codex partial rows are exactly the expected-state fixture\'s')
 
     const { installEligible, nativeImplementationOf, checkCatalogDrift } = await loadModule('core/skills/native-runtime/catalog.mjs')
     assert.equal(installEligible(blueprint, 'codex'), true)
@@ -182,7 +172,7 @@ describe('CP-04e: blueprint on Codex', () => {
   test('2. install: the plan is three lines, install.sh --codex links blueprint in an owned HOME, --uninstall removes it', () => {
     const plan = spawnSync(process.execPath, [join(ROOT, 'core/skills/native-runtime/install-plan.mjs'), '--installation-root', ROOT, '--backend', 'codex'],
       { encoding: 'utf8', cwd: WORK, env: { PATH: dirname(process.execPath) } })
-    assert.deepEqual([plan.status, plan.stderr, plan.stdout], [0, '', THREE_LINES], 'install-plan prints autobuild, blueprint, bughunt and the codex-skill entries')
+    assert.deepEqual([plan.status, plan.stderr, plan.stdout], [0, '', THREE_LINES], 'install-plan prints one line per expected-state partial row')
 
     const { home, skills } = ownedHome()
     runInstall(home, skills)
