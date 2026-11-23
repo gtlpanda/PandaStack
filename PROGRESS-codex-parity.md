@@ -2424,7 +2424,7 @@ Full regressions, review and the branch hunt remain pending for the PR.
 
 ## CP-06 — dev on Codex: native runner section, driver CLI, catalog flip, wiring proof
 
-Branch codex-parity/dev. Fake-codex wiring proof, not runtime certification. The supervisor
+Branch codex-parity/dev. Fake-codex wiring proof, not runtime certification. The task brief
 authorized editing SKILL.md, the catalog and the snapshot pins listed below.
 
 - `graphs/dev/skills/dev/dev-native.mjs` (new): `run --args-file <abs>` with mode `new`, `plan`
@@ -2441,14 +2441,16 @@ authorized editing SKILL.md, the catalog and the snapshot pins listed below.
   `[LIVE_PROOF_MISSING, NATIVE_UNVERIFIED, REQUIREMENTS_INCOMPLETE]`; dependencies gain
   `native-runtime` (the section names the host's reconcile tool); proofRefs gain
   `cp-06-dev-codex`; `entrySha256` re-pinned.
-- Tests: `tests/dev-native.test.mjs` (14 cases on the production catalog: leaf order,
+- Tests: `tests/dev-native.test.mjs` (15 cases on the production catalog: leaf order,
   advisor gate revise and blocked, plan-ready and edited-plan builds, triage, a refusal that
   escalates once with no claude or gh call, same-invocation replay with zero spawns, `resume`
   skipping built components, refusals before a spawn, an installed-symlink run) and
   `tests/dev-codex-runner.test.mjs` (5 cases: section, table against the CLI's keys, roots
   block, byte-identical Claude path).
-- Snapshot pins amended to dev's new state (each also accepts the old state where it did
-  before): cp-01b (`cp04eFlipped` also matches dev), cp-01c (candidate plan gains `skills/dev`,
+- Snapshot pins amended to dev's new state (cp-01b, cp-01c, cp-03b and tests/install-plan
+  keep accepting the old state as well; cp-01d keys dev's expected row on blueprint's, and
+  cp-04e, cp-05e, qa-gate-proof-ref and reference-closure-catalog pin the new state
+  outright): cp-01b (`cp04eFlipped` also matches dev), cp-01c (candidate plan gains `skills/dev`,
   fixture roots set dev unavailable, install-codex sha), cp-01d (ready set), cp-03b (installed
   set), cp-04e (partial rows, plan, installed set), cp-05d case 11 (a root copy with dev
   unavailable replaces the production root), cp-05e case 4 (proofRefs, dev partial);

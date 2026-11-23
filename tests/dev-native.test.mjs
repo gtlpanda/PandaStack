@@ -392,7 +392,8 @@ await test('a host refusal passes through: dev codex unavailable gives OFFERING_
   for (const rel of ['spec', 'core', 'kit', ...readdirSync(join(ROOT, 'graphs')).map(g => `graphs/${g}`)]) {
     const from = join(ROOT, rel)
     if (!existsSync(from)) continue
-    cpSync(from, join(root, rel), { recursive: true, filter: source => !source.includes('/tests') && !source.includes('/test-native') })
+    // Judge each path relative to the checkout: the checkout itself may sit under any directory.
+    cpSync(from, join(root, rel), { recursive: true, filter: source => !/(^|\/)(tests|test-native)(\/|$)/.test(source.slice(ROOT.length)) })
   }
   const catalog = readJson(join(root, CATALOG))
   catalog.offerings.find(o => o.id === 'dev').providers.codex = { implementation: 'unavailable', transportId: null,

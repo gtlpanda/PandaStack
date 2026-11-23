@@ -533,7 +533,7 @@ test('on the candidate root only the codex-partial offerings can be ready (wirin
     }
     // Amended at the CP-04e freeze (W2-10): blueprint joins once CP-04e flips its codex row.
     const partial = row => row.providers.codex.implementation === 'partial'
-    // Amended for CP-06: dev joins once its codex row is partial.
+    // Amended for CP-06: dev joins too (this keys on blueprint's flipped row, so it pins the CP-06 state).
     const expected = catalog.offerings.find(o => o.id === 'blueprint').providers.codex.implementation === 'partial'
       ? ['autobuild', 'blueprint', 'bughunt', 'dev'] : ['autobuild', 'bughunt']
     assert.deepEqual(catalog.offerings.filter(partial).map(o => o.id).sort(), expected, 'no other codex row is partial')
