@@ -692,12 +692,13 @@ Decisions (unattended, recorded here):
 
 Focused validation:
 - `node --test acceptance/ci-optimizer/co-10-report.test.mjs`: 17/17 pass.
-- `node --test graphs/autobuild/tool/test/ci-report.test.mjs`: 13/13 pass, 0 skipped. These are new
+- `node --test graphs/autobuild/tool/test/ci-report.test.mjs`: 14/14 pass, 0 skipped. These are new
   implementation tests, offline, with private `AUTOBUILD_STATE_HOME` directories. They cover:
   - pipe and newline injection, and a null workflow name;
   - the validation line;
   - a baseline without a regression, and nested regression step bullets;
-  - first-run `onboarding` visibility;
+  - `onboarding` on the first report, and `ci-config-changed` after a workflow edit;
+  - a refused `--out` leaving no state directory, so nothing was gathered;
   - an invalid `baseline.json`;
   - `--out` through a linked parent into `.git`;
   - a nested `autobuild.json` root;
@@ -707,8 +708,14 @@ Focused validation:
   - a FIFO (skips itself without `mkfifo`; it ran here);
   - `--out` without a value.
 - Tripwires for the shared modules: all twelve `ci-*.test.mjs` tool tests (including the new
-  `ci-report`), CO-01..10 acceptance and `entrypoint.test.mjs`. 406/406 pass
+  `ci-report`), CO-01..10 acceptance and `entrypoint.test.mjs`. 407/407 pass
   (`logs/evidence/co-10-tripwires.log`, gitignored).
+- Not run here: the loop and status tests (`loop*.test.mjs`, `status-shard-skip`, the
+  run/status-driving tool tests and frozen acceptance listed under CO-09). They load
+  `triggers.mjs` and `discover.mjs`, which this feature touched only to export `workflowLabel`
+  and import `sortedUnique`. They are left to the PR's full regressions.
+- Untested hypothesis: on a case-insensitive filesystem, the `.git` check compares path
+  strings, so `--out .GIT/x` may not be refused there. Not testable on this machine.
 - `bash scripts/check-secrets.sh` (tracked files), and the same script run on
   `lib/ci/report.mjs` and `test/ci-report.test.mjs`: clean.
 

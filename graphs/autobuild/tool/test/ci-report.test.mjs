@@ -122,6 +122,19 @@ test("first report shows onboarding (evaluated before the profile is stored); th
   assert.match(first.stdout, /- \*\*onboarding\*\*: no CI profile for this repository/);
   assert.equal(second.code, 0, second.stderr);
   assert.match(second.stdout, /## Triggers\n\nNo trigger fired\./);
+  writeFileSync(path.join(repo, ".github", "workflows", "test.yml"), WORKFLOW.replace("npm test", "npm test -- --verbose"));
+  const third = ci(repo, home, "report");
+  assert.equal(third.code, 0, third.stderr);
+  assert.match(third.stdout, /- \*\*ci-config-changed\*\*: CI, manifest or autobuild\.json changed since /, "a CI change shows before the profile is refreshed");
+});
+
+test("a refused --out fails before anything is gathered: no state is written", (t) => {
+  const home = tempDir(t, "ci-report-state-");
+  const repo = repoWith(t, { ".github/workflows/test.yml": WORKFLOW });
+  const r = ci(repo, home, "report", "--out", ".git/x");
+  assert.equal(r.code, 2, r.stderr);
+  assert.match(r.stderr, /OUT_UNSAFE/);
+  assert.ok(!existsSync(ciStateDir(repo, { AUTOBUILD_STATE_HOME: home })), "no state directory, so no profile was stored");
 });
 
 test("a baseline.json that is not a baseline document is treated as no baseline", (t) => {
