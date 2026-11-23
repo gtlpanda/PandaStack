@@ -10,7 +10,7 @@
 // This is not hostile same-user OS isolation. It does not establish that the `exec` JavaScript isolate is escape-proof, nor which hosted tools a
 // real provider may attach beyond what the preflight's loopback request showed.
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -128,28 +128,36 @@ export function createNativeCodexHost({ runDir, codexBin, authFile, installation
     return receipt
   }
 
+  // Every attempt is recorded, passing or not: `preflight.json` is the latest attempt, and `preflight-history.jsonl` keeps every attempt in order, so a
+  // refused resume never leaves an earlier passing receipt standing as the record of what happened last.
+  function recordAttempt(attempt) {
+    const entry = { version: 1, checkedAt: new Date().toISOString(), ...attempt }
+    writeJson(join(base, 'preflight.json'), entry)
+    appendFileSync(join(base, 'preflight-history.jsonl'), JSON.stringify(entry) + '\n', { mode: 0o600 })
+  }
+
   async function prepare() {
     layout()
     reader = buildReaderInputs(runDir)
     const receipts = []
+    let version = null, pinned = false
     try {
-      const version = codexVersion({ codexBin, env })
-      const state = { version, pinned: SOURCE_ONLY_PINNED_VERSIONS.includes(version) }
+      version = codexVersion({ codexBin, env })
+      pinned = SOURCE_ONLY_PINNED_VERSIONS.includes(version)
       const catalog = readBundledCatalog({ codexBin, env })
       for (const model of models) {
-        try { receipts.push(await preflightModel(model, catalog, state)) } catch (e) {
+        try { receipts.push(await preflightModel(model, catalog, { version, pinned })) } catch (e) {
           if (e?.code !== 'SOURCE_ONLY_MODEL_MISSING') throw e
           receipts.push({ model, ok: false, problems: ['the Codex catalog has no entry for this model'], requests: 0, codexVersion: version,
-            versionPinned: state.pinned, catalogSha256: null, checkedAt: new Date().toISOString() })
+            versionPinned: pinned, catalogSha256: null, checkedAt: new Date().toISOString() })
         }
       }
-      writeJson(join(base, 'preflight.json'), { version: 1, codexVersion: version, versionPinned: state.pinned, receipts })
       const failed = receipts.filter(r => !r.ok)
       if (failed.length) throw error('SOURCE_ONLY_UNVERIFIED', { problems: failed.flatMap(r => r.problems.map(p => `${r.model}: ${p}`)) })
-      return { codexVersion: version, versionPinned: state.pinned, models: [...verified.keys()] }
+      recordAttempt({ codexVersion: version, versionPinned: pinned, receipts })
+      return { codexVersion: version, versionPinned: pinned, models: [...verified.keys()] }
     } catch (e) {
-      // A receipt exists whatever stopped the preflight, so a refused run says why on disk.
-      if (!existsSync(join(base, 'preflight.json'))) writeJson(join(base, 'preflight.json'), { version: 1, codexVersion: null, versionPinned: false, receipts, error: String(e?.code ?? 'UNKNOWN') })
+      recordAttempt({ codexVersion: version, versionPinned: pinned, receipts, error: String(e?.code ?? 'UNKNOWN') })
       throw e
     }
   }

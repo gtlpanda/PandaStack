@@ -4299,6 +4299,11 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
   the last request; it now fails closed on both. (3) The first Ctrl-C aborted a leaf mid-call, which the journal holds as
   uncertain with no way to clear it; it now stops between stages, and the messages stopped promising a resume that cannot happen.
   A catalog SKILL.md hash and the leaf's argv for the preflight were re-pinned/aligned with it.
+- Bug hunt, both reproduced and fixed at the root: (F1) `resume --grant` raised only the journal grant while every planner gate reads
+  run-metadata `budget`, so a resumed run ended `critic_budget_exhausted`; `audit-run.mjs raiseBudget` is now the one sanctioned,
+  nonterminal, raise-only adjustment (an event is logged), called before the journal's, with the grant bounded by the maximum.
+  (F2) a failing `prepare()` on resume left the earlier passing `preflight.json` as the record; every attempt is now written to
+  `preflight.json` (latest) and appended to `preflight-history.jsonl`. Also found: a refused `--grant` left the journal open.
 - Not solved, stated in the evidence file: the `exec` JS isolate, hosted tools of the real provider, one model/version/repo
   observed, no cross-partition reconciliation seen live, a partitioned critic costs parts + 1 calls where the budget reserve
   assumes 1. The roadmap (docs/roadmap/security-audit-priority.md, frozen) still describes the 2026-11-23 `unavailable` status.
