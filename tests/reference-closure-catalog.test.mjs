@@ -26,7 +26,8 @@ await test('dev, bughunt and release-pr declare exactly the contract table', () 
     ['backlog', 'default-stack', 'harness-review', 'knowledge-map', 'native-runtime', 'verify', 'workflow-state']) // native-runtime: CP-06's dev-native.mjs and Codex runner
   assert.deepEqual(byId.get('bughunt').dependencies,
     ['backlog', 'bug-lenses', 'default-stack', 'findings', 'knowledge-map', 'verify', 'workflow-state'])
-  assert.deepEqual(byId.get('release-pr').dependencies, ['backlog', 'default-stack', 'knowledge-map'])
+  // Amended at CP-08: release-pr's Codex CLI imports the native runtime.
+  assert.deepEqual(byId.get('release-pr').dependencies, ['backlog', 'default-stack', 'knowledge-map', 'native-runtime'])
 })
 
 await test('every dependency list is sorted, unique, names a known offering and never itself', () => {

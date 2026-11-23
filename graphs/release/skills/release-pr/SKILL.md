@@ -13,6 +13,80 @@ the commits, the push, the approval question, and the saved state. Invoking
 Never merge, revert, force-push, or deploy yourself. The merge happens only
 inside stage `land`, only with an approval the user gave for one exact head.
 
+## Codex runner
+
+On Codex, you drive the `release-flow` graph through the CLI beside this file
+(`release-native.mjs`). Never invoke Claude or the Workflow tool, and never
+fall back to another provider. The Setup section's workflow call is replaced
+by the commands below; sections 1 to 6 still say what to show, ask, commit,
+push and wait for, and you still own every wait and the approval question.
+
+The roots. Replace every `<installed-skill-dir>` with the absolute path of the
+installed skill directory (a symlink), then run:
+
+```bash
+SKILL_DIR="$(cd -P -- "<installed-skill-dir>" && pwd -P)"
+ROOT="$(cd -P -- "$SKILL_DIR/../../../.." && pwd -P)"
+CODEX="$(command -v codex)"
+```
+
+`SKILL_DIR` is the real directory holding this file, `ROOT` the installation
+root four levels above it, and `CODEX` the absolute path of `codex` on `PATH`.
+If `CODEX` is empty, say codex is not on `PATH` and stop.
+
+The command. It reads one JSON args file (an absolute path) that you write
+with exactly the keys in the table:
+
+```bash
+node "$SKILL_DIR/release-native.mjs" <docs|ready|approve|land|verify> --args-file <file>
+```
+
+| verb | replaces | args file keys (optional in brackets) |
+|---|---|---|
+| `docs` | stage `docs` (1) | `repo`, `pr`, `installationRoot` (`ROOT`), `codexBin` (`CODEX`), `env`, `timeoutMs` |
+| `ready` | stage `ready` (2) | `repo`, `pr`, `installationRoot` (`ROOT`), `codexBin` (`CODEX`), `env`, `timeoutMs` |
+| `approve` | the approval (4) | `repo`, `pr`, `head`, `base` |
+| `land` | stage `land` (5) | `repo`, `pr`, `installationRoot` (`ROOT`), `codexBin` (`CODEX`), `env`, `timeoutMs` |
+| `verify` | stage `verify` (3, 6) | `repo`, `pr`, `installationRoot` (`ROOT`), `codexBin` (`CODEX`), `env`, `timeoutMs`, [`verifyRound`], [`prior`] |
+
+- `repo` is the absolute `REPO` and `pr` the PR number from Setup. The CLI
+  keeps the state in the same `harness-release/<pr>` directory Setup names
+  and writes every ledger to its `ledger.json`; read the ledger from there.
+  Resume from it as Setup says.
+- `approve` saves the approval only for the `head` and `base` the last
+  `ready` stage reported as `ready-to-merge` (exit 2 `NOT_READY` or
+  `HEAD_MISMATCH` otherwise). Run it only after the human chose to merge that
+  exact head in step 4. `docs` and `ready` delete any saved approval.
+- `land` needs that saved approval (exit 2 `NO_APPROVAL` otherwise) and the
+  graph re-reads the head on GitHub: a moved head is `stale`, and the CLI
+  deletes the approval. The merge is attempted at most once per pull request:
+  once the merger leaf has been dispatched, no later `land` dispatches it
+  again (it ends `escalate` with `MERGE_ALREADY_ATTEMPTED` in the reason), and
+  `approve` exits 2 `MERGE_ALREADY_ATTEMPTED`. A `land` after an unknown merge
+  only reads the state back: if the pull request did merge, it ends `merged`
+  and you go on to `verify`. Never work around it; on `escalate`, follow step 5.
+- `verify` reads the merge SHA and targets the CLI saved at `merged`.
+  `verifyRound` and `prior` are step 3's.
+- `timeoutMs` bounds the stage (1001 to 86400000); give each at least an hour.
+
+The leaf environment. `env` is the leaf's whole environment: `HOME`,
+`CODEX_HOME` when it is set, `PATH`, and `GH_CONFIG_DIR` and `GH_HOST` when
+they are set, copied from your session. The release leaves read `gh`'s stored
+login through `HOME`. Nothing else is added, and never a secret: do not put a
+token variable (`GH_TOKEN`, `GITHUB_TOKEN`) in an args file. If `gh` here
+works only through such a variable, stop and tell the user. The checker,
+merger and deploy-watcher leaves run in Codex's workspace-write sandbox with
+network access, because they run `gh` and the health checks; the scribe and
+advisor leaves get no network.
+
+Outputs. A command prints `{status, file, stateDir, invocationId}` (`approve`
+prints `{approved, head}`); act on `status` as sections 1 to 6 say. Exit 1 is
+bad input, 2 a refusal, 3 a failure, 4 a busy run directory. stderr is one
+`{"error"}` line: report it and stop. A refused or failed leaf ends the stage
+as `escalate`; it is never retried with another provider, and a merge is never
+retried at all. Codex has no push notification: put the PR, the status and the
+one action the user must take at the top of your final message.
+
 ## Setup
 
 1. `REPO="$(git rev-parse --show-toplevel)"`. PR number: the argument, or

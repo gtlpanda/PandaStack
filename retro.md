@@ -4196,3 +4196,17 @@ hash-pin amendment PR.
 - Found, not fixed: `preflight-cli.mjs` run through a symlink (an installed skill link) exits 0
   and prints nothing, because it compares `process.argv[1]` without a realpath, and a test
   forbids it importing `node:fs`.
+
+## 77. Codex parity CP-08: /release-pr on Codex (2026-11-22)
+
+`release-controlled` is no longer refused by the Codex leaf: it runs as `workspace-write` plus
+`sandbox_workspace_write.network_access=true`, for release-checker, merger and deploy-watcher
+only (scribe stays workspace-write without network, advisor read-only). A new
+`release-native.mjs` CLI drives release-flow through the graph host and holds the approval for
+one exact head and the single, never-retried merge attempt (an O_EXCL marker created just
+before the merger dispatch). release-pr's codex row is `partial` via `codex-graph-host`.
+- Proof: acceptance/codex-parity/cp-08-release-codex.test.mjs, 17 tests on the fake codex with
+  recording gh/claude stubs (wiring proof, not runtime certification). A mutation check
+  (marker checks removed, network profile widened to build-workspace) failed 5 of them.
+- Untested hypotheses: the Codex flag spelling under `--ignore-user-config` and `gh` reaching
+  GitHub from that sandbox; no codex was run.

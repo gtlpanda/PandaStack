@@ -41,10 +41,14 @@ export function codexExecArgs(input) {
   check(optional(o.maxConcurrentSubagents, positiveInteger))
   check(optional(o.skipGitRepoCheck, value => typeof value === 'boolean'))
   check(optional(o.outputFile, text) && optional(o.schemaFile, text))
+  // Network access is a workspace-write setting only; it is never a way to widen read-only.
+  check(optional(o.networkAccess, value => typeof value === 'boolean'))
+  check(o.networkAccess !== true || o.sandbox === 'workspace-write')
   const args = ['exec', '--json', '--color', 'never', '--sandbox', o.sandbox, '--ignore-user-config']
   if (o.skipGitRepoCheck === true) args.push('--skip-git-repo-check')
   args.push('-c', 'approval_policy="never"', '--model', o.model,
     '-c', `model_reasoning_effort=${JSON.stringify(o.reasoningEffort)}`)
+  if (o.networkAccess === true) args.push('-c', 'sandbox_workspace_write.network_access=true')
   if (o.subagentModel !== undefined) args.push('-c', `agents.default_subagent_model=${JSON.stringify(o.subagentModel)}`)
   if (o.maxConcurrentSubagents !== undefined) args.push(...codexConcurrencyArgs(o.maxConcurrentSubagents))
   if (o.outputFile !== undefined) args.push('--output-last-message', o.outputFile)

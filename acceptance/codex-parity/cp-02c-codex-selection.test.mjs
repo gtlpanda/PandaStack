@@ -22,7 +22,8 @@ const loadConfig = () => import(url('graphs/autobuild/tool/lib/config.mjs'))
 
 const FIXED_MESSAGE = 'Native runtime: INVALID_SELECTION.'
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra', 'minimal', 'none']
-const REFUSED_WORKFLOWS = ['release-flow', 'security-audit-flow']
+// CP-08 amendment: release-flow left the refused set.
+const REFUSED_WORKFLOWS = ['security-audit-flow']
 const WORKFLOW_ID = Object.fromEntries(Object.entries(PATHS).map(([id, path]) => [path, id]))
 
 // A refusal: the fixed code and message, never an echo of any context value.
@@ -118,7 +119,7 @@ describe('CP-02c role-to-profile table', () => {
     assert.equal(ROLE_PROFILES.runner, null)
   })
 
-  test('CODEX_REFUSED_WORKFLOWS is exactly release-flow and security-audit-flow', async () => {
+  test('CODEX_REFUSED_WORKFLOWS is exactly security-audit-flow', async () => {
     const { CODEX_REFUSED_WORKFLOWS } = await loadSelection()
     assert.ok(Object.isFrozen(CODEX_REFUSED_WORKFLOWS))
     assert.deepEqual([...CODEX_REFUSED_WORKFLOWS], REFUSED_WORKFLOWS)
@@ -137,13 +138,15 @@ describe('CP-02c resolveLeaf', () => {
         const { model, effort } = files[agentType].frontmatter
         const ctx = context(agentType, { workflowId, requestedModel: model, requestedEffort: effort })
         const profile = ROLE_PROFILES[agentType]
-        if (REFUSED_WORKFLOWS.includes(workflowId) || profile === null || ['audit-source-only', 'release-controlled'].includes(profile)) {
+        // CP-08 amendment: release-controlled is accepted in release-flow only.
+        if (REFUSED_WORKFLOWS.includes(workflowId) || profile === null || profile === 'audit-source-only' ||
+          (profile === 'release-controlled' && workflowId !== 'release-flow')) {
           refused(() => resolveLeaf(ctx), agentType, workflowId)
           continue
         }
         const chosen = resolveLeaf(ctx)
         assert.deepEqual(chosen, { selection: { provider: 'codex', model: codexModel(model), effort }, profile })
-        assert.ok(['source-review', 'build-workspace'].includes(chosen.profile))
+        assert.ok(['source-review', 'build-workspace', 'release-controlled'].includes(chosen.profile))
         accepted++
       }
     }
@@ -219,7 +222,7 @@ describe('CP-02c resolveLeaf', () => {
     }
   })
 
-  test('any leaf of release-flow or security-audit-flow is refused, including scribe and advisor', async () => {
+  test('any leaf of security-audit-flow is refused, including scribe and advisor', async () => {
     const { resolveLeaf } = await loadSelection()
     for (const workflowId of REFUSED_WORKFLOWS) {
       for (const agentType of ['scribe', 'advisor', 'reviewer', 'checker']) {
@@ -227,7 +230,7 @@ describe('CP-02c resolveLeaf', () => {
       }
     }
     // A refused workflow anywhere in the path refuses the leaf.
-    refused(() => resolveLeaf(context('reviewer', { workflowId: 'harness-repair', workflowPath: ['release-flow', 'harness-repair'] })))
+    refused(() => resolveLeaf(context('reviewer', { workflowId: 'harness-repair', workflowPath: ['security-audit-flow', 'harness-repair'] })))
     // Outside those workflows the table decides (the templates never send this pair).
     assert.equal(resolveLeaf(context('scribe')).profile, 'build-workspace')
     // A nested leaf path is accepted.
@@ -348,11 +351,15 @@ describe('CP-02c through the real runtime (wiring proof, not runtime certificati
     assert.ok(r.calls.some(c => JSON.stringify(c.workflowPath) === JSON.stringify(['dev-build', 'harness-repair'])))
   })
 
-  test('release-flow: INVALID_SELECTION before any reserve or provider call', async t => {
-    const r = await viaRuntime(t, 'release-flow', { repo: '/inert/project', pr: 1, stage: 'ready' })
-    await assert.rejects(r.run, runtimeCode('INVALID_SELECTION'))
-    assert.deepEqual(r.events, [])
-    assert.deepEqual(r.calls, [])
+  // CP-08 amendment: release-flow is no longer refused; its checker leaf runs as release-controlled.
+  test('release-flow: the checker leaf is admitted with the release-controlled profile', async t => {
+    const answer = () => ({ pr: { number: 1, state: 'OPEN', headRefOid: 'abc1234', headRefName: 'topic', baseRefName: 'main',
+      mergeStateStatus: 'CLEAN', reviewDecision: 'APPROVED', isDraft: false, mergeCommit: '' },
+    default_branch: 'main', merge_methods: ['squash'], checks: [{ name: 'ci', bucket: 'pass' }],
+    deploy: { source: 'config', merge_method: 'squash', targets: [], missing_credentials: [] } })
+    const r = await viaRuntime(t, 'release-flow', { repo: '/inert/project', pr: 1, stage: 'ready' }, { answer })
+    assert.equal((await r.run).status, 'ready-to-merge')
+    assert.deepEqual(r.calls.map(c => [c.agentType, c.profile]), [['release-checker', 'release-controlled']])
   })
 
   test('security-audit-flow: INVALID_SELECTION before any reserve or provider call', async t => {

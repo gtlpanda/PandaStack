@@ -222,7 +222,7 @@ describe('CP-02b exports (wiring proof, not runtime certification)', () => {
   test('sandboxForProfile maps every runtime profile and refuses anything else', async () => {
     const { sandboxForProfile } = await loadProvider()
     const { PROFILES } = await loadRuntime()
-    const expected = { 'source-review': 'read-only', 'build-workspace': 'workspace-write', 'audit-source-only': null, 'release-controlled': null }
+    const expected = { 'source-review': 'read-only', 'build-workspace': 'workspace-write', 'audit-source-only': null, 'release-controlled': 'workspace-write' }
     assert.deepEqual([...PROFILES].sort(), Object.keys(expected).sort())
     for (const profile of PROFILES) assert.equal(sandboxForProfile(profile), expected[profile])
     for (const bad of ['full-access', 'danger-full-access', '', undefined, null, 5, ['source-review'], 'Source-Review']) {
@@ -508,7 +508,8 @@ describe('CP-02b runLeaf failures resolve failed envelopes (wiring proof, not ru
     assert.equal(calls(c).length, 0)
   })
 
-  for (const profile of ['audit-source-only', 'release-controlled']) {
+  // CP-08 amendment: release-controlled is supported (workspace-write plus network), so only audit-source-only is refused.
+  for (const profile of ['audit-source-only']) {
     test(`PROFILE_UNSUPPORTED: ${profile} with zero spawns and no file`, async () => {
       const c = makeCase()
       const provider = await makeProvider(c, [{ output: wireText({ verdict: 'PASS' }) }])
