@@ -2547,11 +2547,16 @@ so the pinned pre-wave plans stay. The install-codex sha pin in cp-01c was re-pi
 Host auto-detection: core/skills/native-runtime/host-provider.mjs. Precedence: PANDASTACK_PROVIDER, then the
 nearest ancestor process named codex or claude, then CODEX_THREAD_ID (untested hypothesis: the repo deletes it
 before nested sessions, which implies Codex sets it, but nothing here observed it) then CLAUDECODE, then
-claude. Wired at autobuild loadConfig (and `autobuild init`), the build-app driver, bughunt native-cli and
-`pandastack doctor`. The blueprint, dev and release CLIs and the qa loop are Codex-only runners with no provider
-choice; the SKILL.md selection sentence routes to them. Decisions: an `autobuild.json` "backend" is an explicit
-pin and beats the host; `--claude --codex` is an error; a failing Codex step in plain install only warns; the
-native-cli refuses a Claude host rather than falling back; an empty PANDASTACK_PROVIDER counts as unset.
+claude. Wired at `autobuild run` and `autobuild init` (through graphs/autobuild/tool/lib/host-backend.mjs; loadConfig
+itself never asks, so `autobuild status` or the gate still load from inside Codex in a Claude-configured project with a
+USD budget), the build-app driver `run`, and `pandastack doctor`. NOT wired: bughunt native-cli (the Codex runner; a
+frozen security-audit acceptance case calls it bare and expects the Codex path), and the blueprint, dev and release CLIs
+and the qa loop (Codex-only runners with no provider choice); the SKILL.md selection sentence routes to them.
+Decisions: an `autobuild.json` "backend" is an explicit pin and beats the host; `--claude --codex` is an error; a failing
+Codex step in plain install only warns; an empty PANDASTACK_PROVIDER counts as unset. The repo's own gate pins
+PANDASTACK_PROVIDER=claude in autobuild.json env.vars (frozen Phase 1 acceptance runs the actual build-app driver bare),
+matching its `"backend": "claude"` pin, so the gate result does not depend on which app launched it; observed by running
+the gate with a stub `codex` ancestor.
 
 build-app final QA: the real qa-loop now passes through the production catalog with dev codex partial
 (tests/driver-codex.test.mjs, a root copy with an inert verify.sh; the repository's own is never run).

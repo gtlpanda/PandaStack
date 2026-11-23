@@ -10,7 +10,6 @@ import { prepareHunt } from './land.mjs';
 import { DEFAULTS, loadConfig, codexModel } from '../../../autobuild/tool/lib/config.mjs';
 import { defaultBase } from '../../../build/skills/build-app/driver/finish.mjs';
 import { disposition } from '../../../../core/skills/findings/findings.mjs';
-import { detectHostProvider } from '../../../../core/skills/native-runtime/host-provider.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export async function main(argv) {
@@ -19,11 +18,7 @@ export async function main(argv) {
     if (!['--repo', '--base', '--backend', '--mode', '--codex-bin'].includes(argv[i]) || !argv[i + 1] || argv[i + 1].startsWith('--')) throw new Error('usage: native-cli.mjs --repo <repo> [--base <ref>] [--backend codex] [--mode discover|propose|fix] [--codex-bin <path>]');
     opts[argv[i].slice(2)] = argv[i + 1];
   }
-  // --backend wins; otherwise the app the user is in decides. This CLI is the Codex runner: from Claude Code
-  // the same graph runs through Workflow (/bughunt), so a Claude host (or --backend claude) is refused here
-  // instead of silently starting a Codex run. `--backend codex` forces it.
-  const backend = opts.backend || detectHostProvider({ env: process.env }).provider;
-  if (backend !== 'codex') throw new Error('Native CLI currently accepts --backend codex; Claude uses the same graph through Workflow');
+  if (opts.backend && opts.backend !== 'codex') throw new Error('Native CLI currently accepts --backend codex; Claude uses the same graph through Workflow');
   const repo = realpathSync(opts.repo || process.cwd());
   return withNativeRepoLock(repo, async lockToken => {
   const mode = opts.mode || 'discover';

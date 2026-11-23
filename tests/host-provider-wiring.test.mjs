@@ -62,16 +62,19 @@ await test('the detected provider flows into the model roles: Opus -> gpt-6-astr
 const NATIVE_CLI = join(REPO, 'graphs/hunt/skills/bughunt/native-cli.mjs')
 const cli = (env, ...args) => spawnSync(process.execPath, [NATIVE_CLI, ...args], { encoding: 'utf8', env: { PATH: process.env.PATH, ...env }, timeout: 30000 })
 
-await test('bughunt native-cli: a Claude host (or --backend claude) is refused, a bad PANDASTACK_PROVIDER is a usage error, both before any run', () => {
+await test('bughunt native-cli is the Codex runner: --backend claude is refused, a bare run is not turned away by the host app', () => {
   const dir = project({})
   try {
-    for (const [env, args] of [[{ PANDASTACK_PROVIDER: 'claude' }, []], [{}, ['--backend', 'claude']], [{ PANDASTACK_PROVIDER: 'codex' }, ['--backend', 'claude']]]) {
-      const r = cli(env, '--repo', dir, ...args)
-      assert.equal(r.status, 12, `${JSON.stringify(env)} ${args}: ${r.stdout}${r.stderr}`)
-      assert.match(r.stderr, /Native CLI currently accepts --backend codex; Claude uses the same graph through Workflow/)
+    const refusal = /Native CLI currently accepts --backend codex; Claude uses the same graph through Workflow/
+    const claude = cli({}, '--repo', dir, '--backend', 'claude')
+    assert.equal(claude.status, 12, claude.stdout + claude.stderr)
+    assert.match(claude.stderr, refusal)
+    // Host detection does not apply to this CLI: with a Claude host a bare run still starts the Codex path (it
+    // then stops at its own intake, this directory being no git repository, which is not the backend refusal).
+    for (const env of [{ PANDASTACK_PROVIDER: 'claude' }, { PANDASTACK_PROVIDER: 'codex' }, {}]) {
+      const bare = cli(env, '--repo', dir)
+      assert.equal(bare.status, 12)
+      assert.doesNotMatch(bare.stderr, refusal, JSON.stringify(env))
     }
-    const bad = cli({ PANDASTACK_PROVIDER: 'gpt' }, '--repo', dir)
-    assert.equal(bad.status, 12)
-    assert.match(bad.stderr, /PANDASTACK_PROVIDER must be "claude" or "codex"/)
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })

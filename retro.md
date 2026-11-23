@@ -4242,11 +4242,17 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
   nearest codex or claude ancestor process, then CODEX_THREAD_ID (untested hypothesis) / CLAUDECODE, then
   claude. The tree comes before the env because Claude variables leak into a Codex sandbox started from a
   Claude shell. An injected env never consults the real process tree, so tests with their own env stay
-  hermetic. Wired at autobuild loadConfig and init, the build-app driver, bughunt native-cli and doctor.
+  hermetic. Wired at `autobuild run` / `init` (not loadConfig: a USD-budget Claude project must still load from
+  inside Codex), the build-app driver and doctor. Not wired: bughunt native-cli (Codex runner, called bare by a
+  frozen test) and the Codex-only blueprint/dev/release CLIs and qa loop.
 - Plain ./install.sh also installs the Codex entry skills when codex is on PATH or ~/.agents exists;
   --claude and --codex pick one.
 - build-app's final QA passes through the real qa-loop now that dev is codex partial (root copy, inert
   verify.sh).
 - cp-03d's Claude-path check scans the instruction text, not the checkout path.
-- Bugs caught: the import of host-provider from bughunt and build-app created an undeclared catalog
-  dependency (checkCatalogDrift DEPENDENCY_UNDECLARED), so both gained native-runtime.
+- Bugs caught: the build-app driver's import of host-provider created an undeclared catalog dependency
+  (checkCatalogDrift DEPENDENCY_UNDECLARED), so build-app gained native-runtime. Running the full gate with
+  a stub `codex` as an ancestor found four leaks that the default (Claude-hosted) gate cannot see: loadConfig
+  asking the host for every caller, the loop and build-app driver tests taking the host's provider, a test
+  that copies config.mjs with a fixed file list, and frozen Phase 1 acceptance (fixed by pinning the provider
+  in the gate environment rather than editing frozen tests).
