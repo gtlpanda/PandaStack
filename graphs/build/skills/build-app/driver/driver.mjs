@@ -412,7 +412,13 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg, c
     if (problems.length) return end(EXIT.preflight, 'failed', `preflight: the backlog on ${integration} does not pass its check: ${problems.join('; ')}`)
     if (backlog.app !== app) return end(EXIT.preflight, 'failed', `preflight: the backlog on ${integration} is for ${JSON.stringify(backlog.app)}, not ${app}`)
     if (git(repo, ['status', '--porcelain']).stdout.trim()) return end(EXIT.preflight, 'failed', 'preflight: the working tree has uncommitted changes; commit or stash them first')
-    if (!run('bash', ['-c', `command -v ${JSON.stringify(cfg.bin)}`]).ok) return end(EXIT.preflight, 'failed', `preflight: ${cfg.bin} not found`)
+    const found = run('bash', ['-c', `command -v ${JSON.stringify(cfg.bin)}`])
+    if (!found.ok) return end(EXIT.preflight, 'failed', `preflight: ${cfg.bin} not found`)
+    // The native QA loop and bug hunt take the provider binary as an absolute path, so a bare name found on
+    // PATH (the default `codex`) is resolved once here and used everywhere after.
+    const resolvedBin = found.stdout.trim().split('\n')[0]
+    if (!resolvedBin.startsWith('/')) return end(EXIT.preflight, 'failed', `preflight: ${cfg.bin} does not resolve to an executable file (command -v printed ${JSON.stringify(resolvedBin)})`)
+    cfg.bin = resolvedBin
     try { ledger = readLedger(files.ledger) } catch (e) { return end(EXIT.preflight, 'failed', `preflight: ${e.message}`) }
     const reconciled = reconcile(repo, integration, backlog, ledger, log)
     if (reconciled !== ledger) { ledger = reconciled; writeLedger(files.ledger, ledger) }

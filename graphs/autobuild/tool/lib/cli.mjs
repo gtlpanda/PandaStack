@@ -101,7 +101,14 @@ export async function main(argv = process.argv.slice(2)) {
       const hostBackend = defaultBackendFor({ flag: backendFlag });
       let config;
       try { config = loadConfig(undefined, process.env, { backend: backendFlag, defaultBackend: hostBackend, model: value(args, "--model"), deliveryMode: value(args, "--delivery-mode") }); }
-      catch (error) { throw withHostBackendHint(error, hostBackend); }
+      catch (error) {
+        // Hint only when the host-derived default is what failed: the same config loads with claude.
+        let claudeLoads = false;
+        if (hostBackend && hostBackend !== "claude") {
+          try { loadConfig(undefined, process.env, { defaultBackend: "claude", model: value(args, "--model"), deliveryMode: value(args, "--delivery-mode") }); claudeLoads = true; } catch { claudeLoads = false; }
+        }
+        throw claudeLoads ? withHostBackendHint(error, hostBackend) : error;
+      }
       const max = value(args, "--max-iterations");
       if (max) config.limits.maxIterations = Number(max);
       return runLoop(config);
