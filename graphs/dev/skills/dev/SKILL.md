@@ -23,6 +23,83 @@ Installed paths start with `${CLAUDE_CONFIG_DIR:-$HOME/.claude}`, where
 `install.sh` linked PandaStack. Write it out in every command: shell state does
 not carry from one command to the next.
 
+## Codex runner
+
+On Codex, you drive the `dev-build` graph through the CLI beside this file.
+Never invoke Claude or the Workflow tool, and never fall back to another
+provider. Sections 1 to 6 still say what to check, ask, show, commit and
+report; section 2's Workflow call is replaced by the command below, and the
+installed-path prefix above does not apply: use `ROOT` and `SKILL_DIR`. Ask
+every question in chat.
+
+The roots. Replace every `<installed-skill-dir>` with the absolute path of the
+installed skill directory (a symlink), then run:
+
+```bash
+SKILL_DIR="$(cd -P -- "<installed-skill-dir>" && pwd -P)"
+ROOT="$(cd -P -- "$SKILL_DIR/../../../.." && pwd -P)"
+CODEX="$(command -v codex)"
+```
+
+`SKILL_DIR` is the real directory holding this file, `ROOT` the installation
+root four levels above it, and `CODEX` the absolute path of `codex` on `PATH`.
+If `CODEX` is empty, say codex is not on `PATH` and stop.
+
+The command. It reads one JSON args file (an absolute path) that you write
+with exactly the keys below:
+
+```bash
+node "$SKILL_DIR/dev-native.mjs" run --args-file <file>
+```
+
+| mode | replaces | args file keys (optional in brackets) |
+|---|---|---|
+| `new` | 2, new task (and 4, after the answers) | `repo`, `mode`, `installationRoot` (`ROOT`), `codexBin` (`CODEX`), `env`, `timeoutMs`, `task`, `approval`, [`base`], [`maxFixRounds`], [`knownStuckSigs`], [`requiredCriteria`], [`invocationId`] |
+| `plan` | 2, the approved plan (3, Approve) | `repo`, `mode`, `installationRoot` (`ROOT`), `codexBin` (`CODEX`), `env`, `timeoutMs`, [`base`], [`maxFixRounds`], [`knownStuckSigs`], [`requiredCriteria`], [`invocationId`] |
+| `resume` | 2, `--resume` | the same keys as `plan` |
+
+- Sections 1.1 to 1.4 and 1.6 run as written; `repo` is the absolute `REPO`.
+  Section 1.5 (`--slice`) runs `node "$ROOT/core/skills/backlog/backlog.mjs"
+  task ...` with the same arguments, and section 1.7 reads the same file.
+- `new` saves `task` to `task.txt` and deletes any `plan.json` in the state
+  directory (section 1.4's `$D`), then plans from the task. `approval` is
+  `advisor`, or `human` under `--review`. `task` is the task text (with
+  `--slice`, the slice's `task`), and `requiredCriteria` is the slice's
+  `requiredCriteria` exactly as printed.
+- `plan` and `resume` read `plan.json` from `$D`; `resume` also reads the
+  `completed` list of `ledger.json`. They are how section 2's "running an
+  approved plan" and `--resume` run on Codex; the plan travels in the host's
+  args, so there is no run script and nothing to retype. After an Edit under
+  section 3, run `plan` again. A missing or unreadable `plan.json` or
+  `ledger.json` is `NO_SAVED_PLAN` or `NO_SAVED_LEDGER`: say so and stop.
+- `maxFixRounds` defaults to 3, and `knownStuckSigs` to `[]`.
+- `timeoutMs` bounds the whole run (1001 to 86400000). Live runs took
+  about 30 minutes to plan and 55 to 85 to build 7 or 8 components; give it at
+  least three hours.
+
+The leaf environment. `env` is the leaf's whole environment: `HOME`,
+`CODEX_HOME` when it is set, and `PATH`, copied from your session. Nothing
+else is added, and never a secret.
+
+Outputs. The command prints `{status, invocationId, stateDir}` and has
+already written `ledger.json` (every run), and `plan.json` when the plan is
+approved or `plan-ready`, in `stateDir`, which is `$D`. Read the ledger from
+`$D/ledger.json` and act on `status` as sections 3 to 6 say. Section 6.1's
+`/verify` is `bash "$ROOT/core/skills/verify/verify.sh"`: quote its block, and
+its last line must be `VERIFY: PASS`. Exit 1 is bad input, 2 a refusal, 3 a
+failure, and 4 a run directory held by another run. stderr is one `{"error"}`
+line (with `invocationId` when a host run had started): report it and stop. A
+refused or failed run is never retried with another provider; a leaf the
+provider refused escalates the graph, and section 5 reports it.
+
+Held leaves. The implementer and checker edit the work tree, so a run that
+exits with `CHECKPOINT_UNCERTAIN` or 4 is reported and stopped: never start
+a new run over it and never edit its files. The person reconciles the held
+call with `node "$ROOT/core/skills/native-runtime/graph-reconcile.mjs" list
+--run-dir <stateDir>/native-runs/<invocationId>`, then `fail`. Only then run
+the same args file again with `invocationId` set to the printed one: the run
+replays every finished leaf with no new call and continues.
+
 ## When to ask
 
 Questions come before any code exists, or not at all.

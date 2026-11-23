@@ -2421,3 +2421,42 @@ Observed limits and untested hypotheses:
 - macOS was not run. No mutation check was run on the new test.
 
 Full regressions, review and the branch hunt remain pending for the PR.
+
+## CP-06 — dev on Codex: native runner section, driver CLI, catalog flip, wiring proof
+
+Branch codex-parity/dev. Fake-codex wiring proof, not runtime certification. The supervisor
+authorized editing SKILL.md, the catalog and the snapshot pins listed below.
+
+- `graphs/dev/skills/dev/dev-native.mjs` (new): `run --args-file <abs>` with mode `new`, `plan`
+  or `resume`. It builds the host args for `dev-build` from the saved state in the repository's
+  `harness-dev` state directory (`task.txt`, `plan.json`, `ledger.json`), runs the CP-02e host
+  CLI as a child process (it imports no repository module), and saves the ledger and, per
+  SKILL.md sections 2 and 3, the plan (approved, or `plan-ready`; a plan that escalated while
+  being made is never saved). `invocationId` re-drives a held run directory (same store,
+  finished leaves replay with zero spawns), the path after `graph-reconcile`. Verify, the
+  touched-files check and commits stay with the session.
+- `SKILL.md`: one `## Codex runner` section before `## When to ask`. Removing it gives the
+  pre-change bytes (sha256 1e7d0b75...), so the Claude path is byte-identical.
+- Catalog: dev's codex row is `partial` on `codex-graph-host` with
+  `[LIVE_PROOF_MISSING, NATIVE_UNVERIFIED, REQUIREMENTS_INCOMPLETE]`; dependencies gain
+  `native-runtime` (the section names the host's reconcile tool); proofRefs gain
+  `cp-06-dev-codex`; `entrySha256` re-pinned.
+- Tests: `tests/dev-native.test.mjs` (14 cases on the production catalog: leaf order,
+  advisor gate revise and blocked, plan-ready and edited-plan builds, triage, a refusal that
+  escalates once with no claude or gh call, same-invocation replay with zero spawns, `resume`
+  skipping built components, refusals before a spawn, an installed-symlink run) and
+  `tests/dev-codex-runner.test.mjs` (5 cases: section, table against the CLI's keys, roots
+  block, byte-identical Claude path).
+- Snapshot pins amended to dev's new state (each also accepts the old state where it did
+  before): cp-01b (`cp04eFlipped` also matches dev), cp-01c (candidate plan gains `skills/dev`,
+  fixture roots set dev unavailable, install-codex sha), cp-01d (ready set), cp-03b (installed
+  set), cp-04e (partial rows, plan, installed set), cp-05d case 11 (a root copy with dev
+  unavailable replaces the production root), cp-05e case 4 (proofRefs, dev partial);
+  tests/install-codex, install-plan, host-wiring-proof-ref, qa-gate-proof-ref,
+  reference-closure-catalog.
+
+Differences from the Claude path: the host runs leaves one at a time (`maxConcurrentSubagents:
+1`); `--review` is mode `new` with `approval: human` and then `plan`; the plan travels in the
+host args rather than a generated run script (the host runs only the catalog-pinned workflow
+bytes). Not proven: a live codex run, `--slice` against a real backlog, `--unattended`, a
+held-leaf (`CHECKPOINT_UNCERTAIN`) recovery end to end.

@@ -48,8 +48,10 @@ const TRANSPORTS = [
   { id: 'codex-bughunt', provider: 'codex', entry: 'graphs/hunt/skills/bughunt/native-runner.mjs' },
   { id: 'codex-graph-host', provider: 'codex', entry: 'core/skills/native-runtime/graph-host.mjs' },
 ]
+// Amended for CP-06: dev is Codex install-eligible too, so the plan has a fourth line.
 const THREE_LINES = 'skills/autobuild\tgraphs/autobuild/skills/autobuild\n' +
-  'skills/blueprint\tgraphs/blueprint/skills/blueprint\nskills/bughunt\tgraphs/hunt/skills/bughunt\n'
+  'skills/blueprint\tgraphs/blueprint/skills/blueprint\nskills/bughunt\tgraphs/hunt/skills/bughunt\n' +
+  'skills/dev\tgraphs/dev/skills/dev\n'
 // CP-04c adds the native-runtime edge; CP-04e leaves the dependency list alone.
 const BLUEPRINT_DEPENDENCIES = ['backlog', 'default-stack', 'knowledge-map', 'native-runtime']
 
@@ -162,7 +164,7 @@ describe('CP-04e: blueprint on Codex', () => {
     assert.equal(blueprint.requirementsComplete, false)
     assert.equal(blueprint.nativeReadiness, 'unknown')
     assert.deepEqual(catalog.offerings.filter(o => o.providers.codex.implementation === 'partial').map(o => o.id).sort(),
-      ['autobuild', 'blueprint', 'bughunt'], 'codex partial rows are exactly autobuild, blueprint and bughunt')
+      ['autobuild', 'blueprint', 'bughunt', 'dev'], 'codex partial rows are exactly autobuild, blueprint, bughunt and dev (CP-06)')
 
     const { installEligible, nativeImplementationOf, checkCatalogDrift } = await loadModule('core/skills/native-runtime/catalog.mjs')
     assert.equal(installEligible(blueprint, 'codex'), true)
@@ -173,7 +175,7 @@ describe('CP-04e: blueprint on Codex', () => {
   test('2. install: the plan is three lines, install.sh --codex links blueprint in an owned HOME, --uninstall removes it', () => {
     const plan = spawnSync(process.execPath, [join(ROOT, 'core/skills/native-runtime/install-plan.mjs'), '--installation-root', ROOT, '--backend', 'codex'],
       { encoding: 'utf8', cwd: WORK, env: { PATH: dirname(process.execPath) } })
-    assert.deepEqual([plan.status, plan.stderr, plan.stdout], [0, '', THREE_LINES], 'install-plan prints autobuild, blueprint, bughunt')
+    assert.deepEqual([plan.status, plan.stderr, plan.stdout], [0, '', THREE_LINES], 'install-plan prints autobuild, blueprint, bughunt, dev')
 
     const { home, skills } = ownedHome()
     runInstall(home, skills)
@@ -181,7 +183,7 @@ describe('CP-04e: blueprint on Codex', () => {
     assert.equal(readlinkSync(join(skills, 'blueprint')), SKILL_DIR, 'blueprint links to graphs/blueprint/skills/blueprint')
     assert.equal(readlinkSync(join(skills, 'autobuild')), join(ROOT, 'graphs/autobuild/skills/autobuild'))
     assert.equal(readlinkSync(join(skills, 'bughunt')), join(ROOT, 'graphs/hunt/skills/bughunt'))
-    assert.deepEqual(readdirSync(skills).sort(), ['autobuild', 'blueprint', 'bughunt'])
+    assert.deepEqual(readdirSync(skills).sort(), ['autobuild', 'blueprint', 'bughunt', 'dev'])
     assertNoAgentDirs(home)
     assert.deepEqual(readdirSync(home), ['.agents'], 'HOME holds only the skills parent')
 

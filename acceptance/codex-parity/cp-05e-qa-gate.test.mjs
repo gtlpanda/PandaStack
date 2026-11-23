@@ -336,9 +336,10 @@ describe('CP-05e catalog', () => {
   test('4. dev records the gate proof as proofRefs [cp-02f-host-wiring, cp-05e-qa-gate]; no other row carries it; dev codex stays unavailable; the drift guard passes', async () => {
     const catalog = readJson(resolve(ROOT, CATALOG))
     const dev = catalog.offerings.find(o => o.id === 'dev')
-    assert.deepEqual(dev?.proofRefs, ['cp-02f-host-wiring', PROOF_REF])
+    // Amended for CP-06: dev appends cp-06-dev-codex and its codex row is partial on codex-graph-host.
+    assert.deepEqual(dev?.proofRefs, ['cp-02f-host-wiring', PROOF_REF, 'cp-06-dev-codex'])
     assert.deepEqual(catalog.offerings.filter(o => o.proofRefs?.includes(PROOF_REF)).map(o => o.id), ['dev'], 'only dev carries it')
-    assert.equal(dev.providers.codex.implementation, 'unavailable')
+    assert.deepEqual([dev.providers.codex.implementation, dev.providers.codex.transportId], ['partial', 'codex-graph-host'])
     const { checkCatalogDrift } = await loadModule('core/skills/native-runtime/catalog.mjs')
     assert.deepEqual(checkCatalogDrift({ installationRoot: ROOT }), { ok: true, problems: [] })
   })

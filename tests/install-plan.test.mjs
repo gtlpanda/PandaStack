@@ -17,12 +17,15 @@ const PLAN = join(REPO, 'core/skills/native-runtime/install-plan.mjs')
 const TMP = realpathSync(tmpdir())
 const NODE_DIR = dirname(process.execPath)
 const row = (catalog, id) => catalog.offerings.find(o => o.id === id)
-// The fixture base: this checkout's catalog with blueprint's codex row as it is before
-// CP-04e (amended at the tier-4 freeze, W2-10), so these cases hold before and after it.
+// The fixture base: this checkout's catalog with blueprint's and dev's codex rows as they are
+// before CP-04e and CP-06 (amended at the tier-4 freeze, W2-10, and for CP-06), so these cases
+// hold before and after both flips.
 const production = () => {
   const catalog = JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8'))
-  row(catalog, 'blueprint').providers.codex = { implementation: 'unavailable', transportId: null,
-    limitations: ['NATIVE_UNVERIFIED', 'NO_PROVIDER_TRANSPORT', 'REQUIREMENTS_INCOMPLETE'] }
+  for (const id of ['blueprint', 'dev']) {
+    row(catalog, id).providers.codex = { implementation: 'unavailable', transportId: null,
+      limitations: ['NATIVE_UNVERIFIED', 'NO_PROVIDER_TRANSPORT', 'REQUIREMENTS_INCOMPLETE'] }
+  }
   return catalog
 }
 const codeIs = code => e => { assert.equal(e.code, code); return true }
@@ -188,10 +191,14 @@ await test('installPlanMain writes only the plan or one error line, and importin
   // This checkout's own plan: blueprint's line appears once CP-04e flips its codex row.
   const flipped = row(JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8')), 'blueprint')
     .providers.codex.implementation === 'partial'
+  // Dev's line appears once CP-06 flips its codex row.
+  const devFlipped = row(JSON.parse(readFileSync(join(REPO, 'spec/offering-capabilities.json'), 'utf8')), 'dev')
+    .providers.codex.implementation === 'partial'
   assert.deepEqual(run(['--installation-root', REPO, '--backend', 'codex']), { status: 0,
     out: 'skills/autobuild\tgraphs/autobuild/skills/autobuild\n' +
       (flipped ? 'skills/blueprint\tgraphs/blueprint/skills/blueprint\n' : '') +
-      'skills/bughunt\tgraphs/hunt/skills/bughunt\n', err: '' })
+      'skills/bughunt\tgraphs/hunt/skills/bughunt\n' +
+      (devFlipped ? 'skills/dev\tgraphs/dev/skills/dev\n' : ''), err: '' })
   assert.deepEqual(run(['--backend', 'codex', '--backend', 'codex']), { status: 1, out: '', err: 'install-plan: INVALID_INSTALL_PLAN_INPUT\n' })
   assert.deepEqual(run(['--installation-root', '/tmp/no-such-root', '--backend', 'codex']), { status: 2, out: '', err: 'install-plan: NOT_FOUND\n' })
 

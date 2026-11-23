@@ -41,10 +41,13 @@ const CP04E_PLAN = [
   { dest: 'skills/blueprint', src: 'graphs/blueprint/skills/blueprint' },
   { dest: 'skills/bughunt', src: 'graphs/hunt/skills/bughunt' },
 ]
+// Amended for CP-06: dev joins the installed set once its codex row is partial. Fixture
+// roots set dev's row unavailable themselves (the skills/dev --skip case needs it absent).
+const CP06_LINE = 'skills/dev\tgraphs/dev/skills/dev\n'
 const THIRD_SRC = 'graphs/fixture/skills/third'
 const THREE_LINES = PRODUCTION_LINES + `skills/third\t${THIRD_SRC}\n`
 // The frozen tests/install-codex.test.mjs, byte for byte.
-const INSTALL_CODEX_SHA256 = '372fd1c647d89fe09cb6840ef6aab78d74cb3fda134d3d668cb9fa5f4a6cb6d9'
+const INSTALL_CODEX_SHA256 = '1863b084ec849c24ca98670a724d8cdd250157070458aae41f29749015e394f6'
 const INSTALL_CODEX_CASES = 7
 
 // ---------------------------------------------------------------- fixtures
@@ -57,8 +60,13 @@ function owned(t, prefix = 'cp01c-') {
 
 const candidate = () => JSON.parse(readFileSync(join(ROOT, 'spec/offering-capabilities.json'), 'utf8'))
 const row = (catalog, id) => catalog.offerings.find(o => o.id === id)
-// The fixture base: the candidate catalog with blueprint's codex row as it is before CP-04e.
-const production = () => { const catalog = candidate(); codexUnavailable(row(catalog, 'blueprint')); return catalog }
+// The fixture base: the candidate catalog with blueprint's and dev's codex rows as they are before CP-04e and CP-06.
+const production = () => {
+  const catalog = candidate()
+  codexUnavailable(row(catalog, 'blueprint'))
+  codexUnavailable(row(catalog, 'dev'))
+  return catalog
+}
 
 // Works for either catalog version: the accessor decides, so the test must not care.
 function codexUnavailable(offering) {
@@ -151,14 +159,15 @@ function snapshot(dir) {
 
 test('install-plan prints exactly the two current dest<TAB>src lines for the candidate root (three once CP-04e flips blueprint)', async () => {
   const flipped = row(candidate(), 'blueprint').providers?.codex?.implementation === 'partial'
-  const lines = flipped ? CP04E_LINES : PRODUCTION_LINES
+  const devFlipped = row(candidate(), 'dev').providers?.codex?.implementation === 'partial'
+  const lines = (flipped ? CP04E_LINES : PRODUCTION_LINES) + (devFlipped ? CP06_LINE : '')
   planOk(plan(ROOT), lines)
   planOk(plan(ROOT, ['--backend', 'codex', '--installation-root', ROOT]), lines)
 
   const { installPlan } = await loadPlan()
   assert.equal(typeof installPlan, 'function', 'install-plan.mjs exports installPlan')
   const result = installPlan({ installationRoot: ROOT, backend: 'codex' })
-  assert.deepEqual(result, flipped ? CP04E_PLAN : PRODUCTION_PLAN)
+  assert.deepEqual(result, [...(flipped ? CP04E_PLAN : PRODUCTION_PLAN), ...(devFlipped ? [{ dest: 'skills/dev', src: 'graphs/dev/skills/dev' }] : [])])
   for (const entry of result) assert.deepEqual(Object.keys(entry), ['dest', 'src'])
   assert.deepEqual(installPlan({ installationRoot: ROOT, backend: 'codex' }), result, 'same result on every call')
 

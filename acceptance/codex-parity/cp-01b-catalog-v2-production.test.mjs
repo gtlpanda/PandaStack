@@ -37,7 +37,8 @@ const CODEX_PARTIAL = { autobuild: 'codex-autobuild', bughunt: 'codex-bughunt' }
 const CP04E_TRANSPORT = { id: 'codex-graph-host', provider: 'codex', entry: 'core/skills/native-runtime/graph-host.mjs' }
 const CP04E_BLUEPRINT_CODEX = { implementation: 'partial', transportId: 'codex-graph-host',
   limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] }
-const cp04eFlipped = row => row.id === 'blueprint' &&
+// Amended for CP-06: dev's flipped row is exactly blueprint's (same transport, same limitations).
+const cp04eFlipped = row => (row.id === 'blueprint' || row.id === 'dev') &&
   JSON.stringify(row.providers.codex) === JSON.stringify(CP04E_BLUEPRINT_CODEX)
 const SHARED_FIELDS = ['id', 'kind', 'source', 'entrySkill', 'installTargets', 'nativeReadiness',
   'evidenceOwners', 'requiredRuntimes', 'aliases', 'requirementsComplete']
