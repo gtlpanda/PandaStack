@@ -135,6 +135,19 @@ await test('preflight: exec_command on the wire refuses; so does no request, an 
   await assert.rejects(runWirePreflight({ codexBin: 'codex', args, cwd: WORK, env: env() }), coded)
 })
 
+await test('preflight fails closed on a layout it does not understand and judges every request, not only the last', async () => {
+  const { runWirePreflight, codexSourceOnlyArgs, wireInventoryProblems } = await so()
+  const args = codexSourceOnlyArgs(INPUT)
+  const run = wire => runWirePreflight({ codexBin: BIN, args, cwd: WORK, env: env({ FAKE_CODEX_WIRE: wire }) })
+  const masked = await run('bad_then_clean')
+  assert.equal(masked.ok, false); assert.equal(masked.requests, 2)
+  assert.match(masked.problems.join(), /request 1: nested-in-exec.*exec_command/)
+  const empty = await run('empty_inventory')
+  assert.equal(empty.ok, false)
+  assert.match(empty.problems.join(), /no tool was found/)
+  assert.ok(wireInventoryProblems({ tools: [], input: [{ type: 'additional_tools', tools: [] }, { type: 'message', content: [{ text: '<tools>\n- mcp__reader\n</tools>' }] }] }).some(p => /no tool was found/.test(p)))
+})
+
 await test('version and bundled catalog readers: parsed from the CLI, unknown output refused', async () => {
   const { codexVersion, readBundledCatalog, SOURCE_ONLY_PINNED_VERSIONS } = await so()
   assert.equal(codexVersion({ codexBin: BIN, env: env() }), '0.167.0')

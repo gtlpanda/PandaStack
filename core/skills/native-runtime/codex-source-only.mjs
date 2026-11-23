@@ -145,6 +145,8 @@ export function wireInventoryProblems(body) {
     const extra = extras(seen, allowed)
     if (extra.length) problems.push(`${label} tools outside the allowed set: ${extra.join(', ')}`)
   }
+  // Fail closed on a layout this check does not understand: an inventory with no top-level tool at all was not read, it was missed.
+  if (top.size === 0) problems.push('top-level: no tool was found, so the request layout is not one this check understands')
   if (deferred.size === 0) problems.push('deferred-namespaces: the reader namespace is missing')
   return problems
 }
@@ -206,12 +208,12 @@ export async function runWirePreflight({ codexBin, args, cwd, env, timeoutMs = 6
     const logFile = join(scratch, 'preflight.log.jsonl')
     const exitCode = await runCodexExec(codexBin, argv, { cwd, env: { ...fields(env, INPUT) }, input: 'preflight', logFile, timeoutMs, graceMs: 500 })
     if (fake.requests.length === 0) problems.push(`codex made no Responses request (exit ${exitCode})`)
-    else {
-      const last = fake.requests.at(-1)
+    // Every request codex sent is checked, not only the last: a second request with another shape must not hide the first's tools.
+    for (const [n, request] of fake.requests.entries()) {
       let body = null
-      try { body = last.bytes === null ? null : decodeBody(last.headers, last.bytes) } catch { body = null }
-      if (body === null) problems.push('the Responses request body could not be read')
-      else problems.push(...wireInventoryProblems(body))
+      try { body = request.bytes === null ? null : decodeBody(request.headers, request.bytes) } catch { body = null }
+      if (body === null) problems.push(`request ${n + 1}: the Responses request body could not be read`)
+      else problems.push(...wireInventoryProblems(body).map(problem => `request ${n + 1}: ${problem}`))
     }
     return { ok: problems.length === 0, problems, requests: fake.requests.length }
   } finally {

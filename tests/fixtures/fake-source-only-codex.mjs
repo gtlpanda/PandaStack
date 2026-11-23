@@ -4,7 +4,7 @@
 //   debug models --bundled  -> a catalog holding FAKE_CODEX_MODELS (comma list, default gpt-6.1-sol)
 //   exec ... (preflight)    -> argv carries model_providers.preflight.base_url: POST one Responses
 //                              body whose tool inventory follows FAKE_CODEX_WIRE (clean | exec_command |
-//                              no_request | gzip)
+//                              no_request | gzip | bad_then_clean | empty_inventory)
 //   exec ... (leaf)         -> read the prompt from stdin, answer with the object the module named by
 //                              FAKE_CODEX_ANSWER returns (default export (prompt) => object), write it to
 //                              --output-last-message ({json: <text>} when --output-schema is the NR-01 wire
@@ -38,16 +38,23 @@ const baseUrl = configs.map(c => /^model_providers\.preflight\.base_url="(.*)"$/
 if (baseUrl) {
   const mode = env.FAKE_CODEX_WIRE ?? 'clean'
   if (mode === 'no_request') process.exit(0)
-  const nested = ['list_mcp_resource_templates', 'list_mcp_resources', 'read_mcp_resource', ...(mode === 'exec_command' ? ['exec_command', 'write_stdin'] : [])]
-  const body = { model: after('--model'), input: [
-    { type: 'additional_tools', role: 'developer', tools: [{ type: 'namespace', name: 'functions', tools: [
-      { name: 'exec', description: nested.map(n => `### \`${n}\`\ndescription`).join('\n') }, { name: 'wait', description: 'wait' }] }] },
-    { type: 'message', role: 'developer', content: [{ type: 'input_text', text: '<tools>\nDeferred tool namespaces:\n- mcp__reader\n</tools>' }] },
-  ], tools: [] }
-  const raw = Buffer.from(JSON.stringify(body))
-  const gz = mode === 'gzip'
-  const res = await fetch(`${baseUrl}/responses`, { method: 'POST', headers: { 'content-type': 'application/json', ...(gz ? { 'content-encoding': 'gzip' } : {}) }, body: gz ? gzipSync(raw) : raw })
-  await res.text()
+  const bodyFor = bad => {
+    const nested = ['list_mcp_resource_templates', 'list_mcp_resources', 'read_mcp_resource', ...(bad ? ['exec_command', 'write_stdin'] : [])]
+    return { model: after('--model'), input: [
+      { type: 'additional_tools', role: 'developer', tools: [{ type: 'namespace', name: 'functions', tools: [
+        { name: 'exec', description: nested.map(n => `### \`${n}\`\ndescription`).join('\n') }, { name: 'wait', description: 'wait' }] }] },
+      { type: 'message', role: 'developer', content: [{ type: 'input_text', text: '<tools>\nDeferred tool namespaces:\n- mcp__reader\n</tools>' }] },
+    ], tools: [] }
+  }
+  const post = async (body, gz) => {
+    const raw = Buffer.from(JSON.stringify(body))
+    const res = await fetch(`${baseUrl}/responses`, { method: 'POST', headers: { 'content-type': 'application/json', ...(gz ? { 'content-encoding': 'gzip' } : {}) }, body: gz ? gzipSync(raw) : raw })
+    await res.text()
+  }
+  // bad_then_clean: the first request carries a shell tool and a second, clean one follows; both must be judged.
+  if (mode === 'bad_then_clean') { await post(bodyFor(true), false); await post(bodyFor(false), false) }
+  else if (mode === 'empty_inventory') await post({ model: after('--model'), input: [{ type: 'message', role: 'developer', content: [{ type: 'input_text', text: '<tools>\nDeferred tool namespaces:\n- mcp__reader\n</tools>' }] }], tools: [] }, false)
+  else await post(bodyFor(mode === 'exec_command'), mode === 'gzip')
   process.exit(0)
 }
 
