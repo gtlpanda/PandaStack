@@ -260,8 +260,11 @@ await test('native-runtime: the installed library prints the Codex plan and its 
   assert.ok(JSON.parse(preflight.stdout).refusal.reasons.includes('LIBRARY_ONLY'))
 })
 
-await test('verify stays NATIVE_UNVERIFIED: its scripts are present and parse, and none is executed here', () => {
-  assert.ok(FIXTURE.keepNativeUnverified.includes('verify'))
+await test('verify drops NATIVE_UNVERIFIED only on the live record: Codex ran it from the install (docs/evidence/codex-live-2026-11-23.md); its scripts are present and parse, and none is executed here', () => {
+  assert.ok(!FIXTURE.keepNativeUnverified.includes('verify'))
+  const evidence = readFileSync(join(REPO, 'docs/evidence/codex-live-2026-11-23.md'), 'utf8')
+  assert.match(evidence, /SKILL_DIR='<home>\/\.agents\/skills\/verify'; bash "\$\{SKILL_DIR:-\$\{CLAUDE_SKILL_DIR\}\}\/verify\.sh"/, 'the live record shows the installed-path command')
+  assert.match(evidence, /\*\*Result:\*\* `VERIFY: PASS`/, 'the live record shows the verify result')
   for (const script of ['verify.sh', 'retention.sh', 'capture-owner.sh']) {
     const file = join(link('verify'), script)
     assert.ok(existsSync(file), script)
