@@ -55,7 +55,9 @@ export function run(root, script, env = {}) {
 
 // The bug hunt is off unless a test turns it on (test/bughunt.test.mjs).
 export function loopEnv(scriptFile) {
-  return { ...process.env, AUTOBUILD_CLAUDE_BIN: FAKE, FAKE_CLAUDE_SCRIPT: scriptFile, AUTOBUILD_CLI: CLI, AUTOBUILD_MAX_SLEEP_MS: "300", AUTOBUILD_BUGHUNT: "0" };
+  // PANDASTACK_PROVIDER pins the Claude path: `autobuild run` with no --backend takes the host app, and these loops run
+  // the fake claude whatever app launched the test.
+  return { ...process.env, PANDASTACK_PROVIDER: "claude", AUTOBUILD_CLAUDE_BIN: FAKE, FAKE_CLAUDE_SCRIPT: scriptFile, AUTOBUILD_CLI: CLI, AUTOBUILD_MAX_SLEEP_MS: "300", AUTOBUILD_BUGHUNT: "0" };
 }
 
 export function head(root) {
