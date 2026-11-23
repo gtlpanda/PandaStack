@@ -22,6 +22,11 @@
       "entry": "core/skills/native-runtime/graph-host.mjs"
     },
     {
+      "id": "codex-security-audit",
+      "provider": "codex",
+      "entry": "graphs/security-audit/skills/security-audit/audit-native.mjs"
+    },
+    {
       "id": "codex-skill",
       "provider": "codex",
       "entry": "install.sh"
@@ -98,6 +103,16 @@
         "cp-08-release-codex"
       ],
       "preWave": false
+    },
+    {
+      "id": "security-audit",
+      "transportId": "codex-security-audit",
+      "limitations": [
+        "NATIVE_UNVERIFIED",
+        "REQUIREMENTS_INCOMPLETE"
+      ],
+      "proofRefs": [],
+      "preWave": false
     }
   ],
   "skill": {
@@ -152,7 +167,5 @@
       "run-records"
     ]
   },
-  "unavailable": [
-    "security-audit"
-  ]
+  "unavailable": []
 }

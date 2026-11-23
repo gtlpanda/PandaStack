@@ -188,9 +188,10 @@ describe('CP-08: catalog and launcher (wiring proof, not runtime certification)'
     assert.equal(installEligible(row, 'codex'), true)
     assert.equal(nativeImplementationOf(row), 'present-limited')
     assert.deepEqual(checkCatalogDrift({ installationRoot: ROOT }), { ok: true, problems: [] })
-    // security-audit keeps its refusal: it is not part of this port.
+    // security-audit is not part of this port; its row is whatever the expected-state fixture says (unavailable until its own port flips it).
     const audit = catalog.offerings.find(o => o.id === 'security-audit').providers.codex
-    assert.equal(audit.implementation, 'unavailable')
+    const expected = JSON.parse(readFileSync(resolve(ROOT, 'tests/fixtures/codex-expected-state.json'), 'utf8'))
+    assert.equal(audit.implementation, expected.unavailable.includes('security-audit') ? 'unavailable' : 'partial')
   })
 
   test('2. codexExecArgs: network access is workspace-write only, opt-in, and never widens the sandbox', async () => {

@@ -15,6 +15,33 @@ that keeps it from being proven and a safe plan to prove it, or it is
 
 These instructions are the opt-in to the Workflow tool for this skill.
 
+## Codex runner
+
+If you are running in Codex, use the Codex runner section; in Claude Code, use the sections below.
+
+Section 1 (when this skill runs, and when it does not) and the Rules at the end apply to Codex unchanged: an explicit full-audit request only, source only,
+never `confirmed`, never edit the audited repository or the run directory. In Codex there is no Workflow tool, so do not follow sections 3 to 5. One command
+drives the whole audit with the same scheduler (`audit-run.mjs next`), the same helper commands and the same validators. Resolve this installed skill
+symlink to find `audit-native.mjs` beside this file:
+
+```bash
+node <resolved-skill-dir>/audit-native.mjs run <absolute-repo> --full --budget <N> [--max-budget <M>] [--profile quick|standard|deep] [--scope <path>,...]
+node <resolved-skill-dir>/audit-native.mjs resume <run dir> [--grant <N>]
+```
+
+`run` takes `init`'s flags and needs a finite `--budget` (a hard cap on agent invocations; there is no unbounded native run). `--max-budget` is the most a
+later `resume --grant` may raise it to (default: the budget). Run it in the background and read its output; relay the `note:` lines `init` prints, as
+section 3 says. Every leaf is a fresh `codex exec` that can only list, read and search the sealed snapshot through a loopback reader: no shell, no patch tool,
+no network, no hosted tools. Before the first leaf of every run the host checks that with a wire preflight (the exact leaf command against a fake Responses
+API, no model call) and refuses, spending nothing, if any tool outside that set appears. An unpinned Codex version runs only if that check passes.
+
+Exit status: `0` complete, with the three reports in the run directory; `5` ended incomplete (a partial pass: read why in `REPORT.md`); `3` paused for the
+budget or an uncertain leaf (`resume`, with `--grant` for a budget pause); `1` any other failure, with the run left as it is (stop, say the reason and the
+run directory, and repair nothing); `2` usage. Report the result as section 6 says. Limits to say plainly: the critic runs as full-evidence partitions plus
+a global reconciliation that sees their summaries and proposals but reads no raw evidence, and that costs one more call than the budget's critic reserve
+assumes, so a tight budget can pause there; the `exec` JavaScript isolate and any hosted tool a real provider adds are not proven absent by the preflight;
+this is not hostile same-user isolation. Saved Codex login is used through a symlink in a per-run `CODEX_HOME`, never copied. No Claude dependency or fallback.
+
 ## 1. When this skill runs, and when it does not
 
 Run a full audit only when the user explicitly asks for one: the literal
