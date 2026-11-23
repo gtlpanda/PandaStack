@@ -40,8 +40,10 @@ const MARKER = `cp04e-host-marker-${process.pid}-${Date.now()}`
 const INVOCATION_ID = /^bp-(interview|design|backlog)-([0-9]{8}T[0-9]{6}Z)-[0-9a-f]{8}$/
 
 // The catalog CP-04e pins. The first three transports are CP-01b's, unchanged.
+// Amended (user-authorized): blueprint's row carried LIVE_PROOF_MISSING until the live run in
+// docs/evidence/codex-live-e2e-2-2026-11-23.md; its limitations now come from the expected-state fixture.
 const CODEX_ROW = Object.freeze({ implementation: 'partial', transportId: 'codex-graph-host',
-  limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] })
+  limitations: [...STATE.graphRows.find(r => r.id === 'blueprint').limitations] })
 const CLAUDE_ROW = Object.freeze({ implementation: 'partial', transportId: 'claude-code', limitations: ['REQUIREMENTS_INCOMPLETE'] })
 // Amended for the codex-parity waves (user-authorized, direct human-directed change): the transports, the
 // partial rows, the plan and the installed set come from the expected-state fixture

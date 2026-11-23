@@ -37,7 +37,6 @@
       "id": "autobuild",
       "transportId": "codex-autobuild",
       "limitations": [
-        "LIVE_PROOF_MISSING",
         "NATIVE_UNVERIFIED",
         "REQUIREMENTS_INCOMPLETE"
       ],
@@ -48,7 +47,6 @@
       "id": "blueprint",
       "transportId": "codex-graph-host",
       "limitations": [
-        "LIVE_PROOF_MISSING",
         "NATIVE_UNVERIFIED",
         "REQUIREMENTS_INCOMPLETE"
       ],
@@ -95,7 +93,6 @@
       "id": "release-pr",
       "transportId": "codex-graph-host",
       "limitations": [
-        "LIVE_PROOF_MISSING",
         "NATIVE_UNVERIFIED",
         "REQUIREMENTS_INCOMPLETE"
       ],

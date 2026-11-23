@@ -43,7 +43,7 @@ import { sessionSettings, sliceArgs, runClaude, runChild, sessionVerdict, probeU
 import { sliceChecks, devReport, outcomeOf, TEST_FILE } from './checks.mjs'
 import {
   INSTALL_ROOT, QA_LOOP_CLI, HUNT_CLI, codexRunConfig, slicePrompt, sliceRules, runSliceSession, runProbeSession, codexVerdict, tokenUsage,
-  controlDigest, controlChanges, hostCommit, writeQaArgs, readQaReport, readQaError, huntArgs, huntStateDir, huntPrep,
+  controlDigest, controlChanges, hostCommit, restoreFrozenTests, writeQaArgs, readQaReport, readQaError, huntArgs, huntStateDir, huntPrep,
 } from './codex-session.mjs'
 import { readCodexResult } from '../../../../autobuild/tool/lib/codex.mjs'
 import { detectHostProvider } from '../../../../../core/skills/native-runtime/host-provider.mjs'
@@ -350,7 +350,12 @@ async function runDriverWork({ repo: given, app, noPr: noPrFlag = null }, cfg, c
       if (qa) {
         writeJson(files.finalQa, { status: qa.status, reason: typeof qa.reason === 'string' ? qa.reason : '', touched: Array.isArray(qa.touched) ? qa.touched : [] })
         if (qa.status === 'done' && Array.isArray(qa.touched) && qa.touched.length) {
-          const made = hostCommit(repo, 'final: QA fixes', `Fixed by the native QA loop on Codex (invocation ${qa.invocationId}). Committed by the driver.`, qa.touched)
+          const kept = restoreFrozenTests(repo, integration, frozenFiles(ledger), qa.touched)
+          if (!kept.ok) log(`final QA: ${kept.message}`)
+          if (kept.restored.length) log(`final QA: put back ${kept.restored.length} frozen test(s) it changed: ${kept.restored.join(', ')}; the driver's checks judge the rest of the fix against them`)
+          const made = kept.touched.length
+            ? hostCommit(repo, 'final: QA fixes', `Fixed by the native QA loop on Codex (invocation ${qa.invocationId}). Committed by the driver.`, kept.touched)
+            : { ok: true, committed: false }
           // A failed commit leaves the tree dirty, which the driver's own checks below report.
           if (!made.ok) log(`final QA: ${made.message}`)
         }

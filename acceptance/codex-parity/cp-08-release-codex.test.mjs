@@ -173,11 +173,14 @@ async function readyAndApprove(flow, head = HEAD1) {
 
 // =====================================================================
 describe('CP-08: catalog and launcher (wiring proof, not runtime certification)', () => {
-  test('1. release-pr is codex partial through codex-graph-host with LIVE_PROOF_MISSING, a proofRef and no new transport', async () => {
+  test('1. release-pr is codex partial through codex-graph-host with the fixture\'s limitations, a proofRef and no new transport', async () => {
     const catalog = readJson(resolve(ROOT, 'spec/offering-capabilities.json'))
     const row = catalog.offerings.find(o => o.id === 'release-pr')
-    assert.deepEqual(row.providers.codex, { implementation: 'partial', transportId: 'codex-graph-host',
-      limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] })
+    // Amended (user-authorized): CP-08 pinned LIVE_PROOF_MISSING until the live run in
+    // docs/evidence/codex-live-e2e-2-2026-11-23.md; the limitations now come from the expected-state fixture.
+    const fixture = JSON.parse(readFileSync(resolve(ROOT, 'tests/fixtures/codex-expected-state.json'), 'utf8')).graphRows.find(r => r.id === 'release-pr')
+    assert.deepEqual(row.providers.codex, { implementation: 'partial', transportId: 'codex-graph-host', limitations: fixture.limitations })
+    assert.equal(fixture.transportId, 'codex-graph-host')
     assert.deepEqual(row.providers.claude, { implementation: 'partial', transportId: 'claude-code', limitations: ['REQUIREMENTS_INCOMPLETE'] })
     assert.deepEqual(row.proofRefs, ['cp-08-release-codex'])
     assert.deepEqual(row.dependencies, ['backlog', 'default-stack', 'knowledge-map', 'native-runtime'])

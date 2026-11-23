@@ -79,8 +79,10 @@ const ROLES = ['extractor', 'questioner', 'architect', 'slicer', 'advisor']
 const UNAVAILABLE = Object.freeze({ implementation: 'unavailable', transportId: null,
   limitations: ['NATIVE_UNVERIFIED', 'NO_PROVIDER_TRANSPORT', 'REQUIREMENTS_INCOMPLETE'] })
 // CP-04e's row, pinned by acceptance/codex-parity/cp-04e-blueprint-codex.test.mjs.
+// Amended (user-authorized): blueprint's row carried LIVE_PROOF_MISSING until the live run in
+// docs/evidence/codex-live-e2e-2-2026-11-23.md; its limitations now come from the expected-state fixture.
 const CP04E_BLUEPRINT_CODEX = Object.freeze({ implementation: 'partial', transportId: 'codex-graph-host',
-  limitations: ['LIVE_PROOF_MISSING', 'NATIVE_UNVERIFIED', 'REQUIREMENTS_INCOMPLETE'] })
+  limitations: [...readJson(resolve(ROOT, 'tests/fixtures/codex-expected-state.json')).graphRows.find(r => r.id === 'blueprint').limitations] })
 
 let WORK, REAL_GIT, REAL_BASH, FIXTURE_ROOT, UNAVAILABLE_ROOT, PREFIXES, STATE_LIB, DECISIONS_LIB
 // A fixture root identical to root() except that blueprint's codex row is unavailable.
