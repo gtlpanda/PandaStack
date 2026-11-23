@@ -74,7 +74,7 @@ const COMMIT_ID = /^([0-9a-f]{40}|[0-9a-f]{64})$/
 export const isCommitId = v => typeof v === 'string' && COMMIT_ID.test(v)   // a string: a regex test coerces an array or an object to one
 
 export class Usage extends Error {}
-class Refusal extends Error {}
+export class Refusal extends Error {}
 export const refuse = message => { throw new Refusal(message) }
 
 // ---------- files ----------
