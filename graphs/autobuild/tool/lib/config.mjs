@@ -119,16 +119,17 @@ export function findProjectRoot(start = process.cwd()) {
 export function loadConfig(root = findProjectRoot(), env = process.env, overrides = {}) {
   const file = path.join(root, CONFIG_FILE);
   const raw = JSON.parse(readFileSync(file, "utf8"));
-  return resolveManagedConfig({ project: raw, env, overrides: withHostBackend(raw, env, overrides), root });
+  return resolveManagedConfig({ project: raw, env, overrides, root });
 }
 
 // Backend precedence: --backend (overrides.backend) > AUTOBUILD_BACKEND > autobuild.json "backend" > the
-// host app the user is in (Codex CLI or Claude Code) > claude. The host is detected here, at the entry
-// point, and handed down as overrides.defaultBackend, so resolveManagedConfig stays a pure function of its
-// inputs. Detection runs only when nothing above it decided.
-function withHostBackend(raw, env, overrides) {
-  if (overrides.backend || env.AUTOBUILD_BACKEND || raw.backend || overrides.defaultBackend) return overrides;
-  return { ...overrides, defaultBackend: detectHostProvider({ env }).provider };
+// host app the user is in (overrides.defaultBackend: Codex CLI or Claude Code) > claude.
+// loadConfig itself never looks at the host: only a command that is about to start a provider asks
+// (`autobuild run`, `autobuild init`), through defaultBackendFor, so `autobuild status` or the gate in a
+// Claude-configured project (USD budgets) still loads when it is run from inside Codex.
+export function defaultBackendFor({ flag, env = process.env } = {}) {
+  if (flag || env.AUTOBUILD_BACKEND) return undefined;
+  return detectHostProvider({ env }).provider;
 }
 
 // Shared, read-only managed launch validation for the launcher and doctor.

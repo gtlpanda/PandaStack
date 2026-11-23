@@ -2523,8 +2523,37 @@ tests/install-codex.test.mjs, tests/install-plan.test.mjs, tests/host-wiring-pro
 Observed limits and untested hypotheses:
 - Fake codex and stubs only: wiring proof, not runtime certification. No live codex, claude or GitHub.
 - The final QA needs `dev` Codex-available in the catalog; until then qa-loop exits 2 OFFERING_UNSUPPORTED
-  and the run brakes after the last slice (observed in the real-CLI case).
+  and the run brakes after the last slice (observed in the real-CLI case). Superseded on the integration
+  branch: dev is codex partial there, and a real-qa-loop case now passes the final QA (see the integration
+  section below).
 - Usage-limit, billing, auth and overload detection reuse the Claude wording patterns; their match on real
   Codex output is an untested hypothesis. A refusal inside the QA loop is not distinguished from an escalation.
 
 Full gate: run on the final commit; its result is in the handoff report.
+
+## Integration: five parity branches merged, host auto-detection, combined install (branch codex-parity/integration)
+
+Direct human-directed change. AGENTS.md scopes SKILL.md and catalog edits out for builder sessions; these
+were made on the user's explicit instruction, with the catalog drift guard (`checkCatalogDrift`) ok.
+
+Merged, all from 2bc3992: skills, dev, release, build-app, security-audit. The row conflicts (cp-01b..cp-04e,
+install-codex, install-plan, host-wiring-proof-ref, PROGRESS, retro) all came from tests that hardcoded
+which rows are codex partial. They now read one expected-state fixture, tests/fixtures/codex-expected-state.json,
+through tests/codex-expected-state.mjs: ordered transports, the six graph rows (transport, limitations,
+proofRefs), the 39 codex-skill ids and `keepNativeUnverified`, and the unavailable list. The catalog must equal
+it exactly (no before-or-after-flip branches); fixture roots reset every wave-flipped row with `resetToPreWave`
+so the pinned pre-wave plans stay. The install-codex sha pin in cp-01c was re-pinned.
+
+Host auto-detection: core/skills/native-runtime/host-provider.mjs. Precedence: PANDASTACK_PROVIDER, then the
+nearest ancestor process named codex or claude, then CODEX_THREAD_ID (untested hypothesis: the repo deletes it
+before nested sessions, which implies Codex sets it, but nothing here observed it) then CLAUDECODE, then
+claude. Wired at autobuild loadConfig (and `autobuild init`), the build-app driver, bughunt native-cli and
+`pandastack doctor`. The blueprint, dev and release CLIs and the qa loop are Codex-only runners with no provider
+choice; the SKILL.md selection sentence routes to them. Decisions: an `autobuild.json` "backend" is an explicit
+pin and beats the host; `--claude --codex` is an error; a failing Codex step in plain install only warns; the
+native-cli refuses a Claude host rather than falling back; an empty PANDASTACK_PROVIDER counts as unset.
+
+build-app final QA: the real qa-loop now passes through the production catalog with dev codex partial
+(tests/driver-codex.test.mjs, a root copy with an inert verify.sh; the repository's own is never run).
+Not proven: any live Codex or Claude run, `codex` comm/argv shapes other than the node-script and native
+binary forms the matcher handles.

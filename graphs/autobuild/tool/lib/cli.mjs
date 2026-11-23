@@ -6,7 +6,7 @@ import { appendFileSync, copyFileSync, existsSync, mkdtempSync, readFileSync, re
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { CONFIG_FILE, findProjectRoot, loadConfig, statePath } from "./config.mjs";
+import { CONFIG_FILE, defaultBackendFor, findProjectRoot, loadConfig, statePath } from "./config.mjs";
 import { detectHostProvider } from "../../../../core/skills/native-runtime/host-provider.mjs";
 import { blockedClosure, countPassing, featureById, nextFeature, readBlockers, readFeatures, readProgress, writeFeatures } from "./features.mjs";
 import { failureExcerpt, gateStepLines, parseShard, runGate } from "./gate.mjs";
@@ -97,7 +97,8 @@ export async function main(argv = process.argv.slice(2)) {
   const [command, ...args] = argv;
   switch (command) {
     case "run": {
-      const config = loadConfig(undefined, process.env, { backend: value(args, "--backend"), model: value(args, "--model"), deliveryMode: value(args, "--delivery-mode") });
+      const backendFlag = value(args, "--backend");
+      const config = loadConfig(undefined, process.env, { backend: backendFlag, defaultBackend: defaultBackendFor({ flag: backendFlag }), model: value(args, "--model"), deliveryMode: value(args, "--delivery-mode") });
       const max = value(args, "--max-iterations");
       if (max) config.limits.maxIterations = Number(max);
       return runLoop(config);

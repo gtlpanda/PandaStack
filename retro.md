@@ -4228,3 +4228,25 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
   docs/evidence/codex-sandbox-source-only-2026-11-23.md.
 - Gotchas: a dotted `-c` key splits at dots inside a path (use one inline table); `codex sandbox -C`
   requires `-P`; the sandbox needs the native codex binary directory readable.
+
+## 80. Codex parity integration: five branches merged, host auto-detection, combined install (2026-11-23)
+
+- Merged codex-parity/skills, dev, release, build-app and security-audit (all from 2bc3992). The
+  conflicts in cp-01b/c/d, cp-03b, cp-04e, install-codex, install-plan and host-wiring-proof-ref came from
+  tests that hardcoded which rows are codex partial. They now read one expected-state fixture
+  (tests/fixtures/codex-expected-state.json via tests/codex-expected-state.mjs): the catalog must equal it
+  exactly, fixture roots reset flipped rows with resetToPreWave, the pinned pre-wave plans are unchanged,
+  and flipping another row is a one-file edit. The old per-branch dual-state ("before or after the flip")
+  branches are gone, which also removed a weakness: those tests accepted either state.
+- Host auto-detection (core/skills/native-runtime/host-provider.mjs): PANDASTACK_PROVIDER, then the
+  nearest codex or claude ancestor process, then CODEX_THREAD_ID (untested hypothesis) / CLAUDECODE, then
+  claude. The tree comes before the env because Claude variables leak into a Codex sandbox started from a
+  Claude shell. An injected env never consults the real process tree, so tests with their own env stay
+  hermetic. Wired at autobuild loadConfig and init, the build-app driver, bughunt native-cli and doctor.
+- Plain ./install.sh also installs the Codex entry skills when codex is on PATH or ~/.agents exists;
+  --claude and --codex pick one.
+- build-app's final QA passes through the real qa-loop now that dev is codex partial (root copy, inert
+  verify.sh).
+- cp-03d's Claude-path check scans the instruction text, not the checkout path.
+- Bugs caught: the import of host-provider from bughunt and build-app created an undeclared catalog
+  dependency (checkCatalogDrift DEPENDENCY_UNDECLARED), so both gained native-runtime.
