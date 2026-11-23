@@ -4182,3 +4182,21 @@ hash-pin amendment PR.
   15 merged parity commits on this run's budget (now cd86609, the main commit this priority
   branches from); F2, CO-10's "Applied automatically" heading for a finding the report never
   applies (now "Auto-applicable (low risk, run `autobuild ci apply`)").
+
+## 77. security-audit on Codex: confinement probe, row stays unavailable (2026-11-23)
+
+- Question: can native Codex enforce source-only access for the `audit-source-only` leaves? A
+  `codex sandbox` flag set (`default_permissions` plus an inline `permissions.<name>.filesystem`
+  table and `network.enabled=false`, via `-c` only) confines a shell command: reads only the
+  snapshot and the codex binary directory, no writes, no sockets, one control per property
+  (tests/codex-source-only-sandbox.test.mjs, 7 cases, skips without codex; two mutations of the
+  recipe each failed the matching cases).
+- Not established: that `codex exec` applies it to a model's tool calls (needs a live model;
+  `codex debug prompt-input` rendered a read-only projection), SA-08's no-shell requirement (the
+  shell stays and runs snapshot scripts), and the native stage itself, which throws
+  `PARTITION_INTEGRATION_REQUIRED` on the critic step (native-stage.mjs:95). The codex row,
+  the refusal in codex-provider.mjs and all frozen tests are unchanged.
+- Evidence and the list of what would change the answer:
+  docs/evidence/codex-sandbox-source-only-2026-11-23.md.
+- Gotchas: a dotted `-c` key splits at dots inside a path (use one inline table); `codex sandbox -C`
+  requires `-P`; the sandbox needs the native codex binary directory readable.
