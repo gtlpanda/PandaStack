@@ -1,11 +1,15 @@
 // Execute ONE scheduler-selected stage through trusted host ports. This library
-// is not a provider launcher or a second audit lifecycle. Critic partition dispatch
-// remains a separate required integration; legacy clipped critics are refused.
+// is not a provider launcher or a second audit lifecycle. The critic stage runs
+// as full-evidence partitions plus a global reconciliation (native-critic.mjs);
+// the legacy clipped critic is never run natively.
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { planNativeStage, applyStage, completedStageRejection, NATIVE_CAPTURE_FILE, pendingNativeApplication, recordNativeApplication } from './audit-stage.mjs'
+import { planNativeStage, applyStage, completedStageRejection, NATIVE_CAPTURE_FILE, WORKFLOW_FILE, pendingNativeApplication, recordNativeApplication } from './audit-stage.mjs'
 import { loadRun, nextStep, readJson, writeJson } from './audit-run.mjs'
-import { assertAuditJournalOwner } from './dispatch-journal.mjs'
-import { createAuditStageCheckpoints } from './native-checkpoints.mjs'
+import { assertAuditJournalOwner, readAuditJournal } from './dispatch-journal.mjs'
+import { createAuditCriticStageCheckpoints, createAuditStageCheckpoints } from './native-checkpoints.mjs'
+import { criticInvocationIds } from './critic-stage.mjs'
+import { readCriticManifest, runCriticPartitions } from './native-critic.mjs'
 import { publishPartialReport, readPartialReport } from './audit-report.mjs'
 import { inspectSnapshotProtection } from './snapshot-protection.mjs'
 import { createNativeRuntime } from '../../../../core/skills/native-runtime/runtime.mjs'
@@ -31,7 +35,7 @@ export async function runNativeAuditStage(options) {
   // (seed/report), which intentionally cannot be planned as a native leaf stage.
   publish()
   const recovery = pendingNativeApplication(runDir)
-  const plan = recovery ?? planNativeStageAfterCriticCheck(runDir)
+  const plan = recovery ?? planNativeStage(runDir)
   const marker = readJson(join(plan.stage.dir, NATIVE_CAPTURE_FILE))
   if (registryWorkflow(registry, 'security-audit-flow').sha256 !== marker.workflow_sha256) fail('CONFLICT')
   const apply = () => {
@@ -60,7 +64,12 @@ export async function runNativeAuditStage(options) {
   }
   // The host may repair report freshness, never budget/uncertainty blockers.
   publish()
-  const checkpoints = createAuditStageCheckpoints({ runDir, journal, stageName: plan.stage.name, invocationId: plan.invocationId })
+  const stageInput = readJson(join(plan.stage.dir, 'input.json'))
+  const partitioned = stageInput.native_partitioned === true
+  // A partitioned critic journals under the invocation ids its stage derived, and only those.
+  const owned = partitioned ? criticInvocationIds(plan.invocationId, readCriticManifest(plan.stage.dir, stageInput)) : [plan.invocationId]
+  const checkpointOptions = { runDir, journal, stageName: plan.stage.name, invocationId: plan.invocationId }
+  const checkpoints = partitioned ? createAuditCriticStageCheckpoints({ ...checkpointOptions, ownedInvocationIds: owned }) : createAuditStageCheckpoints(checkpointOptions)
   let runtime, value, failure
   try {
     runtime = createNativeRuntime({ registry, provider, checkpoints,
@@ -69,7 +78,13 @@ export async function runNativeAuditStage(options) {
         if (chosen?.selection?.provider !== 'codex') fail('INVALID_SELECTION')
         return chosen
       }, maxConcurrentSubagents, deadlineMs, ...(signal === undefined ? {} : { signal }) })
-    const result = await runtime.run('security-audit-flow', readJson(join(plan.stage.dir, 'input.json')), { invocationId: plan.invocationId })
+    let result
+    if (partitioned) {
+      result = await runCriticPartitions({ runtime, stageDir: plan.stage.dir, input: stageInput, stageInvocationId: plan.invocationId,
+        workflowSource: readFileSync(WORKFLOW_FILE, 'utf8') })
+      // What the stage's leaves cost is the journal's row count, the same projection every publication wrote into the spend ledger.
+      result.budgetSpent = readAuditJournal(runDir).rows.filter(r => owned.includes(r.input?.invocationId)).length
+    } else result = await runtime.run('security-audit-flow', stageInput, { invocationId: plan.invocationId })
     writeJson(plan.returned, result)
     const applied = apply()
     publish()
@@ -89,9 +104,4 @@ export async function runNativeAuditStage(options) {
 function nativeError(code, cause) {
   const e = cause === undefined ? new Error(`Native runtime: ${code}.`) : new Error(`Native runtime: ${code}.`, { cause })
   return Object.assign(e, { code })
-}
-
-function planNativeStageAfterCriticCheck(runDir) {
-  if (nextStep(loadRun(runDir)).step === 'critic') fail('PARTITION_INTEGRATION_REQUIRED')
-  return planNativeStage(runDir)
 }

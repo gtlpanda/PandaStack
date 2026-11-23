@@ -23,6 +23,21 @@ const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v)
 export function createAuditStageCheckpoints(options) {
   const input = fields(options, 'INVALID_JOURNAL_INPUT')
   exact(input, ['runDir', 'journal', 'stageName', 'invocationId'], 'INVALID_JOURNAL_INPUT')
+  return stageCheckpoints(input, id => id === input.invocationId)
+}
+
+// The critic stage's variant: the stage has one capture marker (its own invocation id) but dispatches several workflow runs, each under an id the
+// stage derived (critic-stage.mjs). Those ids, and only those, may reserve and are projected into the stage's spend.
+export function createAuditCriticStageCheckpoints(options) {
+  const input = fields(options, 'INVALID_JOURNAL_INPUT')
+  exact(input, ['runDir', 'journal', 'stageName', 'invocationId', 'ownedInvocationIds'], 'INVALID_JOURNAL_INPUT')
+  const owned = input.ownedInvocationIds
+  if (!Array.isArray(owned) || owned.length === 0 || !owned.every(id => typeof id === 'string' && HEX64.test(id)) || new Set(owned).size !== owned.length) fail('INVALID_JOURNAL_INPUT')
+  const ids = new Set(owned)
+  return stageCheckpoints(input, id => ids.has(id))
+}
+
+function stageCheckpoints(input, owns) {
   const { runDir, journal, stageName, invocationId } = input
   if (typeof stageName !== 'string' || !STAGE_NAME.test(stageName) || typeof invocationId !== 'string' || !HEX64.test(invocationId)) fail('INVALID_JOURNAL_INPUT')
   assertAuditJournalOwner(journal, runDir)
@@ -32,7 +47,7 @@ export function createAuditStageCheckpoints(options) {
   let marker
   try { marker = readJson(file) } catch { marker = undefined }
   if (!isRecord(marker) || marker.native !== true || marker.stage !== stageName || marker.invocation_id !== invocationId) fail('CAPTURE_INVALID')
-  return buildCheckpoints(runDir, journal, { stageName, owns: id => id === invocationId })
+  return buildCheckpoints(runDir, journal, { stageName, owns })
 }
 
 function buildCheckpoints(runDir, journal, spend) {
