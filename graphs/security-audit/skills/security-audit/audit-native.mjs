@@ -16,7 +16,7 @@ import { accessSync, constants, existsSync, mkdirSync, realpathSync, statSync } 
 import { homedir } from 'node:os'
 import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Refusal, Usage, loadRun, nextStep, parseInitArgs, readJson, writeJson } from './audit-run.mjs'
+import { Refusal, Usage, loadRun, nextStep, parseInitArgs, raiseBudget, readJson, writeJson } from './audit-run.mjs'
 import { openAuditJournal } from './dispatch-journal.mjs'
 import { runNativeAuditStage } from './native-stage.mjs'
 import { NATIVE_DIR, createNativeCodexHost } from './native-codex.mjs'
@@ -120,15 +120,22 @@ function runHelper(step, runDir, log) {
 
 function openJournal(runDir, native, grant, log) {
   const journal = openAuditJournal({ runDir, invocationLimit: native.maxBudget })
-  if (!journal.getControl()) journal.initControl({ initialGrant: native.grant })
-  const control = journal.getControl()
-  if (grant !== undefined) {
-    if (!control.blockers.includes('paused_budget')) throw Object.assign(new Error('--grant applies only to a run paused for its budget'), { name: 'NativeRefusal' })
-    journal.adjustGrant({ expectedRevision: control.revision, currentGrant: grant, reason: 'operator_increase' })
-    journal.resumeBudget({ expectedRevision: journal.getControl().revision })
-    log(`budget grant raised to ${grant} (maximum ${native.maxBudget})`)
-  }
-  return journal
+  // A refusal below must not leave the journal open (the owner lock would block the next open in this process).
+  try {
+    if (!journal.getControl()) journal.initControl({ initialGrant: native.grant })
+    const control = journal.getControl()
+    if (grant !== undefined) {
+      if (!control.blockers.includes('paused_budget')) throw Object.assign(new Error('--grant applies only to a run paused for its budget'), { name: 'NativeRefusal' })
+      // Never above the caller's maximum, never a silent raise, and the planners' budget moves with the grant: they gate on run-metadata, not the journal.
+      // The run's budget is raised first: a retry after a failure between the two writes finds it already there (raising to the same value is a no-op).
+      if (grant > native.maxBudget || grant <= control.currentGrant) throw Object.assign(new Error(`--grant must be above the current grant ${control.currentGrant} and at most the maximum ${native.maxBudget}`), { name: 'NativeRefusal' })
+      raiseBudget(runDir, grant)
+      journal.adjustGrant({ expectedRevision: control.revision, currentGrant: grant, reason: 'operator_increase' })
+      journal.resumeBudget({ expectedRevision: journal.getControl().revision })
+      log(`budget grant raised to ${grant} (maximum ${native.maxBudget})`)
+    }
+    return journal
+  } catch (e) { journal.close(); throw e }
 }
 
 function summary(runDir) {

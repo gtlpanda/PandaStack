@@ -130,6 +130,22 @@ export function advanceState(runDir, step, extra = {}) {
   writeJson(join(runDir, 'stage-state.json'), { ...state, ...wave, ...extra, version: 1, last: step, updated: new Date().toISOString() })
 }
 
+// The one sanctioned way to raise a run's budget after `init`: an explicit, nonterminal adjustment by the operator (the native entry's `resume --grant`),
+// which never lowers it and never runs on a finished run. Every planner gate reads meta.budget, so the journal's grant and this value must move together;
+// the caller owns the ceiling (the journal's maximum). run-metadata.json has one writer: this module. Raising to the current value changes nothing.
+export function raiseBudget(runDir, budget) {
+  const file = join(runDir, 'run-metadata.json')
+  const meta = readJson(file)
+  if (meta === undefined) refuse(`${runDir} has no run-metadata.json: it is not a run directory`)
+  if (meta.run_status !== 'in_progress') refuse(`the run is ${meta.run_status}: a finished run's budget is never reopened`)
+  if (meta.budget === null) refuse('the run has no budget to raise')
+  if (!isInt(budget) || budget < meta.budget) refuse(`a budget is only ever raised: ${JSON.stringify(budget)} is not an integer of at least ${meta.budget}`)
+  if (budget === meta.budget) return meta.budget
+  writeJson(file, { ...meta, budget })
+  appendEvent(runDir, { cmd: 'raise-budget', stage: 'budget', result: 'ok', counts: { from: meta.budget, to: budget } })
+  return budget
+}
+
 // What a stage's agents cost, recorded under the stage's own key: agents_spent is the sum over the keys, so applying the same stage
 // result twice (a crash between two writes) changes nothing. The count is invocations, as upstream's budget is (SKILL.md, "Cost
 // budget"); a failed or skipped agent was one. run-metadata.json has one writer (SHARED_FILE_OWNERS): this module.
