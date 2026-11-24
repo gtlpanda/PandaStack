@@ -502,7 +502,10 @@ explicit path is used alone: no listing, warning or comparison.
 
 - Sessions use `workspace-write` and `approval_policy=never`. Codex's own sandbox,
   user/project configuration and managed policies apply. Claude's allowedTools,
-  disallowedTools and PreToolUse/Stop hooks are not installed in Codex. Frozen
+  disallowedTools and PreToolUse/Stop hooks are not installed in Codex. The one
+  PandaStack hook a session does run is the review gate, when `install.sh --codex`
+  registered and trusted it in the user's Codex home (`graphs/hunt/README.md`,
+  "In Codex"); it polices pushes and PRs, not edits. Frozen
   paths are checked **after** the session; this is not a per-tool write barrier.
 - Codex leaves feature flags and git commits to the host. The host checks git
   control files, frozen files, unchanged feature metadata/flags, the full gate

@@ -4341,3 +4341,40 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
   canary were shown to be in the process environment first); and the probes were repeated under the other two models' catalogs
   (`gpt-6.1-sol`, `gpt-6-astra`) because the shipped CLI runs `gpt-6.1-sol`, not the model the first probes used.
 - Evidence: `docs/evidence/codex-security-audit-hardening-2026-11-23.md`; the first live note's "What this does not show" is annotated.
+
+## 83. The review gate in Codex: a trusted PreToolUse hook, registered by install.sh --codex (2026-11-23)
+
+- **Codex runs the gate unchanged.** Codex 0.167.0 reads `$CODEX_HOME/hooks.json` in Claude's hook shape, sends a
+  Claude-shaped PreToolUse input (`tool_name: "Bash"`, `tool_input.command`, `cwd`), and obeys the gate's deny. Live, a
+  `gpt-6-astra` session was refused `git push origin main` and `gh pr create` through the installed hook; the remote's
+  `main` did not move. The repo's earlier line "Codex has no PreToolUse guard" was right only about the frozen-test guard.
+- **Trust is the catch.** An untrusted hook, or one whose `hooks.json` entry changed after it was trusted (`modified`), is
+  skipped without a word: probe 3 pushed to main straight past an untrusted gate. So `install.sh --codex` (and the plain
+  install's Codex step) merges one entry with `graphs/hunt/skills/bughunt/codex-hook.mjs`, trusts it through `codex
+  app-server` (`hooks/list`, then the `config/batchWrite` of `hooks.state."<key>".trusted_hash` the Codex UI makes), and
+  checks `hooks/list` again. Anything but `trusted` fails `--codex`; the plain install warns. It trusts only the user-level
+  entry that is exactly its own, never a project hook or an edited entry. No Codex home yet is a warning, not a created dir.
+- **Limits, measured:** a crash or timeout fails open (as in Claude Code; no fail-closed option found); `codex exec
+  --ignore-user-config`, which every native-runtime leaf uses, runs no user hooks; a launch-time variable reaches the hook,
+  so `PANDASTACK_REVIEW_GATE=0` is the same off switch; editing `gate.mjs` keeps trust, editing the entry loses it,
+  and so does adding a `PreToolUse` entry before ours (trust is keyed by place in the file; rerun `--codex`).
+- `gate.mjs`'s override text names Claude Code or Codex.
+- **The branch's two `/bughunt` runs found four bugs, all reproduced and fixed:**
+  - **F1 (MEDIUM).** The first cut wrote to `$CODEX_HOME`. So the frozen install tests, which set a temp `HOME` but
+    inherit the environment, would register and trust the gate in a developer's real Codex home. One of them is
+    SHA-pinned by CP-01c, so the fix went into the installer instead of three frozen tests. It writes only
+    `PANDASTACK_CODEX_HOME` or `$HOME/.codex`, and warns about a `CODEX_HOME` that names another directory.
+  - **F2 (LOW).** A failed `hooks.json` write left its temp file behind. It is now removed.
+  - **F3 (LOW).** Uninstall dropped our emptied group, which moved every later group to a new trust key and left it
+    untrusted. A live probe showed Codex accepts an empty group, so it now stays when others follow it, and a hook
+    that shared our group gets a warning.
+  - **F4 (LOW, second hunt).** Writing replaced a symlinked `hooks.json` (a dotfiles link) with a regular file. It now
+    writes the link's target and refuses a dangling link.
+- Tests:
+  - `graphs/hunt/tests/codex-hook.test.mjs` (18: a fake app-server and the captured Codex payload);
+  - `tests/install-codex-gate.test.mjs` (6);
+  - `tests/install-tests-isolate-codex-home.test.mjs` (3).
+
+  The first install and gate tests failed on main's `install.sh` and `gate.mjs` (6 FAIL). The F1 test fails 3/3 at
+  the hunted head.
+- Evidence: `docs/evidence/codex-review-gate-hook-2026-11-23.md` (16 probes, plus the installed path end to end).

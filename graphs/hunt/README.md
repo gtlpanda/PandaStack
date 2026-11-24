@@ -126,9 +126,63 @@ needs no hunt.
 Once a command matches, anything the gate cannot resolve is denied, and the
 reason names the exact `/bughunt ...` to run.
 
-**Off switches.** Start Claude Code with `PANDASTACK_REVIEW_GATE=0`, or run the
-command yourself in a shell outside Claude Code, which is never gated. Whether
-`!` bash mode skips the hook is in Troubleshooting.
+**Off switches.** Start the agent (Claude Code or Codex) with
+`PANDASTACK_REVIEW_GATE=0`, or run the command yourself in a shell outside the
+agent, which is never gated. Whether Claude Code's `!` bash mode skips the hook
+is in Troubleshooting.
+
+**In Codex.** Codex (0.167 tested) runs the same `gate.mjs` as a PreToolUse
+hook. It sends the same input as Claude Code (`tool_name: "Bash"`,
+`tool_input.command`, `cwd`) and obeys the same deny output, so the gate runs
+unchanged. `install.sh --codex`, and the Codex step of a plain `./install.sh`,
+register it with `codex-hook.mjs`:
+- **Registering.** One `PreToolUse` entry (`matcher: "Bash"`,
+  `node "<skills dir>/bughunt/gate.mjs"`) is appended to `~/.codex/hooks.json`,
+  or to `$PANDASTACK_CODEX_HOME/hooks.json` when that variable is set.
+  Everything else in that file is kept. An entry of ours that is already there
+  is never rewritten. `--uninstall --codex` removes only that entry. When the
+  group it emptied has others after it, the empty group stays, so they keep
+  their trust keys (below). A symlinked `hooks.json` (a dotfiles link) stays a
+  link: its target is written. No Codex home yet (Codex never ran here) leaves
+  the gate unregistered, with a warning.
+- **`CODEX_HOME`.** A `CODEX_HOME` that names another directory is not written
+  on its own say-so. A test that sets a temp `HOME` but inherits it would
+  otherwise reach a real Codex home. The install warns instead; run it again
+  with `PANDASTACK_CODEX_HOME="$CODEX_HOME"`.
+- **Trust.** Codex runs a hook only once it is trusted, and it skips an
+  untrusted hook without a word. So the install trusts the entry through
+  `codex app-server`, with the same `config/batchWrite` of
+  `hooks.state."<key>".trusted_hash` that the Codex UI makes. It trusts only
+  the user-level entry that is exactly the one it added. Then it asks Codex
+  again (`hooks/list`). Anything but `trusted` fails `--codex`; a plain
+  install turns that into a warning. Check it at any time with
+  `node codex-hook.mjs status --gate <skills dir>/bughunt/gate.mjs`, which
+  prints `CODEX-GATE: trusted` and exits 0 only then.
+- **What switches it off without a word:**
+  - Editing the entry in `hooks.json` makes Codex report it `modified` and skip
+    it until it is trusted again. Run `./install.sh --codex` again, after
+    putting the entry back as it was. Editing `gate.mjs` itself, for example
+    through a `git pull`, does not.
+  - Codex keys trust by the entry's place in the file
+    (`hooks.json:pre_tool_use:<group>:<hook>`). Adding or removing a
+    `PreToolUse` entry before ours moves it to a new key, and it is then
+    `untrusted`. Run `./install.sh --codex` again to trust it at its new place.
+    Uninstall keeps every other group in its place. Only a hook you put
+    after ours inside our own group moves up, and the uninstall warns about
+    that.
+  - A `codex exec --ignore-user-config` session runs no user hooks at all.
+    Every leaf started through `core/skills/native-runtime/codex-exec.mjs`
+    (the native graph runners) runs that way. Autobuild's sessions and
+    `/build-app`'s slice sessions (`runCodex`) do not, so the gate applies to
+    them, as it does to an interactive Codex session.
+- **Fails open on a crash or timeout, as in Claude Code.** A hook that exits
+  with an error or runs past its 30 s is skipped and the command runs. No
+  Codex setting was found that makes a failing hook block. `gate.mjs` turns
+  its own errors into a deny for any command it recognizes, so this needs node
+  itself to fail.
+
+The probes behind each point are in
+`docs/evidence/codex-review-gate-hook-2026-11-23.md`.
 
 **What it does not cover:**
 - other machines and the GitHub web UI. Branch protection does that, where a
@@ -545,7 +599,7 @@ second time.
   gated. For `!` bash mode, the Claude Code docs imply it skips hooks: it runs
   "without going through Claude", and PreToolUse "runs only when Claude calls a
   tool". The docs never state it outright, and it has not been tested here. To
-  be sure, start Claude Code with `PANDASTACK_REVIEW_GATE=0`.
+  be sure, start Claude Code (or Codex) with `PANDASTACK_REVIEW_GATE=0`.
 - **Settings edits are live:** the docs say a running session picks up hook
   edits through a file watcher, so the gate applies as soon as `install.sh`
   merges it.

@@ -1,0 +1,12 @@
+{
+  "session_id": "01a20b15-c475-7873-86d3-646edb40456a",
+  "turn_id": "01a20b15-c9a7-7b42-996d-d906a1c9161a",
+  "transcript_path": "/home/dev/.codex/sessions/2026/11/23/rollout-2026-11-23T17-05-06-01a20b15-c475-7873-86d3-646edb40456a.jsonl",
+  "cwd": "/path/to/repo",
+  "hook_event_name": "PreToolUse",
+  "model": "gpt-6-luna",
+  "permission_mode": "bypassPermissions",
+  "tool_name": "Bash",
+  "tool_input": { "command": "echo probe-ok" },
+  "tool_use_id": "exec-240f77fb-2af3-4f3c-be51-c1ad3be5af9a"
+}

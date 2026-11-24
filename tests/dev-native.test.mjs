@@ -433,7 +433,7 @@ await test('through the installed symlink on the production root: install.sh --c
   const skills = join(home, '.agents', 'skills')
   const env = { ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH}`, HOME: home, PANDASTACK_CODEX_SKILLS_DIR: skills,
     HARNESS_NO_GIT_CONFIG: '1', TMPDIR: tmpdir() }
-  for (const key of ['CLAUDE_CONFIG_DIR', 'PANDASTACK_BIN_DIR']) delete env[key]
+  for (const key of ['CLAUDE_CONFIG_DIR', 'PANDASTACK_BIN_DIR', 'CODEX_HOME', 'PANDASTACK_CODEX_HOME']) delete env[key]
   const install = spawnSync('bash', [join(ROOT, 'install.sh'), '--codex'], { encoding: 'utf8', env, cwd: WORK })
   assert.equal(install.status, 0, install.stdout + install.stderr)
   const link = join(skills, 'dev')

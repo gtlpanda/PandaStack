@@ -24,8 +24,10 @@
 #                             only warns, the Claude install stands)
 #   ./install.sh --claude     the Claude targets only, never ~/.agents
 #   ./install.sh --codex      the catalog's Codex entry skills only (every offering whose
-#                             codex row is not unavailable) into ~/.agents/skills; needs
-#                             node. --claude and --codex are alternatives: not both
+#                             codex row is not unavailable) into ~/.agents/skills, and the
+#                             review gate as a trusted PreToolUse hook in the Codex home's
+#                             hooks.json (an untrusted gate is an error); needs node.
+#                             --claude and --codex are alternatives: not both
 #   ./install.sh --dry-run    print what would happen, change nothing
 #   ./install.sh --skip=a,b   install, but leave these targets alone (e.g.
 #                             --skip=settings.json,CLAUDE.md, or skills/verify)
@@ -34,6 +36,9 @@
 # Env: CLAUDE_CONFIG_DIR overrides the target (default: $HOME/.claude).
 #      PANDASTACK_BIN_DIR overrides where command-line tools go (default: $HOME/.local/bin).
 #      PANDASTACK_CODEX_SKILLS_DIR overrides the --codex skills directory.
+#      PANDASTACK_CODEX_HOME names the Codex home for the review gate hook (default:
+#      $HOME/.codex); a CODEX_HOME naming another directory is not written, only warned
+#      about. PANDASTACK_CODEX_BIN is the codex binary that trusts it (default: codex on PATH).
 #      HARNESS_NO_GIT_CONFIG=1 skips enabling the repo's pre-commit hook.
 set -euo pipefail
 
@@ -82,8 +87,9 @@ done
 
 [ "$CLAUDE_ONLY" -eq 0 ] || [ "$CODEX_MODE" -eq 0 ] || { echo "--claude and --codex are alternatives; plain ./install.sh installs both when Codex is present" >&2; exit 2; }
 
-# Codex installs only entry skills supported by the native CLI. It never copies
-# Claude settings/hooks, changes git configuration, or installs other agent assets.
+# Codex installs only entry skills supported by the native CLI, plus one Codex hook: the
+# review gate, in the Codex home's hooks.json (codex_review_gate). It never copies Claude
+# settings/hooks, changes git configuration, or installs other agent assets.
 if [ "$CODEX_MODE" -eq 1 ]; then
   CODEX_SKILLS_DIR="${PANDASTACK_CODEX_SKILLS_DIR:-${HOME:+$HOME/.agents/skills}}"
   [ -n "$CODEX_SKILLS_DIR" ] || { echo "--codex needs HOME or PANDASTACK_CODEX_SKILLS_DIR" >&2; exit 2; }
@@ -380,6 +386,58 @@ enable_git_hooks() {
   fi
 }
 
+# Codex: the review gate (skills/bughunt/gate.mjs) as a PreToolUse hook in the Codex home's
+# hooks.json, then trusted, because Codex skips an untrusted hook without a word. Anything but
+# a trusted gate stops the install with an error (the plain-install Codex pass turns that into
+# a warning). No Codex home yet (Codex never ran here) is a warning: run --codex again later.
+# The target is PANDASTACK_CODEX_HOME, else $HOME/.codex. An inherited CODEX_HOME is never
+# written on its own say-so (a test with a temp HOME would otherwise reach a real Codex home):
+# when it names another directory, the install warns and says to set PANDASTACK_CODEX_HOME.
+CODEX_GATE_HELPER="$REPO_DIR/graphs/hunt/skills/bughunt/codex-hook.mjs"
+codex_home_dir() { printf '%s\n' "${PANDASTACK_CODEX_HOME:-${HOME:+$HOME/.codex}}"; }
+# True when CODEX_HOME is set to a directory other than $1 (Codex would read its hooks there).
+codex_home_elsewhere() {
+  [ -n "${CODEX_HOME:-}" ] || return 1
+  [ "$(physical "$CODEX_HOME")" != "$(physical "$1")" ] || [ -z "$(physical "$1")" ]
+}
+
+codex_review_gate() {
+  [ "$CODEX_MODE" -eq 1 ] || return 0
+  is_codex_plan_dest skills/bughunt || return 0
+  if is_skipped skills/bughunt; then log "codex review gate: skills/bughunt is skipped, so the gate hook is not registered"; return 0; fi
+  local home gate
+  home="$(codex_home_dir)"
+  gate="$CODEX_SKILLS_DIR/bughunt/gate.mjs"
+  if codex_home_elsewhere "$home"; then
+    warn "CODEX_HOME is $CODEX_HOME, so Codex reads its hooks there, not from ${home:-<unset>}: the review gate is not registered. Run again with PANDASTACK_CODEX_HOME=\"$CODEX_HOME\" to register it there"
+    return 0
+  fi
+  if [ -z "$home" ] || [ ! -d "$home" ]; then
+    warn "no Codex home at ${home:-<unset: set PANDASTACK_CODEX_HOME or HOME>}: the review gate is not registered for Codex. Run Codex once, then ./install.sh --codex again"
+    return 0
+  fi
+  if [ "$DRY_RUN" -eq 1 ]; then
+    node "$CODEX_GATE_HELPER" merge --dry-run --codex-home "$home" --gate "$gate" || die "codex review gate: $home/hooks.json cannot be merged; fix it, or pass --skip=skills/bughunt"
+    log "[dry-run] would trust the review gate hook in Codex and check that it is active"
+    return 0
+  fi
+  node "$CODEX_GATE_HELPER" merge --codex-home "$home" --gate "$gate" || die "codex review gate: $home/hooks.json was left as it is; fix it, or pass --skip=skills/bughunt"
+  node "$CODEX_GATE_HELPER" trust --codex-home "$home" --gate "$gate" \
+    || die "codex review gate: the hook is in $home/hooks.json but could not be trusted, so Codex skips it and the gate is NOT active (see the error above)"
+  node "$CODEX_GATE_HELPER" status --codex-home "$home" --gate "$gate" \
+    || die "codex review gate: Codex does not report the hook as trusted, so the gate is NOT active"
+}
+
+codex_review_gate_remove() {
+  [ "$CODEX_MODE" -eq 1 ] || return 0
+  local home args=()
+  home="$(codex_home_dir)"
+  [ -n "$home" ] && [ -f "$home/hooks.json" ] || return 0
+  [ "$DRY_RUN" -eq 0 ] || args+=(--dry-run)
+  node "$CODEX_GATE_HELPER" unmerge ${args[@]+"${args[@]}"} --codex-home "$home" --gate "$CODEX_SKILLS_DIR/bughunt/gate.mjs" \
+    || warn "could not remove the review gate from $home/hooks.json; remove its PreToolUse entry for bughunt/gate.mjs by hand"
+}
+
 do_install() {
   local rel src dest stale on_path=0 linked=0 skipped=0 rc
   log "repo:   $REPO_DIR"
@@ -427,6 +485,7 @@ do_install() {
   esac
   prune_dangling
   enable_git_hooks
+  codex_review_gate
   log "done: $linked linked, $skipped already linked"
 }
 
@@ -454,6 +513,7 @@ do_uninstall() {
   done < <(list_targets)
   prune_dangling
   if [ "$CODEX_MODE" -eq 0 ]; then unmerge_settings; fi
+  codex_review_gate_remove
 
   backup="$(latest_backup_with_manifest)"
   if [ -z "$backup" ]; then
