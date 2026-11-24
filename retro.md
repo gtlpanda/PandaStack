@@ -4358,11 +4358,21 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
   --ignore-user-config`, which every native-runtime leaf uses, runs no user hooks; a launch-time variable reaches the hook,
   so `PANDASTACK_REVIEW_GATE=0` is the same off switch; editing `gate.mjs` keeps trust, editing the entry loses it,
   and so does adding a `PreToolUse` entry before ours (trust is keyed by place in the file; rerun `--codex`).
-- `gate.mjs`'s override text names Claude Code or Codex. The install tests that run `--codex` now unset `CODEX_HOME`
-  (frozen `scripts/test-install.sh` amended with a note), so a developer's real Codex home is not written by them.
-  `tests/install-codex.test.mjs` stays as it is: CP-01c pins its SHA-256. With `CODEX_HOME` unset (CI, and here) its
-  temp HOME has no `.codex`, so the gate step only warns; a developer who exports `CODEX_HOME` should unset it before
-  running that one file directly (open: the frozen pin blocks the same one-line fix).
-- Tests: `graphs/hunt/tests/codex-hook.test.mjs` (14, a fake app-server, the captured Codex payload) and
-  `tests/install-codex-gate.test.mjs` (5). The install and gate tests fail on main's `install.sh` and `gate.mjs` (6 FAIL).
-- Evidence: `docs/evidence/codex-review-gate-hook-2026-11-23.md` (15 probes, the installed path end to end).
+- `gate.mjs`'s override text names Claude Code or Codex.
+- **The branch's `/bughunt` found three bugs, all reproduced and fixed:**
+  - **F1 (MEDIUM).** The first cut wrote to `$CODEX_HOME`. So the frozen install tests, which set a temp `HOME` but
+    inherit the environment, would register and trust the gate in a developer's real Codex home. One of them is
+    SHA-pinned by CP-01c, so the fix went into the installer instead of three frozen tests. It writes only
+    `PANDASTACK_CODEX_HOME` or `$HOME/.codex`, and warns about a `CODEX_HOME` that names another directory.
+  - **F2 (LOW).** A failed `hooks.json` write left its temp file behind. It is now removed.
+  - **F3 (LOW).** Uninstall dropped our emptied group, which moved every later group to a new trust key and left it
+    untrusted. A live probe showed Codex accepts an empty group, so it now stays when others follow it, and a hook
+    that shared our group gets a warning.
+- Tests:
+  - `graphs/hunt/tests/codex-hook.test.mjs` (17: a fake app-server and the captured Codex payload);
+  - `tests/install-codex-gate.test.mjs` (6);
+  - `tests/install-tests-isolate-codex-home.test.mjs` (3).
+
+  The first install and gate tests failed on main's `install.sh` and `gate.mjs` (6 FAIL). The F1 test fails 3/3 at
+  the hunted head.
+- Evidence: `docs/evidence/codex-review-gate-hook-2026-11-23.md` (16 probes, plus the installed path end to end).

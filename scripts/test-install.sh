@@ -8,9 +8,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/pandastack-test.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
-# Amended (codex review gate hook): CODEX_HOME is unset too, so the plain install's Codex step can
-# never register the gate in a developer's real Codex home.
-unset CLAUDE_CONFIG_DIR CODEX_HOME
+unset CLAUDE_CONFIG_DIR
 export HARNESS_NO_GIT_CONFIG=1
 CD="$HOME/.claude"
 

@@ -36,8 +36,9 @@
 # Env: CLAUDE_CONFIG_DIR overrides the target (default: $HOME/.claude).
 #      PANDASTACK_BIN_DIR overrides where command-line tools go (default: $HOME/.local/bin).
 #      PANDASTACK_CODEX_SKILLS_DIR overrides the --codex skills directory.
-#      CODEX_HOME names the Codex home for the review gate hook (default: $HOME/.codex);
-#      PANDASTACK_CODEX_BIN the codex binary that trusts it (default: codex on PATH).
+#      PANDASTACK_CODEX_HOME names the Codex home for the review gate hook (default:
+#      $HOME/.codex); a CODEX_HOME naming another directory is not written, only warned
+#      about. PANDASTACK_CODEX_BIN is the codex binary that trusts it (default: codex on PATH).
 #      HARNESS_NO_GIT_CONFIG=1 skips enabling the repo's pre-commit hook.
 set -euo pipefail
 
@@ -389,8 +390,16 @@ enable_git_hooks() {
 # hooks.json, then trusted, because Codex skips an untrusted hook without a word. Anything but
 # a trusted gate stops the install with an error (the plain-install Codex pass turns that into
 # a warning). No Codex home yet (Codex never ran here) is a warning: run --codex again later.
+# The target is PANDASTACK_CODEX_HOME, else $HOME/.codex. An inherited CODEX_HOME is never
+# written on its own say-so (a test with a temp HOME would otherwise reach a real Codex home):
+# when it names another directory, the install warns and says to set PANDASTACK_CODEX_HOME.
 CODEX_GATE_HELPER="$REPO_DIR/graphs/hunt/skills/bughunt/codex-hook.mjs"
-codex_home_dir() { printf '%s\n' "${CODEX_HOME:-${HOME:+$HOME/.codex}}"; }
+codex_home_dir() { printf '%s\n' "${PANDASTACK_CODEX_HOME:-${HOME:+$HOME/.codex}}"; }
+# True when CODEX_HOME is set to a directory other than $1 (Codex would read its hooks there).
+codex_home_elsewhere() {
+  [ -n "${CODEX_HOME:-}" ] || return 1
+  [ "$(physical "$CODEX_HOME")" != "$(physical "$1")" ] || [ -z "$(physical "$1")" ]
+}
 
 codex_review_gate() {
   [ "$CODEX_MODE" -eq 1 ] || return 0
@@ -399,8 +408,12 @@ codex_review_gate() {
   local home gate
   home="$(codex_home_dir)"
   gate="$CODEX_SKILLS_DIR/bughunt/gate.mjs"
+  if codex_home_elsewhere "$home"; then
+    warn "CODEX_HOME is $CODEX_HOME, so Codex reads its hooks there, not from ${home:-<unset>}: the review gate is not registered. Run again with PANDASTACK_CODEX_HOME=\"$CODEX_HOME\" to register it there"
+    return 0
+  fi
   if [ -z "$home" ] || [ ! -d "$home" ]; then
-    warn "no Codex home at ${home:-<unset: set CODEX_HOME or HOME>}: the review gate is not registered for Codex. Run Codex once, then ./install.sh --codex again"
+    warn "no Codex home at ${home:-<unset: set PANDASTACK_CODEX_HOME or HOME>}: the review gate is not registered for Codex. Run Codex once, then ./install.sh --codex again"
     return 0
   fi
   if [ "$DRY_RUN" -eq 1 ]; then

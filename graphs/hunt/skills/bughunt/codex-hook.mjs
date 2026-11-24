@@ -23,7 +23,7 @@
 //
 // --codex-home defaults to $CODEX_HOME, then $HOME/.codex. PANDASTACK_CODEX_BIN names the
 // codex binary (default: codex on PATH). Exit 0 on success, 1 on any failure, 2 on bad usage.
-import { readFileSync, writeFileSync, renameSync, existsSync, realpathSync, statSync } from 'node:fs'
+import { readFileSync, writeFileSync, renameSync, rmSync, existsSync, realpathSync, statSync } from 'node:fs'
 import { join, isAbsolute } from 'node:path'
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
@@ -74,23 +74,32 @@ export function mergeHooks(config, gate) {
   return { config: out, added: true }
 }
 
-// Returns { config, removed }: config without our entry (a group left empty is dropped,
-// and PreToolUse too when it ends up empty). Everything else is kept as it was.
+// Returns { config, removed, shifted }: config without our entry (PreToolUse is dropped when it
+// ends up empty). Everything else is kept as it was.
+// Codex keys a hook's trust by its place ("pre_tool_use:<group>:<hook>"), so removing a group
+// would move every later group to a new key and leave it untrusted. A group we emptied is
+// therefore kept, empty, when any group follows it (Codex accepts an empty group), and dropped
+// only from the end. `shifted` counts other hooks that still moved: ones after ours in a group
+// they shared with it.
 export function unmergeHooks(config, gate) {
   const command = gateCommand(gate)
   const out = JSON.parse(JSON.stringify(config))
-  if (!isObject(out.hooks) || !Array.isArray(out.hooks.PreToolUse)) return { config: out, removed: 0 }
+  if (!isObject(out.hooks) || !Array.isArray(out.hooks.PreToolUse)) return { config: out, removed: 0, shifted: 0 }
   let removed = 0
-  out.hooks.PreToolUse = out.hooks.PreToolUse
-    .map(g => {
-      if (!isObject(g) || !Array.isArray(g.hooks)) return g
-      const keep = g.hooks.filter(h => !isOurs(g, h, command))
-      removed += g.hooks.length - keep.length
-      return keep.length === g.hooks.length ? g : { ...g, hooks: keep }
-    })
-    .filter(g => !(isObject(g) && Array.isArray(g.hooks) && g.hooks.length === 0))
+  let shifted = 0
+  const emptied = new Set()
+  out.hooks.PreToolUse = out.hooks.PreToolUse.map((g, i) => {
+    if (!isObject(g) || !Array.isArray(g.hooks)) return g
+    const keep = g.hooks.filter(h => !isOurs(g, h, command))
+    if (keep.length === g.hooks.length) return g
+    removed += g.hooks.length - keep.length
+    shifted += keep.filter((h, k) => g.hooks.indexOf(h) !== k).length
+    if (keep.length === 0) emptied.add(i)
+    return { ...g, hooks: keep }
+  })
+  while (out.hooks.PreToolUse.length && emptied.has(out.hooks.PreToolUse.length - 1)) out.hooks.PreToolUse.pop()
   if (out.hooks.PreToolUse.length === 0) delete out.hooks.PreToolUse
-  return { config: out, removed }
+  return { config: out, removed, shifted }
 }
 
 function readHooksFile(file) {
@@ -100,15 +109,17 @@ function readHooksFile(file) {
   return parseHooksFile(text)
 }
 
-// Written to a temp file beside it, then renamed over it, so a failed write never leaves half a file.
-function writeHooksFile(file, config) {
+// Written to a temp file beside it, then renamed over it, so a failed write never leaves half a
+// file; on a failure the temp file is removed too, so nothing is left beside the person's config.
+export function writeHooksFile(file, config, fs = { writeFileSync, renameSync, rmSync }) {
   const tmp = `${file}.pandastack-${process.pid}.tmp`
   let mode = 0o644
   try { mode = statSync(file).mode & 0o777 } catch { /* a new file */ }
   try {
-    writeFileSync(tmp, JSON.stringify(config, null, 2) + '\n', { mode })
-    renameSync(tmp, file)
+    fs.writeFileSync(tmp, JSON.stringify(config, null, 2) + '\n', { mode })
+    fs.renameSync(tmp, file)
   } catch (e) {
+    try { fs.rmSync(tmp, { force: true }) } catch { /* best effort: the error below is what matters */ }
     throw new HookFileError(`cannot write ${file}: ${e.message}`)
   }
 }
@@ -236,11 +247,13 @@ export async function main(argv, log = console.log, err = console.error) {
     if (opts.verb === 'unmerge') {
       const current = readHooksFile(hooksFile)
       if (current === null) return 0
-      const { config, removed } = unmergeHooks(current, opts.gate)
+      const { config, removed, shifted } = unmergeHooks(current, opts.gate)
       if (!removed) return 0
-      if (opts.dryRun) { log(`[dry-run] would remove the review gate from ${hooksFile}`); return 0 }
+      const moved = shifted ? `; ${shifted} other hook(s) after it in the same PreToolUse group moved up, so Codex will skip them until you trust them again` : ''
+      if (opts.dryRun) { log(`[dry-run] would remove the review gate from ${hooksFile}${moved}`); return 0 }
       writeHooksFile(hooksFile, config)
       log(`codex hooks: removed the review gate from ${hooksFile}`)
+      if (shifted) err(`codex-hook: warning${moved}`)
       return 0
     }
     if (opts.verb === 'status') {

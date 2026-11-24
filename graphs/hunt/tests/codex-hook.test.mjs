@@ -4,12 +4,12 @@
 // actually sends (captured from Codex 0.167: tests/fixtures/codex-pretooluse.json).
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, realpathSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, realpathSync, renameSync, rmSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import { test } from '../../../scripts/workflow-harness.mjs'
-import { gateCommand, mergeHooks, unmergeHooks, parseHooksFile, HookFileError, findOurHook, entryIsExactlyOurs, withAppServer, MATCHER } from '../skills/bughunt/codex-hook.mjs'
+import { gateCommand, mergeHooks, unmergeHooks, parseHooksFile, HookFileError, findOurHook, entryIsExactlyOurs, withAppServer, writeHooksFile, MATCHER } from '../skills/bughunt/codex-hook.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const HELPER = join(HERE, '..', 'skills', 'bughunt', 'codex-hook.mjs')
@@ -68,14 +68,51 @@ await test('merge twice adds nothing; an entry of ours already there, even edite
   const otherMatcher = { hooks: { PreToolUse: [{ matcher: 'Edit', hooks: [OURS.hooks[0]] }] } }
   assert.equal(mergeHooks(otherMatcher, GATE).added, true, 'our command under another matcher does not gate Bash')
 })
-await test('unmerge removes only ours: a sibling hook in the same group stays; an emptied group and PreToolUse go', () => {
+await test('unmerge removes only ours, and moves no other entry to a new place (Codex keys trust by place)', () => {
   const theirs = { hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'true' }] }], PreToolUse: [FOREIGN, OURS, { matcher: 'Bash', hooks: [FOREIGN.hooks[0], OURS.hooks[0]] }] } }
-  const { config, removed } = unmergeHooks(theirs, GATE)
+  const { config, removed, shifted } = unmergeHooks(theirs, GATE)
   assert.equal(removed, 2)
-  assert.deepEqual(config.hooks.PreToolUse, [FOREIGN, { matcher: 'Bash', hooks: [FOREIGN.hooks[0]] }])
+  assert.equal(shifted, 0)
+  assert.deepEqual(config.hooks.PreToolUse, [FOREIGN, { matcher: 'Bash', hooks: [] }, { matcher: 'Bash', hooks: [FOREIGN.hooks[0]] }],
+    'our emptied group stays, empty, so the group after it keeps pre_tool_use:2')
   assert.deepEqual(config.hooks.SessionStart, theirs.hooks.SessionStart)
+  assert.deepEqual(unmergeHooks({ hooks: { PreToolUse: [FOREIGN, OURS] } }, GATE).config, { hooks: { PreToolUse: [FOREIGN] } }, 'an emptied group at the end goes')
   assert.deepEqual(unmergeHooks({ hooks: { PreToolUse: [OURS] } }, GATE).config, { hooks: {} })
-  assert.deepEqual(unmergeHooks({ x: 1 }, GATE), { config: { x: 1 }, removed: 0 })
+  const keepTheirEmpty = { hooks: { PreToolUse: [{ matcher: 'Edit', hooks: [] }, OURS] } }
+  assert.deepEqual(unmergeHooks(keepTheirEmpty, GATE).config, { hooks: { PreToolUse: [{ matcher: 'Edit', hooks: [] }] } }, 'an empty group of theirs is theirs')
+  assert.deepEqual(unmergeHooks({ x: 1 }, GATE), { config: { x: 1 }, removed: 0, shifted: 0 })
+})
+await test('unmerge counts the hooks after ours in a shared group as shifted, and the CLI warns about re-trusting them', async () => {
+  const shared = { hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [OURS.hooks[0], FOREIGN.hooks[0]] }] } }
+  const { config, shifted } = unmergeHooks(shared, GATE)
+  assert.equal(shifted, 1)
+  assert.deepEqual(config.hooks.PreToolUse, [{ matcher: 'Bash', hooks: [FOREIGN.hooks[0]] }])
+  const c = codexHome()
+  writeFileSync(c.hooksFile, JSON.stringify(shared))
+  const r = cli(['unmerge'], c)
+  assert.equal(r.status, 0, r.stderr)
+  assert.match(r.stderr, /1 other hook\(s\) after it in the same PreToolUse group moved up, so Codex will skip them until you trust them again/)
+})
+await test('BUGHUNT-F3: uninstall keeps a later hook of theirs at its trusted place', async () => {
+  const c = codexHome()
+  writeFileSync(c.hooksFile, JSON.stringify({ hooks: { PreToolUse: [OURS, FOREIGN] } }))
+  const r = cli(['unmerge'], c)
+  assert.equal(r.status, 0, r.stderr)
+  const groups = JSON.parse(readFileSync(c.hooksFile, 'utf8')).hooks.PreToolUse
+  assert.equal(groups.findIndex(g => g.hooks.some(h => h.command === FOREIGN.hooks[0].command)), 1,
+    'BUGHUNT-F3 uninstall moved their hook from pre_tool_use:1:0, which would leave it untrusted')
+  assert.ok(!JSON.stringify(groups).includes(GATE))
+})
+await test('BUGHUNT-F2: a failed hooks.json write leaves neither hooks.json nor its temp file', () => {
+  const c = codexHome()
+  const failRename = { writeFileSync, renameSync: () => { throw Object.assign(new Error('EPERM: operation not permitted, rename'), { code: 'EPERM' }) }, rmSync }
+  assert.throws(() => writeHooksFile(c.hooksFile, { hooks: {} }, failRename), /cannot write .*EPERM/)
+  assert.deepEqual(readdirSync(c.home), [], 'BUGHUNT-F2 a failed write left its temp file behind')
+  const failWrite = { writeFileSync: (p, ...rest) => { writeFileSync(p, '{"hooks":'); throw Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' }) }, renameSync, rmSync }
+  writeFileSync(c.hooksFile, '{"keep":true}')
+  assert.throws(() => writeHooksFile(c.hooksFile, { hooks: {} }, failWrite), /ENOSPC/)
+  assert.deepEqual(readdirSync(c.home), ['hooks.json'], 'a half-written temp file is removed')
+  assert.equal(readFileSync(c.hooksFile, 'utf8'), '{"keep":true}', 'and hooks.json is untouched')
 })
 
 console.log('== the CLI over a hooks.json')

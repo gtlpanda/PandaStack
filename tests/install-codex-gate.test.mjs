@@ -3,7 +3,7 @@
 // (graphs/hunt/tests/fixtures/fake-codex-app-server.mjs): no real Codex runs here, and the real
 // ~/.codex is never touched (HOME is a temp dir and CODEX_HOME is unset).
 import { join } from 'node:path'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, realpathSync, rmSync, readlinkSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, realpathSync, rmSync, readlinkSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
@@ -20,7 +20,7 @@ function fixture(fn, { codexHome = true } = {}) {
   writeFileSync(bin, `#!/bin/sh\nexec "${process.execPath}" "${FAKE}" "$@"\n`)
   chmodSync(bin, 0o755)
   const env = { ...process.env, HOME: home, HARNESS_NO_GIT_CONFIG: '1', PANDASTACK_CODEX_BIN: bin }
-  for (const k of ['CLAUDE_CONFIG_DIR', 'PANDASTACK_BIN_DIR', 'PANDASTACK_CODEX_SKILLS_DIR', 'CODEX_HOME', 'FAKE_APP_SERVER_MODE']) delete env[k]
+  for (const k of ['CLAUDE_CONFIG_DIR', 'PANDASTACK_BIN_DIR', 'PANDASTACK_CODEX_SKILLS_DIR', 'CODEX_HOME', 'PANDASTACK_CODEX_HOME', 'FAKE_APP_SERVER_MODE']) delete env[k]
   const run = (args = [], extra = {}) => spawnSync('bash', [join(REPO, 'install.sh'), '--codex', ...args], { encoding: 'utf8', env: { ...env, ...extra } })
   const gate = join(home, '.agents', 'skills', 'bughunt', 'gate.mjs')
   const ours = { matcher: 'Bash', hooks: [{ type: 'command', command: `node "${gate}"`, timeout: 30 }] }
@@ -83,6 +83,27 @@ await test('a gate Codex will not trust fails --codex loudly; the plain install 
   assert.equal(plain.status, 0, plain.stdout + plain.stderr)
   assert.match(plain.stderr, /the gate is NOT active/)
   assert.match(plain.stderr, /the Codex step exited 1; the Claude part is done/)
+}))
+
+await test('a CODEX_HOME naming another directory is not written: a warning names PANDASTACK_CODEX_HOME, which registers it there', () => fixture(({ home, codex, run, trust }) => {
+  const other = join(home, 'elsewhere-codex')
+  mkdirSync(other)
+  let r = run([], { CODEX_HOME: other })
+  ok(r)
+  assert.match(r.stderr, /CODEX_HOME is .*elsewhere-codex, so Codex reads its hooks there.*PANDASTACK_CODEX_HOME=/)
+  assert.deepEqual(readdirSync(other), [], 'the inherited CODEX_HOME is not touched')
+  assert.equal(existsSync(join(codex, 'hooks.json')), false, 'nor is ~/.codex, which Codex would not read')
+  r = run([], { CODEX_HOME: other, PANDASTACK_CODEX_HOME: other })
+  ok(r)
+  assert.match(r.stdout, /^CODEX-GATE: trusted/m)
+  assert.equal(existsSync(join(other, 'hooks.json')), true)
+  r = run(['--uninstall'], { CODEX_HOME: other, PANDASTACK_CODEX_HOME: other })
+  ok(r)
+  assert.deepEqual(JSON.parse(readFileSync(join(other, 'hooks.json'), 'utf8')), { hooks: {} })
+  r = run([], { CODEX_HOME: codex })
+  ok(r)
+  assert.match(r.stdout, /^CODEX-GATE: trusted/m, 'a CODEX_HOME that is ~/.codex itself is the same target')
+  assert.ok(Object.keys(trust()).length >= 1)
 }))
 
 await test('uninstall --codex removes only the gate from hooks.json', () => fixture(({ codex, run, hooks }) => {

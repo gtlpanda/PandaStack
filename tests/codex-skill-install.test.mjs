@@ -123,7 +123,7 @@ function ownedHome() {
   const home = mkdtempSync(join(TMP, 'codex-skill-'))
   const skills = join(home, '.agents', 'skills')
   const env = { ...process.env, HOME: home, PANDASTACK_CODEX_SKILLS_DIR: skills, HARNESS_NO_GIT_CONFIG: '1' }
-  for (const k of ['CLAUDE_CONFIG_DIR', 'PANDASTACK_BIN_DIR', 'CLAUDE_SKILL_DIR', 'SKILL_DIR', 'CODEX_HOME']) delete env[k]
+  for (const k of ['CLAUDE_CONFIG_DIR', 'PANDASTACK_BIN_DIR', 'CLAUDE_SKILL_DIR', 'SKILL_DIR', 'CODEX_HOME', 'PANDASTACK_CODEX_HOME']) delete env[k]
   const install = (args = []) => spawnSync('bash', [join(REPO, 'install.sh'), '--codex', ...args], { encoding: 'utf8', env })
   return { home, skills, env, install }
 }

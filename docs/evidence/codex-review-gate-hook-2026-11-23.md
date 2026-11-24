@@ -32,6 +32,7 @@ unhunted PR? And what does `install.sh --codex` have to do so that it actually r
 | 13 | Trusted hook that logs `PANDASTACK_REVIEW_PROBE`; Codex launched with `PANDASTACK_REVIEW_PROBE=probe-value` | The hook saw `probe-value`. A variable set at launch reaches the hook. The probe used a look-alike name rather than setting the real `PANDASTACK_REVIEW_GATE=0`; neither name contains `KEY`, `SECRET` or `TOKEN`. `codex-hook.test.mjs` covers `gate.mjs` obeying `PANDASTACK_REVIEW_GATE=0` from its environment. |
 | 14 | Trusted gate, `codex exec --ignore-user-config`, `git push origin main` | The push **went through** (`70439e9..e6b2e61`). With that flag, Codex runs no user hooks. `core/skills/native-runtime/codex-exec.mjs` always passes it, so native graph leaves are not gated. Autobuild's `runCodex`, which `/build-app` slice sessions also use, does not pass it. |
 | 15 | Trusted gate at `pre_tool_use:0:0`; another `PreToolUse` entry inserted before it | Ours is now `pre_tool_use:1:0` and `untrusted`. Trust is keyed by the entry's place in the file, so rerun `install.sh --codex` after reordering, which trusts it at the new key. |
+| 16 | Two trusted groups at `0:0` and `1:0`; the first group's `hooks` emptied to `[]` (left in place) | Codex accepts the empty group, and the second hook is still `1:0` and `trusted`. Uninstall therefore keeps a group it emptied when others follow it (BUGHUNT-F3), and drops it only from the end. |
 
 ## The installed path, end to end
 
@@ -68,6 +69,13 @@ unhunted PR? And what does `install.sh --codex` have to do so that it actually r
 - `install.sh --codex` registers, trusts and checks the gate. The plain `./install.sh` does too, in its Codex
   step. A gate that is not trusted fails `--codex` and makes the plain install warn.
 - `gate.mjs`'s override text no longer says "start Claude Code with…". It names Claude Code or Codex.
+- **Fixes from the branch's `/bughunt`** (three findings, each reproduced, each now a regression test):
+  - **F1.** Install tests that set a temp `HOME` but inherited `CODEX_HOME` could register and trust the gate in a
+    real Codex home. `install.sh` now writes only `PANDASTACK_CODEX_HOME` or `$HOME/.codex`. A `CODEX_HOME` that names
+    another directory gets a warning that names `PANDASTACK_CODEX_HOME`.
+  - **F2.** A failed `hooks.json` write now removes its temp file.
+  - **F3.** Uninstall no longer shifts later groups to new trust keys (probe 16). It warns when a hook that shared
+    our group moves.
 
 ## What this does not show
 

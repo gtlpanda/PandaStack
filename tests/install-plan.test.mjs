@@ -61,7 +61,7 @@ function codexUnavailable(offering) {
 
 const env = extra => {
   const base = { ...process.env, PATH: `${NODE_DIR}:${process.env.PATH}`, TMPDIR: TMP, HARNESS_NO_GIT_CONFIG: '1' }
-  for (const k of ['CLAUDE_CONFIG_DIR', 'PANDASTACK_BIN_DIR', 'PANDASTACK_CODEX_SKILLS_DIR', 'CODEX_HOME']) delete base[k]
+  for (const k of ['CLAUDE_CONFIG_DIR', 'PANDASTACK_BIN_DIR', 'PANDASTACK_CODEX_SKILLS_DIR', 'CODEX_HOME', 'PANDASTACK_CODEX_HOME']) delete base[k]
   return { ...base, ...extra }
 }
 const install = (root, home, skills, args = []) => spawnSync('bash', [join(root, 'install.sh'), '--codex', ...args],

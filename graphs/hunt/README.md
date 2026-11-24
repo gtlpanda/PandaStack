@@ -137,11 +137,17 @@ hook. It sends the same input as Claude Code (`tool_name: "Bash"`,
 unchanged. `install.sh --codex`, and the Codex step of a plain `./install.sh`,
 register it with `codex-hook.mjs`:
 - **Registering.** One `PreToolUse` entry (`matcher: "Bash"`,
-  `node "<skills dir>/bughunt/gate.mjs"`) is appended to `$CODEX_HOME/hooks.json`
-  (default `~/.codex/hooks.json`). Everything else in that file is kept. An
-  entry of ours that is already there is never rewritten. `--uninstall --codex`
-  removes only that entry. No Codex home yet (Codex never ran here) leaves the
-  gate unregistered, with a warning.
+  `node "<skills dir>/bughunt/gate.mjs"`) is appended to `~/.codex/hooks.json`,
+  or to `$PANDASTACK_CODEX_HOME/hooks.json` when that variable is set.
+  Everything else in that file is kept. An entry of ours that is already there
+  is never rewritten. `--uninstall --codex` removes only that entry. When the
+  group it emptied has others after it, the empty group stays, so they keep
+  their trust keys (below). No Codex home yet (Codex never ran here) leaves
+  the gate unregistered, with a warning.
+- **`CODEX_HOME`.** A `CODEX_HOME` that names another directory is not written
+  on its own say-so. A test that sets a temp `HOME` but inherits it would
+  otherwise reach a real Codex home. The install warns instead; run it again
+  with `PANDASTACK_CODEX_HOME="$CODEX_HOME"`.
 - **Trust.** Codex runs a hook only once it is trusted, and it skips an
   untrusted hook without a word. So the install trusts the entry through
   `codex app-server`, with the same `config/batchWrite` of
@@ -160,7 +166,9 @@ register it with `codex-hook.mjs`:
     (`hooks.json:pre_tool_use:<group>:<hook>`). Adding or removing a
     `PreToolUse` entry before ours moves it to a new key, and it is then
     `untrusted`. Run `./install.sh --codex` again to trust it at its new place.
-    Removing ours on uninstall moves any entry after it the same way.
+    Uninstall keeps every other group in its place. Only a hook you put
+    after ours inside our own group moves up, and the uninstall warns about
+    that.
   - A `codex exec --ignore-user-config` session runs no user hooks at all.
     Every leaf started through `core/skills/native-runtime/codex-exec.mjs`
     (the native graph runners) runs that way. Autobuild's sessions and
