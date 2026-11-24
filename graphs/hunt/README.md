@@ -145,6 +145,12 @@ register it with `codex-hook.mjs`:
   their trust keys (below). A symlinked `hooks.json` (a dotfiles link) stays a
   link: its target is written. No Codex home yet (Codex never ran here) leaves
   the gate unregistered, with a warning.
+- **One skills directory for both.** With `~/.agents/skills -> ~/.claude/skills`,
+  `--codex` links nothing through the symlink, but still registers and trusts
+  the gate as `node "$HOME/.agents/skills/bughunt/gate.mjs"`, written out as an
+  absolute path (the path Codex sees),
+  once the Claude install has linked `bughunt` there. `node codex-hook.mjs has`
+  tells the uninstall whether the entry is registered.
 - **`CODEX_HOME`.** A `CODEX_HOME` that names another directory is not written
   on its own say-so. A test that sets a temp `HOME` but inherits it would
   otherwise reach a real Codex home. The install warns instead; run it again
