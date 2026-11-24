@@ -23,7 +23,7 @@
 //
 // --codex-home defaults to $CODEX_HOME, then $HOME/.codex. PANDASTACK_CODEX_BIN names the
 // codex binary (default: codex on PATH). Exit 0 on success, 1 on any failure, 2 on bad usage.
-import { readFileSync, writeFileSync, renameSync, rmSync, existsSync, realpathSync, statSync } from 'node:fs'
+import { readFileSync, writeFileSync, renameSync, rmSync, existsSync, realpathSync, statSync, lstatSync } from 'node:fs'
 import { join, isAbsolute } from 'node:path'
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
@@ -109,15 +109,26 @@ function readHooksFile(file) {
   return parseHooksFile(text)
 }
 
-// Written to a temp file beside it, then renamed over it, so a failed write never leaves half a
-// file; on a failure the temp file is removed too, so nothing is left beside the person's config.
+// The file a write must replace: hooks.json itself, or, when it is a symlink (a dotfiles manager's
+// link), the file it points to, so the link stays a link. A link to nothing is refused.
+function writeTarget(file) {
+  let link = false
+  try { link = lstatSync(file).isSymbolicLink() } catch { return file }
+  if (!link) return file
+  try { return realpathSync(file) } catch { throw new HookFileError(`${file} is a symlink to a file that does not exist; fix the link or remove it`) }
+}
+
+// Written to a temp file beside its target, then renamed over the target, so a failed write never
+// leaves half a file; on a failure the temp file is removed too, so nothing is left beside the
+// person's config.
 export function writeHooksFile(file, config, fs = { writeFileSync, renameSync, rmSync }) {
-  const tmp = `${file}.pandastack-${process.pid}.tmp`
+  const target = writeTarget(file)
+  const tmp = `${target}.pandastack-${process.pid}.tmp`
   let mode = 0o644
-  try { mode = statSync(file).mode & 0o777 } catch { /* a new file */ }
+  try { mode = statSync(target).mode & 0o777 } catch { /* a new file */ }
   try {
     fs.writeFileSync(tmp, JSON.stringify(config, null, 2) + '\n', { mode })
-    fs.renameSync(tmp, file)
+    fs.renameSync(tmp, target)
   } catch (e) {
     try { fs.rmSync(tmp, { force: true }) } catch { /* best effort: the error below is what matters */ }
     throw new HookFileError(`cannot write ${file}: ${e.message}`)

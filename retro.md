@@ -4359,7 +4359,7 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
   so `PANDASTACK_REVIEW_GATE=0` is the same off switch; editing `gate.mjs` keeps trust, editing the entry loses it,
   and so does adding a `PreToolUse` entry before ours (trust is keyed by place in the file; rerun `--codex`).
 - `gate.mjs`'s override text names Claude Code or Codex.
-- **The branch's `/bughunt` found three bugs, all reproduced and fixed:**
+- **The branch's two `/bughunt` runs found four bugs, all reproduced and fixed:**
   - **F1 (MEDIUM).** The first cut wrote to `$CODEX_HOME`. So the frozen install tests, which set a temp `HOME` but
     inherit the environment, would register and trust the gate in a developer's real Codex home. One of them is
     SHA-pinned by CP-01c, so the fix went into the installer instead of three frozen tests. It writes only
@@ -4368,8 +4368,10 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
   - **F3 (LOW).** Uninstall dropped our emptied group, which moved every later group to a new trust key and left it
     untrusted. A live probe showed Codex accepts an empty group, so it now stays when others follow it, and a hook
     that shared our group gets a warning.
+  - **F4 (LOW, second hunt).** Writing replaced a symlinked `hooks.json` (a dotfiles link) with a regular file. It now
+    writes the link's target and refuses a dangling link.
 - Tests:
-  - `graphs/hunt/tests/codex-hook.test.mjs` (17: a fake app-server and the captured Codex payload);
+  - `graphs/hunt/tests/codex-hook.test.mjs` (18: a fake app-server and the captured Codex payload);
   - `tests/install-codex-gate.test.mjs` (6);
   - `tests/install-tests-isolate-codex-home.test.mjs` (3).
 

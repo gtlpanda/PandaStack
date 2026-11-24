@@ -76,6 +76,8 @@ unhunted PR? And what does `install.sh --codex` have to do so that it actually r
   - **F2.** A failed `hooks.json` write now removes its temp file.
   - **F3.** Uninstall no longer shifts later groups to new trust keys (probe 16). It warns when a hook that shared
     our group moves.
+  - **F4** (a second hunt). Writing replaced a symlinked `hooks.json` with a regular file. It now writes the link's
+    target and refuses a dangling link.
 
 ## What this does not show
 

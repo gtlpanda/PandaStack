@@ -142,7 +142,8 @@ register it with `codex-hook.mjs`:
   Everything else in that file is kept. An entry of ours that is already there
   is never rewritten. `--uninstall --codex` removes only that entry. When the
   group it emptied has others after it, the empty group stays, so they keep
-  their trust keys (below). No Codex home yet (Codex never ran here) leaves
+  their trust keys (below). A symlinked `hooks.json` (a dotfiles link) stays a
+  link: its target is written. No Codex home yet (Codex never ran here) leaves
   the gate unregistered, with a warning.
 - **`CODEX_HOME`.** A `CODEX_HOME` that names another directory is not written
   on its own say-so. A test that sets a temp `HOME` but inherits it would

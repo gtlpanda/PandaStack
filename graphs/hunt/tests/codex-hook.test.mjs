@@ -4,7 +4,7 @@
 // actually sends (captured from Codex 0.167: tests/fixtures/codex-pretooluse.json).
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, realpathSync, renameSync, rmSync, readdirSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, realpathSync, renameSync, rmSync, readdirSync, symlinkSync, lstatSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
@@ -102,6 +102,28 @@ await test('BUGHUNT-F3: uninstall keeps a later hook of theirs at its trusted pl
   assert.equal(groups.findIndex(g => g.hooks.some(h => h.command === FOREIGN.hooks[0].command)), 1,
     'BUGHUNT-F3 uninstall moved their hook from pre_tool_use:1:0, which would leave it untrusted')
   assert.ok(!JSON.stringify(groups).includes(GATE))
+})
+await test('BUGHUNT-F4: a symlinked hooks.json (a dotfiles link) stays a link; merge and unmerge write its target; a dangling link is refused', () => {
+  const c = codexHome()
+  const dotfiles = join(c.root, 'dotfiles')
+  mkdirSync(dotfiles)
+  const target = join(dotfiles, 'hooks.json')
+  writeFileSync(target, JSON.stringify({ hooks: { PreToolUse: [FOREIGN] } }))
+  symlinkSync(target, c.hooksFile)
+  let r = cli(['merge'], c)
+  assert.equal(r.status, 0, r.stderr)
+  assert.ok(lstatSync(c.hooksFile).isSymbolicLink(), 'BUGHUNT-F4 merge replaced the symlinked hooks.json with a regular file')
+  assert.deepEqual(JSON.parse(readFileSync(target, 'utf8')).hooks.PreToolUse, [FOREIGN, OURS])
+  assert.deepEqual(readdirSync(dotfiles), ['hooks.json'], 'no temp file left beside the target')
+  r = cli(['unmerge'], c)
+  assert.equal(r.status, 0, r.stderr)
+  assert.ok(lstatSync(c.hooksFile).isSymbolicLink())
+  assert.deepEqual(JSON.parse(readFileSync(target, 'utf8')).hooks.PreToolUse, [FOREIGN])
+  rmSync(target)
+  r = cli(['merge'], c)
+  assert.equal(r.status, 1)
+  assert.match(r.stderr, /is a symlink to a file that does not exist/)
+  assert.ok(lstatSync(c.hooksFile).isSymbolicLink(), 'the dangling link is left as it is')
 })
 await test('BUGHUNT-F2: a failed hooks.json write leaves neither hooks.json nor its temp file', () => {
   const c = codexHome()
