@@ -14,6 +14,8 @@
 //     already there is left exactly as it is (rewriting it would make Codex skip it)
 //   node codex-hook.mjs unmerge [--dry-run] [--codex-home DIR] --gate ABS_PATH
 //     removes only our entry
+//   node codex-hook.mjs has     [--codex-home DIR] --gate ABS_PATH
+//     exits 0 when hooks.json holds our entry, 1 when it does not (or cannot be read)
 //   node codex-hook.mjs status  [--codex-home DIR] --gate ABS_PATH
 //     asks `codex app-server` (hooks/list); prints CODEX-GATE: <missing|untrusted|modified|trusted|managed>
 //     and exits 0 only for trusted
@@ -230,7 +232,7 @@ function parseArgs(argv) {
     else if (a === '--gate' && rest[i + 1] !== undefined) opts.gate = rest[++i]
     else return null
   }
-  if (!['merge', 'unmerge', 'status', 'trust'].includes(verb) || !opts.gate) return null
+  if (!['merge', 'unmerge', 'has', 'status', 'trust'].includes(verb) || !opts.gate) return null
   if (opts.dryRun && !['merge', 'unmerge'].includes(verb)) return null
   opts.codexHome = opts.codexHome || process.env.CODEX_HOME || (process.env.HOME ? join(process.env.HOME, '.codex') : null)
   return opts
@@ -239,7 +241,7 @@ function parseArgs(argv) {
 export async function main(argv, log = console.log, err = console.error) {
   const opts = parseArgs(argv)
   if (!opts) {
-    err('usage: codex-hook.mjs merge|unmerge [--dry-run] | status | trust  [--codex-home DIR] --gate ABS_PATH')
+    err('usage: codex-hook.mjs merge|unmerge [--dry-run] | has | status | trust  [--codex-home DIR] --gate ABS_PATH')
     return 2
   }
   try {
@@ -266,6 +268,12 @@ export async function main(argv, log = console.log, err = console.error) {
       log(`codex hooks: removed the review gate from ${hooksFile}`)
       if (shifted) err(`codex-hook: warning${moved}`)
       return 0
+    }
+    if (opts.verb === 'has') {
+      const current = readHooksFile(hooksFile)
+      const found = current !== null && unmergeHooks(current, opts.gate).removed > 0
+      log(`codex hooks: ${hooksFile} ${found ? 'has' : 'does not have'} the review gate`)
+      return found ? 0 : 1
     }
     if (opts.verb === 'status') {
       const hook = await withAppServer(opts.codexHome, call => listOurs(call, opts.codexHome, command))

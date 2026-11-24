@@ -4378,3 +4378,22 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
   The first install and gate tests failed on main's `install.sh` and `gate.mjs` (6 FAIL). The F1 test fails 3/3 at
   the hunted head.
 - Evidence: `docs/evidence/codex-review-gate-hook-2026-11-23.md` (16 probes, plus the installed path end to end).
+
+## 84. The Codex review gate on one shared skills directory (2026-11-23)
+
+- **The gap.** On a machine where `~/.agents/skills` is a symlink to `~/.claude/skills`, `./install.sh --codex` stopped at
+  its symlink guard before the gate step, and the plain install's Codex pass only warned. So #83's gate was never
+  registered on that layout, which is the arrangement the README called common. It was found by installing on such a
+  machine, where the gate had to be registered by hand with `codex-hook.mjs merge`/`trust`.
+- **The change.** `--codex` treats that layout as shared when the Codex skills dir resolves to the real Claude skills
+  dir (outside the repo) and, to install, the dir's `bughunt` links to this checkout's with `gate.mjs` in it, or, to
+  uninstall, the gate is registered (`codex-hook.mjs has`, new). On it, `--codex` links, backs up and unlinks nothing,
+  and only registers, trusts and checks the gate as `node "<home>/.agents/skills/bughunt/gate.mjs"`. An entry already
+  registered that way is left byte for byte, so its trust stays. Any other symlinked layout is refused as before, as is
+  a shared dir whose `bughunt` points at another checkout, so a foreign copy's gate is never trusted. The frozen
+  `tests/install-codex.test.mjs` (a shared dir that holds no PandaStack link) is unchanged and passes.
+- **Tests.**
+  - `tests/install-codex-shared-skills.test.mjs` (7): install, an identical entry kept byte for byte, symlinks
+    elsewhere and to another checkout still refused, uninstall removing only the gate, dry-run and `--skip`, and a plain
+    install and uninstall. Five fail on main's installer; the two refusal cases pass on both.
+  - `graphs/hunt/tests/codex-hook.test.mjs`: one more test for `has` (19).

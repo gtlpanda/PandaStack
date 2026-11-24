@@ -174,6 +174,31 @@ await test('merge refuses a malformed hooks.json and leaves it byte for byte; no
   assert.equal(spawnSync(process.execPath, [HELPER, 'merge'], { encoding: 'utf8' }).status, 2, 'no --gate')
   assert.equal(spawnSync(process.execPath, [HELPER, 'status', '--dry-run', '--gate', GATE], { encoding: 'utf8' }).status, 2, 'dry-run is for merge/unmerge')
 })
+await test('has: 0 only for our exact entry; 1 for no file, a foreign or edited entry, or a malformed file; it writes nothing and starts no Codex', () => {
+  const c = codexHome()
+  let r = cli(['has'], c)
+  assert.equal(r.status, 1, 'no hooks.json')
+  assert.equal(existsSync(c.hooksFile), false)
+  const cases = [
+    [{ hooks: { PreToolUse: [FOREIGN] } }, 1],
+    [{ hooks: { PreToolUse: [{ ...OURS, matcher: 'Bash|Edit' }] } }, 1],
+    [{ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: `node ${GATE}` }] }] } }, 1],
+    [{ hooks: { PreToolUse: [FOREIGN, OURS] } }, 0],
+  ]
+  for (const [config, want] of cases) {
+    const text = JSON.stringify(config)
+    writeFileSync(c.hooksFile, text)
+    r = cli(['has'], c)
+    assert.equal(r.status, want, text + r.stdout + r.stderr)
+    assert.equal(readFileSync(c.hooksFile, 'utf8'), text, 'has never writes')
+  }
+  writeFileSync(c.hooksFile, '{ broken')
+  r = cli(['has'], c)
+  assert.equal(r.status, 1)
+  assert.match(r.stderr, /not valid JSON/)
+  assert.deepEqual(calls(c.home), [], 'has never starts codex')
+  assert.equal(spawnSync(process.execPath, [HELPER, 'has', '--dry-run', '--gate', GATE], { encoding: 'utf8' }).status, 2, 'dry-run is for merge/unmerge')
+})
 
 console.log('== trust and status, through the app-server')
 await test('untrusted -> trust -> trusted: one batchWrite of hooks.state for our user-level key, with the hash Codex gave', () => {

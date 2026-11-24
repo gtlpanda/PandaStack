@@ -339,9 +339,15 @@ after installation are preserved, and `--uninstall` restores only skills still i
 the plan. `--skip` accepts `skills` or any planned skill (today `skills/autobuild`
 or `skills/bughunt`) in this mode.
 
-A symlinked destination or ancestor is refused, including the common
-`~/.agents/skills -> ~/.claude/skills` arrangement. If those shared entry links
-already work, leave them as-is; otherwise choose a real dedicated skills directory.
+`--codex` never links, backs up or unlinks anything through a symlinked
+destination or ancestor. The common `~/.agents/skills -> ~/.claude/skills`
+arrangement (one skills directory for both) is the one symlinked layout it
+accepts: there the Claude install's links are the Codex entries, so `--codex`
+only registers and trusts the review gate (below), and `--uninstall --codex`
+only removes it. It counts as shared when the Codex skills directory resolves to
+the real Claude skills directory and that directory's `bughunt` links to this
+checkout (to uninstall: when the gate is registered). Any other symlinked
+layout is refused; choose a real dedicated skills directory.
 No account installation is needed to run the repository's CLI directly.
 
 If `~/.claude/settings.json` is already a file of your own, it is **merged,

@@ -27,6 +27,8 @@
 #                             codex row is not unavailable) into ~/.agents/skills, and the
 #                             review gate as a trusted PreToolUse hook in the Codex home's
 #                             hooks.json (an untrusted gate is an error); needs node.
+#                             With ~/.agents/skills -> ~/.claude/skills (one shared
+#                             dir) it links nothing and registers only the gate.
 #                             --claude and --codex are alternatives: not both
 #   ./install.sh --dry-run    print what would happen, change nothing
 #   ./install.sh --skip=a,b   install, but leave these targets alone (e.g.
@@ -45,6 +47,9 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-${HOME:-}/.claude}"
 CLAUDE_DIR="${CLAUDE_DIR%/}"
+# The Claude config dir itself: --codex points CLAUDE_DIR at the Codex skills dir's parent below,
+# and the shared-layout check (codex_skills_shared) compares against this one.
+CLAUDE_HOME_DIR="$CLAUDE_DIR"
 BACKUP_ROOT="$CLAUDE_DIR/backups"
 MANIFEST=".harness-manifest"
 
@@ -125,11 +130,44 @@ run() {
 # Physical path of a directory, or empty if it does not exist.
 physical() { [ -d "$1" ] && (cd "$1" && pwd -P) || true; }
 
+# The shared layout: the Codex skills dir is, or sits under, a symlink to the Claude skills dir
+# (~/.agents/skills -> ~/.claude/skills), so each Codex entry IS the Claude entry the Claude
+# install links. --codex still never links, backs up or unlinks anything through that symlink,
+# but the review gate belongs in the Codex home either way. So the layout counts as shared, and
+# --codex runs only its gate step, when the Codex skills dir resolves to the Claude skills dir
+# (itself a real directory, outside the repo) and, to install, that dir's bughunt is a link to
+# this checkout's with gate.mjs in it, or, to uninstall, our gate entry is in hooks.json. Any
+# other symlinked layout is refused as before (guard_layout).
+SHARED_CODEX_SKILLS=0
+codex_skills_aliased() {
+  local p="$CODEX_SKILLS_DIR"
+  while [ "$p" != / ]; do
+    [ ! -L "$p" ] || return 0
+    p="$(dirname "$p")"
+  done
+  return 1
+}
+codex_skills_shared() {
+  local claude_skills="$CLAUDE_HOME_DIR/skills" shared
+  [ -n "$CLAUDE_HOME_DIR" ] && [ -d "$claude_skills" ] && [ ! -L "$claude_skills" ] || return 1
+  shared="$(physical "$CODEX_SKILLS_DIR")"
+  [ -n "$shared" ] && [ "$shared" = "$(physical "$claude_skills")" ] || return 1
+  case "$shared" in "$REPO_DIR"|"$REPO_DIR"/*) return 1 ;; esac
+  if [ "$MODE" = install ]; then
+    [ -L "$CODEX_SKILLS_DIR/bughunt" ] \
+      && [ "$(physical "$CODEX_SKILLS_DIR/bughunt")" = "$REPO_DIR/graphs/hunt/skills/bughunt" ] \
+      && [ -f "$CODEX_SKILLS_DIR/bughunt/gate.mjs" ]
+  else
+    codex_gate_registered
+  fi
+}
+
 # Refuse layouts where linking would write into, or move files out of, the repo
 # itself, or write through a symlinked target dir (skills/, bin/, ...) into some other tree.
 guard_layout() {
   local p t
   if [ "$CODEX_MODE" -eq 1 ]; then
+    if codex_skills_aliased && codex_skills_shared; then SHARED_CODEX_SKILLS=1; return; fi
     # Refuse an aliased skills tree even when its entries already work: never
     # write through ~/.agents/skills -> ~/.claude/skills (including uninstall).
     for t in "$CODEX_SKILLS_DIR" "$BACKUP_ROOT"; do
@@ -428,6 +466,14 @@ codex_review_gate() {
     || die "codex review gate: Codex does not report the hook as trusted, so the gate is NOT active"
 }
 
+# True when the Codex home's hooks.json holds our gate entry (exactly as install adds it).
+codex_gate_registered() {
+  local home
+  home="$(codex_home_dir)"
+  [ -n "$home" ] && [ -f "$home/hooks.json" ] || return 1
+  node "$CODEX_GATE_HELPER" has --codex-home "$home" --gate "$CODEX_SKILLS_DIR/bughunt/gate.mjs" >/dev/null 2>&1
+}
+
 codex_review_gate_remove() {
   [ "$CODEX_MODE" -eq 1 ] || return 0
   local home args=()
@@ -446,6 +492,12 @@ do_install() {
   guard_layout
   check_duplicates
   check_skips
+  if [ "$SHARED_CODEX_SKILLS" -eq 1 ]; then
+    log "shared skills dir: $CODEX_SKILLS_DIR is $(physical "$CODEX_SKILLS_DIR"), the Claude skills dir, whose entries ./install.sh links; nothing is linked through it"
+    codex_review_gate
+    log "done: 0 linked (shared skills dir)"
+    return 0
+  fi
   run mkdir -p "$CLAUDE_DIR"
   while IFS=$'\t' read -r rel srcrel; do
     src="$REPO_DIR/$srcrel"; dest="$(dest_of "$rel")"
@@ -505,6 +557,12 @@ do_uninstall() {
   if [ "$CODEX_MODE" -eq 1 ]; then guard_layout; fi
   log "repo:   $REPO_DIR"
   log "target: $CLAUDE_DIR"
+  if [ "$SHARED_CODEX_SKILLS" -eq 1 ]; then
+    log "shared skills dir: nothing is unlinked through $CODEX_SKILLS_DIR (the Claude uninstall owns its entries)"
+    codex_review_gate_remove
+    log "done: 0 unlinked (shared skills dir)"
+    return 0
+  fi
   while IFS=$'\t' read -r rel _; do
     dest="$(dest_of "$rel")"
     if points_into_repo "$dest"; then
