@@ -890,7 +890,10 @@ function main(argv) {
     opts.timeoutMs = ms
     argv = [...argv.slice(0, at), ...argv.slice(at + 2)]
   }
-  const [cmd, stateDir, id, ...rest] = argv
+  const [cmd, given, id, ...rest] = argv
+  // The sandbox and the ledger writes need an absolute state dir; a person or an agent often
+  // types `.git/bughunt/<key>` from the repo root.
+  const stateDir = given ? resolve(given) : given
   try {
     if (COMMANDS[cmd] && stateDir && ID.test(id || '') && !rest.length) {
       for (const l of COMMANDS[cmd](stateDir, id, opts).lines) console.log(l)

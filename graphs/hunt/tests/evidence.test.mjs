@@ -1,7 +1,7 @@
 // evidence.test.mjs — evidence.mjs runs real reproduction tests (node --test)
 // in throwaway repos: every verdict, the guards on what it will run, the
 // sandbox, and recheck correcting a ledger to what the runs show.
-import { join, dirname } from 'node:path'
+import { join, dirname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -265,6 +265,16 @@ await test('recheck re-runs what the ledger relies on and corrects a status the 
   assert.match(l.findings[0].history.at(-1).why, /^evidence recheck/)
   r = ev(['recheck', STATE])
   assert.equal(lastLine(r.stdout), 'RECHECK: PASS')
+})
+// A Codex session ran `recheck .git/bughunt/<key>` from the repo root: the sandbox refused the
+// relative state dir, every run was an ERROR, and recheck demoted a reproduced finding to confirmed.
+// Uses the ledger the recheck test above writes, so it needs what that test needs.
+await test('recheck given a relative state dir resolves it: the same runs, nothing demoted', { skip: NO_ISOLATION }, () => {
+  const r = spawnSync('node', [EVIDENCE, 'recheck', basename(STATE)], { encoding: 'utf8', cwd: dirname(STATE) })
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.doesNotMatch(r.stdout, /ERROR/, r.stdout)
+  assert.equal(lastLine(r.stdout), 'RECHECK: PASS', r.stdout)
+  assert.equal(readLedger(join(STATE, 'ledger.json'), 'x').findings[0].verification_status, 'reproduced')
 })
 // Uses the ledger the recheck test above writes, so it needs what that test needs.
 await test('recheck never trusts a claimed run without a written reproduction: it falls back to confirmed', { skip: NO_ISOLATION }, () => {
