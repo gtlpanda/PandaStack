@@ -11,8 +11,10 @@
 // review-status.mjs: the hunted head, plus only docs commits and verified
 // /bughunt repairs after it.
 //
-// Off switch: start Claude Code with PANDASTACK_REVIEW_GATE=0. A person can
-// also run the command themselves (`! gh pr merge ...`), which no hook sees.
+// Off switch: start the agent (Claude Code or Codex) with PANDASTACK_REVIEW_GATE=0.
+// A person can also run the command themselves in their own terminal (in Claude
+// Code, `! gh pr merge ...`), which no hook sees. Claude Code runs this hook from
+// settings.json; Codex from its hooks.json, with the same input (codex-hook.mjs).
 // It allows any call it cannot read (not a Bash call, bad input); once a
 // command matches, anything it cannot resolve is denied with the reason.
 import { readFileSync, existsSync, realpathSync, lstatSync } from 'node:fs'
@@ -24,7 +26,7 @@ import { simpleCommands, gitSubcommand } from '../../../build/skills/build-app/d
 import { reviewStatus, commitOf } from './review-status.mjs'
 
 const SAFE_GIT = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false']
-const OVERRIDE = 'A person can run it themselves with `! <command>`, or start Claude Code with PANDASTACK_REVIEW_GATE=0.'
+const OVERRIDE = 'A person can run it themselves in their own terminal (in Claude Code, `! <command>`), or start the agent (Claude Code or Codex) with PANDASTACK_REVIEW_GATE=0.'
 
 function git(dir, args) {
   const r = spawnSync('git', ['-C', dir, ...SAFE_GIT, ...args], { encoding: 'utf8', timeout: 15_000 })

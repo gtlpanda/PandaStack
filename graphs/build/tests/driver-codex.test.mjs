@@ -309,7 +309,7 @@ await test('lock and resume: a live driver or a live session holds the lock; a b
   assert.equal(gitOut(root, 'log', '-1', '--format=%s', INT), 'S2: slice 2')
 })
 
-// Codex has no PreToolUse guard: a live run (docs/evidence) saw the QA fixer add cases to a test an
+// No frozen-test guard runs in Codex: a live run (docs/evidence) saw the QA fixer add cases to a test an
 // earlier slice froze, and the driver then braked the whole build. The driver now puts frozen tests back
 // before its commit and lets its own checks judge the rest of the fix against the original tests.
 await test('the final QA changes a frozen test on Codex: the driver puts it back, commits the rest, and the build finishes', () => {

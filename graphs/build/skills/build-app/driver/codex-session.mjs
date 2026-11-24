@@ -130,8 +130,9 @@ export function hostCommit(repo, subject, body = '', paths = null) {
   return made.ok ? { ok: true, committed: true } : { ok: false, committed: false, message: `git commit failed: ${made.out.trim().slice(0, 300)}` }
 }
 
-// Codex has no PreToolUse guard, so nothing stops the final QA's fixer from editing a test an
-// earlier slice froze (Claude's guard denies that edit as it happens). Before the host commit,
+// No frozen-test guard runs in Codex (the only PandaStack hook Codex can run is the review gate,
+// which polices pushes and PRs, not edits), so nothing stops the final QA's fixer from editing a
+// test an earlier slice froze (Claude's guard denies that edit as it happens). Before the host commit,
 // put every frozen test the QA loop touched back to its version on `ref`; the driver's checks
 // then judge the rest of the fix against the original tests. Returns {ok, restored, touched}:
 // `touched` without the restored files, or ok false with a message when git could not restore them.
