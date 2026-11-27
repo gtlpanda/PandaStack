@@ -4397,3 +4397,28 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
     elsewhere and to another checkout still refused, uninstall removing only the gate, dry-run and `--skip`, and a plain
     install and uninstall. Five fail on main's installer; the two refusal cases pass on both.
   - `graphs/hunt/tests/codex-hook.test.mjs`: one more test for `has` (19).
+
+## 85. A SKILL.md linter with a ratchet baseline (2026-11-26)
+
+- **Why.** Skills are the unit everything else runs on, and nothing checked their shape beyond complete frontmatter.
+  The rules come from a published account of running thousands of skills: steps numbered with one goal each, a concrete
+  command whose result is checked, and an error-recovery table where "try again" is not a fix.
+- **The linter.** `scripts/lint-skills.mjs` reads the catalog (`spec/offering-capabilities.json`) and checks the 44
+  offerings that have a `SKILL.md`, so vendored trees and fixtures are never linted. Six rules with stable ids:
+  `FRONTMATTER`, `DESCRIPTION` (at most 1024 characters, with a "Use when" style trigger), `BODY_LENGTH` (at most 500
+  lines), and three procedure rules, `NUMBERED_STEPS`, `STEP_COMMAND` and `ERROR_RECOVERY`, from which the seven
+  `shared-reference-contract` offerings are exempt. Headings, lists and commands inside code fences are not read as
+  structure, and a recovery heading must be the whole heading, so "Error Audit - Find Silent Failures" does not count
+  (the first run counted it; caught by checking the one procedure skill that passed).
+- **The ratchet.** `scripts/skill-lint-baseline.json` (not under `spec/`, which is frozen) records today's 53
+  violations across 38 skills. A violation it does not list fails (`NEW`); a listed one that was fixed fails
+  (`STALE`) until `--update-baseline` removes it; that flag never adds an entry. CI runs it through
+  `tests/lint-skills.test.mjs`, which the workflow suite already runs, so the frozen `scripts/test.sh`,
+  `scripts/validate.sh` and the gate list are unchanged. No `SKILL.md` was edited (their hashes are pinned).
+- **Today's baseline.** `ERROR_RECOVERY` 37, `DESCRIPTION` 5, `NUMBERED_STEPS` 5, `STEP_COMMAND` 4, `BODY_LENGTH` 2.
+  Almost no skill has a recovery section; that is the first thing to fix as skills are touched.
+- **Tests.** `tests/lint-skills.test.mjs` (19): each rule and its look-alikes (prose that mentions errors, title
+  headings, retry-only fixes, a table without its rule row, numbers and headings inside code, tool names without
+  arguments, "Useful when"), frontmatter edge cases (missing, unclosed, malformed, duplicate keys, name mismatch,
+  CRLF, quoted and folded values), the exemption, the CLI's baseline semantics and exit codes, and the repo itself
+  against its baseline. Against a stub linter that flags nothing, 15 of the 19 fail.
