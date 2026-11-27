@@ -108,7 +108,7 @@ export function hasNumberedSteps(body) {
   for (const { line, kind } of scan(body)) {
     if (kind !== 'text') continue
     const item = /^\s*(\d+)[.)]\s+\S/.exec(line)
-    const head = /^#{1,6}\s+(?:step\s+)?(\d+)(?:[.):]|\s+[-–—]|\s)/i.exec(line)
+    const head = /^#{1,6}\s+(?:step\s+)?(\d+)(?:[.):]|\s|$)/i.exec(line)
     const n = item?.[1] ?? head?.[1]
     if (n) seen.add(Number(n))
   }
@@ -131,12 +131,15 @@ export function hasCommand(body) {
 // after the separator of a list item.
 function recoveryPairs(sectionLines) {
   const pairs = []
-  const rows = sectionLines.filter(l => /^\s*\|.*\|\s*$/.test(l))
-  const isRule = l => /^\s*\|(\s*:?-{3,}:?\s*\|)+\s*$/.test(l)
-  if (rows.length >= 3 && isRule(rows[1])) {
-    for (const row of rows.slice(2)) {
-      if (isRule(row)) continue
-      const cells = row.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim())
+  // A GFM table: a header row, a delimiter row (cells of one or more dashes, colons for alignment),
+  // then data rows; outer pipes are optional. The fix is each data row's last cell.
+  const cellsOf = l => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim())
+  const isRule = l => l.includes('|') || /^\s*:?-+:?\s*$/.test(l) ? cellsOf(l).every(c => /^:?-+:?$/.test(c)) : false
+  for (const [i, l] of sectionLines.entries()) {
+    if (i === 0 || !l.includes('-') || !isRule(l) || !sectionLines[i - 1].includes('|')) continue
+    for (const row of sectionLines.slice(i + 1)) {
+      if (!row.includes('|')) break
+      const cells = cellsOf(row)
       if (cells.length >= 2 && cells[0] && cells.at(-1)) pairs.push(cells.at(-1))
     }
   }

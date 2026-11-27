@@ -4421,11 +4421,14 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
   (`go.mod`, `docker-compose.yml`, `autobuild.json`) counted as a command; a tool now needs whitespace and an
   argument after it. F2: a baseline write that failed (`--update-baseline` on an unwritable path) escaped as a crash
   with exit 1, the code for a lint failure; it is now `LINT-SKILLS: ERROR` with exit 2, and the temp file is removed.
-  Neither changed today's baseline.
-- **Tests.** `tests/lint-skills.test.mjs` (21): each rule and its look-alikes (prose that mentions errors, title
+  Neither changed today's baseline. A second hunt found two false violations that would have turned CI red on a
+  well-formed skill: F3, a heading that is only the step number (`## Step 1`) was not read as a step; F4, a valid GFM
+  table with short delimiter cells (`|-|-|`) or without outer pipes was not read as a table. Both fixed, again with
+  no change to the baseline.
+- **Tests.** `tests/lint-skills.test.mjs` (23): each rule and its look-alikes (prose that mentions errors, title
   headings, retry-only fixes, a table without its rule row, numbers and headings inside code, tool names without
   arguments, file names that start with a tool name, "Useful when"), frontmatter edge cases (missing, unclosed,
   malformed, duplicate keys, name mismatch, CRLF, quoted and folded values), the exemption, the CLI's baseline
   semantics and exit codes (including a baseline that cannot be written), and the repo itself against its baseline.
-  Against a stub linter that flags nothing, 15 of the first 19 fail; the two hunt regressions fail on the pre-fix
-  linter.
+  Against a stub linter that flags nothing, 15 of the first 19 fail; each of the four hunt regressions fails on the
+  linter before its fix.

@@ -79,6 +79,14 @@ await test('NUMBERED_STEPS: items or headings numbered 1 and 2; one item, or num
   assert.ok(!hasNumberedSteps('- a\n- b'))
   assert.ok(!hasNumberedSteps('In 2024. we shipped 1.5 releases'))
 })
+// bughunt F3: a heading that is only the step number was not read as a step.
+await test('NUMBERED_STEPS: bare "## Step 1" / "## 2" headings count; a number glued to a word does not', () => {
+  assert.ok(hasNumberedSteps('## Step 1\n\nDo a.\n\n## Step 2\n\nDo b.'))
+  assert.ok(hasNumberedSteps('### 1\n### 2   '))
+  assert.ok(hasNumberedSteps('## Step 1 - plan\n## Step 2 — build'))
+  assert.ok(!hasNumberedSteps('## 1st thing\n## 2nd thing'))
+  assert.ok(!hasNumberedSteps('## Step 1\n## Step 1b'))
+})
 await test('STEP_COMMAND: a shell block or an inline command; prose code, data blocks and bare names do not count', () => {
   assert.ok(hasCommand('```bash\nnode x.mjs\n```'))
   assert.ok(hasCommand('```\nmake test\n```'), 'an untagged fence is read as shell')
@@ -102,6 +110,19 @@ await test('ERROR_RECOVERY: a failure -> fix table or list under a recovery head
   assert.deepEqual(errorRecovery('### Errors\n\n- exit 2 -> pass a path\n'), { ok: true })
   assert.deepEqual(errorRecovery('## When something fails\n\n- **Login expired**: run `codex login`\n'), { ok: true })
   assert.deepEqual(errorRecovery('## 4. Error recovery\n\n- timeout → raise --timeout-ms\n'), { ok: true })
+})
+// bughunt F4: valid GFM tables with short delimiter cells, or without outer pipes, were not read.
+await test('ERROR_RECOVERY: any GFM table shape counts: short delimiters, alignment colons, no outer pipes', () => {
+  for (const table of [
+    '| Failure | Fix |\n|-|-|\n| 404 | check the URL |',
+    '| Failure | Fix |\n| - | - |\n| 404 | check the URL |',
+    '| Failure | Fix |\n|:--|--:|\n| 404 | check the URL |',
+    'Failure | Fix\n--- | ---\n404 | check the URL',
+    'Failure | Fix\n-|-\n404 | check the URL',
+  ]) assert.deepEqual(errorRecovery(`## Errors\n\n${table}\n`), { ok: true }, table)
+  assert.match(errorRecovery('## Errors\n\nFailure | Fix\n-|-\n500 | retry\n').reason, /only "retry"/)
+  assert.match(errorRecovery('## Errors\n\n| Failure | Fix |\n| -x- | - |\n| 404 | check |\n').reason, /maps no failure/, 'a delimiter cell is only dashes and colons')
+  assert.match(errorRecovery('## Errors\n\nSome text\n---\n').reason, /maps no failure/, 'a rule under prose is not a table')
 })
 await test('ERROR_RECOVERY look-alikes: prose, title headings, retry-only fixes, code, other sections', () => {
   assert.match(errorRecovery('If an error happens, fix it.\n').reason, /no error-recovery section/)
