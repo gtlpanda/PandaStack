@@ -200,16 +200,22 @@ await test('checking whether pytest is installed never runs a pytest.py the chan
 })
 await test('anything that throws during a run is an ERROR verdict with an evidence file, never a crash', () => {
   repro('F16', 'tests/bughunt-f16.test.mjs', TEST("  assert.fail('BUGHUNT-F16')"))
-  // A file where the run's work dir goes: the export throws ENOTDIR before any
-  // isolation check, for root too (a read-only dir does not stop root).
-  put(join(STATE, 'work', 'F16'), 'not a directory')
-  const r = ev(['repro', STATE, 'F16'])
+  // A temp dir inside a .git directory: the arm's export refuses it and throws
+  // before any isolation check, for root too.
+  const gitTmp = join(repo, '.git', 'bughunt-f16-tmp')
+  mkdirSync(gitTmp, { recursive: true })
+  const r = ev(['repro', STATE, 'F16'], { TMPDIR: gitTmp })
   assert.equal(r.status, 0, r.stdout)
   assert.equal(lastLine(r.stdout), 'EVIDENCE: ERROR F16')
-  assert.match(r.stdout, /the run failed: ENOTDIR/)
+  assert.match(r.stdout, /the run failed: Reproduction temporary location is inside Git metadata/)
   assert.equal(evidenceOf('F16').verdict, 'ERROR')
-  assert.match(evidenceOf('F16').reason, /the run failed: ENOTDIR/)
+  assert.match(evidenceOf('F16').reason, /inside Git metadata/)
   assert.ok(!existsSync(join(STATE, 'work', 'F16')), 'the run cleans its work path up even after a throw')
+})
+await test('a reproduction runs in an export outside every .git directory (Vite denies **/.git/** to DOM tests)', { skip: NO_ISOLATION }, () => {
+  repro('F17', 'tests/bughunt-f17.test.mjs', TEST("  assert.ok(!process.cwd().split('/').includes('.git'), 'BUGHUNT-F17 the export is inside .git: ' + process.cwd())"))
+  const r = ev(['repro', STATE, 'F17'])
+  assert.equal(lastLine(r.stdout), 'EVIDENCE: NOT_REPRODUCED F17', r.stdout)
 })
 await test('a detached grandchild dies with the run, and the run ends when the test does', { skip: NO_ISOLATION }, () => {
   repro('F14', 'tests/bughunt-f14.test.mjs', TEST([

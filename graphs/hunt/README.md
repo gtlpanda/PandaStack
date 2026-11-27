@@ -410,7 +410,7 @@ ledger.
 | `ledger.json` | the findings across runs (`findings.mjs`) |
 | `repro/F<n>/` | each reproduction: `repro.json` and `files/<test_file>` |
 | `evidence/F<n>.json` | what `evidence.mjs` ran and saw: each arm's commit, exit code, marker, and output tail, plus the verdict |
-| `work/F<n>/` | the exports a run uses, removed when it ends |
+| `work/F<n>/` | a run's capture logs, removed when it ends. The exports themselves go to a private directory under the system temp dir (`bughunt-arm-*`, `bughunt-suite-*`), outside `.git`, because Vite refuses to load files under `.git` for a DOM test environment |
 | `fix/` | the fix worktree (propose, fix): detached in propose mode, branch `bughunt/<key>` in fix mode. Made by `/bughunt`, never removed by it |
 | `repro/F<n>/adversarial/` | the fix verifier's adversarial tests: `adversarial.json` and `files/` |
 

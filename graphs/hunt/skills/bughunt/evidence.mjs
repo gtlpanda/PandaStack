@@ -182,14 +182,24 @@ function exportTree(repo, sha, dir) {
   }
 }
 
-export function createSuiteExport({repo,tree}) {
-  if(typeof repo!=='string'||typeof tree!=='string'||! /^[0-9a-f]{40,64}$/.test(tree))throw new Error('Invalid suite export source')
+// A private, empty directory under the system temp dir, never inside a .git
+// directory. Code under test treats a path under .git as off limits: Vite's
+// default server.fs.deny has "**/.git/**", so a jsdom or happy-dom vitest run
+// from an export under <repo>/.git/bughunt/ cannot load its own setup or test
+// files ("Cannot find module '/src/...'"); node-environment runs are not checked.
+function privateTempDir(prefix, what) {
   const parent = realpathSync(tmpdir())
   for(let current=parent;;current=dirname(current)){
-    if(basename(current)==='.git')throw new Error('Suite temporary location is inside Git metadata')
+    if(basename(current)==='.git')throw new Error(`${what} temporary location is inside Git metadata`)
     if(current===dirname(current))break
   }
-  const directory=mkdtempSync(join(parent,'bughunt-suite-'));chmodSync(directory,0o700)
+  const directory=mkdtempSync(join(parent,prefix));chmodSync(directory,0o700)
+  return directory
+}
+
+export function createSuiteExport({repo,tree}) {
+  if(typeof repo!=='string'||typeof tree!=='string'||! /^[0-9a-f]{40,64}$/.test(tree))throw new Error('Invalid suite export source')
+  const directory=privateTempDir('bughunt-suite-','Suite')
   const env={...sandboxEnv(),GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',GIT_AUTHOR_NAME:'bughunt export',GIT_AUTHOR_EMAIL:'export@localhost',GIT_COMMITTER_NAME:'bughunt export',GIT_COMMITTER_EMAIL:'export@localhost'}
   const call=(args,extra={})=>{
     const r=spawnSync('git',['-C',directory,...SAFE_GIT,'-c','commit.gpgsign=false','-c','core.autocrlf=false',...args],{env,encoding:'utf8',timeout:30000,maxBuffer:128*1024*1024,...extra})
@@ -324,9 +334,14 @@ function unsafeTestPath(dir, testFile) {
 }
 
 // One test run in a fresh export of `source.sha` (a commit, or the staged
-// tree of a repair).
+// tree of a repair). The export lives in its own temp directory (see
+// privateTempDir), removed after the run; workDir keeps only the capture.
 function runArm(repo, source, arm, testFile, testText, workDir, timeoutMs, marker) {
-  const dir = join(workDir, arm)
+  const exportRoot = privateTempDir('bughunt-arm-', 'Reproduction')
+  try { return runArmIn(join(exportRoot, arm), repo, source, arm, testFile, testText, workDir, timeoutMs, marker) }
+  finally { rmSync(exportRoot, { recursive: true, force: true }) }
+}
+function runArmIn(dir, repo, source, arm, testFile, testText, workDir, timeoutMs, marker) {
   const sha = source.sha
   const fail = error => ({ arm, sha, exit: null, timedOut: false, marker: false, error, tail: '' })
   const err = exportTree(repo, sha, dir)
