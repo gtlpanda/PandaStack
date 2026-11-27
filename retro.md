@@ -4417,8 +4417,15 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
   `scripts/validate.sh` and the gate list are unchanged. No `SKILL.md` was edited (their hashes are pinned).
 - **Today's baseline.** `ERROR_RECOVERY` 37, `DESCRIPTION` 5, `NUMBERED_STEPS` 5, `STEP_COMMAND` 4, `BODY_LENGTH` 2.
   Almost no skill has a recovery section; that is the first thing to fix as skills are touched.
-- **Tests.** `tests/lint-skills.test.mjs` (19): each rule and its look-alikes (prose that mentions errors, title
+- **Bugs the hunt found (both reproduced, both fixed).** F1: an inline file name that starts with a tool name
+  (`go.mod`, `docker-compose.yml`, `autobuild.json`) counted as a command; a tool now needs whitespace and an
+  argument after it. F2: a baseline write that failed (`--update-baseline` on an unwritable path) escaped as a crash
+  with exit 1, the code for a lint failure; it is now `LINT-SKILLS: ERROR` with exit 2, and the temp file is removed.
+  Neither changed today's baseline.
+- **Tests.** `tests/lint-skills.test.mjs` (21): each rule and its look-alikes (prose that mentions errors, title
   headings, retry-only fixes, a table without its rule row, numbers and headings inside code, tool names without
-  arguments, "Useful when"), frontmatter edge cases (missing, unclosed, malformed, duplicate keys, name mismatch,
-  CRLF, quoted and folded values), the exemption, the CLI's baseline semantics and exit codes, and the repo itself
-  against its baseline. Against a stub linter that flags nothing, 15 of the 19 fail.
+  arguments, file names that start with a tool name, "Useful when"), frontmatter edge cases (missing, unclosed,
+  malformed, duplicate keys, name mismatch, CRLF, quoted and folded values), the exemption, the CLI's baseline
+  semantics and exit codes (including a baseline that cannot be written), and the repo itself against its baseline.
+  Against a stub linter that flags nothing, 15 of the first 19 fail; the two hunt regressions fail on the pre-fix
+  linter.

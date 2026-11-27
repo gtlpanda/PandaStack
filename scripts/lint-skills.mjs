@@ -27,7 +27,7 @@
 //   node scripts/lint-skills.mjs [--root DIR] [--baseline FILE] [--update-baseline]
 // Exit 0: no new or stale violation. 1: new or stale violations. 2: bad usage, or an unreadable
 // catalog, skill or baseline.
-import { existsSync, readFileSync, realpathSync, writeFileSync, renameSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync, writeFileSync, renameSync, rmSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -46,8 +46,9 @@ export const TRIGGER = /\b(use (it |this |this skill )?(only )?(when|whenever|if
 export const RECOVERY_HEADING = /^(errors?|error (recovery|handling)|failures?|failure (modes|recovery)|troubleshooting|recovery|common (errors|failures|problems)|when (something|it|a step|things) (fails|goes wrong)|if (something|it|a step) fails)( and (fixes|recovery|what to do))?[.:!?]?$/i
 // A fix that is nothing but "do it again".
 export const RETRY_ONLY = /^(just )?(try (it )?again|retry( it)?|re-?run( it)?|run (it )?again|try once more|repeat( it)?)$/i
-// Inline `command` shapes: a known tool, a ./script, or $ prompt.
-const INLINE_COMMAND = /^(\$ )?(node|npm|npx|pnpm|yarn|bun|deno|git|gh|bash|sh|zsh|python3?|pip3?|uv|go|cargo|make|docker|kubectl|terraform|aws|curl|autobuild|codex|claude|rg|grep|sed|jq|ls|cat|cd|mkdir|rm|cp|mv|chmod|ssh|psql|sqlite3)\b\s*\S|^\.{1,2}\/[\w./-]+/
+// Inline `command` shapes: a known tool then whitespace and an argument (so a file name such as
+// `go.mod` or `docker-compose.yml` is not one), or a ./script.
+const INLINE_COMMAND = /^(\$ )?(node|npm|npx|pnpm|yarn|bun|deno|git|gh|bash|sh|zsh|python3?|pip3?|uv|go|cargo|make|docker|kubectl|terraform|aws|curl|autobuild|codex|claude|rg|grep|sed|jq|ls|cat|cd|mkdir|rm|cp|mv|chmod|ssh|psql|sqlite3)\s+\S|^\.{1,2}\/[\w./-]+/
 const SHELL_LANGS = new Set(['', 'bash', 'sh', 'shell', 'zsh', 'console', 'terminal', 'fish', 'powershell', 'ps1', 'cmd'])
 
 export class LintInputError extends Error {}
@@ -258,10 +259,17 @@ export function shrinkBaseline(baseline, kept) {
   return out
 }
 
+// Writes through a temp file and a rename, so a reader never sees half a baseline. A failure is an
+// input error (exit 2), not a lint failure (exit 1), and leaves no temp file behind.
 function writeBaseline(file, violations) {
   const tmp = `${file}.tmp-${process.pid}`
-  writeFileSync(tmp, JSON.stringify({ version: 1, violations }, null, 2) + '\n')
-  renameSync(tmp, file)
+  try {
+    writeFileSync(tmp, JSON.stringify({ version: 1, violations }, null, 2) + '\n')
+    renameSync(tmp, file)
+  } catch (e) {
+    try { rmSync(tmp, { force: true }) } catch { /* the cleanup failed too; report the write error */ }
+    throw new LintInputError(`cannot write the baseline ${file}: ${e.message}`)
+  }
 }
 
 export function main(argv, log = console.log) {

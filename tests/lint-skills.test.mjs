@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { test, REPO } from '../scripts/workflow-harness.mjs'
-import { parseSkill, lintSkill, hasNumberedSteps, hasCommand, errorRecovery, TRIGGER, RECOVERY_HEADING } from '../scripts/lint-skills.mjs'
+import { parseSkill, lintSkill, hasNumberedSteps, hasCommand, errorRecovery, main, TRIGGER, RECOVERY_HEADING } from '../scripts/lint-skills.mjs'
 
 const SCRIPT = join(REPO, 'scripts', 'lint-skills.mjs')
 const rules = violations => [...new Set(violations.map(v => v.rule))].sort()
@@ -89,6 +89,13 @@ await test('STEP_COMMAND: a shell block or an inline command; prose code, data b
   assert.ok(!hasCommand('```bash\n# only a comment\n```'))
   assert.ok(!hasCommand('Edit `tasks/lessons.md` and `retro.md`.'))
   assert.ok(!hasCommand('Use `node` for this.'), 'a tool name alone is not a command')
+})
+// bughunt F1: a file name that starts with a tool name (`go.mod`) passed as a command.
+await test('STEP_COMMAND: a file name that starts with a tool name is not a command', () => {
+  for (const name of ['go.mod', 'docker-compose.yml', 'git-hooks', 'claude.json', 'autobuild.json', 'codex-skill', 'node_modules/x', 'make.conf'])
+    assert.ok(!hasCommand(`Edit \`${name}\`.`), name)
+  assert.ok(hasCommand('Run `go test ./...`.') && hasCommand('Run `$ docker compose up`.'))
+  assert.ok(lint(skill({ body: GOOD_BODY.replace(/```bash\nnode check.mjs\n```/, 'Update `go.mod` and `docker-compose.yml`.') })).some(v => v.rule === 'STEP_COMMAND'))
 })
 await test('ERROR_RECOVERY: a failure -> fix table or list under a recovery heading', () => {
   assert.deepEqual(errorRecovery('## Troubleshooting\n\n| Symptom | Fix |\n| --- | --- |\n| 404 | check the URL |\n'), { ok: true })
@@ -175,6 +182,26 @@ await test('--update-baseline never adds a violation: the new one still fails an
     assert.match(r.stdout, /never adds a violation/)
     assert.match(r.stdout, /^NEW {3}bad DESCRIPTION/m)
     assert.deepEqual(baselineOf(root), {}, 'the stale entry went; the new one was not added')
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+// bughunt F2: a failed baseline write escaped main() as a crash (exit 1, a lint failure's code).
+await test('a baseline that cannot be written is an input error (exit 2), and no temp file is left', () => {
+  const root = fixture({ baseline: { bad: ['DESCRIPTION'], good: ['STEP_COMMAND'] } })
+  try {
+    const file = join(root, 'scripts/skill-lint-baseline.json')
+    const before = readFileSync(file, 'utf8')
+    mkdirSync(`${file}.tmp-${process.pid}`)   // the temp path is taken by a directory: the write fails
+    const lines = []
+    assert.equal(main(['--root', root, '--update-baseline'], l => lines.push(l)), 2)
+    assert.match(lines.at(-1), /^LINT-SKILLS: ERROR cannot write the baseline .*skill-lint-baseline\.json/)
+    assert.equal(readFileSync(file, 'utf8'), before, 'the baseline is unchanged')
+    const missing = join(root, 'no-such-dir', 'baseline.json')
+    writeFileSync(join(root, 'stale.json'), JSON.stringify({ version: 1, violations: { bad: ['DESCRIPTION'], gone: ['FRONTMATTER'] } }))
+    const r = run(root, '--baseline', join(root, 'stale.json'), '--update-baseline')
+    assert.equal(r.status, 0, r.stdout)
+    const r2 = spawnSync('node', [SCRIPT, '--root', root, '--baseline', missing, '--update-baseline'], { encoding: 'utf8' })
+    assert.equal(r2.status, 1, 'no baseline file means an empty one: the violation is new, nothing to write')
+    assert.ok(!existsSync(join(root, 'no-such-dir')))
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 await test('--update-baseline with nothing stale leaves the file byte for byte', () => {
