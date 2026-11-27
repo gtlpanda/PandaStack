@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { basename, join, posix, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
-import { NON_PRE_WAVE_PARTIAL_IDS, PARTIAL_IDS, STATE, expectedCodexRow, expectedProofRefs } from '../../tests/codex-expected-state.mjs'
+import { NON_PRE_WAVE_PARTIAL_IDS, PARTIAL_IDS, POST_SNAPSHOT_IDS, STATE, expectedCodexRow, expectedProofRefs } from '../../tests/codex-expected-state.mjs'
 
 const ROOT = process.env.PANDASTACK_CANDIDATE_ROOT || fileURLToPath(new URL('../../', import.meta.url))
 const loadCatalog = () => import(pathToFileURL(resolve(ROOT, 'core/skills/native-runtime/catalog.mjs')))
@@ -31,6 +31,12 @@ async function guard() {
 // fixture (tests/fixtures/codex-expected-state.json) through tests/codex-expected-state.mjs. The
 // catalog must equal it exactly; a row flipped by any wave is an edit to the fixture, not to this test.
 const isFlipped = row => NON_PRE_WAVE_PARTIAL_IDS.includes(row.id)
+// Amended for offerings added after the v1 snapshot (user-authorized, direct human-directed change):
+// the fixture's `postSnapshot` rows are counted on top of the snapshot's 46 and set aside before the
+// snapshot comparison. Every other row and target must still equal the snapshot exactly.
+const isPostSnapshot = id => POST_SNAPSHOT_IDS.includes(id)
+const snapshotRows = catalog => catalog.offerings.filter(o => !isPostSnapshot(o.id))
+const snapshotTargets = catalog => catalog.installerTargets.filter(t => !isPostSnapshot(t.target.replace(/^skills\//, '')))
 const SHARED_FIELDS = ['id', 'kind', 'source', 'entrySkill', 'installTargets', 'nativeReadiness',
   'evidenceOwners', 'requiredRuntimes', 'aliases', 'requirementsComplete']
 
@@ -97,7 +103,8 @@ test('the production catalog is v2 and valid, with the v1 counts', async () => {
   assert.equal(catalog.schemaVersion, 2, 'spec/offering-capabilities.json is v2')
   assert.deepEqual(api.validateCatalog(catalog), [])
   assert.deepEqual(api.loadOfferingCatalog({ installationRoot: ROOT }), catalog)
-  assert.equal(catalog.offerings.length, 46)
+  assert.equal(catalog.offerings.length, 46 + POST_SNAPSHOT_IDS.length)
+  assert.equal(snapshotRows(catalog).length, 46)
   assert.equal(catalog.workflows.length, 6)
   assert.equal(catalog.assets.length, 46)
   assert.equal(catalog.fixedTargets.length, 4)
@@ -113,13 +120,14 @@ test('same inventory and derived values as the v1 snapshot', async () => {
   const api = await loadCatalog()
   const catalog = production(), v1 = v1Snapshot()
   assert.equal(catalog.schemaVersion, 2)
-  for (const key of ['status', 'inventorySha256', 'limits', 'assets', 'fixedTargets', 'installerTargets', 'aliases']) {
+  for (const key of ['status', 'inventorySha256', 'limits', 'assets', 'fixedTargets', 'aliases']) {
     assert.deepEqual(catalog[key], v1[key], key)
   }
+  assert.deepEqual(snapshotTargets(catalog), v1.installerTargets, 'installerTargets')
   assert.equal(catalog.inventorySha256, sha(readFileSync(resolve(ROOT, 'spec/codex-parity-inventory.json'))))
   assert.deepEqual(catalog.workflows.map(({ source, roles, nativeReadiness }) => ({ source, roles, nativeReadiness })), v1.workflows)
-  assert.deepEqual(catalog.offerings.map(o => o.id), v1.offerings.map(o => o.id))
-  catalog.offerings.forEach((row, i) => {
+  assert.deepEqual(snapshotRows(catalog).map(o => o.id), v1.offerings.map(o => o.id))
+  snapshotRows(catalog).forEach((row, i) => {
     const old = v1.offerings[i]
     for (const field of SHARED_FIELDS) assert.deepEqual(row[field], old[field], `${row.id} ${field}`)
     assert.ok(!Object.hasOwn(row, 'codexInstallEligible') && !Object.hasOwn(row, 'nativeImplementation'), `${row.id} has no v1-only field`)

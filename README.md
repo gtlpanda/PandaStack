@@ -221,7 +221,7 @@ symlinked into `~/.claude/` on every machine.
 
 ```
 install.sh  settings.json  CLAUDE.md  loop.md   shared config, linked into ~/.claude/ (CLAUDE.md: the global rules, at most 200 lines)
-core/skills/                                    skills more than one graph uses (verify, harness-review, knowledge-map, default-stack, gtm-brief, backlog, findings, bug-lenses)
+core/skills/                                    skills more than one graph uses (verify, harness-review, knowledge-map, default-stack, gtm-brief, backlog, findings, bug-lenses, papercut)
 core/agents/                                    agents more than one graph uses (advisor, checker)
 core/bin/                                       statusline.sh (model, effort, directory, branch, worktree, context used)
 kit/skills/  kit/agents/  kit/commands/         standalone tools that belong to no graph (see Kit below)
@@ -254,6 +254,7 @@ One repo, one install. Each piece, where it lives, and the state it keeps:
 | The kit | `kit/` | one link per skill, agent, and command in `~/.claude/` | none |
 | The review gate | `graphs/hunt/skills/bughunt/gate.mjs` | a `PreToolUse` hook in `~/.claude/settings.json`, active in every repo | reads the hunt ledger; `PANDASTACK_REVIEW_GATE=0` at launch turns it off, for a person, never for Claude |
 | The rules | `CLAUDE.md` | `~/.claude/CLAUDE.md` (one link) | at most 200 lines; `validate.sh` pins its rails |
+| Papercuts | `core/skills/papercut/` | the `papercut` skill, for Claude and Codex; `CLAUDE.md` tells agents to use it unprompted | `${PANDASTACK_PAPERCUT_DIR:-${XDG_STATE_HOME:-~/.local/state}/pandastack}/papercuts.jsonl` (0600): agents' structured friction reports, secrets redacted, never sent anywhere; `papercut.mjs summary` groups them by tool |
 | Settings | `settings.json` | merged into your own `~/.claude/settings.json` | your values win; `permissions` untouched |
 | Status line | `core/bin/statusline.sh` | `~/.claude/bin/statusline.sh` | none |
 | CI and branch protection | `.github/workflows/test.yml` | GitHub | The full gate (`scripts/test.sh`'s suites as separate steps, plus the acceptance steps) on every PR and push to `main`, as three parallel `autobuild check --phase full --shard i/3` jobs; `main` requires the `test` check, which passes only when all three shards pass, admins included |

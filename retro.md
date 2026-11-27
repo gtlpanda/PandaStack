@@ -4397,3 +4397,28 @@ before the merger dispatch). release-pr's codex row is `partial` via `codex-grap
     elsewhere and to another checkout still refused, uninstall removing only the gate, dry-run and `--skip`, and a plain
     install and uninstall. Five fail on main's installer; the two refusal cases pass on both.
   - `graphs/hunt/tests/codex-hook.test.mjs`: one more test for `has` (19).
+
+## 85. Papercuts: agents file their own friction reports (2026-11-26)
+
+- **Why.** A live Codex session hit the `evidence.mjs` relative-state-dir bug (#97), worked around it and moved on; it
+  was found only because a person read the session log. Uber's skills write-up describes the fix for that loss: an
+  always-available skill agents use to file a structured report whenever a tool fights them.
+- **The skill.** `core/skills/papercut/` (offering `papercut`, guided, Claude `claude-code` and Codex `codex-skill`).
+  `papercut.mjs file` takes the tool, the command tried, expected, actual, an optional workaround and the fix, plus the
+  agent; the repository is recorded by directory name only, never a path, and there is no field for prompt text.
+  Every field is capped, control characters are cleaned, and secrets are redacted before writing: the blueprint
+  graph's token shapes (copied, because the frozen CP-04a contract keeps blueprint-state on `node:` built-ins and a core
+  skill may not depend on a graph; a drift test compares the two copies), plus bearer and authorization headers with a
+  guard that keeps prose. One `O_APPEND` write per line, so concurrent sessions never interleave; the store dir is
+  0700, the file 0600 (wider modes are tightened), a symlinked store dir or file is refused, nothing is sent anywhere.
+  `summary` groups reports by tool and a signature over the normalized command and failure (paths, numbers and hex ids
+  folded), newest first; `list` is newest first.
+- **Always on.** `CLAUDE.md` (the installed global rules) gains one line in Automation & Tooling.
+- **Catalog.** One offering row, one installer target, `papercut` in the expected-state fixture's codex-skill ids
+  (40). The frozen cp-01b and oc-01 snapshot tests are amended to set aside the fixture's new `postSnapshot` ids before
+  comparing with the v1 snapshot; every other row still equals it.
+- **Tests.** `tests/papercut.test.mjs` (16): fields, stdin JSON, secrets and look-alikes, the redaction drift guard,
+  20 concurrent writers, symlink refusal, permissions, store location, grouping, unreadable lines, usage. Seven
+  mutations of `papercut.mjs` (no `O_NOFOLLOW`, no header scrub, no prose guard, a drifted copy, a split write, no
+  permission tightening, no path folding) each fail their test. `tests/codex-skill-install.test.mjs` runs papercut from
+  the installed location the Codex way.

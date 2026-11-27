@@ -150,6 +150,7 @@ Every `CLAUDE.md` must stay at or under **200 lines**: it loads on every session
 ## Automation & Tooling
 
 - If you do something more than once a day, turn it into a skill or slash command
+- When a tool, skill, flag or doc fights you (exits 0 on an error, rejects a documented flag, needs a workaround), file it with the `papercut` skill in one command, then carry on
 - Run a techdebt sweep at end of every session — kill dead code, duplication, stale TODOs — in its own commit
 - Analytics and data queries go through CLI tools. Don't hand-write SQL when a tool handles it
 - Build context-syncing commands that pull from Slack, GitHub, GDrive into one dump
