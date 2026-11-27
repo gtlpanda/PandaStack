@@ -1,6 +1,6 @@
 ---
 name: papercut
-description: File a structured friction report when a tool, skill, flag, doc or command fights you - it exits 0 on an error, rejects a flag its help lists, returns nothing when it should match, needs a workaround, or you spent several turns on an unexpected error. Use it unprompted, the moment you notice the friction, then carry on with the task. Reports stay on this machine, grouped by tool so the owner can fix the cause. Also lists and summarizes what was filed.
+description: Use when a tool, skill, flag, doc or command fights you - it exits 0 on an error, rejects a documented flag, returns nothing when it should match, needs a workaround, or you spent several turns on an unexpected error. Files one structured friction report (tool, command, expected, actual, fix), unprompted, then you carry on with the task. Reports stay on this machine with secrets redacted, grouped by tool so the owner can fix the cause. Also lists and summarizes what was filed.
 allowed-tools: Bash, Read
 ---
 
