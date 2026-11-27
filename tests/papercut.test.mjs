@@ -125,8 +125,17 @@ await test('look-alikes that are not secrets are kept as written', () => {
     'commit=0123456789abcdef0123456789abcdef01234567',
     'Token expired; log in again',
     'x-api-key header missing',
+    'Token expired.',
+    '401 Unauthorized: Bearer authentication.',
+    'authorization: required.',
+    'Basic authentication is disabled...',
   ]) assert.equal(scrub(text), text, text)
   assert.equal(scrub(42), 42)
+  // bughunt F1: a sentence-ending period made a plain word look like a credential.
+  const expired = validateFields({ ...GOOD, actual: 'Token expired.' }), revoked = validateFields({ ...GOOD, actual: 'Token revoked.' })
+  assert.notEqual(signature(expired), signature(revoked), 'different prose failures keep different signatures')
+  assert.equal(scrub('Authorization: Basic dXNlcjpwYXNz'), 'Authorization: Basic <redacted: credential>', 'base64 with no digit is still a credential')
+  assert.equal(scrub('sent Bearer abc123def456.'), 'sent Bearer <redacted: credential>.', 'the sentence period stays outside the redaction')
 })
 
 await test("papercut's redaction copy agrees with the blueprint graph's on every shape (drift guard)", () => {
@@ -252,11 +261,16 @@ await test('an unreadable line is skipped with a warning and the rest still read
     assert.equal(r.stdout, 'no papercuts filed\n')
     assert.equal(lstatSync(s.store, { throwIfNoEntry: false }), undefined, 'reading creates nothing')
     assert.equal(s.file().status, 0)
-    writeFileSync(join(s.store, 'papercuts.jsonl'), readFileSync(join(s.store, 'papercuts.jsonl'), 'utf8') + '{broken\n{"tool":1}\n')
+    // bughunt F2: a line with the grouping keys but no printed fields used to crash list and summary.
+    const partial = JSON.stringify({ tool: 'partial-tool', signature: 's', at: '2026-01-01T00:00:00Z' })
+    writeFileSync(join(s.store, 'papercuts.jsonl'), readFileSync(join(s.store, 'papercuts.jsonl'), 'utf8') + `{broken\n{"tool":1}\n${partial}\n[]\n`)
     r = s.run(['list'])
-    assert.equal(r.status, 0)
-    assert.match(r.stderr, /skipped 2 unreadable line\(s\)/)
+    assert.equal(r.status, 0, r.stderr)
+    assert.match(r.stderr, /skipped 4 unreadable line\(s\)/)
     assert.match(r.stdout, /evidence\.mjs/)
+    r = s.run(['summary'])
+    assert.equal(r.status, 0, r.stderr)
+    assert.match(r.stdout, /^1 papercut\(s\) in 1 group\(s\)/)
   } finally { s.done() }
 })
 

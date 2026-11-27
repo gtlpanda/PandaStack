@@ -163,20 +163,32 @@ export function redactSecrets(value) {
 
 // ---------------------------------------------------------------- fields
 
-// Bearer and basic credentials in headers, which the token shapes do not cover. A value is
-// redacted only when it has a digit or token punctuation, so prose ("Bearer authentication
-// failed", "authorization: required") is kept.
-const CREDENTIAL = '(?=[A-Za-z0-9._~+/=-]*[0-9._~+/=-])[A-Za-z0-9._~+/=-]{8,}'
+// Bearer and basic credentials in headers, which the token shapes do not cover. The value
+// after the keyword is redacted only when it looks like a credential (looksLikeCredential),
+// so prose ("Bearer authentication failed.", "Token expired.") is kept.
+const VALUE = '[A-Za-z0-9._~+/=-]{8,}'
 const HEADER_SECRETS = [
-  [new RegExp(`\\b(Bearer|Basic|Token)([ \\t]+)${CREDENTIAL}`, 'g'), '$1$2<redacted: credential>'],
-  [new RegExp(`\\b(authorization|x-api-key|api-key|private-token)([ \\t]*[:=][ \\t]*["']?)(?:(?:Bearer|Basic|Token)[ \\t]+)?${CREDENTIAL}`, 'gi'),
-    '$1$2<redacted: credential>'],
+  new RegExp(`\\b(Bearer|Basic|Token)([ \\t]+)(${VALUE})`, 'g'),
+  new RegExp(`\\b(authorization|x-api-key|api-key|private-token)([ \\t]*[:=][ \\t]*["']?(?:(?:Bearer|Basic|Token)[ \\t]+)?)(${VALUE})`, 'gi'),
 ]
+// A credential has a digit, punctuation inside it (not a sentence's final period), or a
+// lowercase letter followed by a capital (base64). A plain word of 8+ letters is prose.
+export function looksLikeCredential(value) {
+  const core = value.replace(/\.+$/, '')
+  if (core.length < 8) return false
+  return /[0-9]/.test(core) || /[._~+/=-][A-Za-z0-9]/.test(core) || /[a-z][A-Z]/.test(core)
+}
 /** Redacts secrets from one text field. Anything else comes back as it was. */
 export function scrub(text) {
   if (typeof text !== 'string') return text
   let out = text
-  for (const [pattern, label] of HEADER_SECRETS) out = out.replace(pattern, label)
+  for (const pattern of HEADER_SECRETS) {
+    out = out.replace(pattern, (match, keyword, gap, value) => {
+      if (!looksLikeCredential(value)) return match
+      const period = value.match(/\.+$/)?.[0] ?? ''
+      return `${keyword}${gap}<redacted: credential>${period}`
+    })
+  }
   return redactSecrets(out)
 }
 
@@ -293,6 +305,13 @@ export function fileReport(raw, { env = process.env, cwd = process.cwd(), now = 
   return { record, path }
 }
 
+// A stored line is read only when every field list and summary print is text, so a partial
+// or foreign line is skipped instead of breaking the whole store.
+const RECORD_TEXT = ['at', 'tool', 'signature', 'tried', 'expected', 'actual', 'fix']
+function isRecord(r) {
+  return r !== null && typeof r === 'object' && !Array.isArray(r) && RECORD_TEXT.every(k => typeof r[k] === 'string')
+}
+
 /** Every readable report, oldest first, and how many lines could not be read. */
 export function readReports({ env = process.env } = {}) {
   const dir = storeDir(env)
@@ -313,7 +332,7 @@ export function readReports({ env = process.env } = {}) {
     if (!line.trim()) continue
     try {
       const r = JSON.parse(line)
-      if (r && typeof r === 'object' && typeof r.tool === 'string' && typeof r.signature === 'string' && typeof r.at === 'string') reports.push(r)
+      if (isRecord(r)) reports.push(r)
       else skipped++
     } catch { skipped++ }
   }
