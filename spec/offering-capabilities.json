@@ -317,6 +317,43 @@
       "proofRefs": []
     },
     {
+      "id": "papercut",
+      "kind": "guided-offering",
+      "source": "core/skills/papercut",
+      "entrySkill": true,
+      "installTargets": [
+        "skills/papercut"
+      ],
+      "nativeReadiness": "unknown",
+      "dependencies": [],
+      "evidenceOwners": [
+        "core/skills/papercut/SKILL.md",
+        "core/skills/papercut/papercut.mjs"
+      ],
+      "requiredRuntimes": [],
+      "aliases": [],
+      "requirementsComplete": false,
+      "entrySha256": "0e76825bb2716357964531740cf183b107f25ac9a4b9a7014d57fffe37476ee0",
+      "providers": {
+        "claude": {
+          "implementation": "partial",
+          "transportId": "claude-code",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        },
+        "codex": {
+          "implementation": "partial",
+          "transportId": "codex-skill",
+          "limitations": [
+            "REQUIREMENTS_INCOMPLETE"
+          ]
+        }
+      },
+      "permissionProfile": null,
+      "proofRefs": []
+    },
+    {
       "id": "run-records",
       "kind": "shared-reference-contract",
       "source": "core/skills/run-records",
@@ -2144,6 +2181,12 @@
     {
       "target": "skills/knowledge-map",
       "source": "core/skills/knowledge-map",
+      "codexInstaller": false,
+      "kind": "skills"
+    },
+    {
+      "target": "skills/papercut",
+      "source": "core/skills/papercut",
       "codexInstaller": false,
       "kind": "skills"
     },

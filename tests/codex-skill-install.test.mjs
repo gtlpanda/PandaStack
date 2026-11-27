@@ -82,9 +82,9 @@ await test('the hygiene rule flags Claude-only references and accepts the SKILL_
 
 // ---------------------------------------------------------------- the catalog
 
-await test('the fixture names exactly the codex rows on the codex-skill transport, 39 of them', () => {
-  assert.equal(FIXTURE.ids.length, 39)
-  assert.equal(new Set(FIXTURE.ids).size, 39)
+await test('the fixture names exactly the codex rows on the codex-skill transport, 40 of them', () => {
+  assert.equal(FIXTURE.ids.length, 40)
+  assert.equal(new Set(FIXTURE.ids).size, 40)
   assert.deepEqual(sorted(catalog.offerings.filter(o => o.providers.codex.transportId === FIXTURE.transport.id).map(o => o.id)), sorted(FIXTURE.ids))
   assert.deepEqual(catalog.transports.filter(t => t.id === FIXTURE.transport.id), [FIXTURE.transport])
   assert.ok(existsSync(join(REPO, FIXTURE.transport.entry)), 'the transport entry exists')
@@ -219,6 +219,18 @@ await test('render runs from the installed location and refuses a missing key fi
   assert.equal(r.status, 1, r.stdout + r.stderr)
   assert.match(r.stderr, /API key file missing/)
   assert.equal(r.stdout, '')
+})
+
+await test('papercut runs from the installed location: files into its own store and summarizes it', () => {
+  const store = mkdtempSync(join(fixtureHome.home, 'papercut-'))
+  const filed = runDocumented('papercut', ['file', '--agent', 'codex', '--tool', 'x-tool', '--tried', 'x-tool --flag', '--expected', 'ok',
+    '--actual', 'rejected --flag', '--fix', 'accept --flag'], { PANDASTACK_PAPERCUT_DIR: join(store, 'pc') })
+  noModuleError(filed)
+  assert.equal(filed.status, 0, filed.stdout + filed.stderr)
+  assert.match(filed.stdout, /^PAPERCUT: FILED [0-9a-f]{16} x-tool -> /)
+  const summary = runDocumented('papercut', ['summary', '--json'], { PANDASTACK_PAPERCUT_DIR: join(store, 'pc') })
+  assert.equal(summary.status, 0, summary.stderr)
+  assert.equal(JSON.parse(summary.stdout).groups[0].count, 1)
 })
 
 await test('workflow-state run-script runs from the installed location and writes only the seam line', () => {

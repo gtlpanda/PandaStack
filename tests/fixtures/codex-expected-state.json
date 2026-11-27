@@ -148,6 +148,7 @@
       "knowledge-map",
       "logging",
       "native-runtime",
+      "papercut",
       "release",
       "render",
       "run-records",
@@ -164,5 +165,11 @@
       "run-records"
     ]
   },
-  "unavailable": []
+  "unavailable": [],
+  "postSnapshot": {
+    "comment": "Offerings added after the frozen v1 catalog snapshot (acceptance/native-runtime/oc-01-catalog.fixture.json) and the historical inventory (spec/codex-parity-inventory.json). The frozen snapshot tests compare the catalog minus these rows to the snapshot, and count them on top of it.",
+    "ids": [
+      "papercut"
+    ]
+  }
 }

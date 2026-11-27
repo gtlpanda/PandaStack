@@ -5,6 +5,9 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
+// Amended for offerings added after this snapshot (user-authorized, direct human-directed change):
+// skill directories the expected-state fixture lists as `postSnapshot` are not in this frozen fixture.
+import {POST_SNAPSHOT_IDS} from '../../tests/codex-expected-state.mjs';
 const ROOT=process.env.PANDASTACK_CANDIDATE_ROOT||fileURLToPath(new URL('../../',import.meta.url));
 const load=()=>import(pathToFileURL(resolve(ROOT,'core/skills/native-runtime/catalog.mjs')));
 const full=()=>JSON.parse(readFileSync(new URL('./oc-01-catalog.fixture.json',import.meta.url)));
@@ -18,7 +21,7 @@ test('declared catalog covers historical inventory plus explicit native-runtime 
  assert.deepEqual(catalog.workflows,inventory.workflows.map(x=>({source:x.source,roles:x.roles,nativeReadiness:'unknown'})));assert.deepEqual(catalog.assets,inventory.otherInstallerAssets.map(x=>({target:x.target,source:x.source,kind:x.kind})));assert.deepEqual(catalog.fixedTargets,inventory.fixedInstallerTargets);
  for(const entry of catalog.offerings){const skill=resolve(ROOT,entry.source,'SKILL.md');assert.equal(entry.entrySkill,existsSync(skill));}
  const library=catalog.offerings.find(x=>x.id==='native-runtime');assert.equal(library.entrySkill,false);assert.equal(library.nativeReadiness,'unknown');
- const actual=[];for(const base of ['core','kit',...readdirSync(resolve(ROOT,'graphs')).map(x=>'graphs/'+x)]){const dir=resolve(ROOT,base,'skills');if(existsSync(dir))for(const name of readdirSync(dir))actual.push(base+'/skills/'+name);}
+ const actual=[];for(const base of ['core','kit',...readdirSync(resolve(ROOT,'graphs')).map(x=>'graphs/'+x)]){const dir=resolve(ROOT,base,'skills');if(existsSync(dir))for(const name of readdirSync(dir))if(!POST_SNAPSHOT_IDS.includes(name))actual.push(base+'/skills/'+name);}
  assert.deepEqual(catalog.offerings.map(x=>x.source).sort(),actual.sort());assert.equal(catalog.offerings.find(x=>x.id==='decisions').entrySkill,false);
 });
 test('explicit-root load reads inert catalog and never creates missing paths',async t=>{

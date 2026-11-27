@@ -17,6 +17,8 @@ export const GRAPH_ROWS = STATE.graphRows
 export const SKILL_IDS = STATE.skill.ids
 export const SKILL_TRANSPORT = STATE.skill.transport
 export const KEEP_NATIVE_UNVERIFIED = STATE.skill.keepNativeUnverified
+// Offerings added after the frozen v1 catalog snapshot and the historical inventory.
+export const POST_SNAPSHOT_IDS = STATE.postSnapshot.ids
 // Rows that were already codex partial before the codex-parity waves (autobuild, bughunt).
 export const PRE_WAVE_IDS = GRAPH_ROWS.filter(r => r.preWave).map(r => r.id)
 // Every offering whose codex row is `partial`, sorted. The install set and the ready set.
