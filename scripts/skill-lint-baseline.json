@@ -1,0 +1,134 @@
+{
+  "version": 1,
+  "violations": {
+    "autobuild": [
+      "ERROR_RECOVERY"
+    ],
+    "blueprint": [
+      "ERROR_RECOVERY"
+    ],
+    "bughunt": [
+      "ERROR_RECOVERY"
+    ],
+    "build-app": [
+      "ERROR_RECOVERY"
+    ],
+    "build-bot-integration": [
+      "ERROR_RECOVERY"
+    ],
+    "build-scraper": [
+      "STEP_COMMAND",
+      "ERROR_RECOVERY"
+    ],
+    "clean-gone": [
+      "DESCRIPTION",
+      "ERROR_RECOVERY"
+    ],
+    "commit": [
+      "DESCRIPTION",
+      "NUMBERED_STEPS",
+      "ERROR_RECOVERY"
+    ],
+    "copywriting": [
+      "ERROR_RECOVERY"
+    ],
+    "deep": [
+      "ERROR_RECOVERY"
+    ],
+    "deep-fix": [
+      "ERROR_RECOVERY"
+    ],
+    "dev": [
+      "ERROR_RECOVERY"
+    ],
+    "dockerize": [
+      "ERROR_RECOVERY"
+    ],
+    "dry": [
+      "ERROR_RECOVERY"
+    ],
+    "error-audit": [
+      "ERROR_RECOVERY"
+    ],
+    "fix-scraper": [
+      "DESCRIPTION",
+      "ERROR_RECOVERY"
+    ],
+    "frontend-design": [
+      "NUMBERED_STEPS",
+      "STEP_COMMAND",
+      "ERROR_RECOVERY"
+    ],
+    "harness-review": [
+      "ERROR_RECOVERY"
+    ],
+    "init-agents": [
+      "ERROR_RECOVERY"
+    ],
+    "init-ci": [
+      "ERROR_RECOVERY"
+    ],
+    "init-claude": [
+      "ERROR_RECOVERY"
+    ],
+    "init-env": [
+      "ERROR_RECOVERY"
+    ],
+    "init-monorepo": [
+      "ERROR_RECOVERY"
+    ],
+    "init-tasks": [
+      "STEP_COMMAND",
+      "ERROR_RECOVERY"
+    ],
+    "init-tests": [
+      "ERROR_RECOVERY"
+    ],
+    "logging": [
+      "ERROR_RECOVERY"
+    ],
+    "release": [
+      "ERROR_RECOVERY"
+    ],
+    "release-pr": [
+      "ERROR_RECOVERY"
+    ],
+    "render": [
+      "ERROR_RECOVERY"
+    ],
+    "run-records": [
+      "DESCRIPTION"
+    ],
+    "scaffold-app": [
+      "BODY_LENGTH",
+      "ERROR_RECOVERY"
+    ],
+    "security": [
+      "ERROR_RECOVERY"
+    ],
+    "security-audit": [
+      "ERROR_RECOVERY"
+    ],
+    "seo": [
+      "BODY_LENGTH",
+      "ERROR_RECOVERY"
+    ],
+    "seo-check": [
+      "NUMBERED_STEPS",
+      "ERROR_RECOVERY"
+    ],
+    "vendor-lens": [
+      "STEP_COMMAND",
+      "ERROR_RECOVERY"
+    ],
+    "verify": [
+      "NUMBERED_STEPS",
+      "ERROR_RECOVERY"
+    ],
+    "workflow-state": [
+      "DESCRIPTION",
+      "NUMBERED_STEPS",
+      "ERROR_RECOVERY"
+    ]
+  }
+}

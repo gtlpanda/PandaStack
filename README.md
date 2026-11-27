@@ -243,6 +243,27 @@ this repo does not ship and Claude Code does not build in, so a tool that works
 only next to another toolkit cannot slip in. CI runs every check on a fresh
 machine with nothing else installed.
 
+**Skill lint.** `scripts/lint-skills.mjs` checks every `SKILL.md` the catalog
+(`spec/offering-capabilities.json`) ships; vendored trees are not linted. Each
+rule is pass or fail:
+
+| Rule | Passes when |
+|---|---|
+| `FRONTMATTER` | `---` frontmatter has `name` and `description`, every line is `key: value`, and `name` is the directory name |
+| `DESCRIPTION` | the description is at most 1024 characters and says when to use the skill ("Use when ...", "when the user says ...") |
+| `BODY_LENGTH` | the body is at most 500 lines |
+| `NUMBERED_STEPS` | the procedure has steps numbered 1 and 2 (list items or headings) |
+| `STEP_COMMAND` | there is a concrete command: a shell code block or an inline `command` |
+| `ERROR_RECOVERY` | a heading such as "Error recovery" or "Troubleshooting" opens a table or `failure -> fix` list, and no fix is only "try again", "retry" or "rerun" |
+
+The last three are procedure rules; reference contracts (catalog kind
+`shared-reference-contract`) are exempt. `scripts/skill-lint-baseline.json`
+lists the violations accepted when the linter arrived. It is a ratchet: a
+violation it does not list fails the run (`NEW`), and so does a listed one that
+was fixed (`STALE`), until `node scripts/lint-skills.mjs --update-baseline`
+removes it. That flag only removes entries; accepting a new violation is a hand
+edit to the file, made in review. `tests/lint-skills.test.mjs` runs it in CI.
+
 ## What's installed and where
 
 One repo, one install. Each piece, where it lives, and the state it keeps:
@@ -495,6 +516,7 @@ scripts/test-secrets.sh   # proves the scanner and pre-commit hook block real ke
 scripts/test-workflow.sh  # runs every graphs/*/tests/*.test.mjs against scripted agents; checks every workflow parses
 scripts/test-autobuild.sh # autobuild's suite against fake Claude/Codex CLIs, including gates, reviews and shared hunts
 scripts/check-secrets.sh  # the scanner itself (prints "check-secrets: clean" or lists hits); also the pre-commit hook
+node scripts/lint-skills.mjs  # SKILL.md rules against scripts/skill-lint-baseline.json (run in CI by tests/lint-skills.test.mjs)
 ```
 
 The test scripts end with an explicit `PASS`/`FAIL` line.
