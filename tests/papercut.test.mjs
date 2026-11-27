@@ -233,6 +233,12 @@ await test('the same failure from different paths, numbers and ids groups into o
   assert.equal(signature(a), signature(b))
   assert.notEqual(signature(a), signature(c))
   assert.equal(normalize('Exit 3 at /tmp/x/y and abc1234def'), 'exit # at <path> and <hex>')
+  // bughunt F3: 0x addresses and numbers that grow past six digits split one failure into many groups.
+  assert.equal(normalize('Segfault at 0x7fff5fbff8c0'), normalize('Segfault at 0x7ffee4a3b1d0'))
+  assert.equal(normalize('pid 123456 exited'), normalize('pid 1234567 exited'))
+  assert.equal(normalize('pid 1234567 exited'), 'pid # exited')
+  const seg = f => signature(validateFields({ ...GOOD, actual: f }))
+  assert.equal(seg('Segfault at 0x7fff5fbff8c0'), seg('Segfault at 0x7ffee4a3b1d0'))
 })
 
 await test('summary groups by tool and signature with counts, newest group first; list is newest first and honours --limit', () => {
@@ -271,6 +277,25 @@ await test('an unreadable line is skipped with a warning and the rest still read
     r = s.run(['summary'])
     assert.equal(r.status, 0, r.stderr)
     assert.match(r.stdout, /^1 papercut\(s\) in 1 group\(s\)/)
+  } finally { s.done() }
+})
+
+await test('terminal control characters never reach list or summary output, from a derived repo name or a hand-edited line', () => {
+  const s = sandbox()
+  try {
+    // bughunt F4: the repository name is derived from the working directory, which may carry escape bytes.
+    const evil = join(s.home, 'repo\u001b]0;pwned\u0007\u001b[2J')
+    mkdirSync(evil)
+    const r = s.run(['file', ...Object.entries(GOOD).flatMap(([k, v]) => [`--${k}`, v])], { cwd: evil })
+    assert.equal(r.status, 0, r.stderr)
+    assert.ok(!/[\u0000-\u001f]/.test(s.lines()[0].repo), 'the stored repo name has no control characters')
+    writeFileSync(join(s.store, 'papercuts.jsonl'), readFileSync(join(s.store, 'papercuts.jsonl'), 'utf8') +
+      JSON.stringify({ ...s.lines()[0], tool: 'x\u001b[31mred', actual: 'a\u009bb', agent: 'codex\u0007' }) + '\n')
+    for (const args of [['list'], ['summary']]) {
+      const out = s.run(args)
+      assert.equal(out.status, 0, out.stderr)
+      assert.ok(!/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/.test(out.stdout), `${args[0]} printed a control character`)
+    }
   } finally { s.done() }
 })
 

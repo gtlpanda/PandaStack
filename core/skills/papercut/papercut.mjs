@@ -239,7 +239,9 @@ export function normalize(text) {
     .toLowerCase()
     .replace(/<redacted: [^>]*>/g, '<secret>')
     .replace(/(?:~|\.{1,2})?(?:\/[^\s/'"`:]+)+\/?/g, '<path>')
-    .replace(/\b[0-9a-f]{7,}\b/g, '<hex>')
+    .replace(/\b0x[0-9a-f]+\b/g, '<hex>')
+    // A hex run counts as an id only with a letter in it; an all-digit run of any length is a number.
+    .replace(/\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b/g, '<hex>')
     .replace(/\d+/g, '#')
     .replace(/\s+/g, ' ')
     .trim()
@@ -255,8 +257,15 @@ function repoName(cwd) {
   const r = spawnSync('git', ['-C', cwd, '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', 'rev-parse', '--show-toplevel'],
     { encoding: 'utf8', timeout: 10_000 })
   const top = r.status === 0 && typeof r.stdout === 'string' ? r.stdout.trim() : ''
-  return basename(top || cwd).slice(0, REPO_MAX) || null
+  return printable(basename(top || cwd)).slice(0, REPO_MAX) || null
 }
+
+// Text safe to print to a terminal: every control character, escape included, becomes '?'.
+// Applied to everything list and summary print, since a store line may have been edited by hand.
+export function printable(text) {
+  return String(text ?? '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '?')
+}
+const firstLine = text => printable(String(text ?? '').split('\n')[0])
 
 // The PandaStack commit this helper came from, or null for a copy outside a checkout.
 function pandastackSha() {
@@ -385,12 +394,12 @@ function readStdinJson() {
 
 function printGroup(g, i) {
   const lines = [
-    `${i + 1}. ${g.tool}  x${g.count}  (last ${g.last.slice(0, 16).replace('T', ' ')}, sig ${g.signature})`,
-    `   tried:    ${g.latest.tried.split('\n')[0]}`,
-    `   actual:   ${g.latest.actual.split('\n')[0]}`,
-    `   fix:      ${g.latest.fix.split('\n')[0]}`,
+    `${i + 1}. ${firstLine(g.tool)}  x${g.count}  (last ${firstLine(g.last.slice(0, 16).replace('T', ' '))}, sig ${firstLine(g.signature)})`,
+    `   tried:    ${firstLine(g.latest.tried)}`,
+    `   actual:   ${firstLine(g.latest.actual)}`,
+    `   fix:      ${firstLine(g.latest.fix)}`,
   ]
-  if (g.repos.length) lines.push(`   repos:    ${g.repos.join(', ')}   agents: ${g.agents.join(', ')}`)
+  if (g.repos.length) lines.push(`   repos:    ${g.repos.map(firstLine).join(', ')}   agents: ${g.agents.map(firstLine).join(', ')}`)
   return lines.join('\n')
 }
 
@@ -420,7 +429,7 @@ export function main(argv, { env = process.env, cwd = process.cwd(), out = s => 
       if (flags.json) out(JSON.stringify({ reports: newest, skipped }) + '\n')
       else {
         if (!newest.length) out('no papercuts filed\n')
-        for (const r of newest) out(`${r.at.slice(0, 16).replace('T', ' ')}  ${r.agent ?? '?'}  ${r.repo ?? '-'}  ${r.tool}  ${r.signature}\n  actual: ${r.actual.split('\n')[0]}\n`)
+        for (const r of newest) out(`${firstLine(r.at.slice(0, 16).replace('T', ' '))}  ${firstLine(r.agent ?? '?')}  ${firstLine(r.repo ?? '-')}  ${firstLine(r.tool)}  ${firstLine(r.signature)}\n  actual: ${firstLine(r.actual)}\n`)
       }
       if (skipped) err(`papercut: skipped ${skipped} unreadable line(s)\n`)
       return 0
